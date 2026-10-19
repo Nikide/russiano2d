@@ -41,6 +41,18 @@ add_custom_target(r2d_json_check
     COMMENT "Проверяю разбор и сборку JSON"
     VERBATIM)
 
+# --- Пул слотов с поколениями (§48) -----------------------------------------
+# Фундамент динамических реестров: freelist, dense-список, поколения и
+# проверяемый рост. Тест не требует SDL/GPU, поэтому идёт в общем наборе.
+add_executable(r2d_slot_pool_test "${CMAKE_SOURCE_DIR}/tests/slot_pool/slot_pool_test.c"
+                                  "${CMAKE_SOURCE_DIR}/src/r2d_slot_pool.c")
+target_include_directories(r2d_slot_pool_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_slot_pool_test PRIVATE ${R2D_WIN_LIBS} r2d_unity)
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_slot_pool_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_slot_pool_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # --- Шифрование груза --------------------------------------------------------
 # Тест-векторы RFC 8439: ChaCha20-Poly1305 не должен «почти работать» —
 # молча неверный шифр хуже отсутствия шифра. Собирается с санитайзерами,
@@ -879,6 +891,84 @@ foreach(_r2d_tgt IN LISTS _r2d_render_features_targets)
             "${CMAKE_SOURCE_DIR}/src/re2d_world_render_features.c")
     endif()
 endforeach()
+
+# --- Async-планировщик: состояния, watermarks/бюджеты, отмена --------------
+# Без GPU/окна: async.c собирается с R2D_ASYNC_TEST (синтетические задания).
+# Санитайзеры ловят double-free в путях cancel/take/release.
+add_executable(r2d_async_backpressure_test "${CMAKE_SOURCE_DIR}/tests/async/backpressure_test.c"
+                                           "${CMAKE_SOURCE_DIR}/src/async.c")
+target_include_directories(r2d_async_backpressure_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_compile_definitions(r2d_async_backpressure_test PRIVATE R2D_ASYNC_TEST=1)
+target_link_libraries(r2d_async_backpressure_test PRIVATE SDL3::SDL3 SDL3_image::SDL3_image ${R2D_WIN_LIBS} r2d_unity)
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_async_backpressure_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_async_backpressure_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# --- Индекс путей груза (§35) ------------------------------------------------
+add_executable(r2d_payload_lookup_test "${CMAKE_SOURCE_DIR}/tests/payload/lookup_bench_test.c"
+                                "${CMAKE_SOURCE_DIR}/src/payload.c"
+                                "${CMAKE_SOURCE_DIR}/src/crypto.c")
+target_include_directories(r2d_payload_lookup_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_payload_lookup_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_payload_lookup_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_payload_lookup_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# --- Реестр звуков и бюджет голосов (§20-22) --------------------------------
+if(R2D_ENABLE_AUDIO AND TARGET SDL3_mixer::SDL3_mixer)
+    add_executable(r2d_audio_sound_registry_test
+        "${CMAKE_SOURCE_DIR}/tests/audio/sound_registry_stress_test.c"
+        "${CMAKE_SOURCE_DIR}/src/audio.c"
+        "${CMAKE_SOURCE_DIR}/src/audio_fx.c"
+        "${CMAKE_SOURCE_DIR}/src/audio_reverb.c")
+    target_include_directories(r2d_audio_sound_registry_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    target_link_libraries(r2d_audio_sound_registry_test PRIVATE
+        SDL3::SDL3 SDL3_mixer::SDL3_mixer ${R2D_WIN_LIBS} r2d_unity)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(r2d_audio_sound_registry_test PRIVATE m)
+    endif()
+    if(R2D_SANITIZE_FLAGS_AVAILABLE)
+        target_compile_options(r2d_audio_sound_registry_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_options(r2d_audio_sound_registry_test PRIVATE -fsanitize=address,undefined)
+    endif()
+endif()
+
+# --- Физика: динамические реестры и контакты (§4.1, §9, §10) ----------------
+# Без окна: Box2D + SDL. Проверяет >512 событий за шаг, 100/1000/8000 тел,
+# freelist-переиспользование, поколения и >64 суставов.
+add_executable(r2d_physics_stress_test "${CMAKE_SOURCE_DIR}/tests/physics/contact_stress_test.c"
+                                       "${CMAKE_SOURCE_DIR}/src/physics.c"
+                                       "${CMAKE_SOURCE_DIR}/src/r2d_slot_pool.c")
+target_include_directories(r2d_physics_stress_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_physics_stress_test PRIVATE SDL3::SDL3 box2d::box2d ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_physics_stress_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_physics_stress_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_physics_stress_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# Re2D dynamic registries: materials/lights/decals beyond legacy array caps.
+add_executable(r2d_re2d_scalability_test re2d/scalability_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world.c" "${CMAKE_SOURCE_DIR}/src/re2d_math.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_topology.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_visibility.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_hint.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_light.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_material.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_bake.c" "${CMAKE_SOURCE_DIR}/src/re2d_world_semantic.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_metadata.c"
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_render_features.c"
+    "${CMAKE_SOURCE_DIR}/src/json.c" "${CMAKE_SOURCE_DIR}/src/bsp.c")
+target_include_directories(r2d_re2d_scalability_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_re2d_scalability_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_re2d_scalability_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_re2d_scalability_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_re2d_scalability_test PRIVATE -fsanitize=address,undefined)
+endif()
 
 # --- P0-H: CTest для каждой Unity-цели и всех JS-наборов --------------------
 # Цели перечисляются автоматически по имени r2d_*_test; EXR-тест требует

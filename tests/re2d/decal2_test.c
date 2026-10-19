@@ -64,8 +64,13 @@ static void test_decal2_validation_and_budget(void)
     R2DWorldDecal ok={.surface=0,.material=0,.u=0,.v=0,.w=8,.h=8,.remaining=1.0f};
     int created=0;
     for(int i=0;i<128;i++)if(r2d_world_decal_create(&w,&ok)>=0)created++;
-    TEST_ASSERT_EQUAL_INT_MESSAGE(128,created,"128-slot decal pool");
-    TEST_ASSERT_EQUAL_INT(-1,r2d_world_decal_create(&w,&ok));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(128,created,"decal render budget starts at 128");
+    // Хранилище динамическое: создание сверх бюджета успешно и вытесняет
+    // самую старую/низкоприоритетную декаль, а не отвергает контент.
+    const int extra=r2d_world_decal_create(&w,&ok);
+    TEST_ASSERT_GREATER_OR_EQUAL_INT_MESSAGE(0,extra,"decal creation beyond the budget succeeds");
+    TEST_ASSERT_EQUAL_INT(128,w.decal_count);
+    TEST_ASSERT_TRUE_MESSAGE(w.decal_evicted>0,"budget overflow evicts deterministically");
     r2d_world_free(&w);
 }
 

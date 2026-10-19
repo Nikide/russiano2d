@@ -47,6 +47,10 @@ typedef struct R2DScript {
     // Zero-copy представление массива трансформов физики для JS.
     JSValue transforms_array;     // Float32Array поверх physics->transforms
     bool    transforms_valid;
+    // Ёмкость, под которую построен typed array. Реестр тел растёт, и вместе с
+    // ним меняется адрес transforms[] — старое представление обязано быть
+    // пересобрано, иначе JS увидит освобождённую память.
+    uint32_t transforms_capacity;
 
     // Объект globalThis.engine и обработчики кадра.
     JSValue engine_obj;
@@ -68,8 +72,12 @@ typedef struct R2DScript {
     uint32_t seed;
 
     // Реестр JS-функций, на которые ссылаются слушатели событий RmlUi.
-    JSValue callbacks[256];
-    int     callback_count;
+    // Динамический пул обработчиков UI (§27): слоты переиспользуются после
+    // off/detach, а при исчерпании массив растёт. 256 — стартовая ёмкость, не
+    // предел. JS-значения в пуле принадлежат движку (Dup при on, Free при off).
+    JSValue *callbacks;
+    int      callback_cap;
+    int      callback_count;
 
     // Hot reload
     bool   hot_reload;

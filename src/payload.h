@@ -43,10 +43,20 @@ extern "C" {
 //       кадром zstd, а raw_size — размер тела до сжатия (проверяется при
 //       распаковке: иначе «распаковалось, но не то» прошло бы молча).
 //
+// Версия 3 (НЕ реализована, только проект) — HEADER + TOC + отдельные чанки
+// файлов вместо одного кадра zstd на весь груз: случайный доступ, mmap и
+// инкрементальная распаковка. Полный разбор, совместимость и план перехода —
+// в docs/internal/PAYLOAD_V3.md. Здесь важно только, что читатель обязан
+// явно отвергать неизвестные версии: R2D_PAYLOAD_VERSION_MAX ниже остаётся 2.
+//
 // Читатель понимает обе версии; всё, что больше R2D_PAYLOAD_VERSION_MAX, —
 // ошибка с кодом R2D_PAYLOAD_UNKNOWN_VERSION (не «мусор» и не тихий отказ).
 #define R2D_PAYLOAD_VERSION       1u
 #define R2D_PAYLOAD_VERSION_ZSTD  2u
+// v3 (см. docs/internal/PAYLOAD_V3.md) пока не читается и не пишется.
+#define R2D_PAYLOAD_VERSION_V3_PROPOSED 3u
+// Потолок читаемых версий. Поднимать до 3 только вместе с реализацией v3:
+// иначе неизвестный контейнер пройдёт разбор «вслепую».
 #define R2D_PAYLOAD_VERSION_MAX   R2D_PAYLOAD_VERSION_ZSTD
 
 // Признаки контейнера версии 2 (битовое поле flags).
@@ -68,6 +78,18 @@ typedef struct R2dPayloadFile {
     size_t   size;
 } R2dPayloadFile;
 
+// Диагностика поиска по грузу. Счётчики только растут и ничего не решают:
+// нужны, чтобы отличить «индекс работает» от «молча съехали на линейный скан».
+typedef struct R2dPayloadLookupStats {
+    unsigned long long exact_hits;    // попадания в индекс точного пути
+    unsigned long long suffix_hits;   // попадания через basename/suffix-индекс
+    unsigned long long misses;        // не найдено
+    unsigned long long linear_fallbacks; // поиск шёл без индекса (OOM/parse)
+    unsigned long long probes;        // всего проб в открытой адресации
+    unsigned long long collisions;    // пробы заняты чужим ключом (strcmp != 0)
+    bool               indexed;       // индекс построен и используется
+} R2dPayloadLookupStats;
+
 typedef struct R2dPayload {
     R2dPayloadFile *files;
     int             file_count;
@@ -84,6 +106,21 @@ typedef struct R2dPayload {
     // Диагностика старта: сколько заняла распаковка тела (0 — груз не сжат).
     // Число честное — это замер самой операции, а не оценка по размеру.
     double          decompress_ms;
+
+    // --- Индекс путей (строится ОДИН раз в r2d_payload_parse) --------------
+    // Точный путь: открытая адресация, значение = индекс файла + 1 (0 — пусто).
+    // Хэш 64-битный FNV-1a, коллизии разрешаются strcmp — как в VFS игры.
+    int            *exact_slots;
+    int             exact_cap;    // степень двойки или 0 (индекса нет)
+    // Хвост пути: та же открытая адресация по basename, но у каждого слота
+    // есть цепочка файлов с одинаковым basename (base_next). Порядок цепочки —
+    // порядок файлов в контейнере, поэтому первое совпадение при обходе ровно
+    // то же, что дал бы линейный скан: старый fallback сохранён побайтово.
+    int            *base_slots;   // значение = head (индекс файла + 1)
+    int            *base_tail;    // значение = tail (индекс файла + 1)
+    int            *base_next;    // по индексу файла: следующий с тем же basename
+    int             base_cap;
+    R2dPayloadLookupStats lookup_stats;
 } R2dPayload;
 
 // Разбирает контейнер из памяти. При успехе buffer переходит во владение
@@ -93,8 +130,14 @@ R2dPayload *r2d_payload_parse(uint8_t *buffer, size_t size, char *err, size_t er
 
 void r2d_payload_free(R2dPayload *payload);
 
-// Ищет файл: сначала точное совпадение пути, затем по имени файла без каталогов.
+// Ищет файл: сначала точное совпадение пути, затем по basename с проверкой
+// суффикса (см. r2d_payload_find в payload.c). Оба пути индексированы в
+// r2d_payload_parse: полный скан файлов — только аварийный fallback при OOM.
 const R2dPayloadFile *r2d_payload_find(const R2dPayload *payload, const char *path);
+
+// Снимок счётчиков поиска (копия; можно передать NULL). Нужен диагностике и
+// тестам: «индекс построен» и «сколько было fallback'ов» видно без замеров.
+void r2d_payload_lookup_stats(const R2dPayload *payload, R2dPayloadLookupStats *out);
 
 // --- Движок -----------------------------------------------------------------
 

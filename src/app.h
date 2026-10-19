@@ -23,9 +23,12 @@ typedef struct R2DApp {
 
     // Подписчики на события SDL (GUI, отладочный оверлей). События
     // разбираются один раз в r2d_app_begin_frame и рассылаются всем.
-    void (*event_listeners[8])(void *user, const SDL_Event *ev);
-    void  *event_listener_user[8];
-    int    event_listener_count;
+    // Подписчики на SDL-события (§28): стартовая ёмкость 8 (обычно хватает,
+    // и она выделена один раз при init), дальше массив растёт.
+    void (**event_listeners)(void *user, const SDL_Event *ev);
+    void  **event_listener_user;
+    int     event_listener_count;
+    int     event_listener_cap;
 
     char title[256];     // текущее имя окна (его можно менять на ходу)
     bool vsync;          // вертикальная синхронизация презентации
@@ -110,15 +113,22 @@ typedef struct R2DApp {
     // Виртуальный ввод (агентская команда text) приходит МЕЖДУ кадрами,
     // поэтому сначала попадает в text_pending, а в text_input переносится
     // на ближайшем begin_frame — иначе его стёрло бы очисткой буфера кадра.
-    char text_input[1024];
-    int  text_input_len;
-    char text_pending[1024];
-    int  text_pending_len;
+    // Буферы РАСТУТ (§29): вставка из буфера обмена, длинная строка IME или
+    // команда консоли больше не обрезаются на 1024/256 байтах. Верхняя
+    // граница R2D_TEXT_BUF_SAFETY_MAX — защита от повреждённого ввода, а не
+    // игровой лимит; при её достижении ввод усекается с явным предупреждением.
+    char *text_input;
+    int   text_input_len;
+    int   text_input_cap;
+    char *text_pending;
+    int   text_pending_len;
+    int   text_pending_cap;
     // Предпросмотр IME: незавершённая композиция («nihao» → 你好). Игра
     // показывает её подчёркнутой, а сам текст приходит отдельным событием.
-    char text_editing[256];
-    int  text_editing_len;
-    int  text_editing_start;   // где началась композиция, в символах UTF-8
+    char *text_editing;
+    int   text_editing_len;
+    int   text_editing_cap;
+    int   text_editing_start;   // где началась композиция, в символах UTF-8
 
     // Буфер обмена: SDL отдаёт копию, её надо освободить SDL_free. Храним
     // последнее прочитанное значение, чтобы не выделять на каждый кадр.

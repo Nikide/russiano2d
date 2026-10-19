@@ -2,6 +2,7 @@
 #include "unity.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 void setUp(void) {}
@@ -75,9 +76,18 @@ static void test_init_and_info_defaults(void)
     TEST_ASSERT_EQUAL_INT(0, info.temp_lights);
     TEST_ASSERT_EQUAL_INT(0, info.decals);
     TEST_ASSERT_EQUAL_INT(0, info.bundles);
+    // Defaults match the legacy fixed capacities; they are runtime budgets now.
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_VFX_MAX_CARDS, info.cards_capacity);
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_VFX_MAX_TRAILS, info.trails_capacity);
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_VFX_MAX_LIGHTS, info.light_capacity);
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_VFX_MAX_BUNDLES, info.bundle_capacity);
     TEST_ASSERT_EQUAL_INT(R2D_WORLD_VFX_MAX_LIGHTS, info.light_budget);
+    R2DWorldVfxQuality quality = r2d_world_vfx_get_quality(&vfx);
+    TEST_ASSERT_EQUAL_INT(R2D_WORLD_VFX_TRAIL_POINTS, quality.trail_points);
+    r2d_world_vfx_free(&vfx);
     r2d_world_vfx_init(&vfx,NULL,-5);
     TEST_ASSERT_EQUAL_INT(0, r2d_world_vfx_get_light_budget(&vfx));
+    r2d_world_vfx_free(&vfx);
 }
 
 static void test_define_parses_every_primitive(void)
@@ -91,6 +101,7 @@ static void test_define_parses_every_primitive(void)
     r2d_world_vfx_info(&vfx,&info);
     TEST_ASSERT_EQUAL_INT(1, info.bundles);
     TEST_ASSERT_FALSE(r2d_world_vfx_defined(&vfx,"missing"));
+    r2d_world_vfx_free(&vfx);
 }
 
 static void test_bad_bundle_json_is_rejected(void)
@@ -111,6 +122,7 @@ static void test_bad_bundle_json_is_rejected(void)
     TEST_ASSERT_FALSE(r2d_world_vfx_define(&vfx,"bad",
         "{\"light\":{\"radius\":0}}",error,sizeof error));
     TEST_ASSERT_FALSE(r2d_world_vfx_defined(&vfx,"bad"));
+    r2d_world_vfx_free(&vfx);
 }
 
 static void test_spawn_emits_particles_and_cards(void)
@@ -142,6 +154,7 @@ static void test_spawn_emits_particles_and_cards(void)
     TEST_ASSERT_EQUAL_INT(1, info.temp_lights);
     TEST_ASSERT_EQUAL_INT(1, info.distortion_cards);
     TEST_ASSERT_EQUAL_INT(1, info.fx_spawns);
+    r2d_world_vfx_free(&vfx);
 }
 
 static void test_cards_step_curves_and_expire(void)
@@ -164,6 +177,7 @@ static void test_cards_step_curves_and_expire(void)
     r2d_world_vfx_info(&vfx,&info);
     TEST_ASSERT_EQUAL_INT(0, info.cards);
     TEST_ASSERT_EQUAL_INT(0, info.distortion_cards);
+    r2d_world_vfx_free(&vfx);
 }
 
 static void test_trail_step_records_points_and_expires(void)
@@ -183,6 +197,7 @@ static void test_trail_step_records_points_and_expires(void)
     r2d_world_vfx_step(&vfx,0.25f);
     TEST_ASSERT_FALSE(trail->active);
     TEST_ASSERT_EQUAL_INT(0, trail->count);
+    r2d_world_vfx_free(&vfx);
 }
 
 static void test_light_budget_and_priority_stealing(void)
@@ -212,6 +227,7 @@ static void test_light_budget_and_priority_stealing(void)
     r2d_world_vfx_info(&vfx,&info);
     TEST_ASSERT_EQUAL_INT(0, info.temp_lights);
     TEST_ASSERT_EQUAL_INT(0, info.light_budget);
+    r2d_world_vfx_free(&vfx);
 }
 
 static void test_light_expiry_and_clear(void)
@@ -232,6 +248,7 @@ static void test_light_expiry_and_clear(void)
     TEST_ASSERT_EQUAL_INT(0, info.trails);
     TEST_ASSERT_EQUAL_INT(0, info.temp_lights);
     TEST_ASSERT_EQUAL_INT(1, info.bundles);
+    r2d_world_vfx_free(&vfx);
 }
 
 static void test_particle_collision_modes(void)
@@ -252,7 +269,7 @@ static void test_particle_collision_modes(void)
     collision.blocked = test_blocked;
     collision.user = &query;
     r2d_world_particle_step_collide(&pool,0.1f,&collision);
-    R2DWorldParticle *p = &pool.items[0];
+    R2DWorldParticle *p = r2d_world_particle_at_mut(&pool,0);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, p->h);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, p->vh);
 
@@ -262,7 +279,7 @@ static void test_particle_collision_modes(void)
     bounce.bounce = 0.5f;
     TEST_ASSERT_EQUAL_INT(1, r2d_world_particle_emit_burst(&pool,&bounce,1,0,0,0,0,0));
     r2d_world_particle_step_collide(&pool,0.1f,&collision);
-    p = &pool.items[0];
+    p = r2d_world_particle_at_mut(&pool,0);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, p->h);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 5.0f, p->vh);
 
@@ -273,7 +290,7 @@ static void test_particle_collision_modes(void)
     query.wall_x = 1.0f;
     TEST_ASSERT_EQUAL_INT(1, r2d_world_particle_emit_burst(&pool,&wall,1,0,0,0,0,0));
     r2d_world_particle_step_collide(&pool,0.1f,&collision);
-    p = &pool.items[0];
+    p = r2d_world_particle_at_mut(&pool,0);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.9f, p->x);
     TEST_ASSERT_FLOAT_WITHIN(1e-5f, 0.0f, p->vx);
 
@@ -315,6 +332,11 @@ static void test_spawn_determinism(void)
     TEST_ASSERT_EQUAL_INT(ia.temp_lights,ib.temp_lights);
     TEST_ASSERT_EQUAL_INT(ia.fx_spawns,ib.fx_spawns);
     TEST_ASSERT_EQUAL_INT(ia.particles_spawned,ib.particles_spawned);
+    TEST_ASSERT_EQUAL_INT(ia.cards_evicted,ib.cards_evicted);
+    TEST_ASSERT_EQUAL_INT(ia.trails_evicted,ib.trails_evicted);
+    TEST_ASSERT_EQUAL_INT(ia.particle_peak,ib.particle_peak);
+    r2d_world_vfx_free(&a);
+    r2d_world_vfx_free(&b);
 }
 
 static void test_spawn_rejects_invalid_input(void)
@@ -331,6 +353,67 @@ static void test_spawn_rejects_invalid_input(void)
     R2DWorldVfxInfo info;
     r2d_world_vfx_info(&vfx,&info);
     TEST_ASSERT_EQUAL_INT(0, info.fx_spawns);
+    r2d_world_vfx_free(&vfx);
+}
+
+// Regression for the old fixed #65 bundle rejection: the registry grows on
+// demand and definitions are not capped at compile time.
+static void test_bundle_registry_grows_past_default(void)
+{
+    R2DWorldVfx vfx;
+    r2d_world_vfx_init(&vfx,NULL,4);
+    char error[192];
+    for (int i = 0; i < 200; i++) {
+        char name[32];
+        snprintf(name,sizeof name,"fx%03d",i);
+        TEST_ASSERT_TRUE_MESSAGE(r2d_world_vfx_define(&vfx,name,BUNDLE_PARTICLES,
+                                                      error,sizeof error),error);
+    }
+    R2DWorldVfxInfo info;
+    r2d_world_vfx_info(&vfx,&info);
+    TEST_ASSERT_EQUAL_INT(200, info.bundles);
+    TEST_ASSERT_TRUE(info.bundle_capacity >= 200);
+    TEST_ASSERT_TRUE(r2d_world_vfx_defined(&vfx,"fx199"));
+    r2d_world_vfx_free(&vfx);
+}
+
+// Quality pools are runtime capacities: lowering them is accepted between
+// spawns, and saturating the card pool evicts the oldest card deterministically
+// instead of failing randomly.
+static void test_quality_resize_and_deterministic_card_eviction(void)
+{
+    R2DWorldVfx vfx;
+    r2d_world_vfx_init(&vfx,NULL,1);
+    char error[192];
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_vfx_define(&vfx,"all",BUNDLE_ALL,error,sizeof error),
+                             error);
+    R2DWorldVfxQuality quality = r2d_world_vfx_default_quality();
+    quality.max_cards = 2;
+    quality.max_trails = 1;
+    quality.trail_points = 4;
+    quality.temp_lights = 1;
+    TEST_ASSERT_TRUE(r2d_world_vfx_set_quality(&vfx,&quality));
+    R2DWorldVfxInfo info;
+    r2d_world_vfx_info(&vfx,&info);
+    TEST_ASSERT_EQUAL_INT(2, info.cards_capacity);
+    TEST_ASSERT_EQUAL_INT(1, info.trails_capacity);
+
+    for (int i = 0; i < 3; i++)
+        TEST_ASSERT_TRUE(r2d_world_vfx_spawn(&vfx,"all",(float)i,0,0,0,0,0,1,NULL) > 0);
+    r2d_world_vfx_info(&vfx,&info);
+    TEST_ASSERT_EQUAL_INT(2, info.cards);
+    TEST_ASSERT_EQUAL_INT(1, info.cards_evicted);
+    // Equal-age slots tie-break to the lowest index, which is overwritten by
+    // the newest spawn: slot 0 holds x=2, slot 1 keeps x=1.
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 2.0f, vfx.cards[0].x);
+    TEST_ASSERT_FLOAT_WITHIN(1e-5f, 1.0f, vfx.cards[1].x);
+
+    // Invalid quality is rejected and leaves the manager untouched.
+    quality.max_cards = (1 << 20) + 1;
+    TEST_ASSERT_FALSE(r2d_world_vfx_set_quality(&vfx,&quality));
+    r2d_world_vfx_info(&vfx,&info);
+    TEST_ASSERT_EQUAL_INT(2, info.cards);
+    r2d_world_vfx_free(&vfx);
 }
 
 int main(void)
@@ -347,5 +430,7 @@ int main(void)
     RUN_TEST(test_particle_collision_modes);
     RUN_TEST(test_spawn_determinism);
     RUN_TEST(test_spawn_rejects_invalid_input);
+    RUN_TEST(test_bundle_registry_grows_past_default);
+    RUN_TEST(test_quality_resize_and_deterministic_card_eviction);
     return UNITY_END();
 }

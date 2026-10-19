@@ -8,6 +8,10 @@
 #pragma once
 
 #include "r2d.h"
+// Пул слотов с поколениями и проверяемый рост массивов (§36): реестры тел и
+// суставов больше не фиксированные, поэтому используют ту же инфраструктуру,
+// что и текстуры рендера.
+#include "r2d_slot_pool.h"
 
 #include <box2d/box2d.h>
 
@@ -127,7 +131,7 @@ typedef struct R2DContactEvent {
 // причина. В отличие от лога, они не теряются при нескольких ошибках подряд.
 typedef enum R2DPhysicsErrorCode {
     R2D_PERR_SHAPE_INVALID = 1,   // контур/капсула/круг отвергнуты до создания тела
-    R2D_PERR_BODY_LIMIT    = 2,   // достигнут лимит тел (R2D_MAX_BODIES)
+    R2D_PERR_BODY_LIMIT    = 2,   // не хватило памяти под тело (бывший лимит)
     R2D_PERR_SHAPE_INDEX   = 3,   // форма с таким индексом не найдена
 } R2DPhysicsErrorCode;
 
@@ -143,8 +147,39 @@ typedef struct R2DPhysicsError {
 } R2DPhysicsError;
 
 
-#define R2D_MAX_CONTACT_EVENTS 128
-#define R2D_MAX_JOINTS         64
+// Стартовые ёмкости динамических реестров. Это НЕ потолки: при нехватке
+// массив удваивается, поэтому 9000-е тело или 100-й сустав создаются штатно.
+// Рост проверяемый: required <= UINT32_MAX, capacity * sizeof(T) <= SIZE_MAX,
+// при отказе аллокатора данные не меняются и ошибка уходит в R2D_ERROR.
+#ifndef R2D_INITIAL_BODIES
+#define R2D_INITIAL_BODIES         1024
+#endif
+#define R2D_INITIAL_CONTACT_EVENTS 128
+#define R2D_INITIAL_JOINTS         64
+
+// ВРЕМЕННЫЕ legacy-алиасы: script.c ещё читает эти имена как «потолки».
+// Физика их не использует; после интеграции их нужно заменить на
+// r2d_physics_contact_capacity()/r2d_physics_joint_capacity().
+
+// Растущий буфер событий контакта за кадр. items выделяется один раз и
+// переиспользуется: в начале кадра обнуляется только count, free/realloc на
+// каждом кадре нет. Ёмкость растёт 128 → 256 → 512 → … без фиксированного
+// потолка; peak — максимум за всё время жизни мира (диагностика).
+typedef struct R2DContactBuffer {
+    R2DContactEvent *items;
+    uint32_t         count;
+    uint32_t         capacity;
+    uint32_t         peak;
+} R2DContactBuffer;
+
+// Растущий вектор int: списки пар began/ended/stay тоже больше не упираются в
+// размер буфера событий. Раньше при >128 контактах пары молча отбрасывались,
+// из-за чего могли дублироваться end/stay.
+typedef struct R2DIntVec {
+    int      *items;
+    uint32_t  count;
+    uint32_t  capacity;
+} R2DIntVec;
 
 typedef enum R2DJointKind {
     R2D_JOINT_REVOLUTE = 0,
@@ -162,49 +197,43 @@ typedef enum R2DJointKind {
 
 typedef struct R2DPhysics {
     b2WorldId world;
-    b2BodyId  bodies[R2D_MAX_BODIES];
-    bool      alive[R2D_MAX_BODIES];
-    float     transforms[R2D_MAX_BODIES * 3];   // x, y, angle — читает JS
-    int       live_count;
     bool      world_valid;
 
-    // --- Односторонние платформы -------------------------------------------
-    // Нормаль «рабочей» стороны в системе тела: тело проходит сквозь платформу
-    // с обратной стороны и встаёт на неё с лицевой. Хранится локально, чтобы
-    // повёрнутая платформа работала правильно.
-    bool  one_way[R2D_MAX_BODIES];
-    float one_way_nx[R2D_MAX_BODIES];
-    float one_way_ny[R2D_MAX_BODIES];
-    // «Спрыгивание»: пока флаг стоит, preSolve не даёт этому телу упираться в
-    // односторонние платформы — узел падает сквозь ту, на которой стоял.
-    // Флаг персональный (не у платформы): на одной платформе может стоять
-    // несколько тел, и спрыгнуть должно только одно.
-    bool  one_way_ignore[R2D_MAX_BODIES];
+    // --- Реестр тел ---------------------------------------------------------
+    // Слоты выдаёт пул: id = индекс слота (стабильный публичный id), freelist —
+    // O(1) создание после удаления, dense-список — обход только живых тел,
+    // generation — распознавание протухших ссылок на переиспользованный id.
+    // Массивы ниже индексируются слотом и растут вместе с ёмкостью пула.
+    R2DSlotPool body_pool;
+    b2BodyId   *bodies;
+    float      *transforms;        // x, y, angle — читает JS
+    bool       *one_way;
+    float      *one_way_nx;
+    float      *one_way_ny;
+    bool       *one_way_ignore;
+    bool       *contact_stay;
+    uint32_t    body_capacity;     // ёмкость массивов (== body_pool.slot_capacity)
+    uint32_t    body_peak;         // максимум одновременно живых тел
 
     // --- События контакта (читает JS через engine.contacts()) ---------------
-    R2DContactEvent contacts[R2D_MAX_CONTACT_EVENTS];
+    R2DContactBuffer contacts;
+    // Совместимость: script.c читает это поле напрямую. Значение всегда равно
+    // contacts.count и обновляется в конце каждой функции сбора событий.
     int             contact_count;
-    bool            overflow_logged;
+    bool            contact_oom;   // рост буфера/пар не удался (события не потеряны молча)
     // Буфер копится за все подшаги кадра: события одного шага живут до
     // следующего вызова Box2D, а за кадр шагов бывает до пяти, и раньше
     // выживали только события последнего.
     bool            contact_accumulating;
 
     // --- §7. Устойчивые контакты -------------------------------------------
-    // STAY — opt-in на тело: без флага ни одного лишнего обхода контактов.
-    bool     contact_stay[R2D_MAX_BODIES];
-    // Пары тел, у которых в этом кадре уже было begin/end/stay. Нужны, чтобы
-    // один и тот же end не пришёл дважды, а stay не дублировался, когда его
-    // просят оба участника пары.
-    int      began_pairs[R2D_MAX_CONTACT_EVENTS * 2];
-    int      began_count;
-    int      ended_pairs[R2D_MAX_CONTACT_EVENTS * 2];
-    int      ended_count;
-    int      stay_pairs[R2D_MAX_CONTACT_EVENTS * 4];
-    int      stay_count;
-    // Поколение тела: растёт при каждом создании. Событие несёт поколение —
-    // «устаревший handle» отличается от нового владельца того же id.
-    uint32_t generations[R2D_MAX_BODIES];
+    // Пары тел, у которых в этом кадре уже было begin/end/stay. Векторы растут:
+    // при >128 контактах пары больше не теряются. Нужны, чтобы один и тот же
+    // end не пришёл дважды, а stay не дублировался, когда его просят оба
+    // участника пары.
+    R2DIntVec began_pairs;
+    R2DIntVec ended_pairs;
+    R2DIntVec stay_pairs;
 
     // --- §7. Ошибки физики (кольцо, читает JS) ------------------------------
     R2DPhysicsError errors[R2D_MAX_PHYSICS_ERRORS];
@@ -214,13 +243,42 @@ typedef struct R2DPhysics {
     bool            error_overflow;
 
     // --- Суставы ------------------------------------------------------------
-    b2JointId joints[R2D_MAX_JOINTS];
-    bool      joint_alive[R2D_MAX_JOINTS];
+    // Тот же пул слотов: id = индекс слота, freelist + dense-список + поколения.
+    R2DSlotPool joint_pool;
+    b2JointId   *joints;
+    uint32_t     joint_capacity;
+    uint32_t     joint_peak;
     // Ось следующего prismatic/wheel-сустава (мировые координаты): параметров
     // у create_joint уже слишком много, а ось нужна только этим двум видам.
-    float     joint_axis_x;
-    float     joint_axis_y;
+    float        joint_axis_x;
+    float        joint_axis_y;
 } R2DPhysics;
+
+// --- Диагностика для debug-страницы -----------------------------------------
+// Только чтение: занято/ёмкость/пик по телам и суставам, count/ёмкость/пик по
+// контактам и флаг OOM. Всё это — факты реестров, а не «потолки из define».
+typedef struct R2DPhysicsStats {
+    uint32_t bodies_live;
+    uint32_t bodies_capacity;
+    uint32_t bodies_peak;
+    uint32_t joints_live;
+    uint32_t joints_capacity;
+    uint32_t joints_peak;
+    uint32_t contacts_count;
+    uint32_t contacts_capacity;
+    uint32_t contacts_peak;
+    bool     contact_oom;
+} R2DPhysicsStats;
+
+void     r2d_physics_stats(const R2DPhysics *p, R2DPhysicsStats *out);
+uint32_t r2d_physics_body_capacity(const R2DPhysics *p);
+uint32_t r2d_physics_body_peak(const R2DPhysics *p);
+uint32_t r2d_physics_joint_capacity(const R2DPhysics *p);
+uint32_t r2d_physics_joint_peak(const R2DPhysics *p);
+uint32_t r2d_physics_contact_capacity(const R2DPhysics *p);
+uint32_t r2d_physics_contact_peak(const R2DPhysics *p);
+uint32_t r2d_physics_contact_count(const R2DPhysics *p);
+bool     r2d_physics_contact_oom(const R2DPhysics *p);
 
 void r2d_physics_init(R2DPhysics *p, float gravity_x, float gravity_y);
 void r2d_physics_shutdown(R2DPhysics *p);

@@ -364,7 +364,9 @@ static void vfx_detach(WorldHandle *w)
     VfxBinding *binding=*entry;
     *entry=binding->next;
     if(binding->world)binding->world->vfx=NULL;
-    r2d_world_vfx_clear(&binding->vfx);
+    // Пулы VFX теперь выделяются в init: clear() их не освобождает, поэтому
+    // при уничтожении мира обязателен free (иначе утечка на каждый мир).
+    r2d_world_vfx_free(&binding->vfx);
     free(binding);
 }
 static void world_dispose(WorldHandle *w)
@@ -402,6 +404,17 @@ static bool world_token(JSContext *ctx,int argc,JSValueConst *argv,int *out)
     if(JS_ToFloat64(ctx,&id,argv[0])<0)return false;
     if(!isfinite(id)||id<0||id>2147483647.0||id!=floor(id)){JS_ThrowRangeError(ctx,"Re2D World: integer handle required");return false;}
     *out=(int)id;return true;
+}
+// Token buffers are sized from the live registry, not a compile-time constant.
+// The small stack staging buffer covers the common case; larger worlds get an
+// exact heap buffer for this one JS call (no per-frame allocator churn).
+#define WORLD_TOKEN_STAGE 256
+static int *world_token_stage(JSContext *ctx,int need,int *stage,int *capacity)
+{
+    (void)ctx;
+    *capacity=need>WORLD_TOKEN_STAGE?need:WORLD_TOKEN_STAGE;
+    if(need<=WORLD_TOKEN_STAGE)return stage;
+    return (int *)malloc((size_t)need*sizeof(int));
 }
 static uint32_t world_rgb(const float *v)
 { return 0xff000000u|(uint32_t)v[0]|((uint32_t)v[1]<<8)|((uint32_t)v[2]<<16); }
@@ -444,7 +457,7 @@ static JSValue world_ray(JSContext *ctx,JSValueConst self,int argc,JSValueConst 
 }
 static JSValue material_info_object(JSContext *ctx,R2DWorldRuntime *w,int index)
 {
-    if(!w||index<0||index>=R2D_WORLD_MAX_MATERIALS)return JS_NULL;
+    if(!w||index<0||index>=w->world.material_capacity)return JS_NULL;
     const R2DWorldMaterial *m=&w->world.materials[index];
     if(!m->used)return JS_NULL;
     JSValue o=JS_NewObject(ctx);
@@ -492,12 +505,12 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
     set_num(ctx,o,"cellsRejected",w->world.cell_count-w->visibility.cells_visible);set_num(ctx,o,"surfacesRejected",w->world.surface_count-w->visibility.surface_count);
     set_num(ctx,o,"cpuFramePayloadBytes",(double)w->width*w->height*(4+sizeof(float)+sizeof(R2DWorldPixelOwner)));
     size_t material_bytes=(size_t)w->world.sky.width*w->world.sky.height*4;
-    for(int i=0;i<64;i++){const R2DWorldMaterial *m=&w->world.materials[i];material_bytes+=(size_t)m->albedo.width*m->albedo.height*4+(size_t)m->normal.width*m->normal.height*4+(size_t)m->emissive.width*m->emissive.height*4;}
+    for(int i=0;i<w->world.material_capacity;i++){const R2DWorldMaterial *m=&w->world.materials[i];material_bytes+=(size_t)m->albedo.width*m->albedo.height*4+(size_t)m->normal.width*m->normal.height*4+(size_t)m->emissive.width*m->emissive.height*4;}
     set_num(ctx,o,"cpuMaterialPayloadBytes",material_bytes);set_num(ctx,o,"gpuTexturePayloadBytes",w->gpu_texture_bytes);set_num(ctx,o,"gpuBufferPayloadBytes",w->gpu_transfer_bytes);set_num(ctx,o,"gpuShadowUpdates",w->gpu_shadow_updates);
     set_num(ctx,o,"decals",w->world.decal_count);set_num(ctx,o,"lightUpdates",w->world.light_updates);
     {
         JSValue materials=JS_NewArray(ctx);uint32_t materialCount=0;
-        for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)if(w->world.materials[i].used){
+        for(int i=0;i<w->world.material_capacity;i++)if(w->world.materials[i].used){
             JSValue entry=material_info_object(ctx,w,i);
             if(!JS_IsNull(entry))JS_SetPropertyUint32(ctx,materials,materialCount++,entry);else JS_FreeValue(ctx,entry);
         }
@@ -726,6 +739,21 @@ static JSValue world_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst
 
     set_num(ctx,o,"materials",w->world.material_count);
     set_num(ctx,o,"lights",w->world.light_count);set_num(ctx,o,"lightSpanPairs",w->world.light_pairs);set_num(ctx,o,"lightOverflow",w->world.light_overflow);
+    // Scalability diagnostics: live counts vs dynamic capacities plus the
+    // budget decisions (light candidate/selected/culled, shadow selection,
+    // decal eviction). Additive fields; legacy keys above are unchanged.
+    set_num(ctx,o,"actorCount",w->actor_count);set_num(ctx,o,"actorCapacity",w->actor_capacity);
+    set_num(ctx,o,"atlasCount",w->atlas_count);set_num(ctx,o,"atlasCapacity",w->atlas_capacity);
+    set_num(ctx,o,"frameCapacity",w->frame_capacity);
+    set_num(ctx,o,"hitProxies",w->diag_hit_proxies);set_num(ctx,o,"triggerCount",w->diag_triggers);
+    set_num(ctx,o,"moverCount",w->diag_movers);set_num(ctx,o,"controllerCount",w->diag_controllers);
+    set_num(ctx,o,"materialCapacity",w->world.material_capacity);
+    set_num(ctx,o,"lightCapacity",w->world.light_capacity);
+    set_num(ctx,o,"lightCandidates",w->diag_light_candidates);
+    set_num(ctx,o,"lightsSelected",w->diag_lights_selected);
+    set_num(ctx,o,"shadowsSelected",w->diag_shadows_selected);
+    set_num(ctx,o,"decalCount",w->diag_decals_total);set_num(ctx,o,"decalCapacity",w->world.decal_capacity);
+    set_num(ctx,o,"decalsRendered",w->diag_decals_rendered);set_num(ctx,o,"decalsEvicted",w->diag_decals_evicted);
     set_num(ctx,o,"visibleCells",w->visibility.cells_visible);set_num(ctx,o,"visibleSpans",w->visibility.span_count);set_num(ctx,o,"visibleSurfaces",w->visibility.surface_count);set_num(ctx,o,"portalsTested",w->visibility.portals_tested);set_num(ctx,o,"portalsConservative",w->visibility.portals_conservative);set_num(ctx,o,"bspNodesVisited",w->visibility.bsp_nodes_visited);
     set_num(ctx,o,"cells",w->world.cell_count);set_num(ctx,o,"portals",w->world.portal_count);set_num(ctx,o,"surfaces",w->world.surface_count);
     set_num(ctx,o,"segments",w->world.bsp.segment_count);set_num(ctx,o,"width",w->width);set_num(ctx,o,"height",w->height);
@@ -1033,8 +1061,9 @@ static JSValue world_light_delete(JSContext *ctx,JSValueConst self,int argc,JSVa
 static JSValue world_light_info(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);int token;if(!w||!world_token(ctx,argc,argv,&token))return JS_EXCEPTION;
-    int slot=token%R2D_WORLD_MAX_LIGHTS;const R2DWorldLight *l=&w->world.lights[slot];
-    if(!l->active||l->generation!=(unsigned)(token/R2D_WORLD_MAX_LIGHTS))return JS_ThrowRangeError(ctx,"Re2D World: stale light");
+    const int slot=r2d_world_light_slot(&w->world,(int)token);
+    if(slot<0)return JS_ThrowRangeError(ctx,"Re2D World: stale light");
+    const R2DWorldLight *l=&w->world.lights[slot];
     JSValue o=JS_NewObject(ctx);set_num(ctx,o,"x",l->x);set_num(ctx,o,"y",l->y);set_num(ctx,o,"h",l->h);set_num(ctx,o,"radius",l->radius);set_num(ctx,o,"intensity",l->intensity);
     set_num(ctx,o,"r",l->r);set_num(ctx,o,"g",l->g);set_num(ctx,o,"b",l->b);set_num(ctx,o,"remaining",l->remaining);set_num(ctx,o,"flickerMin",l->flicker_min);set_num(ctx,o,"flickerMax",l->flicker_max);set_num(ctx,o,"flickerRate",l->flicker_rate);set_num(ctx,o,"flickerSeed",l->flicker_seed);JS_SetPropertyStr(ctx,o,"shadow",JS_NewBool(ctx,l->shadow));return o;
 }
@@ -1525,9 +1554,13 @@ static JSValue world_secret_info(JSContext *ctx,JSValueConst self,int argc,JSVal
 static JSValue world_secret_tick(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[4];if(!w||!world_numbers(ctx,argc,argv,4,p))return JS_EXCEPTION;
-    int tokens[R2D_WORLD_SECRET_LIMIT];
-    int count=r2d_world_secret_tick(w,p[0],p[1],p[2],p[3],tokens,R2D_WORLD_SECRET_LIMIT);
-    return trigger_tokens(ctx,count,tokens);
+    int stage[WORLD_TOKEN_STAGE],capacity=0;
+    int *tokens=world_token_stage(ctx,r2d_world_secret_active_count(w),stage,&capacity);
+    if(!tokens)return JS_ThrowOutOfMemory(ctx);
+    int count=r2d_world_secret_tick(w,p[0],p[1],p[2],p[3],tokens,capacity);
+    JSValue result=trigger_tokens(ctx,count,tokens);
+    if(tokens!=stage)free(tokens);
+    return result;
 }
 static JSValue world_breakable_create(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -1705,7 +1738,7 @@ static JSValue world_vfx_debug(JSContext *ctx,JSValueConst self,int argc,JSValue
     set_num(ctx,o,"particleBudget",w->particle_budget);
     JSValue names=JS_NewArray(ctx);
     int written=0;
-    for(int i=0;i<R2D_WORLD_VFX_MAX_BUNDLES;i++)
+    for(int i=0;i<binding->vfx.bundle_capacity;i++)
         if(binding->vfx.bundles[i].used)
             JS_SetPropertyUint32(ctx,names,(uint32_t)written++,JS_NewString(ctx,binding->vfx.bundles[i].name));
     JS_SetPropertyStr(ctx,o,"bundles",names);
@@ -2008,24 +2041,36 @@ static JSValue trigger_tokens(JSContext *ctx,int count,const int *tokens)
 static JSValue world_trigger_tick(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[4];if(!w||!world_numbers(ctx,argc,argv,4,p))return JS_EXCEPTION;
-    int tokens[R2D_WORLD_TRIGGER_LIMIT];
-    int count=r2d_world_trigger_tick(w,p[1],p[2],p[3],tokens,R2D_WORLD_TRIGGER_LIMIT);
+    int stage[WORLD_TOKEN_STAGE],capacity=0;
+    int *tokens=world_token_stage(ctx,r2d_world_trigger_active_count(w),stage,&capacity);
+    if(!tokens)return JS_ThrowOutOfMemory(ctx);
+    int count=r2d_world_trigger_tick(w,p[1],p[2],p[3],tokens,capacity);
     (void)p[0];
-    return trigger_tokens(ctx,count,tokens);
+    JSValue result=trigger_tokens(ctx,count,tokens);
+    if(tokens!=stage)free(tokens);
+    return result;
 }
 static JSValue world_trigger_use(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[3];if(!w||!world_numbers(ctx,argc,argv,3,p))return JS_EXCEPTION;
-    int tokens[R2D_WORLD_TRIGGER_LIMIT];
-    int count=r2d_world_trigger_use_at(w,p[0],p[1],p[2],tokens,R2D_WORLD_TRIGGER_LIMIT);
-    return trigger_tokens(ctx,count,tokens);
+    int stage[WORLD_TOKEN_STAGE],capacity=0;
+    int *tokens=world_token_stage(ctx,r2d_world_trigger_active_count(w),stage,&capacity);
+    if(!tokens)return JS_ThrowOutOfMemory(ctx);
+    int count=r2d_world_trigger_use_at(w,p[0],p[1],p[2],tokens,capacity);
+    JSValue result=trigger_tokens(ctx,count,tokens);
+    if(tokens!=stage)free(tokens);
+    return result;
 }
 static JSValue world_trigger_shoot(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
     WorldHandle *w=world_get(ctx,self);float p[4];if(!w||!world_numbers(ctx,argc,argv,4,p))return JS_EXCEPTION;
-    int tokens[R2D_WORLD_TRIGGER_LIMIT];
-    int count=r2d_world_trigger_shoot_at(w,p[0],p[1],p[2],p[3],tokens,R2D_WORLD_TRIGGER_LIMIT);
-    return trigger_tokens(ctx,count,tokens);
+    int stage[WORLD_TOKEN_STAGE],capacity=0;
+    int *tokens=world_token_stage(ctx,r2d_world_trigger_active_count(w),stage,&capacity);
+    if(!tokens)return JS_ThrowOutOfMemory(ctx);
+    int count=r2d_world_trigger_shoot_at(w,p[0],p[1],p[2],p[3],tokens,capacity);
+    JSValue result=trigger_tokens(ctx,count,tokens);
+    if(tokens!=stage)free(tokens);
+    return result;
 }
 static JSValue world_atlas_add(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -2209,7 +2254,7 @@ static JSValue world_decal_new(JSContext *ctx,JSValueConst self,int argc,JSValue
     if(argc>9){float v2[1];if(!world_numbers(ctx,1,argv+9,1,v2))return JS_EXCEPTION;decal.fade_in=v2[0];decal.max_life=p[5];}
     if(argc>10){float v2[1];if(!world_numbers(ctx,1,argv+10,1,v2))return JS_EXCEPTION;decal.fade_out=v2[0];decal.max_life=p[5];}
     int token=r2d_world_decal_create(&w->world,&decal);
-    if(token<0)return JS_ThrowRangeError(ctx,"Re2D World: invalid decal or 128-decal budget exhausted");return JS_NewInt32(ctx,token);
+    if(token<0)return JS_ThrowRangeError(ctx,"Re2D World: invalid decal definition or allocation failure");return JS_NewInt32(ctx,token);
 }
 static JSValue world_decal_remove(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
 {
@@ -2301,7 +2346,7 @@ static JSValue world_materials_info(JSContext *ctx,JSValueConst self,int argc,JS
 {
     (void)argc;(void)argv;WorldHandle *w=world_get(ctx,self);if(!w)return JS_EXCEPTION;
     JSValue arr=JS_NewArray(ctx);uint32_t count=0;
-    for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)if(w->world.materials[i].used){
+    for(int i=0;i<w->world.material_capacity;i++)if(w->world.materials[i].used){
         JSValue o=material_info_object(ctx,w,i);if(JS_IsNull(o)){JS_FreeValue(ctx,o);continue;}
         JS_SetPropertyUint32(ctx,arr,count++,o);
     }
@@ -2327,7 +2372,7 @@ static JSValue world_surface_material_name(JSContext *ctx,JSValueConst self,int 
     int index=(int)p[0];
     if(index<0||index>=w->world.surface_count)return JS_NULL;
     int material=w->world.surface_materials?w->world.surface_materials[index]:-1;
-    if(material<0||material>=R2D_WORLD_MAX_MATERIALS||!w->world.materials[material].used)return JS_NULL;
+    if(material<0||material>=w->world.material_capacity||!w->world.materials[material].used)return JS_NULL;
     return JS_NewString(ctx,w->world.materials[material].name);
 }
 static JSValue world_surface_material_set(JSContext *ctx,JSValueConst self,int argc,JSValueConst *argv)
@@ -2891,24 +2936,50 @@ static JSValue world_reload_apply(JSContext *ctx,WorldHandle *w,const char *text
     if(!ok)return JS_ThrowTypeError(ctx,"%s",error);
     const float region_hint=r2d_world_region_size_from_json(text);
     R2DRe2dWorld old=w->world;
-    R2DWorldLight authored[R2D_WORLD_MAX_LIGHTS];memcpy(authored,next.lights,sizeof authored);
+    // Authored static lights loaded by the new map, copied out before the old
+    // dynamic registry is adopted. Sized from the live count, not a fixed 128.
+    const int authored_capacity=next.light_count;
+    R2DWorldLight *authored=authored_capacity?(R2DWorldLight *)malloc((size_t)authored_capacity*sizeof *authored):NULL;
+    if(authored_capacity&&!authored){r2d_world_free(&next);return JS_ThrowOutOfMemory(ctx);}
+    int authored_count=0;
+    for(int i=0;i<next.light_capacity;i++)if(next.lights[i].active){
+        if(authored_count<authored_capacity)authored[authored_count++]=next.lights[i];
+    }
     bool retain=!next.authored_lighting;
-    if(!r2d_world_set_lighting(&next,retain?&old.lighting:&next.lighting)){r2d_world_free(&next);return JS_ThrowOutOfMemory(ctx);}
-    memcpy(next.lights,old.lights,sizeof next.lights);next.light_count=0;
-    for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++){
+    if(!r2d_world_set_lighting(&next,retain?&old.lighting:&next.lighting)){
+        free(authored);r2d_world_free(&next);return JS_ThrowOutOfMemory(ctx);
+    }
+    // Adopt the old runtime light registry (dynamic lights survive a map reload)
+    // and rebuild the authored static lights into it.
+    r2d_world_light_registry_free(&next);
+    if(!r2d_world_light_registry_move(&next,&old)){
+        free(authored);r2d_world_free(&next);return JS_ThrowOutOfMemory(ctx);
+    }
+    if(next.light_dirty_slots&&next.light_capacity)memset(next.light_dirty_slots,1,(size_t)next.light_capacity);
+    next.light_count=0;
+    for(int i=0;i<next.light_capacity;i++){
         if(next.lights[i].is_static)next.lights[i].active=false;
         if(next.lights[i].active)next.light_count++;
         next.light_links[i].count=0;
     }
-    if(next.span_count)memset(next.span_light_masks,0,(size_t)next.span_count*4*sizeof(uint32_t));
+    if(next.span_count&&next.span_light_masks)
+        memset(next.span_light_masks,0,(size_t)next.span_count*(size_t)next.span_light_words*sizeof(uint32_t));
     if(next.span_count)memset(next.span_light_counts,0,(size_t)next.span_count);
     if(next.span_count)memset(next.span_light_candidates,0,(size_t)next.span_count);
     next.light_pairs=next.light_overflow=0;next.light_dirty=next.light_full_dirty=true;
-    for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(authored[i].active){
-        if(r2d_world_light_create(&next,&authored[i])<0){r2d_world_free(&next);return JS_ThrowRangeError(ctx,"Re2D World: reloaded static lights exceed available pool");}
+    for(int i=0;i<authored_count;i++)if(r2d_world_light_create(&next,&authored[i])<0){
+        free(authored);
+        // Move the registry back so a failed reload leaves the live world intact.
+        r2d_world_light_registry_move(&old,&next);
+        r2d_world_free(&next);
+        return JS_ThrowRangeError(ctx,"Re2D World: reloaded static lights exceed available memory");
     }
-    memcpy(next.materials,old.materials,sizeof next.materials);next.material_count=old.material_count;
-    memset(old.materials,0,sizeof old.materials);old.material_count=0;
+    free(authored);
+    // Material definitions and decals are runtime-owned; move the dynamic banks
+    // into the new world value (freeing the loader's empty banks first).
+    free(next.materials);
+    next.materials=old.materials;next.material_capacity=old.material_capacity;next.material_count=old.material_count;
+    old.materials=NULL;old.material_capacity=old.material_count=0;
     next.sky=old.sky;next.sky_color=old.sky_color;next.sky_yaw=old.sky_yaw;memset(&old.sky,0,sizeof old.sky);
     // Indexed configuration survives only when its canonical index domain agrees.
     if(next.wall_count==old.wall_count&&next.span_count==old.span_count&&next.cell_count==old.cell_count){
@@ -2916,8 +2987,14 @@ static JSValue world_reload_apply(JSContext *ctx,WorldHandle *w,const char *text
         free(next.surface_materials);next.surface_materials=old.surface_materials;old.surface_materials=NULL;
         if(retain){free(next.span_lights);next.span_lights=old.span_lights;old.span_lights=NULL;}
     }
-    memcpy(next.decals,old.decals,sizeof next.decals);next.decal_count=old.decal_count;
-    if(next.wall_count!=old.wall_count||next.span_count!=old.span_count||next.cell_count!=old.cell_count){for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)next.decals[i].active=false;next.decal_count=0;}
+    free(next.decals);
+    next.decals=old.decals;next.decal_capacity=old.decal_capacity;next.decal_count=old.decal_count;
+    next.decal_budget=old.decal_budget;next.decal_evicted=old.decal_evicted;next.decal_sequence=old.decal_sequence;
+    old.decals=NULL;old.decal_capacity=old.decal_count=0;
+    if(next.wall_count!=old.wall_count||next.span_count!=old.span_count||next.cell_count!=old.cell_count){
+        for(int i=0;i<next.decal_capacity;i++)next.decals[i].active=false;
+        next.decal_count=0;
+    }
     next.geometry_revision=old.geometry_revision+1;
     VfxBinding *vfx=vfx_binding(w);
     if(vfx)r2d_world_vfx_clear(&vfx->vfx);

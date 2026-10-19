@@ -4,30 +4,158 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <stdint.h>
 bool r2d_world_light_valid(const R2DWorldLight *l)
 {
     return l&&isfinite(l->x)&&isfinite(l->y)&&isfinite(l->h)&&isfinite(l->radius)&&l->radius>0&&l->radius<=1000000&&
         isfinite(l->intensity)&&l->intensity>=0&&l->intensity<=100&&isfinite(l->r)&&l->r>=0&&l->r<=1&&
         isfinite(l->g)&&l->g>=0&&l->g<=1&&isfinite(l->b)&&l->b>=0&&l->b<=1;
 }
+static int light_mask_words(int light_capacity)
+{
+    int words=(light_capacity+31)/32;
+    // The bake/shader format always covers the legacy 128 slots; 4 words is the
+    // minimum storage even for an empty/dynamic world.
+    return words<4?4:words;
+}
+static int light_token(unsigned generation,int slot)
+{
+    return (int)(generation*(unsigned)R2D_WORLD_LIGHT_TOKEN_STRIDE+(unsigned)slot);
+}
+int r2d_world_light_slot(const R2DRe2dWorld *w,int token)
+{
+    if(!w||token<0)return -1;
+    const unsigned stride=R2D_WORLD_LIGHT_TOKEN_STRIDE;
+    unsigned slot=(unsigned)token%stride,generation=(unsigned)token/stride;
+    if(slot<(unsigned)w->light_capacity&&w->lights[slot].active&&
+       w->lights[slot].generation==generation)return (int)slot;
+    // Compatibility decode for callers that build the historic
+    // generation*128+slot token (used by native tests/tooling). Dynamic tokens
+    // start at R2D_WORLD_LIGHT_TOKEN_STRIDE, so the ranges do not overlap.
+    if(token<R2D_WORLD_LIGHT_TOKEN_STRIDE){
+        unsigned legacy_slot=(unsigned)token%R2D_WORLD_MAX_LIGHTS;
+        unsigned legacy_generation=(unsigned)token/R2D_WORLD_MAX_LIGHTS;
+        if(legacy_slot<(unsigned)w->light_capacity&&w->lights[legacy_slot].active&&
+           w->lights[legacy_slot].generation==legacy_generation)return (int)legacy_slot;
+    }
+    return -1;
+}
+// Grow lights/light_links/light_dirty_slots/shadow_mask/shadow_geometry_revision
+// together. Span light masks grow with the registry too (one bit per light per
+// span), so a light slot above 127 still propagates correctly. All allocations
+// are prepared before the old arrays are released (transactional growth).
+static bool light_registry_reserve(R2DRe2dWorld *w,int need)
+{
+    if(!w||need<0)return false;
+    if(need<=w->light_capacity)return true;
+    int capacity=w->light_capacity>0?w->light_capacity:R2D_WORLD_MAX_LIGHTS;
+    while(capacity<need){
+        if(capacity>INT_MAX/2){capacity=need;break;}
+        capacity*=2;
+    }
+    if((size_t)capacity>SIZE_MAX/sizeof(R2DWorldLight))return false;
+    uint32_t *masks=NULL;int mask_words=w->span_light_words;
+    if(w->span_light_masks&&w->span_count>0){
+        const int words=light_mask_words(capacity);
+        if(words>w->span_light_words){
+            masks=calloc((size_t)w->span_count*(size_t)words,sizeof *masks);
+            if(!masks)return false;
+            for(int i=0;i<w->span_count;i++)
+                memcpy(masks+(size_t)i*words,w->span_light_masks+(size_t)i*w->span_light_words,
+                       (size_t)w->span_light_words*sizeof *masks);
+            mask_words=words;
+        }
+    }
+    R2DWorldLight *lights=calloc((size_t)capacity,sizeof *lights);
+    R2DWorldLightLinks *links=calloc((size_t)capacity,sizeof *links);
+    uint8_t *dirty=calloc((size_t)capacity,1);
+    uint8_t *shadow=calloc((size_t)capacity,1);
+    uint64_t *revisions=calloc((size_t)capacity,sizeof *revisions);
+    if(!lights||!links||!dirty||!shadow||!revisions){
+        free(masks);free(lights);free(links);free(dirty);free(shadow);free(revisions);return false;
+    }
+    if(w->light_capacity>0){
+        memcpy(lights,w->lights,(size_t)w->light_capacity*sizeof *lights);
+        memcpy(links,w->light_links,(size_t)w->light_capacity*sizeof *links);
+        memcpy(dirty,w->light_dirty_slots,(size_t)w->light_capacity);
+        memcpy(shadow,w->shadow_mask,(size_t)w->light_capacity);
+        memcpy(revisions,w->shadow_geometry_revision,(size_t)w->light_capacity*sizeof *revisions);
+    }
+    free(w->lights);free(w->light_links);free(w->light_dirty_slots);
+    free(w->shadow_mask);free(w->shadow_geometry_revision);
+    if(masks){free(w->span_light_masks);w->span_light_masks=masks;}
+    w->span_light_words=mask_words;
+    w->lights=lights;w->light_links=links;w->light_dirty_slots=dirty;
+    w->shadow_mask=shadow;w->shadow_geometry_revision=revisions;w->light_capacity=capacity;
+    return true;
+}
+void r2d_world_light_registry_free(R2DRe2dWorld *w)
+{
+    if(!w)return;
+    for(int i=0;i<w->light_capacity;i++)free(w->light_links[i].spans);
+    free(w->lights);free(w->light_links);free(w->light_dirty_slots);
+    free(w->shadow_mask);free(w->shadow_geometry_revision);
+    w->lights=NULL;w->light_links=NULL;w->light_dirty_slots=NULL;
+    w->shadow_mask=NULL;w->shadow_geometry_revision=NULL;
+    w->light_capacity=0;w->light_count=0;
+}
+bool r2d_world_light_registry_move(R2DRe2dWorld *dst,R2DRe2dWorld *src)
+{
+    if(!dst||!src)return false;
+    // Each span needs one bit per light slot; prepare the destination mask table
+    // before detaching the source registry so a failure changes nothing.
+    uint32_t *masks=NULL;int mask_words=dst->span_light_words;
+    if(dst->span_light_masks&&dst->span_count>0){
+        const int words=light_mask_words(src->light_capacity);
+        if(words>dst->span_light_words){
+            masks=calloc((size_t)dst->span_count*(size_t)words,sizeof *masks);
+            if(!masks)return false;
+            for(int i=0;i<dst->span_count;i++)
+                memcpy(masks+(size_t)i*words,dst->span_light_masks+(size_t)i*dst->span_light_words,
+                       (size_t)dst->span_light_words*sizeof *masks);
+            mask_words=words;
+        }
+    }
+    r2d_world_light_registry_free(dst);
+    if(masks){free(dst->span_light_masks);dst->span_light_masks=masks;}
+    dst->span_light_words=mask_words;
+    dst->lights=src->lights;dst->light_links=src->light_links;
+    dst->light_dirty_slots=src->light_dirty_slots;
+    dst->shadow_mask=src->shadow_mask;dst->shadow_geometry_revision=src->shadow_geometry_revision;
+    dst->light_capacity=src->light_capacity;dst->light_count=src->light_count;
+    dst->light_dirty=src->light_dirty;dst->light_full_dirty=src->light_full_dirty;
+    src->lights=NULL;src->light_links=NULL;src->light_dirty_slots=NULL;
+    src->shadow_mask=NULL;src->shadow_geometry_revision=NULL;
+    src->light_capacity=src->light_count=0;
+    return true;
+}
 void r2d_world_light_free(R2DRe2dWorld *w)
 {
+    if(!w)return;
     free(w->span_lights);free(w->span_light_counts);free(w->span_light_refs);free(w->span_light_masks);free(w->span_light_candidates);
     free(w->light_queue);free(w->light_seen);free(w->light_touched);free(w->light_touched_flags);
-    for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)free(w->light_links[i].spans);
+    w->span_lights=NULL;w->span_light_counts=NULL;w->span_light_refs=NULL;w->span_light_masks=NULL;w->span_light_candidates=NULL;
+    w->light_queue=NULL;w->light_seen=NULL;w->light_touched=NULL;w->light_touched_flags=NULL;
+    w->span_light_words=0;
+    r2d_world_light_registry_free(w);
 }
 static bool ensure(R2DRe2dWorld *w)
 {
+    if(!w)return false;
+    if(!w->light_capacity&&!light_registry_reserve(w,R2D_WORLD_MAX_LIGHTS))return false;
     if(w->span_lights&&w->span_light_masks)return true;
     int n=w->span_count;if(!n)return true;
+    const int words=light_mask_words(w->light_capacity);
     R2DWorldSpanLight *ambient=calloc((size_t)n,sizeof *ambient);
     uint8_t *counts=calloc((size_t)n,1),*candidates=calloc((size_t)n,1),*seen=calloc((size_t)n,1),*flags=calloc((size_t)n,1);
     int *refs=calloc((size_t)n*R2D_WORLD_LIGHTS_PER_SPAN,sizeof *refs),*queue=malloc((size_t)n*sizeof(int)),*touched=malloc((size_t)n*sizeof(int));
-    uint32_t *masks=calloc((size_t)n*4,sizeof *masks);
+    uint32_t *masks=calloc((size_t)n*(size_t)words,sizeof *masks);
     if(!ambient||!counts||!refs||!candidates||!seen||!flags||!queue||!touched||!masks){free(ambient);free(counts);free(refs);free(candidates);free(seen);free(flags);free(queue);free(touched);free(masks);return false;}
     for(int i=0;i<n;i++)ambient[i]=w->span_lights?w->span_lights[i]:(R2DWorldSpanLight){1,1,1,1,0,0,0,0,0};
     free(w->span_lights);free(w->span_light_counts);free(w->span_light_refs);
     w->span_lights=ambient;w->span_light_counts=counts;w->span_light_refs=refs;w->span_light_masks=masks;w->span_light_candidates=candidates;
+    w->span_light_words=words;
     w->light_queue=queue;w->light_seen=seen;w->light_touched=touched;w->light_touched_flags=flags;
     w->light_dirty=true;w->light_full_dirty=true;return true;
 }
@@ -44,32 +172,36 @@ bool r2d_world_set_span_light(R2DRe2dWorld *w,int span,const R2DWorldSpanLight *
     if(l->level>1||l->r>1||l->g>1||l->b>1||l->fog_r>1||l->fog_g>1||l->fog_b>1||!ensure(w))return false;
     w->span_lights[span]=*l;return true;
 }
-static int light_slot(const R2DRe2dWorld *w,int token)
-{
-    if(!w||token<0)return -1;int slot=token%R2D_WORLD_MAX_LIGHTS;
-    return w->lights[slot].active&&w->lights[slot].generation==(unsigned)(token/R2D_WORLD_MAX_LIGHTS)?slot:-1;
-}
 int r2d_world_light_create(R2DRe2dWorld *w,const R2DWorldLight *l)
 {
     if(!w||!r2d_world_light_valid(l)||!ensure(w))return -1;
-    for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(!w->lights[i].active) {
-        // Exhausted generation slots retire instead of accepting stale tokens after wrap.
-        unsigned gen=w->lights[i].generation;if(gen>=16777215)continue;gen++;
+    for(int i=0;i<w->light_capacity;i++)if(!w->lights[i].active) {
+        // Exhausted-generation slots retire instead of accepting stale tokens.
+        unsigned gen=w->lights[i].generation;
+        if(gen>=R2D_WORLD_LIGHT_GENERATION_MAX)continue;
+        gen++;
         w->lights[i]=*l;w->lights[i].active=true;w->lights[i].generation=gen;w->light_count++;w->light_dirty=true;w->light_dirty_slots[i]=1;
-        return (int)(gen*R2D_WORLD_MAX_LIGHTS+(unsigned)i);
+        return light_token(gen,i);
     }
-    return -1;
+    // No retired/free slot: grow the registry. Slots are bounded only by the
+    // opaque-token packing (17 bits), which is a token-format safety limit.
+    if(w->light_capacity>=R2D_WORLD_LIGHT_TOKEN_STRIDE)return -1;
+    const int slot=w->light_capacity;
+    if(!light_registry_reserve(w,slot+1))return -1;
+    w->lights[slot]=*l;w->lights[slot].active=true;w->lights[slot].generation=1;
+    w->light_dirty_slots[slot]=1;w->light_count++;w->light_dirty=true;
+    return light_token(1,slot);
 }
 bool r2d_world_light_update(R2DRe2dWorld *w,int token,const R2DWorldLight *l)
 {
-    int slot=light_slot(w,token);if(slot<0||!r2d_world_light_valid(l))return false;unsigned generation=w->lights[slot].generation;
+    int slot=r2d_world_light_slot(w,token);if(slot<0||!r2d_world_light_valid(l))return false;unsigned generation=w->lights[slot].generation;
     R2DWorldLight old=w->lights[slot];w->lights[slot]=*l;
     w->lights[slot].is_static=old.is_static;w->lights[slot].remaining=old.remaining;w->lights[slot].age=old.age;
     w->lights[slot].flicker_min=old.flicker_min;w->lights[slot].flicker_max=old.flicker_max;w->lights[slot].flicker_rate=old.flicker_rate;w->lights[slot].flicker_seed=old.flicker_seed;
     w->lights[slot].active=true;w->lights[slot].generation=generation;w->light_dirty=true;w->light_dirty_slots[slot]=1;return true;
 }
 bool r2d_world_light_remove(R2DRe2dWorld *w,int token)
-{ int slot=light_slot(w,token);if(slot<0)return false;w->lights[slot].active=false;w->light_count--;w->light_dirty=true;w->light_dirty_slots[slot]=1;return true; }
+{ int slot=r2d_world_light_slot(w,token);if(slot<0)return false;w->lights[slot].active=false;w->light_count--;w->light_dirty=true;w->light_dirty_slots[slot]=1;return true; }
 static float box_distance(float p,float lo,float hi)
 { return p<lo?lo-p:p>hi?p-hi:0; }
 static bool affects(const R2DWorldLight *l,const R2DWorldSpan *s)
@@ -86,7 +218,7 @@ static bool opening_near(const R2DWorldLight *l,const R2DWorldPortal *p,const R2
 }
 void r2d_world_light_invalidate_box(R2DRe2dWorld *w,float x0,float y0,float h0,float x1,float y1,float h1)
 {
-    for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(w->lights[i].active){const R2DWorldLight *l=&w->lights[i];
+    for(int i=0;i<w->light_capacity;i++)if(w->lights[i].active){const R2DWorldLight *l=&w->lights[i];
         float dx=box_distance(l->x,x0,x1),dy=box_distance(l->y,y0,y1),dh=box_distance(l->h,h0,h1);
         if(dx*dx+dy*dy+dh*dh<=l->radius*l->radius){w->light_dirty_slots[i]=1;w->light_dirty=true;w->shadow_geometry_revision[i]++;}
     }
@@ -103,13 +235,32 @@ static void clear_seen(R2DRe2dWorld *w)
 bool r2d_world_light_rebuild(R2DRe2dWorld *w)
 {
     if(!w||!ensure(w))return false;w->light_updates=0;if(!w->light_dirty)return true;
-    memset(w->shadow_mask,0,sizeof w->shadow_mask);int shadowed=0;
-    for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(w->lights[i].active&&w->lights[i].shadow&&shadowed<R2D_WORLD_MAX_SHADOWS){w->shadow_mask[i]=1;shadowed++;}
-    if(w->light_full_dirty){memset(w->light_dirty_slots,1,sizeof w->light_dirty_slots);w->light_full_dirty=false;}
+    memset(w->shadow_mask,0,(size_t)w->light_capacity);
+    // Shadow quality ranking: R2D_WORLD_MAX_SHADOWS is a BUDGET, not a creation
+    // ceiling. Rank every active shadow-casting light by deterministic
+    // influence (intensity * radius^2) and keep the top N; light #17 is created
+    // normally and simply competes for a shadow slot.
+    {
+        int best_slot[R2D_WORLD_MAX_SHADOWS];double best_score[R2D_WORLD_MAX_SHADOWS];int shadowed=0;
+        for(int i=0;i<w->light_capacity;i++){
+            const R2DWorldLight *l=&w->lights[i];
+            if(!l->active||!l->shadow)continue;
+            const double score=(double)l->intensity*(double)l->radius*(double)l->radius;
+            int insert=shadowed;
+            if(insert>=R2D_WORLD_MAX_SHADOWS){
+                insert=R2D_WORLD_MAX_SHADOWS-1;
+                if(score<=best_score[insert])continue;
+            }else shadowed++;
+            while(insert>0&&best_score[insert-1]<score){best_score[insert]=best_score[insert-1];best_slot[insert]=best_slot[insert-1];insert--;}
+            best_score[insert]=score;best_slot[insert]=i;
+        }
+        for(int i=0;i<shadowed;i++)w->shadow_mask[best_slot[i]]=1;
+    }
+    if(w->light_full_dirty){memset(w->light_dirty_slots,1,(size_t)w->light_capacity);w->light_full_dirty=false;}
     clear_seen(w);
-    for(int light=0;light<R2D_WORLD_MAX_LIGHTS;light++)if(w->light_dirty_slots[light]){
+    for(int light=0;light<w->light_capacity;light++)if(w->light_dirty_slots[light]){
         R2DWorldLightLinks *links=&w->light_links[light];uint32_t bit=1u<<(light&31);int word=light/32;
-        for(int i=0;i<links->count;i++){int span=links->spans[i];w->span_light_masks[span*4+word]&=~bit;touched(w,span);}links->count=0;
+        for(int i=0;i<links->count;i++){int span=links->spans[i];w->span_light_masks[(size_t)span*w->span_light_words+word]&=~bit;touched(w,span);}links->count=0;
         const R2DWorldLight *l=&w->lights[light];w->light_updates++;
         if(!l->active){w->light_dirty_slots[light]=0;continue;}
         int head=0,tail=0,start=r2d_world_span_at(w,l->x,l->y,l->h);int *queue=w->light_queue;uint8_t *seen=w->light_seen;
@@ -119,7 +270,7 @@ bool r2d_world_light_rebuild(R2DRe2dWorld *w)
         while(head<tail){
             int span=queue[head++];const R2DWorldSpan *from=&w->spans[span];if(!affects(l,from))continue;
             if(!link_append(links,span))return false;
-            w->span_light_masks[span*4+word]|=bit;touched(w,span);
+            w->span_light_masks[(size_t)span*w->span_light_words+word]|=bit;touched(w,span);
             if(!w->cell_count)continue;int cell=w->span_cells[span];
             for(int pi=w->cell_portal_offsets[cell];pi<w->cell_portal_offsets[cell+1];pi++){
                 const R2DWorldPortal *portal=&w->portals[w->cell_portal_refs[pi]];if(portal->closed)continue;
@@ -135,10 +286,40 @@ bool r2d_world_light_rebuild(R2DRe2dWorld *w)
         clear_seen(w);w->light_dirty_slots[light]=0;
     }
     for(int i=0;i<w->light_touched_count;i++){
-        int span=w->light_touched[i],count=0,total=0;uint32_t *mask=w->span_light_masks+span*4;
-        for(int slot=0;slot<R2D_WORLD_MAX_LIGHTS;slot++)if(mask[slot/32]&(1u<<(slot&31))){total++;if(count<R2D_WORLD_LIGHTS_PER_SPAN)w->span_light_refs[span*R2D_WORLD_LIGHTS_PER_SPAN+count++]=slot;}
-        int old=w->span_light_candidates[span];w->light_pairs+=count-w->span_light_counts[span];w->light_overflow+=(total>16?total-16:0)-(old>16?old-16:0);
-        w->span_light_counts[span]=(uint8_t)count;w->span_light_candidates[span]=(uint8_t)total;w->light_touched_flags[span]=0;
+        const int span=w->light_touched[i];
+        uint32_t *mask=w->span_light_masks+(size_t)span*w->span_light_words;
+        const R2DWorldSpan *s=&w->spans[span];
+        // Per-span shader budget: keep the top R2D_WORLD_LIGHTS_PER_SPAN by
+        // deterministic contribution (sampling falloff at the span centre).
+        // Ties keep ascending slot order, so native priority stays stable.
+        int best_slot[R2D_WORLD_LIGHTS_PER_SPAN];float best_score[R2D_WORLD_LIGHTS_PER_SPAN];
+        int kept=0,total=0;
+        for(int slot=0;slot<w->light_capacity;slot++)if(mask[slot/32]&(1u<<(slot&31))){
+            total++;
+            const R2DWorldLight *l=&w->lights[slot];
+            const float cx=s->x+s->w*0.5f,cy=s->y+s->h*0.5f;
+            const float dx=l->x-cx,dy=l->y-cy,dh=l->h-(s->bottom+s->top)*0.5f;
+            const float dist=sqrtf(dx*dx+dy*dy+dh*dh);
+            float score=0.0f;
+            if(dist<l->radius){const float t=1.0f-dist/l->radius;score=l->intensity*t*t;}
+            int insert=kept;
+            if(insert>=R2D_WORLD_LIGHTS_PER_SPAN){
+                insert=R2D_WORLD_LIGHTS_PER_SPAN-1;
+                if(score<=best_score[insert])continue;
+            }else kept++;
+            while(insert>0&&best_score[insert-1]<score){
+                best_score[insert]=best_score[insert-1];best_slot[insert]=best_slot[insert-1];insert--;
+            }
+            best_score[insert]=score;best_slot[insert]=slot;
+        }
+        const int count=kept;
+        for(int j=0;j<count;j++)w->span_light_refs[span*R2D_WORLD_LIGHTS_PER_SPAN+j]=best_slot[j];
+        const int old=w->span_light_candidates[span];
+        w->light_pairs+=count-w->span_light_counts[span];
+        w->light_overflow+=(total>R2D_WORLD_LIGHTS_PER_SPAN?total-R2D_WORLD_LIGHTS_PER_SPAN:0)-(old>R2D_WORLD_LIGHTS_PER_SPAN?old-R2D_WORLD_LIGHTS_PER_SPAN:0);
+        w->span_light_counts[span]=(uint8_t)count;
+        // uint8 telemetry saturates instead of wrapping for huge light worlds.
+        w->span_light_candidates[span]=(uint8_t)(total>255?255:total);w->light_touched_flags[span]=0;
     }
     w->light_touched_count=0;w->light_dirty=false;return true;
 }
@@ -178,13 +359,13 @@ uint32_t r2d_world_lit_color(const R2DRe2dWorld *w,int span,uint32_t color,float
 
 bool r2d_world_light_visual(R2DRe2dWorld *w,int token,float life,float min,float max,float rate,uint32_t seed)
 {
-    int slot=light_slot(w,token);if(slot<0||!isfinite(life)||life<0||life>1000000||!isfinite(min)||!isfinite(max)||min<0||max<min||max>100||!isfinite(rate)||rate<0||rate>1000)return false;
+    int slot=r2d_world_light_slot(w,token);if(slot<0||!isfinite(life)||life<0||life>1000000||!isfinite(min)||!isfinite(max)||min<0||max<min||max>100||!isfinite(rate)||rate<0||rate>1000)return false;
     R2DWorldLight *l=&w->lights[slot];l->remaining=life;l->flicker_min=min;l->flicker_max=max;l->flicker_rate=rate;l->flicker_seed=seed;return true;
 }
 void r2d_world_light_step(R2DRe2dWorld *w,float dt)
 {
     if(!w||!isfinite(dt)||dt<0)return;
-    for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++) {
+    for(int i=0;i<w->light_capacity;i++) {
         R2DWorldLight *l=&w->lights[i];if(!l->active)continue;
         // Bounded age prevents integer-overflow conversion in deterministic flicker.
         l->age=fmodf(l->age+dt,1000000);
@@ -216,7 +397,7 @@ bool r2d_world_load_lighting(R2DRe2dWorld *w,const R2dJson *root,char *err,size_
     const R2dJson *config=r2d_json_get(root,"lighting"),*lights=r2d_json_get(root,"lights");
     if(!config&&!lights&&!w->span_lights)return true;
     w->authored_lighting=true;
-    if((config&&config->type!=R2D_JSON_OBJ)||(lights&&(lights->type!=R2D_JSON_ARR||lights->count>128)))goto bad;
+    if((config&&config->type!=R2D_JSON_OBJ)||(lights&&(lights->type!=R2D_JSON_ARR||lights->count<0)))goto bad;
     const R2dJson *mode=r2d_json_get(config,"mode");if(mode&&(mode->type!=R2D_JSON_STR||strcmp(mode->string,"classic")))goto bad;
     R2DWorldLighting l;
     if(!json_bool(config,"enabled",true,&l.enabled)||!json_bool(config,"dynamic",true,&l.dynamic)||!json_bool(config,"shadows",false,&l.shadows)||!json_bool(config,"orientationContrast",true,&l.orientation)||

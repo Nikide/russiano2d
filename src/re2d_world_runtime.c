@@ -10,9 +10,9 @@
 #include <SDL3_image/SDL_image.h>
 #include <SDL3/SDL_timer.h>
 #include <math.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-#define ACTOR_LIMIT 4096
 static int atlas_stream_slot(const R2DWorldRuntime *w,int stream_id);
 static void atlas_release_actor_images(R2DWorldRuntime *w,R2DWorldAtlasActor *actor);
 static void atlas_free_actor_storage(R2DWorldAtlasActor *actor);
@@ -54,13 +54,37 @@ void r2d_world_render_advance(R2DWorldRuntime *w,float dt)
 }
 static bool same(JSValueConst a,JSValueConst b)
 { return JS_VALUE_GET_TAG(a)==JS_VALUE_GET_TAG(b)&&JS_VALUE_GET_PTR(a)==JS_VALUE_GET_PTR(b); }
+// Overflow-safe registry growth. `current` is the live capacity and `need` the
+// minimum required slot count. Small registries start at 8 and double; a huge
+// requested count clamps to the exact need so the size_t multiplication check
+// decides whether the allocation is representable. -1 means "impossible".
+static int registry_capacity(int current,int need,size_t element_size)
+{
+    if(need<1)need=1;
+    if(current>=need)return current;
+    int cap=current>0?current:8;
+    while(cap<need){
+        if(cap>INT_MAX/2){cap=need;break;}
+        cap*=2;
+    }
+    if(element_size&&(size_t)cap>SIZE_MAX/element_size)return -1;
+    return cap;
+}
 bool r2d_world_actor_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node)
 {
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: actor registry is busy");return false;}
     if(!JS_IsObject(node)){JS_ThrowTypeError(ctx,"Re2D World: actor needs a Re2DSprite node");return false;}
     for(int i=0;i<w->actor_count;i++)if(same(node,w->actors[i]))return true;
-    if(w->actor_count==ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: actor budget exhausted");return false;}
-    if(w->actor_count==w->actor_capacity){int n=w->actor_capacity?w->actor_capacity*2:16;JSValue *p=realloc(w->actors,(size_t)n*sizeof *p);if(!p){JS_ThrowOutOfMemory(ctx);return false;}w->actors=p;w->actor_capacity=n;}
+    // The registry is memory-bound only. Capacity grows by doubling; an OOM is
+    // reported through QuickJS with the registry size diagnostics below instead
+    // of an arbitrary "actor budget" rejection.
+    if(w->actor_count>=w->actor_capacity){
+        const int capacity=registry_capacity(w->actor_capacity,w->actor_count+1,sizeof *w->actors);
+        if(capacity<0){JS_ThrowOutOfMemory(ctx);return false;}
+        JSValue *grown=realloc(w->actors,(size_t)capacity*sizeof *grown);
+        if(!grown){JS_ThrowOutOfMemory(ctx);return false;}
+        w->actors=grown;w->actor_capacity=capacity;
+    }
     w->actors[w->actor_count++]=JS_DupValue(ctx,node);return true;
 }
 bool r2d_world_actor_unregister(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node)
@@ -129,7 +153,7 @@ static bool runtime_stream_io_build(R2DWorldRuntime *w)
     r2d_world_stream_io_set_allocator(&w->stream_io,runtime_stream_io_alloc,NULL);
     const int wall_total=w->world.wall_count;
     int *wall_mark=(int *)calloc((size_t)(wall_total>0?wall_total:1),sizeof(int));
-    int *material_mark=(int *)calloc(R2D_WORLD_MAX_MATERIALS,sizeof(int));
+    int *material_mark=(int *)calloc((size_t)(w->world.material_capacity>0?w->world.material_capacity:1),sizeof(int));
     if(!wall_mark||!material_mark){free(wall_mark);free(material_mark);runtime_stream_io_dispose(w);return false;}
     int generation=0;
     bool ok=true;
@@ -197,7 +221,7 @@ static bool runtime_stream_io_build(R2DWorldRuntime *w)
                 const int surface=surface_values[k];
                 if(surface<0||surface>=w->world.surface_count)continue;
                 const int material=w->world.surface_materials[surface];
-                if(material<0||material>=R2D_WORLD_MAX_MATERIALS||material_mark[material]==generation)continue;
+                if(material<0||material>=w->world.material_capacity||material_mark[material]==generation)continue;
                 material_mark[material]=generation;material_count++;
             }
         }
@@ -210,7 +234,7 @@ static bool runtime_stream_io_build(R2DWorldRuntime *w)
                 const int surface=surface_values[k];
                 if(surface<0||surface>=w->world.surface_count)continue;
                 const int material=w->world.surface_materials[surface];
-                if(material<0||material>=R2D_WORLD_MAX_MATERIALS||material_mark[material]==generation)continue;
+                if(material<0||material>=w->world.material_capacity||material_mark[material]==generation)continue;
                 material_mark[material]=generation;material_values[cursor++]=material;
             }
         }
@@ -385,7 +409,7 @@ bool r2d_world_regions_ensure(R2DWorldRuntime *w)
 
     // Budgeted residency cache. Per-region BSP/surface payloads are registered;
     // material textures/atlases are merged by stream_sync_assets().
-    int stream_capacity=regions*2+512+w->world.material_count+R2D_WORLD_ATLAS_ACTOR_LIMIT;
+    int stream_capacity=regions*2+512+w->world.material_count+(w->atlas_capacity>0?w->atlas_capacity:R2D_WORLD_ATLAS_ACTOR_INITIAL);
     if(stream_capacity<1024)stream_capacity=1024;
     if(stream_capacity>R2D_WORLD_STREAM_MAX_ITEMS)stream_capacity=R2D_WORLD_STREAM_MAX_ITEMS;
     w->next_atlas_stream_id=1000000;
@@ -671,7 +695,7 @@ static void runtime_stream_sync_assets(JSContext *ctx,R2DWorldRuntime *w)
         (w->world.geometry_revision&0x7fffffffu);
     if(revision==w->stream_asset_revision)return;
     w->stream_asset_revision=revision;
-    for(int m=0;m<w->world.material_count;m++){
+    for(int m=0;m<w->world.material_capacity;m++){
         const R2DWorldMaterial *material=&w->world.materials[m];
         if(!material->used)continue;
         int region=-1;
@@ -955,9 +979,15 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
     r2d_world_atlas_image_cache_free(&w->atlas_images);
     for(int i=0;i<w->hit_count;i++)JS_FreeValueRT(w->runtime,w->hit_entries[i].node);
     for(int i=0;i<w->trigger_count;i++){free(w->triggers[i].id);free(w->triggers[i].target);}
+    free(w->material_anims);free(w->material_anim_active);
+    w->material_anims=NULL;w->material_anim_active=NULL;w->material_anim_capacity=0;
+    free(w->light_flags);free(w->light_kept);
+    w->light_flags=NULL;w->light_kept=NULL;w->light_flags_capacity=w->light_kept_capacity=0;
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
     free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_tints);free(w->frame_keys);free(w->atlas_actors);r2d_world_stream_pin_set_free(&w->path_pins);
     free(w->hit_entries);free(w->trace_scratch);free(w->movers);free(w->triggers);
+    free(w->controllers);w->controllers=NULL;
+    w->controller_count=w->controller_capacity=0;w->next_controller_token=0;
     free(w->batch_items);free(w->batch_instances);free(w->batch_groups);
     w->batch_items=NULL;w->batch_instances=NULL;w->batch_groups=NULL;
     w->batch_item_capacity=w->batch_instance_capacity=w->batch_group_capacity=0;
@@ -973,6 +1003,48 @@ static bool field(JSContext *ctx,JSValueConst node,const char *name,float *out)
     JSValue v=JS_GetPropertyStr(ctx,node,name);double n;
     if(JS_IsException(v))return false;int ok=JS_ToFloat64(ctx,&n,v);JS_FreeValue(ctx,v);
     if(ok<0)return false;if(!isfinite(n)||fabs(n)>1000000){JS_ThrowRangeError(ctx,"Re2D World: actor %s must be finite",name);return false;}*out=(float)n;return true;
+}
+// Grow the parallel per-frame composition arrays together. They are allocated
+// transactionally (fresh blocks + copy + swap) so a failed growth leaves the
+// previous frame data untouched and never leaks JS handles. This replaces the
+// old fixed 4096-entry composition budget: composition is now memory-bound.
+static bool frame_reserve(JSContext *ctx,R2DWorldRuntime *w,int need)
+{
+    if(need<=w->frame_capacity)return true;
+    const int capacity=registry_capacity(w->frame_capacity,need,1);
+    if(capacity<0){JS_ThrowOutOfMemory(ctx);return false;}
+    const size_t n=(size_t)capacity,old=(size_t)w->frame_capacity;
+    JSValue *handles=malloc(n*sizeof *handles);
+    float *positions=malloc(n*5*sizeof *positions);
+    const uint8_t **images=malloc(n*sizeof *images);
+    int *sizes=malloc(n*sizeof *sizes),*kinds=malloc(n*sizeof *kinds),*revisions=malloc(n*sizeof *revisions),*blends=malloc(n*sizeof *blends);
+    uint64_t *keys=malloc(n*sizeof *keys);float *tints=malloc(n*4*sizeof *tints);
+    if(!handles||!positions||!images||!sizes||!kinds||!revisions||!blends||!keys||!tints){
+        free(handles);free(positions);free(images);free(sizes);free(kinds);
+        free(revisions);free(blends);free(keys);free(tints);JS_ThrowOutOfMemory(ctx);return false;
+    }
+    if(old){
+        memcpy(handles,w->frame_handles,old*sizeof *handles);
+        memcpy(positions,w->frame_positions,old*5*sizeof *positions);
+        memcpy(images,w->frame_images,old*sizeof *images);
+        memcpy(sizes,w->frame_sizes,old*sizeof *sizes);
+        memcpy(kinds,w->frame_kinds,old*sizeof *kinds);
+        memcpy(revisions,w->frame_revisions,old*sizeof *revisions);
+        memcpy(blends,w->frame_blends,old*sizeof *blends);
+        memcpy(keys,w->frame_keys,old*sizeof *keys);
+        memcpy(tints,w->frame_tints,old*4*sizeof *tints);
+    }
+    for(int i=w->frame_capacity;i<capacity;i++){
+        handles[i]=JS_UNDEFINED;images[i]=NULL;sizes[i]=kinds[i]=revisions[i]=blends[i]=0;keys[i]=0;
+        tints[i*4]=tints[i*4+1]=tints[i*4+2]=tints[i*4+3]=1.0f;
+        positions[i*5]=positions[i*5+1]=positions[i*5+2]=positions[i*5+3]=positions[i*5+4]=0.0f;
+    }
+    free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
+    free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_tints);free(w->frame_keys);
+    w->frame_handles=handles;w->frame_positions=positions;w->frame_images=images;w->frame_sizes=sizes;
+    w->frame_kinds=kinds;w->frame_revisions=revisions;w->frame_blends=blends;w->frame_tints=tints;w->frame_keys=keys;
+    w->frame_capacity=capacity;
+    return true;
 }
 static bool collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,JSValueConst node,int depth,bool attached,double root_yaw,double root_pitch)
 {
@@ -996,7 +1068,9 @@ static bool collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,JS
     uint32_t count=0;
     if(JS_IsArray(children)) {
         JSValue length=JS_GetPropertyStr(ctx,children,"length");int converted=JS_ToUint32(ctx,&count,length);JS_FreeValue(ctx,length);if(converted<0)goto done;
-        if(count>ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: attachment budget exhausted");goto done;}
+        // Composition is memory-bound: attachment counts are not rejected by
+        // an arbitrary constant, frame_reserve() grows the parallel arrays.
+        if(count>(uint32_t)INT_MAX){JS_ThrowRangeError(ctx,"Re2D World: attachment count out of range");goto done;}
     }
     // Preserve existing attachment ordering around the parent depth.
     for(uint32_t i=0;i<count;i++) {
@@ -1004,7 +1078,7 @@ static bool collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,JS
         if(JS_IsException(child))goto done;
         bool valid=field(ctx,child,"depth",&h);if(valid&&h<p[2])valid=collect(ctx,w,view,child,depth+1,true,root_yaw,root_pitch);JS_FreeValue(ctx,child);if(!valid)goto done;
     }
-    if(w->frame_count==ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: composition budget exhausted");goto done;}
+    if(!frame_reserve(ctx,w,w->frame_count+1))goto done;
     int index=w->frame_count++;w->frame_handles[index]=JS_DupValue(ctx,handle);memcpy(w->frame_positions+index*5,p,sizeof p);
     w->frame_kinds[index]=R2D_WORLD_FRAME_ROTSPRITE;
     w->frame_tints[index*4]=w->frame_tints[index*4+1]=w->frame_tints[index*4+2]=w->frame_tints[index*4+3]=1.0f;
@@ -1025,7 +1099,7 @@ done:
 // same composition list as Re2DSprite actors.
 static bool atlas_png(JSContext *ctx,R2DWorldRuntime *w,const char *path,uint8_t **pixels,int *width,int *height);
 static void particles_draw_cpu(R2DWorldRuntime *,const R2DRe2dView *,int,int,uint8_t *,float *,float);
-static bool particle_collect_gpu(R2DWorldRuntime *,const R2DRe2dView *,int,int,float);
+static bool particle_collect_gpu(JSContext *,R2DWorldRuntime *,const R2DRe2dView *,int,int,float);
 // Crop one logical cell from the actor's shared single image or tiled set.
 static bool atlas_actor_crop(const R2DWorldAtlasActor *actor,int cell_x,int cell_y,
                              int cell_w,int cell_h,bool flip,int side,int dest_x,int dest_y,
@@ -1137,7 +1211,7 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
                 actor->last_column=column;actor->last_row=row;actor->last_flip=flip?1:0;actor->frame_revision++;
             } else if(changed) w->lod_throttled_actors++;
         }
-        if(w->frame_count==ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: composition budget exhausted");return false;}
+        if(!frame_reserve(ctx,w,w->frame_count+1))return false;
         const int index=w->frame_count++;
         w->frame_handles[index]=JS_UNDEFINED;
         float *p=w->frame_positions+index*5;p[0]=wx;p[1]=py_;p[2]=bottom;p[3]=wsq;p[4]=hsq;
@@ -1313,20 +1387,27 @@ void r2d_world_debug_overlay(R2DWorldRuntime *w,const R2DRe2dView *view,float or
     c.stream_budget=w->stream_budget.upload_budget_items;
     r2d_world_debug_overlay_draw(&c,view,width,height,rgba);
 }
+// Runtime-owned light culling scratch. Grown with the light registry so a world
+// with thousands of lights still does zero per-frame allocation.
+static bool light_scratch_ensure(R2DWorldRuntime *w,int need)
+{
+    if(need<0)need=0;
+    if(w->light_flags_capacity>=need&&w->light_kept_capacity>=need)return true;
+    int capacity=need>R2D_WORLD_MAX_LIGHTS?need:R2D_WORLD_MAX_LIGHTS;
+    uint8_t *flags=realloc(w->light_flags,(size_t)capacity);
+    int *kept=realloc(w->light_kept,(size_t)capacity*sizeof *kept);
+    if(!flags||!kept){if(flags)w->light_flags=flags;if(kept)w->light_kept=kept;return false;}
+    w->light_flags=flags;w->light_kept=kept;
+    w->light_flags_capacity=w->light_kept_capacity=capacity;
+    return true;
+}
 int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *view,int width,int height,float ortho)
 {
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: reentrant rendering");return -1;}
     if(!w->render_features_ready)r2d_world_render_init(w);
-    if(!w->frame_handles) {
-        JSValue *handles=calloc(ACTOR_LIMIT,sizeof *handles);float *positions=malloc(ACTOR_LIMIT*5*sizeof(float));
-        const uint8_t **images=calloc(ACTOR_LIMIT,sizeof *images);int *sizes=calloc(ACTOR_LIMIT,sizeof *sizes);
-        int *kinds=calloc(ACTOR_LIMIT,sizeof *kinds),*revisions=calloc(ACTOR_LIMIT,sizeof *revisions),*blends=calloc(ACTOR_LIMIT,sizeof *blends);
-        uint64_t *keys=calloc(ACTOR_LIMIT,sizeof *keys);float *tints=calloc((size_t)ACTOR_LIMIT*4,sizeof *tints);
-        if(!handles||!positions||!images||!sizes||!kinds||!revisions||!blends||!keys||!tints){free(handles);free(positions);free(images);free(sizes);free(kinds);free(revisions);free(blends);free(keys);free(tints);JS_ThrowOutOfMemory(ctx);return -1;}
-        w->frame_handles=handles;w->frame_positions=positions;w->frame_images=images;w->frame_sizes=sizes;
-        w->frame_kinds=kinds;w->frame_revisions=revisions;w->frame_blends=blends;w->frame_keys=keys;w->frame_tints=tints;
-    }
-    if(w->frame_tints)for(int i=0;i<ACTOR_LIMIT;i++){w->frame_tints[i*4]=w->frame_tints[i*4+1]=w->frame_tints[i*4+2]=w->frame_tints[i*4+3]=1.0f;}
+    // Lazy, growable composition arrays. Every producer writes its own tint/
+    // kind/size slot, so no full-capacity reset pass is needed each frame.
+    if(!frame_reserve(ctx,w,64))return -1;
     r2d_world_regions_ensure(w);
     runtime_stream_sync_assets(ctx,w);
     r2d_world_regions_frame(w,view);
@@ -1351,21 +1432,27 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     r2d_world_batch_frame(w);
     if(!r2d_world_light_rebuild(&w->world)){JS_ThrowOutOfMemory(ctx);goto done;}
     w->light_cull_ms=(SDL_GetPerformanceCounter()-phase)*ms;
-    bool lights[R2D_WORLD_MAX_LIGHTS]={0};w->visible_lights=w->shadowed_lights=0;
+    const int light_total=w->world.light_capacity;
+    if(!light_scratch_ensure(w,light_total)){JS_ThrowOutOfMemory(ctx);goto done;}
+    uint8_t *lights=w->light_flags;
+    memset(lights,0,(size_t)light_total);
+    w->visible_lights=w->shadowed_lights=0;
     for(int i=0;i<w->visibility.span_count;i++){int span=w->visibility.spans[i];for(int j=0;j<w->world.span_light_counts[span];j++)lights[w->world.span_light_refs[span*R2D_WORLD_LIGHTS_PER_SPAN+j]]=true;}
     // Light LOD: distance policy drops far lights and shadowed lights beyond
     // the per-ring shadow budget. Typical near lights keep the full pool.
+    w->diag_light_candidates=0;
+    for(int i=0;i<light_total;i++)if(lights[i])w->diag_light_candidates++;
     if(w->render_features.quality>=R2D_RENDER_QUALITY_HIGH){
-        int kept[ R2D_WORLD_MAX_LIGHTS ], kept_count=0, shadowed=0;
-        for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){
+        int *kept=w->light_kept,kept_count=0,shadowed=0;
+        for(int i=0;i<light_total;i++)if(lights[i]){
             const R2DWorldLight *light=&w->world.lights[i];
             const float dx=light->x-view->x,dy=light->y-view->y,dz=light->h-view->eye;
             const float distance=sqrtf(dx*dx+dy*dy+dz*dz);
             R2DWorldRegionLod lod;r2d_world_region_lod_eval(distance,&w->lod_config,&lod);
             if(!lod.light_updates||lod.max_lights<=0){w->lod_culled_lights++;continue;}
-            if(kept_count<R2D_WORLD_MAX_LIGHTS)kept[kept_count++]=i;
+            kept[kept_count++]=i;
         }
-        int budget=w->lod_config.near_lights>0?w->lod_config.near_lights:R2D_WORLD_MAX_LIGHTS;
+        int budget=w->lod_config.near_lights>0?w->lod_config.near_lights:light_total;
         if(kept_count>budget){
             // Keep the nearest `budget` lights deterministically.
             for(int a=budget;a<kept_count;a++){
@@ -1382,21 +1469,28 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
             }
         }
         w->visible_lights=0;w->shadowed_lights=0;
-        for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){
+        for(int i=0;i<light_total;i++)if(lights[i]){
             w->visible_lights++;
             if(w->world.shadow_mask[i]&&shadowed<w->lod_config.max_shadow_lights){shadowed++;w->shadowed_lights++;}
         }
     }else{
         // CPU/GPU reference parity at low/medium: no distance light culling.
         w->visible_lights=0;w->shadowed_lights=0;
-        for(int i=0;i<R2D_WORLD_MAX_LIGHTS;i++)if(lights[i]){
+        for(int i=0;i<light_total;i++)if(lights[i]){
             w->visible_lights++;
             if(w->world.shadow_mask[i])w->shadowed_lights++;
         }
     }
+    w->diag_lights_selected=w->visible_lights;
+    w->diag_shadows_selected=w->shadowed_lights;
+    w->diag_decals_total=w->world.decal_count;
+    w->diag_decals_evicted=(int)w->world.decal_evicted;
+    w->diag_decals_rendered=r2d_world_decal_active_count(&w->world);
+    w->diag_hit_proxies=w->hit_count;w->diag_triggers=r2d_world_trigger_active_count(w);
+    w->diag_movers=w->mover_count;w->diag_controllers=w->controller_count;
     // Decal region pool stats: a decal is culled when its owning cell is
     // outside the hierarchical PVS or distance LOD drops it this frame.
-    for(int i=0;i<w->world.decal_count;i++){
+    for(int i=0;i<w->world.decal_capacity;i++){
         const R2DWorldDecal *decal=&w->world.decals[i];if(!decal->active)continue;
         const R2DWorldSurface *surface=r2d_world_surface(&w->world,decal->surface);
         if(!surface||surface->span<0||!w->world.span_cells){w->lod_culled_decals++;continue;}
@@ -1410,7 +1504,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     }
     phase=SDL_GetPerformanceCounter();
     if(!atlas_collect(ctx,w,view,width,height,ortho))goto done;
-    if(w->gpu_enabled&&!particle_collect_gpu(w,view,width,height,ortho))goto done;
+    if(w->gpu_enabled&&!particle_collect_gpu(ctx,w,view,width,height,ortho))goto done;
     // Resolve all script properties before borrowing synthesis memory.
     int cursor=w->frame_count?w->pose_cursor%w->frame_count:0,next_cursor=cursor;
     for(int k=0;k<w->frame_count;k++) {
@@ -1464,7 +1558,12 @@ static bool material_png(JSContext *ctx,const char *path,R2DWorldTexture *out,in
         if(bytes){SDL_IOStream *io=SDL_IOFromConstMem(bytes,size);if(io){image=IMG_LoadPNG_IO(io);SDL_CloseIO(io);}r2d_vfs_free(bytes);}
     } else {SDL_IOStream *io=SDL_IOFromFile(full,"rb");if(io){image=IMG_LoadPNG_IO(io);SDL_CloseIO(io);}}
     if(!image){JS_ThrowTypeError(ctx,"Re2D World: cannot read material PNG %s",path);return false;}
-    if(image->w<1||image->h<1||image->w>max_width||image->h>2048){SDL_DestroySurface(image);JS_ThrowRangeError(ctx,"Re2D World: material PNG dimensions 1..2048");return false;}
+    if(image->w<1||image->h<1||image->w>max_width||image->h>max_width){
+        JS_ThrowRangeError(ctx,
+            "Re2D World: material PNG %dx%d rejected; project asset limit is %dx%d "
+            "(R2D_WORLD_MATERIAL_TEXTURE_MAX). Resize the asset in the pipeline.",
+            image->w,image->h,max_width,max_width);
+        SDL_DestroySurface(image);return false;}
     SDL_Surface *rgba=SDL_ConvertSurface(image,SDL_PIXELFORMAT_RGBA32);SDL_DestroySurface(image);
     if(!rgba){JS_ThrowOutOfMemory(ctx);return false;}
     out->pixels=malloc((size_t)rgba->w*rgba->h*4);
@@ -1477,8 +1576,8 @@ bool r2d_world_runtime_material(JSContext *ctx,R2DWorldRuntime *w,const char *na
 {
     if(!name||strlen(name)>=64||!albedo||!albedo[0]){JS_ThrowTypeError(ctx,"Re2D World: material requires name and albedo PNG");return false;}
     R2DWorldMaterial m={0};strcpy(m.name,name);m.emissive_strength=strength;m.u_scale=u_scale;m.v_scale=v_scale;m.blend=blend;m.opacity=opacity;m.world_uv=world_uv;m.linear=linear;
-    bool ok=material_png(ctx,albedo,&m.albedo,2048)&&material_png(ctx,normal,&m.normal,2048)&&material_png(ctx,emissive,&m.emissive,2048);
-    if(ok&&r2d_world_material_set(&w->world,&m)<0){JS_ThrowRangeError(ctx,"Re2D World: invalid material or material budget exhausted");ok=false;}
+    bool ok=material_png(ctx,albedo,&m.albedo,R2D_WORLD_MATERIAL_TEXTURE_MAX)&&material_png(ctx,normal,&m.normal,R2D_WORLD_MATERIAL_TEXTURE_MAX)&&material_png(ctx,emissive,&m.emissive,R2D_WORLD_MATERIAL_TEXTURE_MAX);
+    if(ok&&r2d_world_material_set(&w->world,&m)<0){JS_ThrowRangeError(ctx,"Re2D World: invalid material definition or allocation failure");ok=false;}
     if(ok)r2d_world_gpu_material_dirty(w);
     r2d_world_material_free(&m);return ok;
 }
@@ -1541,7 +1640,7 @@ bool r2d_world_runtime_sky_layer_set(JSContext *ctx,R2DWorldRuntime *w,int index
     uint8_t *pixels=NULL;int width=0,height=0;
     if(texture&&texture[0]){
         R2DWorldTexture decoded={0};
-        if(!material_png(ctx,texture,&decoded,2048)){sky_error(w,"layer texture failed to load");return false;}
+        if(!material_png(ctx,texture,&decoded,R2D_WORLD_MATERIAL_TEXTURE_MAX)){sky_error(w,"layer texture failed to load");return false;}
         pixels=decoded.pixels;width=decoded.width;height=decoded.height;
     }
     if(!r2d_world_sky_set_layer(&cfg,index,id?id:cfg.layers[index].id,next_path,
@@ -1587,7 +1686,7 @@ bool r2d_world_runtime_sky_manifest(JSContext *ctx,R2DWorldRuntime *w,const char
     uint8_t *pixels[R2D_SKY_MAX_LAYERS]={0};int widths[R2D_SKY_MAX_LAYERS]={0},heights[R2D_SKY_MAX_LAYERS]={0};
     for(int i=0;i<manifest.layer_count;i++){
         R2DWorldTexture decoded={0};
-        if(!material_png(ctx,manifest.layers[i].texture,&decoded,2048)){
+        if(!material_png(ctx,manifest.layers[i].texture,&decoded,R2D_WORLD_MATERIAL_TEXTURE_MAX)){
             for(int j=0;j<i;j++)free(pixels[j]);
             sky_error(w,"manifest layer texture failed to load");
             return false;
@@ -1806,11 +1905,13 @@ static bool atlas_commit(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node,
             tc,tr,tcw,tch,tw,th);
         return false;
     }
-    if(w->atlas_count==w->atlas_capacity){
-        int n=w->atlas_capacity?w->atlas_capacity*2:8;
-        R2DWorldAtlasActor *p=realloc(w->atlas_actors,(size_t)n*sizeof *p);
-        if(!p){atlas_release_actor_images(w,actor);atlas_free_actor_storage(actor);JS_ThrowOutOfMemory(ctx);return false;}
-        w->atlas_actors=p;w->atlas_capacity=n;
+    if(w->atlas_count>=w->atlas_capacity){
+        const int capacity=registry_capacity(w->atlas_capacity,
+            w->atlas_count+1>R2D_WORLD_ATLAS_ACTOR_INITIAL?w->atlas_count+1:R2D_WORLD_ATLAS_ACTOR_INITIAL,
+            sizeof *w->atlas_actors);
+        R2DWorldAtlasActor *grown=capacity<0?NULL:realloc(w->atlas_actors,(size_t)capacity*sizeof *grown);
+        if(!grown){atlas_release_actor_images(w,actor);atlas_free_actor_storage(actor);JS_ThrowOutOfMemory(ctx);return false;}
+        w->atlas_actors=grown;w->atlas_capacity=capacity;
     }
     actor->node=JS_DupValue(ctx,node);
     actor->stream_id=w->next_atlas_stream_id++;
@@ -1854,7 +1955,6 @@ bool r2d_world_atlas_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst nod
 {
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: atlas registry is busy");return false;}
     if(!JS_IsObject(node)){JS_ThrowTypeError(ctx,"Re2D World: atlas sprite needs a node");return false;}
-    if(w->atlas_count==R2D_WORLD_ATLAS_ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: atlas sprite budget exhausted");return false;}
     if(!atlas_validate_common(ctx,columns,rows,directions,cell_w,cell_h,pivot,
                               pivot_x,pivot_y,width,height,blend))return false;
     R2DWorldAtlasActor actor={0};
@@ -1876,7 +1976,6 @@ bool r2d_world_atlas_register_tiled(JSContext *ctx,R2DWorldRuntime *w,JSValueCon
 {
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: atlas registry is busy");return false;}
     if(!JS_IsObject(node)){JS_ThrowTypeError(ctx,"Re2D World: atlas sprite needs a node");return false;}
-    if(w->atlas_count==R2D_WORLD_ATLAS_ACTOR_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: atlas sprite budget exhausted");return false;}
     if(!JS_IsArray(files)){JS_ThrowTypeError(ctx,"Re2D World: atlas files must be an array");return false;}
     if(tile_width<1||tile_height<1||tile_width>4096||tile_height>4096){
         JS_ThrowRangeError(ctx,"Re2D World: atlas tile size 1..4096");return false;
@@ -2000,8 +2099,16 @@ bool r2d_world_hit_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node,
     // into the caller mask, so the public API does not expose raw bit values.
     if(category!=1&&category!=2){JS_ThrowRangeError(ctx,"Re2D World: worldHit category enemy|breakable");return false;}
     for(int i=0;i<w->hit_count;i++)if(same(node,w->hit_entries[i].node)){JS_ThrowTypeError(ctx,"Re2D World: node already has a hit proxy");return false;}
-    if(w->hit_count==R2D_WORLD_HIT_PROXY_LIMIT){JS_ThrowRangeError(ctx,"Re2D World: hit proxy budget exhausted");return false;}
-    if(w->hit_count==w->hit_capacity){int n=w->hit_capacity?w->hit_capacity*2:16;R2DWorldHitEntry *p=realloc(w->hit_entries,(size_t)n*sizeof *p);if(!p){JS_ThrowOutOfMemory(ctx);return false;}w->hit_entries=p;w->hit_capacity=n;}
+    // Hit proxies are a growable compact registry; nodes are looked up by JS
+    // identity and no numeric handle is exposed, so no free-list/generation
+    // layer is required. Capacity is memory-bound, not capped.
+    if(w->hit_count>=w->hit_capacity){
+        const int capacity=registry_capacity(w->hit_capacity,w->hit_count+1,sizeof *w->hit_entries);
+        if(capacity<0){JS_ThrowOutOfMemory(ctx);return false;}
+        R2DWorldHitEntry *grown=realloc(w->hit_entries,(size_t)capacity*sizeof *grown);
+        if(!grown){JS_ThrowOutOfMemory(ctx);return false;}
+        w->hit_entries=grown;w->hit_capacity=capacity;
+    }
     R2DWorldHitEntry *e=&w->hit_entries[w->hit_count++];
     e->node=JS_DupValue(ctx,node);e->radius=radius;e->bottom_offset=bottom;e->top_offset=top;e->category=category;
     e->zone_count=0;
@@ -2102,8 +2209,16 @@ int r2d_world_mover_create(R2DWorldRuntime *w,int type,int span,int portal,float
     if(portal>=w->world.portal_count)return -1;
     float top=0;if(span>=0){top=w->world.spans[span].top;if(to>=top||from>=top||from==to)return -1;}
     int slot=-1;for(int i=0;i<w->mover_count;i++)if(!w->movers[i].active){slot=i;break;}
-    if(slot<0){if(w->mover_count==R2D_WORLD_MOVER_LIMIT)return -1;slot=w->mover_count++;
-        if(slot>=w->mover_capacity){int n=w->mover_capacity?w->mover_capacity*2:8;R2DWorldMoverEntry *p=realloc(w->movers,(size_t)n*sizeof *p);if(!p){w->mover_count--;return -1;}w->movers=p;w->mover_capacity=n;}}
+    if(slot<0){
+        if(w->mover_count>=w->mover_capacity){
+            const int capacity=registry_capacity(w->mover_capacity,w->mover_count+1,sizeof *w->movers);
+            if(capacity<0)return -1;
+            R2DWorldMoverEntry *grown=realloc(w->movers,(size_t)capacity*sizeof *grown);
+            if(!grown)return -1;
+            w->movers=grown;w->mover_capacity=capacity;
+        }
+        slot=w->mover_count++;
+    }
     R2DWorldMoverEntry *e=&w->movers[slot];memset(e,0,sizeof *e);
     if(!r2d_world_mover_init(&e->mover,type,span,from,to,speed,wait,auto_return))return -1;
     e->active=true;e->token=++w->next_mover_token;e->span=span;e->portal=portal;e->kind=type;e->span_top=top;e->generation++;
@@ -2167,10 +2282,17 @@ static R2DWorldTriggerEntry *trigger_entry(R2DWorldRuntime *w,int token)
 int r2d_world_trigger_create(R2DWorldRuntime *w,int type,const char *id,const char *target,float x,float y,float radius,float bottom,float top,bool once,float cooldown)
 {
     if(w->rendering||!id||!id[0]||strlen(id)>=64)return -1;
-    if(w->trigger_count==R2D_WORLD_TRIGGER_LIMIT)return -1;
     int slot=-1;for(int i=0;i<w->trigger_count;i++)if(!w->triggers[i].active){slot=i;break;}
-    if(slot<0){slot=w->trigger_count++;
-        if(slot>=w->trigger_capacity){int n=w->trigger_capacity?w->trigger_capacity*2:8;R2DWorldTriggerEntry *p=realloc(w->triggers,(size_t)n*sizeof *p);if(!p){w->trigger_count--;return -1;}w->triggers=p;w->trigger_capacity=n;}}
+    if(slot<0){
+        if(w->trigger_count>=w->trigger_capacity){
+            const int capacity=registry_capacity(w->trigger_capacity,w->trigger_count+1,sizeof *w->triggers);
+            if(capacity<0)return -1;
+            R2DWorldTriggerEntry *grown=realloc(w->triggers,(size_t)capacity*sizeof *grown);
+            if(!grown)return -1;
+            w->triggers=grown;w->trigger_capacity=capacity;
+        }
+        slot=w->trigger_count++;
+    }
     R2DWorldTriggerEntry *e=&w->triggers[slot];memset(e,0,sizeof *e);
     if(!r2d_world_trigger_init(&e->trigger,type,id,target,x,y,radius,bottom,top,once,cooldown))return -1;
     e->id=SDL_strdup(id);e->target=target?SDL_strdup(target):NULL;
@@ -2182,6 +2304,12 @@ bool r2d_world_trigger_remove(R2DWorldRuntime *w,int token)
 {
     R2DWorldTriggerEntry *e=trigger_entry(w,token);if(!e)return true;
     e->active=false;free(e->id);e->id=NULL;free(e->target);e->target=NULL;return true;
+}
+int r2d_world_trigger_active_count(const R2DWorldRuntime *w)
+{
+    int count=0;if(!w)return 0;
+    for(int i=0;i<w->trigger_count;i++)if(w->triggers[i].active)count++;
+    return count;
 }
 void r2d_world_trigger_advance(R2DWorldRuntime *w,float dt)
 {
@@ -2220,19 +2348,29 @@ void r2d_world_trigger_free(R2DWorldRuntime *w)
 static R2DWorldControllerEntry *controller_entry(R2DWorldRuntime *w,int token)
 {
     if(token<=0)return NULL;
-    for(int i=0;i<R2D_WORLD_CONTROLLER_LIMIT;i++)
+    for(int i=0;i<w->controller_count;i++)
         if(w->controllers[i].active&&w->controllers[i].token==token)return &w->controllers[i];
     return NULL;
 }
 int r2d_world_controller_create(R2DWorldRuntime *w,const R2DWorldControllerConfig *config)
 {
     if(w->rendering||!config)return -1;
-    for(int i=0;i<R2D_WORLD_CONTROLLER_LIMIT;i++){
-        R2DWorldControllerEntry *e=&w->controllers[i];if(e->active)continue;
-        e->config=*config;e->active=true;e->token=++w->next_controller_token;
-        return e->token;
+    int slot=-1;
+    for(int i=0;i<w->controller_count;i++)if(!w->controllers[i].active){slot=i;break;}
+    if(slot<0){
+        if(w->controller_count>=w->controller_capacity){
+            const int capacity=registry_capacity(w->controller_capacity,w->controller_count+1,sizeof *w->controllers);
+            if(capacity<0)return -1;
+            R2DWorldControllerEntry *grown=realloc(w->controllers,(size_t)capacity*sizeof *grown);
+            if(!grown)return -1;
+            w->controllers=grown;w->controller_capacity=capacity;
+        }
+        slot=w->controller_count++;
     }
-    return -1;
+    R2DWorldControllerEntry *e=&w->controllers[slot];
+    memset(e,0,sizeof *e);
+    e->config=*config;e->active=true;e->token=++w->next_controller_token;
+    return e->token;
 }
 bool r2d_world_controller_remove(R2DWorldRuntime *w,int token)
 {
@@ -2341,15 +2479,45 @@ int r2d_world_nav_path_runtime(R2DWorldRuntime *w,int from,int to,int *path,int 
 
 
 // --- P1: native particle pool + compositor pass ----------------------------
+// Designed native particle pool. The storage is heap-allocated once and reused
+// (no per-frame allocation); this is a rendering/design budget, not an
+// actor-registry limit. 2048 is the DEFAULT quality capacity: Low/Medium/High
+// quality selects 512/2048/8192 through r2d_world_particles_set_capacity().
+// The pool itself accepts any caller capacity up to
+// R2D_WORLD_PARTICLE_MAX_CAPACITY (1<<20).
 #define R2D_WORLD_PARTICLE_CAPACITY 2048
 bool r2d_world_particles_ready(R2DWorldRuntime *w)
 {
+    if(!w)return false;
     if(w->particle_ready)return true;
     R2DWorldParticle *storage=calloc(R2D_WORLD_PARTICLE_CAPACITY,sizeof *storage);
     if(!storage)return false;
     if(!r2d_world_particle_pool_init(&w->particles,storage,R2D_WORLD_PARTICLE_CAPACITY)){free(storage);return false;}
     w->particle_storage=storage;w->particle_ready=true;w->particle_accumulator=0;
     if(w->particle_budget<=0)w->particle_budget=R2D_WORLD_PARTICLE_CAPACITY;
+    return true;
+}
+// Quality knob: resize the runtime particle pool. The pool is reallocated only
+// when it holds no live particles (callers lower quality between bursts or
+// after r2d_world_particles_clear). Returns false without touching the pool when
+// the request is invalid, allocation fails, or particles are alive.
+bool r2d_world_particles_set_capacity(R2DWorldRuntime *w,int capacity)
+{
+    if(!w||capacity<1||capacity>R2D_WORLD_PARTICLE_MAX_CAPACITY)return false;
+    if(!r2d_world_particles_ready(w))return false;
+    const int old_capacity=w->particles.capacity;
+    if(capacity==old_capacity)return true;
+    if(w->particles.count>0)return false;
+    R2DWorldParticle *storage=calloc((size_t)capacity,sizeof *storage);
+    if(!storage)return false;
+    const uint32_t seed=w->particles.seed;
+    if(!r2d_world_particle_pool_init(&w->particles,storage,capacity)){free(storage);return false;}
+    w->particles.seed=seed;
+    free(w->particle_storage);
+    w->particle_storage=storage;
+    // The default budget follows the default capacity; an explicitly lowered
+    // budget (different from the old capacity) is preserved.
+    if(w->particle_budget<=0||w->particle_budget==old_capacity)w->particle_budget=capacity;
     return true;
 }
 int r2d_world_particles_burst(R2DWorldRuntime *w,const R2DWorldParticle *prototype,int count,float spread,float speed,float dx,float dy,float dh)
@@ -2385,7 +2553,7 @@ static void particles_draw_cpu(R2DWorldRuntime *w,const R2DRe2dView *v,int width
 {
     w->particles_drawn=0;
     for(int i=0;i<w->particles.count;i++){
-        const R2DWorldParticle *p=&w->particles.items[i];if(!p->active)continue;
+        const R2DWorldParticle *p=r2d_world_particle_at(&w->particles,i);if(!p||!p->active)continue;
         R2DWorldRegionLod lod;r2d_world_region_lod_eval(hypotf(p->x-v->x,p->y-v->y),&w->lod_config,&lod);
         if(lod.particle_percent<=0||(lod.particle_percent<100&&(i%100)>=lod.particle_percent)){
             w->lod_culled_particles++;continue;
@@ -2442,18 +2610,20 @@ static void particles_draw_cpu(R2DWorldRuntime *w,const R2DRe2dView *v,int width
 // GPU particles reuse the actor billboard pipeline with a shared 1x1 white
 // texture and a per-frame tint. Bounded so a huge CPU pool cannot monopolise
 // GPU texture uploads; the CPU reference still draws the full pool.
+// Hardware/upload safety budget: at most 512 particle billboards are packed
+// into the GPU actor list per frame; the CPU reference still draws the full pool.
 #define R2D_WORLD_PARTICLE_GPU_BUDGET 512
-static bool particle_collect_gpu(R2DWorldRuntime *w,const R2DRe2dView *v,int width,int height,float ortho)
+static bool particle_collect_gpu(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v,int width,int height,float ortho)
 {
     static const uint8_t white[4]={255,255,255,255};
     int drawn=0;
     for(int i=0;i<w->particles.count&&drawn<R2D_WORLD_PARTICLE_GPU_BUDGET;i++){
-        const R2DWorldParticle *p=&w->particles.items[i];if(!p->active)continue;
+        const R2DWorldParticle *p=r2d_world_particle_at(&w->particles,i);if(!p||!p->active)continue;
         R2DWorldRegionLod lod;r2d_world_region_lod_eval(hypotf(p->x-v->x,p->y-v->y),&w->lod_config,&lod);
         if(lod.particle_percent<=0||(lod.particle_percent<100&&(i%100)>=lod.particle_percent)){
             w->lod_culled_particles++;continue;
         }
-        if(w->frame_count==ACTOR_LIMIT)break;
+        if(!frame_reserve(ctx,w,w->frame_count+1))return false;
         const int index=w->frame_count++;
         float *pos=w->frame_positions+index*5;
         pos[0]=p->x;pos[1]=p->y;pos[2]=p->h-p->size*0.5f;pos[3]=p->size;pos[4]=p->size;
@@ -2488,11 +2658,19 @@ int r2d_world_secret_create(R2DWorldRuntime *w,const char *id,float x,float y,fl
 {
     if(w->rendering||!id)return -1;
     int slot=-1;for(int i=0;i<w->secret_count;i++)if(w->secret_tokens[i]==0){slot=i;break;}
-    if(slot<0){if(w->secret_count==R2D_WORLD_SECRET_LIMIT)return -1;slot=w->secret_count++;
-        if(slot>=w->secret_capacity){int n=w->secret_capacity?w->secret_capacity*2:8;
-            R2DWorldSecret *s=realloc(w->secrets,(size_t)n*sizeof *s);int *t=realloc(w->secret_tokens,(size_t)n*sizeof *t);
-            if(!s||!t){if(s)w->secrets=s;if(t)w->secret_tokens=t;return -1;}
-            w->secrets=s;w->secret_tokens=t;w->secret_capacity=n;}}
+    if(slot<0){
+        if(w->secret_count>=w->secret_capacity){
+            const int capacity=registry_capacity(w->secret_capacity,w->secret_count+1,sizeof *w->secrets);
+            if(capacity<0)return -1;
+            R2DWorldSecret *grown=realloc(w->secrets,(size_t)capacity*sizeof *grown);
+            if(!grown)return -1;
+            w->secrets=grown;
+            int *tokens=realloc(w->secret_tokens,(size_t)capacity*sizeof *tokens);
+            if(!tokens)return -1;
+            w->secret_tokens=tokens;w->secret_capacity=capacity;
+        }
+        slot=w->secret_count++;
+    }
     if(!r2d_world_secret_init(&w->secrets[slot],id,x,y,radius,bottom,top,once))return -1;
     w->secret_tokens[slot]=++w->next_secret_token;
     return w->secret_tokens[slot];
@@ -2508,6 +2686,12 @@ bool r2d_world_secret_info(R2DWorldRuntime *w,int token,int *found,int *count)
     const R2DWorldSecret *s=&w->secrets[slot-w->secret_tokens];
     if(found)*found=s->found?1:0;if(count)*count=s->found_count;return true;
 }
+int r2d_world_secret_active_count(const R2DWorldRuntime *w)
+{
+    int count=0;if(!w)return 0;
+    for(int i=0;i<w->secret_count;i++)if(w->secret_tokens[i])count++;
+    return count;
+}
 int r2d_world_secret_tick(R2DWorldRuntime *w,float dt,float x,float y,float feet,int *tokens,int capacity)
 {
     int fired=0;
@@ -2522,11 +2706,19 @@ int r2d_world_breakable_create(R2DWorldRuntime *w,const char *id,int hp,int vari
 {
     if(w->rendering||!id)return -1;
     int slot=-1;for(int i=0;i<w->breakable_count;i++)if(w->breakable_tokens[i]==0){slot=i;break;}
-    if(slot<0){if(w->breakable_count==R2D_WORLD_SECRET_LIMIT)return -1;slot=w->breakable_count++;
-        if(slot>=w->breakable_capacity){int n=w->breakable_capacity?w->breakable_capacity*2:8;
-            R2DWorldBreakable *b=realloc(w->breakables,(size_t)n*sizeof *b);int *t=realloc(w->breakable_tokens,(size_t)n*sizeof *t);
-            if(!b||!t){if(b)w->breakables=b;if(t)w->breakable_tokens=t;return -1;}
-            w->breakables=b;w->breakable_tokens=t;w->breakable_capacity=n;}}
+    if(slot<0){
+        if(w->breakable_count>=w->breakable_capacity){
+            const int capacity=registry_capacity(w->breakable_capacity,w->breakable_count+1,sizeof *w->breakables);
+            if(capacity<0)return -1;
+            R2DWorldBreakable *grown=realloc(w->breakables,(size_t)capacity*sizeof *grown);
+            if(!grown)return -1;
+            w->breakables=grown;
+            int *tokens=realloc(w->breakable_tokens,(size_t)capacity*sizeof *tokens);
+            if(!tokens)return -1;
+            w->breakable_tokens=tokens;w->breakable_capacity=capacity;
+        }
+        slot=w->breakable_count++;
+    }
     if(!r2d_world_breakable_init(&w->breakables[slot],id,hp,variant,portal,x,y,radius,bottom,top))return -1;
     w->breakable_tokens[slot]=++w->next_breakable_token;
     return w->breakable_tokens[slot];
@@ -2818,15 +3010,38 @@ bool r2d_world_state_apply(R2DWorldRuntime *w,const R2DWorldSaveState *in)
 
 
 // --- P2 material animation over the existing material bank -----------------
+// Animation storage is parallel to the dynamic material bank and grows with it;
+// this keeps material slots above 63 fully animatable.
+static bool material_anim_ensure(R2DWorldRuntime *w,int need)
+{
+    if(!w||need<0)return false;
+    int capacity=w->material_anim_capacity>0?w->material_anim_capacity:R2D_WORLD_MAX_MATERIALS;
+    while(capacity<need){
+        if(capacity>INT_MAX/2){capacity=need;break;}
+        capacity*=2;
+    }
+    if((size_t)capacity>SIZE_MAX/sizeof(R2DWorldMaterialAnim))return false;
+    R2DWorldMaterialAnim *anims=calloc((size_t)capacity,sizeof *anims);
+    bool *active=calloc((size_t)capacity,sizeof *active);
+    if(!anims||!active){free(anims);free(active);return false;}
+    if(w->material_anim_capacity>0){
+        memcpy(anims,w->material_anims,(size_t)w->material_anim_capacity*sizeof *anims);
+        memcpy(active,w->material_anim_active,(size_t)w->material_anim_capacity*sizeof *active);
+    }
+    free(w->material_anims);free(w->material_anim_active);
+    w->material_anims=anims;w->material_anim_active=active;w->material_anim_capacity=capacity;
+    return true;
+}
 bool r2d_world_material_anim_set(R2DWorldRuntime *w,int material,int frames,float fps,bool ping_pong,uint32_t seed,float scroll_u,float scroll_v,float pulse_hz,float pulse_amount)
 {
-    if(!w||material<0||material>=R2D_WORLD_MAX_MATERIALS||!w->world.materials[material].used)return false;
+    if(!w||material<0||material>=w->world.material_capacity||!w->world.materials[material].used)return false;
+    if(!material_anim_ensure(w,material+1))return false;
     if(!r2d_world_material_anim_init(&w->material_anims[material],frames,fps,ping_pong,seed,scroll_u,scroll_v,pulse_hz,pulse_amount))return false;
     w->material_anim_active[material]=true;return true;
 }
 bool r2d_world_material_anim_info(R2DWorldRuntime *w,int material,int *frame,float *emissive,float *u_offset,float *v_offset)
 {
-    if(!w||material<0||material>=R2D_WORLD_MAX_MATERIALS||!w->material_anim_active[material])return false;
+    if(!w||material<0||material>=w->material_anim_capacity||!w->material_anim_active[material])return false;
     const R2DWorldMaterialAnim *a=&w->material_anims[material];
     if(frame)*frame=r2d_world_material_anim_frame(a);
     if(emissive)*emissive=r2d_world_material_anim_emissive(a);
@@ -2835,15 +3050,18 @@ bool r2d_world_material_anim_info(R2DWorldRuntime *w,int material,int *frame,flo
 }
 bool r2d_world_material_anim_clear(R2DWorldRuntime *w,int material)
 {
-    if(!w||material<0||material>=R2D_WORLD_MAX_MATERIALS)return false;
+    if(!w||material<0||material>=w->material_anim_capacity)return false;
     w->material_anim_active[material]=false;
-    w->world.materials[material].anim_u=0;w->world.materials[material].anim_v=0;w->world.materials[material].anim_emissive=1;
+    if(material<w->world.material_capacity){
+        w->world.materials[material].anim_u=0;w->world.materials[material].anim_v=0;w->world.materials[material].anim_emissive=1;
+    }
     return true;
 }
 void r2d_world_material_anim_advance(R2DWorldRuntime *w,float dt)
 {
     if(!w)return;
-    for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++){
+    const int limit=w->material_anim_capacity<w->world.material_capacity?w->material_anim_capacity:w->world.material_capacity;
+    for(int i=0;i<limit;i++){
         if(!w->material_anim_active[i])continue;
         R2DWorldMaterialAnim *a=&w->material_anims[i];
         r2d_world_material_anim_step(a,dt);
@@ -2859,7 +3077,10 @@ void r2d_world_particles_budget(R2DWorldRuntime *w,int budget)
 {
     if(!w)return;
     if(budget<0)budget=0;
-    if(budget>R2D_WORLD_PARTICLE_CAPACITY)budget=R2D_WORLD_PARTICLE_CAPACITY;
+    // Потолок — фактическая ёмкость пула (может быть 8192+), а не старый
+    // compile-time default 2048. До готовности пула берём default.
+    const int cap=w->particles.capacity>0?w->particles.capacity:R2D_WORLD_PARTICLE_CAPACITY;
+    if(budget>cap)budget=cap;
     w->particle_budget=budget;
 }
 bool r2d_world_aim_assist(JSContext *ctx,R2DWorldRuntime *w,const float from[3],const float dir[3],float cone_rad,float range,int mask,R2DWorldAimAssist *out)

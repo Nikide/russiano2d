@@ -3,15 +3,20 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 void setUp(void) {}
 void tearDown(void) {}
 
 #define EPS 1e-4f
 
+// Logical ring access: 0 = oldest live particle.
+#define POOL_AT(pool, index) (*r2d_world_particle_at_mut(&(pool), (index)))
+
 // Large static buffers keep big capacities off the test stack.
-static R2DWorldParticle g_storage_8192[R2D_WORLD_PARTICLE_MAX_CAPACITY];
+static R2DWorldParticle g_storage_8192[8192];
 static R2DWorldParticle g_storage_512[512];
 static R2DWorldParticle g_storage_256[256];
 static R2DWorldParticle g_storage_300[300];
@@ -58,7 +63,7 @@ static uint64_t hash_pool(const R2DWorldParticlePool *pool)
     h = hash_mix(h, (uint32_t)pool->overflow);
     h = hash_mix(h, pool->seed);
     for (int i = 0; i < pool->count; ++i) {
-        const R2DWorldParticle *p = &pool->items[i];
+        const R2DWorldParticle *p = r2d_world_particle_at(pool, i);
         h = hash_mix(h, float_bits(p->x));
         h = hash_mix(h, float_bits(p->y));
         h = hash_mix(h, float_bits(p->h));
@@ -93,16 +98,19 @@ static void test_init_validation(void)
                              "capacity 0 rejected");
     TEST_ASSERT_FALSE_MESSAGE(r2d_world_particle_pool_init(&pool, g_storage_4, -3),
                              "negative capacity rejected");
-    TEST_ASSERT_FALSE_MESSAGE(r2d_world_particle_pool_init(&pool, g_storage_4, 8193),
-                             "capacity above 8192 rejected");
+    TEST_ASSERT_FALSE_MESSAGE(r2d_world_particle_pool_init(&pool, g_storage_4,
+                                                           R2D_WORLD_PARTICLE_MAX_CAPACITY + 1),
+                             "capacity above the explicit caller-storage ceiling rejected");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, pool.capacity, "failed capacity leaves pool empty");
 
     TEST_ASSERT_TRUE_MESSAGE(r2d_world_particle_pool_init(&pool, g_storage_4, 4),
-                             "capacity 1..8192 accepted");
+                             "capacity 1..MAX_CAPACITY accepted");
     TEST_ASSERT_TRUE_MESSAGE(pool.items == g_storage_4, "storage is borrowed, not copied");
     TEST_ASSERT_EQUAL_INT_MESSAGE(4, pool.capacity, "capacity stored");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, pool.count, "pool starts empty");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, pool.overflow, "pool starts without overflow");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, pool.peak, "pool starts with a zero peak");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, pool.start, "ring head starts at slot 0");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(R2D_WORLD_PARTICLE_DEFAULT_SEED, pool.seed,
                                      "default seed installed");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, r2d_world_particle_alive(&pool), "new pool is empty");
@@ -110,9 +118,8 @@ static void test_init_validation(void)
         TEST_ASSERT_FALSE_MESSAGE(g_storage_4[i].active, "init clears slot active flags");
     }
 
-    TEST_ASSERT_TRUE_MESSAGE(r2d_world_particle_pool_init(&pool, g_storage_8192,
-                                                          R2D_WORLD_PARTICLE_MAX_CAPACITY),
-                             "max capacity 8192 accepted");
+    TEST_ASSERT_TRUE_MESSAGE(r2d_world_particle_pool_init(&pool, g_storage_8192, 8192),
+                             "large caller capacity accepted");
     TEST_ASSERT_TRUE_MESSAGE(r2d_world_particle_pool_init(&pool, g_storage_8, 1),
                              "capacity 1 accepted");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, pool.capacity, "capacity 1 stored");
@@ -163,7 +170,7 @@ static void test_burst_count_spread_and_direction(void)
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, pool.overflow, "no overflow while capacity remains");
 
     for (int i = 0; i < pool.count; ++i) {
-        const R2DWorldParticle *p = &pool.items[i];
+        const R2DWorldParticle *p = r2d_world_particle_at(&pool, i);
         TEST_ASSERT_TRUE_MESSAGE(p->active, "burst slots active");
         TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, p->life, "spawn life equals max_life");
         TEST_ASSERT_EQUAL_FLOAT_MESSAGE(2.0f, p->max_life, "max_life copied");
@@ -188,9 +195,9 @@ static void test_burst_count_spread_and_direction(void)
                                             0.0f, 3.0f, 4.0f);
     TEST_ASSERT_EQUAL_INT_MESSAGE(3, emitted, "direction burst emitted");
     for (int i = 0; i < 3; ++i) {
-        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, pool.items[i].vx, "prototype vx preserved");
-        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f, pool.items[i].vy, "normalized dir.y * speed");
-        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 4.0f, pool.items[i].vh, "normalized dir.h * speed");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, POOL_AT(pool,i).vx, "prototype vx preserved");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f, POOL_AT(pool,i).vy, "normalized dir.y * speed");
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 4.0f, POOL_AT(pool,i).vh, "normalized dir.h * speed");
     }
 }
 
@@ -367,18 +374,18 @@ static void test_step_math_gravity(void)
                                                            0, 0, 0, 0, 0));
     r2d_world_particle_step(&pool, 0.2f);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, pool.count, "particle survives the first step");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.6f, pool.items[0].x, "x += vx*dt");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.6f, pool.items[0].y, "y += vy*dt");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.0f, pool.items[0].vh, "gravity integrates vh");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.4f, pool.items[0].h, "h += vh*dt after gravity");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.8f, pool.items[0].life, "life counts down");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.6f, POOL_AT(pool,0).x, "x += vx*dt");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.6f, POOL_AT(pool,0).y, "y += vy*dt");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.0f, POOL_AT(pool,0).vh, "gravity integrates vh");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.4f, POOL_AT(pool,0).h, "h += vh*dt after gravity");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.8f, POOL_AT(pool,0).life, "life counts down");
 
     r2d_world_particle_step(&pool, 0.2f);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.2f, pool.items[0].x, "second x update");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.2f, pool.items[0].y, "second y update");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f, pool.items[0].vh, "gravity keeps integrating");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.4f, pool.items[0].h, "second h update");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.6f, pool.items[0].life, "life after two steps");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.2f, POOL_AT(pool,0).x, "second x update");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.2f, POOL_AT(pool,0).y, "second y update");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f, POOL_AT(pool,0).vh, "gravity keeps integrating");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.4f, POOL_AT(pool,0).h, "second h update");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.6f, POOL_AT(pool,0).life, "life after two steps");
 }
 
 static void test_step_screen_ignores_gravity(void)
@@ -400,13 +407,13 @@ static void test_step_screen_ignores_gravity(void)
     r2d_world_particle_step(&billboard, 0.2f);
     r2d_world_particle_step(&screen, 0.2f);
 
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, -1.0f, billboard.items[0].vh,
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, -1.0f, POOL_AT(billboard,0).vh,
                                      "billboard applies gravity");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, -0.2f, billboard.items[0].h,
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, -0.2f, POOL_AT(billboard,0).h,
                                      "billboard height follows gravity");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, screen.items[0].vh,
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, POOL_AT(screen,0).vh,
                                      "screen mode ignores gravity");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.2f, screen.items[0].h,
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.2f, POOL_AT(screen,0).h,
                                      "screen height still integrates vh");
 }
 
@@ -434,35 +441,35 @@ static void test_step_drag_rotation_and_curves(void)
     r2d_world_particle_step(&pool, 0.25f);
 
     const float damp = expf(-0.5f); // drag 2 * dt 0.25
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f * damp, pool.items[0].vx, "drag damps vx");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, -2.0f * damp, pool.items[0].vy, "drag damps vy");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 4.0f * damp, pool.items[0].vh, "drag damps vh");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f * damp * 0.25f, pool.items[0].x,
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f * damp, POOL_AT(pool,0).vx, "drag damps vx");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, -2.0f * damp, POOL_AT(pool,0).vy, "drag damps vy");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 4.0f * damp, POOL_AT(pool,0).vh, "drag damps vh");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f * damp * 0.25f, POOL_AT(pool,0).x,
                                      "x uses damped vx");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, -2.0f * damp * 0.25f, pool.items[0].y,
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, -2.0f * damp * 0.25f, POOL_AT(pool,0).y,
                                      "y uses damped vy");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 4.0f * damp * 0.25f, pool.items[0].h,
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 4.0f * damp * 0.25f, POOL_AT(pool,0).h,
                                      "h uses damped vh");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.5f, pool.items[0].rotation, "rotation += spin*dt");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.5f, pool.items[0].size, "size curve at f=0.125");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.875f, pool.items[0].alpha, "alpha curve at f=0.125");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, pool.items[0].frame, "frame follows life fraction");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.5f, POOL_AT(pool,0).rotation, "rotation += spin*dt");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.5f, POOL_AT(pool,0).size, "size curve at f=0.125");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.875f, POOL_AT(pool,0).alpha, "alpha curve at f=0.125");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, POOL_AT(pool,0).frame, "frame follows life fraction");
 
     r2d_world_particle_step(&pool, 0.25f);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f * damp * damp, pool.items[0].vx,
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f * damp * damp, POOL_AT(pool,0).vx,
                                      "drag compounds");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f * damp * 0.25f + 3.0f * damp * damp * 0.25f,
-                                     pool.items[0].x, "x after two damped steps");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, pool.items[0].rotation, "rotation after two steps");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f, pool.items[0].size, "size curve at f=0.25");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.75f, pool.items[0].alpha, "alpha curve at f=0.25");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, pool.items[0].frame, "frame at f=0.25");
+                                     POOL_AT(pool,0).x, "x after two damped steps");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, POOL_AT(pool,0).rotation, "rotation after two steps");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 3.0f, POOL_AT(pool,0).size, "size curve at f=0.25");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.75f, POOL_AT(pool,0).alpha, "alpha curve at f=0.25");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, POOL_AT(pool,0).frame, "frame at f=0.25");
 
     for (int i = 0; i < 4; ++i) r2d_world_particle_step(&pool, 0.25f);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, pool.count, "particle alive at f=0.75");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 5.0f, pool.items[0].size, "size curve at f=0.75");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.25f, pool.items[0].alpha, "alpha curve at f=0.75");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(6, pool.items[0].frame, "frame at f=0.75");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 5.0f, POOL_AT(pool,0).size, "size curve at f=0.75");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.25f, POOL_AT(pool,0).alpha, "alpha curve at f=0.75");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(6, POOL_AT(pool,0).frame, "frame at f=0.75");
 
     // Non-positive drag must not amplify velocity.
     R2DWorldParticle hold = make_proto();
@@ -471,15 +478,15 @@ static void test_step_drag_rotation_and_curves(void)
     TEST_ASSERT_TRUE(r2d_world_particle_pool_init(&pool, g_storage_4, 4));
     TEST_ASSERT_EQUAL_INT(1, r2d_world_particle_emit_burst(&pool, &hold, 1, 0, 0, 0, 0, 0));
     r2d_world_particle_step(&pool, 0.1f);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 5.0f, pool.items[0].vx, "negative drag clamps to zero");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, pool.items[0].size, "size holds without endpoints");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 5.0f, POOL_AT(pool,0).vx, "negative drag clamps to zero");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, POOL_AT(pool,0).size, "size holds without endpoints");
 
     // Alpha is clamped into [0,1] at spawn.
     R2DWorldParticle bright = make_proto();
     bright.alpha = 2.0f;
     TEST_ASSERT_TRUE(r2d_world_particle_pool_init(&pool, g_storage_4, 4));
     TEST_ASSERT_EQUAL_INT(1, r2d_world_particle_emit_burst(&pool, &bright, 1, 0, 0, 0, 0, 0));
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, pool.items[0].alpha, "alpha clamps to 1");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 1.0f, POOL_AT(pool,0).alpha, "alpha clamps to 1");
 }
 
 static void test_life_expiry_exact(void)
@@ -492,7 +499,7 @@ static void test_life_expiry_exact(void)
     TEST_ASSERT_EQUAL_INT(1, r2d_world_particle_emit_burst(&pool, &proto, 1, 0, 0, 0, 0, 0));
     r2d_world_particle_step(&pool, 0.25f);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, pool.count, "alive halfway through life");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.25f, pool.items[0].life, "half life remains");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.25f, POOL_AT(pool,0).life, "half life remains");
 
     r2d_world_particle_step(&pool, 0.25f);
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, pool.count, "expires exactly at life end");
@@ -520,9 +527,10 @@ static void test_pool_overflow_evicts_oldest(void)
     }
     TEST_ASSERT_EQUAL_INT_MESSAGE(3, pool.count, "pool stays at capacity");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, pool.overflow, "one eviction counted");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 20.0f, pool.items[0].x, "oldest (10) was evicted");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 30.0f, pool.items[1].x, "second particle survived");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 40.0f, pool.items[2].x, "newest particle appended");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, pool.peak, "peak records the high-water mark");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 20.0f, POOL_AT(pool,0).x, "oldest (10) was evicted");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 30.0f, POOL_AT(pool,1).x, "second particle survived");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 40.0f, POOL_AT(pool,2).x, "newest particle appended");
     TEST_ASSERT_EQUAL_INT_MESSAGE(3, r2d_world_particle_alive(&pool), "all slots active");
 
     for (int i = 0; i < 5; ++i) {
@@ -531,15 +539,44 @@ static void test_pool_overflow_evicts_oldest(void)
     }
     TEST_ASSERT_EQUAL_INT_MESSAGE(3, pool.count, "pool remains capped");
     TEST_ASSERT_EQUAL_INT_MESSAGE(6, pool.overflow, "every eviction counted");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 70.0f, pool.items[0].x, "age order preserved (70)");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 80.0f, pool.items[1].x, "age order preserved (80)");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 90.0f, pool.items[2].x, "age order preserved (90)");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 70.0f, POOL_AT(pool,0).x, "age order preserved (70)");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 80.0f, POOL_AT(pool,1).x, "age order preserved (80)");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 90.0f, POOL_AT(pool,2).x, "age order preserved (90)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, pool.peak, "peak stays at capacity");
 
     // Overflow saturates instead of wrapping.
     pool.overflow = INT32_MAX;
     proto.x = 100.0f;
     TEST_ASSERT_EQUAL_INT(1, r2d_world_particle_emit_burst(&pool, &proto, 1, 0, 0, 0, 0, 0));
     TEST_ASSERT_EQUAL_INT_MESSAGE(INT32_MAX, pool.overflow, "overflow saturates");
+}
+
+// Saturation stress check: emitting into an already-full small pool must stay
+// O(1) per particle (ring eviction), not shift the whole array. Prints the wall
+// time so the scalability claim is observable in the test log.
+static void test_saturated_emit_is_constant_time(void)
+{
+    R2DWorldParticlePool pool;
+    TEST_ASSERT_TRUE(r2d_world_particle_pool_init(&pool, g_storage_8, 4));
+    R2DWorldParticle proto = make_proto();
+    proto.max_life = 1000.0f;
+
+    TEST_ASSERT_EQUAL_INT(4, r2d_world_particle_emit_burst(&pool, &proto, 4, 0, 0, 0, 0, 0));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, pool.count, "pool saturated before timing");
+
+    const int emits = 100000;
+    const clock_t start = clock();
+    for (int i = 0; i < emits; ++i) {
+        proto.x = (float)(i % 97);
+        TEST_ASSERT_EQUAL_INT(1, r2d_world_particle_emit_burst(&pool, &proto, 1, 0, 0, 0, 0, 0));
+    }
+    const double ms = (double)(clock() - start) * 1000.0 / (double)CLOCKS_PER_SEC;
+    printf("particle saturation: %d emits into a full 4-slot pool in %.3f ms\n", emits, ms);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, pool.count, "saturated pool stays at capacity");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(emits, pool.overflow, "every emit evicted exactly one particle");
+    TEST_ASSERT_TRUE_MESSAGE(ms < 5000.0, "100k saturated emits finish quickly (O(1) eviction)");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, (float)((emits - 1) % 97),
+                                     POOL_AT(pool,3).x, "newest particle is the last emitted");
 }
 
 static void test_step_clamps_dt(void)
@@ -552,19 +589,19 @@ static void test_step_clamps_dt(void)
     TEST_ASSERT_EQUAL_INT(1, r2d_world_particle_emit_burst(&pool, &proto, 1, 0, 0, 0, 0, 0));
 
     r2d_world_particle_step(&pool, -1.0f);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f, pool.items[0].x, "negative dt ignored");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f, POOL_AT(pool,0).x, "negative dt ignored");
     r2d_world_particle_step(&pool, NAN);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f, pool.items[0].x, "NaN dt ignored");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f, POOL_AT(pool,0).x, "NaN dt ignored");
     r2d_world_particle_step(&pool, INFINITY);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f, pool.items[0].x, "infinite dt ignored");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 0.0f, POOL_AT(pool,0).x, "infinite dt ignored");
     r2d_world_particle_step(NULL, 0.1f);
 
     r2d_world_particle_step(&pool, 10.0f);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.5f, pool.items[0].x, "dt clamps to 0.25 s");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 9.75f, pool.items[0].life, "life uses clamped dt");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.5f, POOL_AT(pool,0).x, "dt clamps to 0.25 s");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 9.75f, POOL_AT(pool,0).life, "life uses clamped dt");
 
     r2d_world_particle_step(&pool, 0.0f);
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.5f, pool.items[0].x, "zero dt is a no-op");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 2.5f, POOL_AT(pool,0).x, "zero dt is a no-op");
 }
 
 static void test_nan_particle_dropped(void)
@@ -577,13 +614,13 @@ static void test_nan_particle_dropped(void)
     proto.x = 5.0f;
 
     TEST_ASSERT_EQUAL_INT(2, r2d_world_particle_emit_burst(&pool, &proto, 2, 0, 0, 0, 0, 0));
-    pool.items[0].vx = NAN;
+    POOL_AT(pool,0).vx = NAN;
     r2d_world_particle_step(&pool, 0.1f);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, pool.count, "NaN particle is dropped");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, r2d_world_particle_alive(&pool), "only the sane particle lives");
-    TEST_ASSERT_TRUE_MESSAGE(isfinite(pool.items[0].x), "surviving particle stays finite");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 5.2f, pool.items[0].x, "surviving particle stepped");
+    TEST_ASSERT_TRUE_MESSAGE(isfinite(POOL_AT(pool,0).x), "surviving particle stays finite");
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(EPS, 5.2f, POOL_AT(pool,0).x, "surviving particle stepped");
 }
 
 static void test_seed_determinism(void)
@@ -650,7 +687,7 @@ static void test_alive_and_clear(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(7u, pool.seed, "clear preserves seed");
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, r2d_world_particle_alive(&pool), "clear drops all particles");
     for (int i = 0; i < 16; ++i) {
-        TEST_ASSERT_FALSE_MESSAGE(pool.items[i].active, "clear deactivates every slot");
+        TEST_ASSERT_FALSE_MESSAGE(pool.items[i].active, "clear deactivates every physical slot");
     }
     TEST_ASSERT_EQUAL_INT(2, r2d_world_particle_emit_burst(&pool, &proto, 2, 0, 0, 0, 0, 0));
     TEST_ASSERT_EQUAL_INT_MESSAGE(2, r2d_world_particle_alive(&pool), "pool is reusable after clear");
@@ -673,6 +710,7 @@ int main(void)
     RUN_TEST(test_step_drag_rotation_and_curves);
     RUN_TEST(test_life_expiry_exact);
     RUN_TEST(test_pool_overflow_evicts_oldest);
+    RUN_TEST(test_saturated_emit_is_constant_time);
     RUN_TEST(test_step_clamps_dt);
     RUN_TEST(test_nan_particle_dropped);
     RUN_TEST(test_seed_determinism);

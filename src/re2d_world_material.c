@@ -2,14 +2,42 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <limits.h>
 void r2d_world_material_free(R2DWorldMaterial *m)
 { if(!m)return;free(m->albedo.pixels);free(m->normal.pixels);free(m->emissive.pixels);memset(m,0,sizeof *m); }
+// Definition-capacity growth for the dynamic material bank. The texture bytes
+// and the GPU-resident set are separate concerns: growing the bank never forces
+// a material texture to become GPU-resident.
+static bool material_reserve(R2DRe2dWorld *w,int need)
+{
+    if(!w||need<0)return false;
+    if(need<=w->material_capacity)return true;
+    int capacity=w->material_capacity>0?w->material_capacity:R2D_WORLD_MAX_MATERIALS;
+    while(capacity<need){
+        if(capacity>INT_MAX/2){capacity=need;break;}
+        capacity*=2;
+    }
+    if((size_t)capacity>SIZE_MAX/sizeof(R2DWorldMaterial))return false;
+    R2DWorldMaterial *grown=realloc(w->materials,(size_t)capacity*sizeof *grown);
+    if(!grown)return false;
+    memset(grown+w->material_capacity,0,(size_t)(capacity-w->material_capacity)*sizeof *grown);
+    w->materials=grown;w->material_capacity=capacity;
+    return true;
+}
+bool r2d_world_material_ensure(R2DRe2dWorld *w,int slots)
+{
+    return material_reserve(w,slots);
+}
 int r2d_world_material_find(const R2DRe2dWorld *w,const char *name)
-{ if(!w||!name)return -1;for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)if(w->materials[i].used&&!strcmp(w->materials[i].name,name))return i;return -1; }
+{
+    if(!w||!name)return -1;
+    for(int i=0;i<w->material_capacity;i++)if(w->materials[i].used&&!strcmp(w->materials[i].name,name))return i;
+    return -1;
+}
 static bool texture_copy(R2DWorldTexture *to,const R2DWorldTexture *from,bool required)
 {
     if(!from->pixels)return !required&&from->width==0&&from->height==0;
-    if(from->width<1||from->height<1||from->width>2048||from->height>2048)return false;
+    if(from->width<1||from->height<1||from->width>R2D_WORLD_MATERIAL_TEXTURE_MAX||from->height>R2D_WORLD_MATERIAL_TEXTURE_MAX)return false;
     size_t size=(size_t)from->width*from->height*4;to->pixels=malloc(size);if(!to->pixels)return false;
     memcpy(to->pixels,from->pixels,size);to->width=from->width;to->height=from->height;return true;
 }
@@ -17,8 +45,10 @@ int r2d_world_material_set(R2DRe2dWorld *w,const R2DWorldMaterial *m)
 {
     if(!w||!m||!memchr(m->name,0,sizeof m->name)||!m->name[0]||!isfinite(m->emissive_strength)||m->emissive_strength<0||m->emissive_strength>100||
         m->blend<0||m->blend>3||!isfinite(m->opacity)||m->opacity<0||m->opacity>1||!isfinite(m->u_scale)||!isfinite(m->v_scale)||m->u_scale<=0||m->v_scale<=0||m->u_scale>1000000||m->v_scale>1000000)return -1;
-    int index=r2d_world_material_find(w,m->name);if(index<0)for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)if(!w->materials[i].used){index=i;break;}
-    if(index<0)return -1;
+    int index=r2d_world_material_find(w,m->name);
+    if(index<0)for(int i=0;i<w->material_capacity;i++)if(!w->materials[i].used){index=i;break;}
+    if(index<0){index=w->material_count;if(!material_reserve(w,index+1))return -1;}
+    if(index<0||index>=w->material_capacity)return -1;
     R2DWorldMaterial next={0};
     if(!texture_copy(&next.albedo,&m->albedo,true)||!texture_copy(&next.normal,&m->normal,false)||!texture_copy(&next.emissive,&m->emissive,false)){r2d_world_material_free(&next);return -1;}
     if(!w->surface_materials&&w->surface_count) {
@@ -30,7 +60,7 @@ int r2d_world_material_set(R2DRe2dWorld *w,const R2DWorldMaterial *m)
 }
 bool r2d_world_surface_material(R2DRe2dWorld *w,int surface,int material)
 {
-    if(!w||surface<0||surface>=w->surface_count||material<0||material>=R2D_WORLD_MAX_MATERIALS||!w->materials[material].used)return false;
+    if(!w||surface<0||surface>=w->surface_count||material<0||material>=w->material_capacity||!w->materials[material].used)return false;
     w->surface_materials[surface]=material;return true;
 }
 void r2d_world_texture_sample(const R2DWorldTexture *t,float u,float v,bool linear,bool clamp_v,uint8_t out[4]) {
@@ -144,18 +174,104 @@ bool r2d_world_material_color(const R2DRe2dWorld *w,int surface,int span,uint32_
 {int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;if(!material_color_id(w,id,span,tint,u,v,x,y,h,normal,tangent,depth,NULL,out))return false;*out=surface_fade_color(w,surface,*out);return true;}
 bool r2d_world_material_color_features(const R2DRe2dWorld *w,int surface,int span,uint32_t tint,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,const R2DWorldRenderFeatures *features,uint32_t *out)
 {int id=w->surface_materials&&surface>=0&&surface<w->surface_count?w->surface_materials[surface]:-1;if(!material_color_id(w,id,span,tint,u,v,x,y,h,normal,tangent,depth,features,out))return false;*out=surface_fade_color(w,surface,*out);return true;}
+// Dynamic decal bank. Creation capacity is memory-bound; the RENDER budget
+// (decal_budget, default R2D_WORLD_MAX_DECALS) is enforced by deterministic
+// eviction instead of rejecting new decals.
+static bool decal_reserve(R2DRe2dWorld *w,int need)
+{
+    if(!w||need<0)return false;
+    if(need<=w->decal_capacity)return true;
+    int capacity=w->decal_capacity>0?w->decal_capacity:R2D_WORLD_MAX_DECALS;
+    while(capacity<need){
+        if(capacity>INT_MAX/2){capacity=need;break;}
+        capacity*=2;
+    }
+    if((size_t)capacity>SIZE_MAX/sizeof(R2DWorldDecal))return false;
+    R2DWorldDecal *grown=realloc(w->decals,(size_t)capacity*sizeof *grown);
+    if(!grown)return false;
+    memset(grown+w->decal_capacity,0,(size_t)(capacity-w->decal_capacity)*sizeof *grown);
+    w->decals=grown;w->decal_capacity=capacity;
+    return true;
+}
+static int decal_effective_budget(const R2DRe2dWorld *w)
+{
+    return w&&w->decal_budget>0?w->decal_budget:R2D_WORLD_MAX_DECALS;
+}
+int r2d_world_decal_budget(R2DRe2dWorld *w,int budget)
+{
+    if(!w)return 0;
+    if(budget<0)budget=0;
+    w->decal_budget=budget;
+    return decal_effective_budget(w);
+}
+int r2d_world_decal_active_count(const R2DRe2dWorld *w)
+{
+    if(!w)return 0;
+    int active=0;for(int i=0;i<w->decal_capacity;i++)if(w->decals[i].active)active++;
+    const int budget=decal_effective_budget(w);
+    return budget>0&&active>budget?budget:active;
+}
+// Deterministic eviction: non-persistent (max_life>0) before persistent; then
+// lowest authored priority; then oldest serial.
+static void decal_evict_one(R2DRe2dWorld *w)
+{
+    int victim=-1;bool victim_persistent=true;int victim_priority=INT_MAX;uint64_t victim_serial=UINT64_MAX;
+    for(int i=0;i<w->decal_capacity;i++){
+        R2DWorldDecal *d=&w->decals[i];if(!d->active)continue;
+        const bool persistent=d->max_life<=0.0f;
+        bool better=false;
+        if(victim<0)better=true;
+        else if(victim_persistent&&!persistent)better=true;
+        else if(victim_persistent==persistent){
+            if(d->priority<victim_priority)better=true;
+            else if(d->priority==victim_priority&&d->serial<victim_serial)better=true;
+        }
+        if(better){victim=i;victim_persistent=persistent;victim_priority=d->priority;victim_serial=d->serial;}
+    }
+    if(victim<0)return;
+    R2DWorldDecal *d=&w->decals[victim];
+    d->active=false;d->generation++;
+    w->decal_count--;w->decal_evicted++;
+}
+// Find a reusable slot. Retired slots (generation exhausted) are never reused;
+// the bank grows instead so stale tokens can never alias a new decal.
+static int decal_slot_for_new(R2DRe2dWorld *w)
+{
+    for(int i=0;i<w->decal_capacity;i++)
+        if(!w->decals[i].active&&w->decals[i].generation<R2D_WORLD_DECAL_GENERATION_MAX)return i;
+    const int slot=w->decal_capacity;
+    if(!decal_reserve(w,slot+1))return -1;
+    return slot;
+}
 int r2d_world_decal_create(R2DRe2dWorld *w,const R2DWorldDecal *d)
 {
-    if(!w||!d||d->surface<0||d->surface>=w->surface_count||(w->surface_sky&&w->surface_sky[d->surface])||r2d_world_surface_blend(w,d->surface)>=R2D_WORLD_TRANSLUCENT||d->material<0||d->material>=R2D_WORLD_MAX_MATERIALS||!w->materials[d->material].used||
+    if(!w||!d||d->surface<0||d->surface>=w->surface_count||(w->surface_sky&&w->surface_sky[d->surface])||r2d_world_surface_blend(w,d->surface)>=R2D_WORLD_TRANSLUCENT||d->material<0||d->material>=w->material_capacity||!w->materials[d->material].used||
        !isfinite(d->u)||!isfinite(d->v)||!isfinite(d->w)||!isfinite(d->h)||!isfinite(d->remaining)||fabsf(d->u)>1000000||fabsf(d->v)>1000000||d->w<=0||d->h<=0||d->w>1000000||d->h>1000000||d->remaining<0||d->remaining>1000000||
        !isfinite(d->max_life)||!isfinite(d->rotation)||!isfinite(d->scale)||!isfinite(d->fade_in)||!isfinite(d->fade_out)||
        d->max_life<0||d->max_life>1000000||d->scale<0||d->scale>8||d->fade_in<0||d->fade_out<0)return -1;
-    for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)if(!w->decals[i].active&&w->decals[i].generation<16777215){unsigned gen=w->decals[i].generation+1;w->decals[i]=*d;
-        if(w->decals[i].max_life>0.0f&&w->decals[i].scale<=0.0f)w->decals[i].scale=1.0f;
-        w->decals[i].generation=gen;w->decals[i].active=true;w->decal_count++;return (int)(gen*128u+(unsigned)i);}return -1;
+    const int budget=decal_effective_budget(w);
+    if(budget>0&&w->decal_count>=budget)decal_evict_one(w);
+    const int slot=decal_slot_for_new(w);
+    if(slot<0)return -1;
+    R2DWorldDecal *target=&w->decals[slot];
+    unsigned generation=target->generation+1;
+    if(generation>R2D_WORLD_DECAL_GENERATION_MAX)return -1;
+    *target=*d;
+    if(target->max_life>0.0f&&target->scale<=0.0f)target->scale=1.0f;
+    target->generation=generation;target->active=true;target->serial=++w->decal_sequence;
+    w->decal_count++;
+    return (int)(generation*R2D_WORLD_DECAL_TOKEN_STRIDE+(unsigned)slot);
 }
 bool r2d_world_decal_remove(R2DRe2dWorld *w,int token)
-{if(!w||token<128)return false;int i=token%128;R2DWorldDecal *d=&w->decals[i];if(!d->active||d->generation!=(unsigned)token/128)return false;d->active=false;w->decal_count--;return true;}
+{
+    if(!w||token<0)return false;
+    const unsigned stride=R2D_WORLD_DECAL_TOKEN_STRIDE;
+    const unsigned slot=(unsigned)token%stride,generation=(unsigned)token/stride;
+    if(slot>=(unsigned)w->decal_capacity)return false;
+    R2DWorldDecal *d=&w->decals[slot];
+    if(!d->active||d->generation!=generation)return false;
+    d->active=false;w->decal_count--;return true;
+}
 float r2d_world_decal_alpha(const R2DWorldDecal *d)
 {
     if(!d)return 0.0f;
@@ -168,7 +284,7 @@ float r2d_world_decal_alpha(const R2DWorldDecal *d)
     return alpha<0.0f?0.0f:(alpha>1.0f?1.0f:alpha);
 }
 void r2d_world_decal_step(R2DRe2dWorld *w,float dt)
-{if(!w||!isfinite(dt)||dt<0)return;for(int i=0;i<R2D_WORLD_MAX_DECALS;i++){R2DWorldDecal *d=&w->decals[i];if(d->active&&d->remaining>0){d->remaining-=dt;if(d->remaining<=0){d->active=false;w->decal_count--;}}}}
+{if(!w||!isfinite(dt)||dt<0)return;for(int i=0;i<w->decal_capacity;i++){R2DWorldDecal *d=&w->decals[i];if(d->active&&d->remaining>0){d->remaining-=dt;if(d->remaining<=0){d->active=false;w->decal_count--;}}}}
 bool r2d_world_decal_color(const R2DRe2dWorld *w,const R2DWorldDecal *decal,int span,float u,float v,float x,float y,float h,const float normal[3],const float tangent[3],float depth,uint32_t *out)
 {
     u=(u-decal->u)/decal->w;v=(v-decal->v)/decal->h;if(u<0||v<0||u>=1||v>=1)return false;

@@ -66,6 +66,9 @@ bool r2d_font_measure(const char *text, float size, const char *family,
 
 // Сколько глифов в атласе и сколько памяти он занимает — для `$.debug.stats`.
 void r2d_font_stats(int *glyph_count, int *atlas_w, int *atlas_h);
+// Диагностика атласа (§6): сколько глифов растеризовано и сколько пачек
+// загрузки ушло в GPU. Нужна стресс-тесту «1000 новых глифов».
+void r2d_font_upload_stats(int *rasterized, int *batches, int *pages);
 // Сколько глифов ушло в батч с запуска — проверка отрисовки в тестах.
 int  r2d_font_drawn_total(void);
 // Первый спрайт глифа: тесты рисуют его напрямую и проверяют пиксели.

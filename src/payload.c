@@ -107,6 +107,191 @@ static void parse_fail(R2dPayload *payload)
     r2d_payload_free(payload);
 }
 
+// ---------------------------------------------------------------------------
+// Индекс путей груза
+//
+// Раньше r2d_payload_find делал ДВА линейных прохода по всем файлам (точный
+// путь, затем суффикс), то есть на грузе в тысячи файлов каждый запрос шрифта
+// или картинки стоил O(n) strcmp. Теперь индекс строится ОДИН раз здесь, при
+// разборе, и дальше поиск — открытая адресация + strcmp только для коллизий.
+//
+// Инвариант fallback'а сохранён: если один путь является суффиксом другого на
+// границе каталога, у них ОДИН basename. Поэтому достаточно индексировать по
+// basename, а внутри цепочки одинаковых basename проверить точное старое
+// условие суффикса и вернуть первый по порядку файлов — ровно то, что дал бы
+// второй линейный скан.
+// ---------------------------------------------------------------------------
+
+// FNV-1a 64: простой, детерминированный, без зависимостей. Качество для
+// коротких ASCII-путей достаточное; коллизии всё равно разрешает strcmp.
+static uint64_t index_hash64(const char *s)
+{
+    uint64_t h = 1469598103934665603ULL;
+    while (*s) {
+        h ^= (uint64_t)(unsigned char)*s++;
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static int index_pow2(size_t need)
+{
+    size_t cap = 8;
+    while (cap < need) {
+        if (cap > (size_t)INT32_MAX / 2) return 0;   // грузы такого размера не наши
+        cap <<= 1;
+    }
+    if (cap > (size_t)INT32_MAX) return 0;
+    return (int)cap;
+}
+
+// Имя файла без каталогов: хвост после последнего '/'. Контейнер хранит пути
+// с прямыми слэшами; поведение совпадает со старым r2d_payload_find.
+static const char *path_basename(const char *path)
+{
+    const char *slash = strrchr(path, '/');
+    return slash ? slash + 1 : path;
+}
+
+// Ровно условие второго прохода старого r2d_payload_find: один путь совпадает
+// с концом другого на границе каталога (в любую сторону).
+static bool path_suffix_match(const char *candidate, const char *path)
+{
+    const size_t want = SDL_strlen(path);
+    const size_t have = SDL_strlen(candidate);
+    if (have >= want) {
+        return SDL_strcmp(candidate + (have - want), path) == 0 &&
+               (have == want || candidate[have - want - 1] == '/');
+    }
+    return SDL_strcmp(path + (want - have), candidate) == 0 &&
+           (want == have || path[want - have - 1] == '/');
+}
+
+static void free_index(R2dPayload *payload)
+{
+    SDL_free(payload->exact_slots);
+    SDL_free(payload->base_slots);
+    SDL_free(payload->base_tail);
+    SDL_free(payload->base_next);
+    payload->exact_slots = NULL;
+    payload->base_slots = NULL;
+    payload->base_tail = NULL;
+    payload->base_next = NULL;
+    payload->exact_cap = 0;
+    payload->base_cap = 0;
+    payload->lookup_stats.indexed = false;
+}
+
+static void exact_index_insert(R2dPayload *payload, int file_index)
+{
+    const char *key = payload->files[file_index].path;
+    const size_t mask = (size_t)payload->exact_cap - 1;
+    size_t i = (size_t)index_hash64(key) & mask;
+    for (int n = 0; n < payload->exact_cap; ++n) {
+        const int v = payload->exact_slots[i];
+        if (v == 0) {
+            payload->exact_slots[i] = file_index + 1;
+            return;
+        }
+        if (SDL_strcmp(payload->files[v - 1].path, key) == 0) return; // дубль пути
+        payload->lookup_stats.collisions++;
+        i = (i + 1) & mask;
+    }
+}
+
+static void base_index_insert(R2dPayload *payload, int file_index)
+{
+    const char *key = path_basename(payload->files[file_index].path);
+    const size_t mask = (size_t)payload->base_cap - 1;
+    size_t i = (size_t)index_hash64(key) & mask;
+    for (int n = 0; n < payload->base_cap; ++n) {
+        const int head = payload->base_slots[i];
+        if (head == 0) {
+            payload->base_slots[i] = file_index + 1;
+            payload->base_tail[i] = file_index + 1;
+            payload->base_next[file_index] = -1;
+            return;
+        }
+        if (SDL_strcmp(path_basename(payload->files[head - 1].path), key) == 0) {
+            // Цепочка в порядке файлов: новый файл дописывается в хвост, а не
+            // в голову, иначе «первый по порядку» перестал бы быть первым.
+            const int tail = payload->base_tail[i] - 1;
+            payload->base_next[tail] = file_index;
+            payload->base_next[file_index] = -1;
+            payload->base_tail[i] = file_index + 1;
+            return;
+        }
+        payload->lookup_stats.collisions++;
+        i = (i + 1) & mask;
+    }
+}
+
+// Строит оба индекса. false — не хватило памяти: индекс освобождён, поиск
+// продолжит работать старым линейным путём (корректность важнее скорости).
+static bool build_index(R2dPayload *payload)
+{
+    if (payload->file_count <= 0) {
+        payload->lookup_stats.indexed = true;   // пустой груз индексировать нечего
+        return true;
+    }
+    const int cap = index_pow2((size_t)payload->file_count * 2);
+    if (cap <= 0) return false;
+
+    payload->exact_slots = (int *)SDL_calloc((size_t)cap, sizeof(int));
+    payload->base_slots  = (int *)SDL_calloc((size_t)cap, sizeof(int));
+    payload->base_tail   = (int *)SDL_calloc((size_t)cap, sizeof(int));
+    payload->base_next   = (int *)SDL_malloc((size_t)payload->file_count * sizeof(int));
+    if (!payload->exact_slots || !payload->base_slots || !payload->base_tail ||
+        !payload->base_next) {
+        free_index(payload);
+        return false;
+    }
+    payload->exact_cap = cap;
+    payload->base_cap = cap;
+
+    for (int i = 0; i < payload->file_count; ++i) {
+        exact_index_insert(payload, i);
+        base_index_insert(payload, i);
+    }
+    payload->lookup_stats.indexed = true;
+    return true;
+}
+
+static int exact_index_lookup(R2dPayload *payload, const char *path)
+{
+    if (payload->exact_cap <= 0 || !payload->exact_slots) return -1;
+    const size_t mask = (size_t)payload->exact_cap - 1;
+    size_t i = (size_t)index_hash64(path) & mask;
+    for (int n = 0; n < payload->exact_cap; ++n) {
+        const int v = payload->exact_slots[i];
+        payload->lookup_stats.probes++;
+        if (v == 0) return -1;
+        if (SDL_strcmp(payload->files[v - 1].path, path) == 0) return v - 1;
+        payload->lookup_stats.collisions++;
+        i = (i + 1) & mask;
+    }
+    return -1;
+}
+
+// Голова цепочки файлов с тем же basename (индекс файла) либо -1.
+static int base_index_lookup(R2dPayload *payload, const char *basename)
+{
+    if (payload->base_cap <= 0 || !payload->base_slots) return -1;
+    const size_t mask = (size_t)payload->base_cap - 1;
+    size_t i = (size_t)index_hash64(basename) & mask;
+    for (int n = 0; n < payload->base_cap; ++n) {
+        const int head = payload->base_slots[i];
+        payload->lookup_stats.probes++;
+        if (head == 0) return -1;
+        if (SDL_strcmp(path_basename(payload->files[head - 1].path), basename) == 0) {
+            return head - 1;
+        }
+        payload->lookup_stats.collisions++;
+        i = (i + 1) & mask;
+    }
+    return -1;
+}
+
 // Разбор ТЕЛА контейнера: [entry_len][entry][count][файлы…]. Отдельная
 // функция, потому что тело лежит либо прямо в контейнере (версия 1, без
 // сжатия), либо в распакованном буфере (версия 2 с признаком zstd).
@@ -172,6 +357,9 @@ static bool parse_body(R2dPayload *payload, const uint8_t *body, size_t body_siz
         return false;
     }
 
+    // Индекс необязателен: при OOM поиск честно откатывается на старый
+    // линейный скан (build_index сам освобождает частичные таблицы).
+    (void)build_index(payload);
     return true;
 }
 
@@ -306,6 +494,8 @@ R2dPayload *r2d_payload_parse(uint8_t *buffer, size_t size, char *err, size_t er
 void r2d_payload_free(R2dPayload *payload)
 {
     if (!payload) return;
+    // Индекс ссылается на files[], поэтому освобождаем его до самих файлов.
+    free_index(payload);
     for (int i = 0; i < payload->file_count; ++i) SDL_free(payload->files[i].path);
     SDL_free(payload->files);
     if (payload->buffer) {
@@ -321,36 +511,65 @@ void r2d_payload_free(R2dPayload *payload)
     SDL_free(payload);
 }
 
+void r2d_payload_lookup_stats(const R2dPayload *payload, R2dPayloadLookupStats *out)
+{
+    if (!out) return;
+    if (!payload) {
+        memset(out, 0, sizeof *out);
+        return;
+    }
+    // Копия: счётчики меняются в const-поиске (диагностика), но наружу они
+    // уходят снимком, чтобы вызывающий не держал указатель внутрь груза.
+    *out = payload->lookup_stats;
+}
+
 const R2dPayloadFile *r2d_payload_find(const R2dPayload *payload, const char *path)
 {
     if (!payload || !path || !*path) return NULL;
 
-    for (int i = 0; i < payload->file_count; ++i) {
-        if (SDL_strcmp(payload->files[i].path, path) == 0) return &payload->files[i];
-    }
+    // Счётчики — диагностика, а не состояние поиска. API исторически const,
+    // поэтому снимаем const именно для них (сам груз при поиске не меняется).
+    R2dPayload *mutable_payload = (R2dPayload *)(void *)payload;
 
-    // Точное совпадение не сработало — значит пути записаны от разных корней:
-    // игра просит «assets/x.png», а движок подставил каталог запуска
-    // («/opt/game/assets/x.png»), или наоборот. Сверяем по хвосту пути в обе
-    // стороны: тот, что короче, должен совпасть с концом длинного на границе
-    // каталога.
-    const size_t want = SDL_strlen(path);
-    for (int i = 0; i < payload->file_count; ++i) {
-        const char *candidate = payload->files[i].path;
-        const size_t have = SDL_strlen(candidate);
+    if (payload->exact_cap > 0 && payload->exact_slots) {
+        const int exact = exact_index_lookup(mutable_payload, path);
+        if (exact >= 0) {
+            mutable_payload->lookup_stats.exact_hits++;
+            return &payload->files[exact];
+        }
 
-        if (have >= want) {
-            if (SDL_strcmp(candidate + (have - want), path) == 0 &&
-                (have == want || candidate[have - want - 1] == '/')) {
-                return &payload->files[i];
-            }
-        } else {
-            if (SDL_strcmp(path + (want - have), candidate) == 0 &&
-                (want == have || path[want - have - 1] == '/')) {
+        // Точное совпадение не сработало — значит пути записаны от разных
+        // корней: игра просит «assets/x.png», а движок подставил каталог
+        // запуска («/opt/game/assets/x.png»), или наоборот. Кандидаты с другим
+        // basename совпасть не могут, поэтому идём только по своей цепочке;
+        // внутри — то же условие суффикса и тот же порядок, что раньше.
+        const char *basename = path_basename(path);
+        for (int i = base_index_lookup(mutable_payload, basename); i >= 0;
+             i = payload->base_next[i]) {
+            if (path_suffix_match(payload->files[i].path, path)) {
+                mutable_payload->lookup_stats.suffix_hits++;
                 return &payload->files[i];
             }
         }
+        mutable_payload->lookup_stats.misses++;
+        return NULL;
     }
+
+    // Fallback: индекс не построился (OOM). Поведение побайтово прежнее.
+    mutable_payload->lookup_stats.linear_fallbacks++;
+    for (int i = 0; i < payload->file_count; ++i) {
+        if (SDL_strcmp(payload->files[i].path, path) == 0) {
+            mutable_payload->lookup_stats.exact_hits++;
+            return &payload->files[i];
+        }
+    }
+    for (int i = 0; i < payload->file_count; ++i) {
+        if (path_suffix_match(payload->files[i].path, path)) {
+            mutable_payload->lookup_stats.suffix_hits++;
+            return &payload->files[i];
+        }
+    }
+    mutable_payload->lookup_stats.misses++;
     return NULL;
 }
 

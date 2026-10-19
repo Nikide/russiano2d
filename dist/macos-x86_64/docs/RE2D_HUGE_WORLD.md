@@ -78,8 +78,14 @@ UNLOADED -> PRELOAD -> RESIDENT -> EVICTABLE -> UNLOADED
 * per frame: bounded promotions (`promote_budget_items`), bounded uploads
   (`upload_budget_bytes` + `upload_budget_items`), then LRU eviction of
   non-active payloads until the resident byte/item budget holds;
+* pinned/visible-demand items (`pinned`/`demand` flags) outrank ordinary
+  payloads: they are promoted without the ordinary promote budget, are never
+  demoted or evicted, and form the soft residency cap when they alone exceed a
+  budget;
 * `0` upload budget means "no upload this frame"; residency budget `0` means
-  unlimited;
+  unlimited. The public `world.streamConfig()` maps `0` to unlimited for all of
+  its fields (new API only; legacy `regionConfig`/`regionBudget` keep the old
+  contract);
 * texture/atlas items use the same state machine, so `textureResident` /
   `atlasResident` queries share one contract.
 
@@ -104,8 +110,10 @@ material texture at init:
   `gpuStreamEvictions`;
 * a visible material is demand-loaded so a visible surface never samples white
   while its region is still PRELOAD; hidden materials still follow the cache;
-* atlas residency gates `ActorGPU` uploads (`id=1000000+actor`, kind ATLAS);
-  non-resident atlases release the GPU frame texture and are skipped;
+* atlas residency gates `ActorGPU` uploads (stable `stream_id`, kind ATLAS);
+  non-resident atlases release the GPU frame texture and are skipped; the
+  matching contact/ground shadow is suppressed (`groundShadowsSuppressed`) so a
+  shadow is never left without its sprite;
 * `r2d_world_stream_set_hook()` is installed by the GPU owner and counts every
   residency transition (`gpuStreamTransitions`), so loaders/uploaders do not
   need to poll the cache.
@@ -114,6 +122,161 @@ Remaining honest limitation: this is deterministic incremental residency, not
 async disk I/O; placement/eviction is real on SDL_GPU, disk loading still uses
 the existing loader. EVICTABLE copies stay GPU-resident for visual continuity
 until the cache actually evicts them (UNLOADED).
+
+### Visible-demand atlas residency + diagnostics (BASHNYA 1.2.11 report)
+
+BASHNYA reported visible flat-atlas sprites disappearing while their contact
+shadows remained, with `streamEvictions` every frame and only 82/138 atlases
+resident. Root cause on the engine side: atlas residency had no visible-demand
+input and no public budget/pin/diagnostic surface, and atlas stream ids were the
+registration array index, so unregister/re-register churn could leave stale
+residency state for a different atlas. Fixed additively:
+
+* **stable atlas stream ids** (`next_atlas_stream_id`, `R2DWorldAtlasActor.stream_id`)
+  and removal of the stream item on `world.remove(node)`; the GPU actor gate and
+  the cache now agree even when the atlas registry shifts down;
+* **visible demand** is derived natively every frame from the previous frame's
+  visible atlas actors (no per-frame JS calls): those items are demand-pinned,
+  force-promoted ahead of preload/distant payloads, touched for LRU and never
+  evicted. If the pinned set exceeds `residentBytes`/`residentItems` it stays
+  resident as a reported soft cap (`over_budget_bytes/items`);
+* **grounding gate**: a visible atlas that is not RESIDENT/EVICTABLE is not drawn
+  (existing GPU gate) and its contact/ground card is skipped as well;
+* **diagnostics**: bounded native warning ring
+  (`R2D_WORLD_STREAM_WARNING_LIMIT` = 64, one entry per atlas episode: path,
+  bytes, cell/grid, image size, node id, state, eviction reason, frame) plus
+  cumulative counters in `world.info()`;
+* **public API** (`world.streamInfo/streamConfig/atlasPin/streamWarnings/
+  takeStreamWarnings`, see `docs/highlevel/re2d.md`). Path pins are sticky: a `world.atlasPin(path,true)` issued before the atlas
+  registers is kept in a bounded 64-path pending set (`streamInfo().pinsPending/
+  pinPaths`) and applied on registration, so streamed populations do not warn on
+  their first visible frame. `streamInfo().atlases`
+  reports per-atlas `path/bytes/state/pinned/demandPinned/refs/visibleRefs/
+  lastEvictFrame/reason`; `streamConfig` sets budgets (`0` = unlimited) and
+  `atlasPin(pathOrId,on)` protects an authored PNG path or atlas id.
+
+Measured acceptance (`tests/agent/re2d_atlas_residency_test.py`, generated game
+under `build/`, 50 atlas sprites × 1024×1024 PNG = 200 MiB decoded accounting,
+4 MiB / 4-item residency budget, 4 promotions/frame):
+
+* first frame: 46/50 visible atlases not resident, 8 actor draws, 46 suppressed
+  ground cards, structured `R2D_ATLAS_NOT_RESIDENT` errors naming path+node;
+* frame 2+: visible demand promotes all 50, `visibleAtlasBlocked=0`,
+  `overBudget=1`, 50 demand pins, 100/50 actor draws (base + span-filtered pair);
+* 300 fixed-dt frames with camera motion and per-frame shot events: 0 blocked
+  frames, 0 suppressed shadows, no visible sprite lost, pinned non-visible
+  atlas stays resident;
+* `streamConfig({residentBytes:0, residentItems:0})`: no evictions,
+  `overBudget=0`, `streamInfo` reports budgets as 0;
+* native cache coverage: `tests/re2d/stream_residency_test.c` (6 Unity tests:
+  pin beats LRU, visible-demand soft cap, eviction preference/reason, budget 0
+  unlimited, deterministic promotion order, unregister/invalid input).
+
+### Shared decoded pixels (path dedup) and atlas sets (1.2.12)
+
+`world.sprite` decoded RGBA is now shared per unique canonical PNG path
+(app/VFS-resolved) inside a refcounted image cache (`src/re2d_world_atlas.c`):
+
+* one RGBA buffer per unique path and cache generation, regardless of how many
+  registrations reference it or how their grid/cell/pivot metadata differs;
+  tiled sets share per tile path;
+* refcount release on `world.remove`, `r2d_world_atlas_unregister`, scene
+  dispose and reload; the buffer is freed only when the last registration goes.
+  Hot reload/`reloadJSON` bumps the cache generation: new registrations decode
+  the file again while live actors keep their (still referenced) buffer;
+* stream accounting stays unique: the first registration accounting a shared
+  image owns its `stream_bytes`, aliases count 0, and ownership transfers to a
+  surviving registration on unregister. `residentBytes` therefore does not
+  double-count shared pixels;
+* diagnostics: `streamInfo().decodedUniqueBytes` (live decoded bytes),
+  `decodedSavedBytes` (bytes avoided by sharing), `dedupHits`, and per-atlas
+  `sharedRefs`/`pixelBytes`/`streamBytes`. `world.info().atlasesResident`
+  remains the per-registration residency count.
+
+Measured (`tests/agent/re2d_atlas_tiling_test.py`): 100 sprites on one
+2048×2048 PNG → decodedUniqueBytes 16 MiB (one buffer) instead of 1.6 GiB,
+decodedSavedBytes 1.55 GiB, dedupHits 99, 100 sharedRefs, sum of streamBytes
+16 MiB, no residency warnings; a distinct 256×256 path stays separate.
+
+Atlas sets (logical sheet >4096) are an authoring feature, see
+`docs/highlevel/re2d.md`:
+
+```js
+world.sprite(node, {
+  atlas: { files: ['a.png','b.png','c.png'],
+           tile: { width: 2048, height: 2048, columns: 3, rows: 1 } },
+  columns: 48, rows: 1, directions: 1, cell: { w: 128, h: 128 },
+});
+```
+
+`files` is row-major and must be exactly `tile.columns*tile.rows`; every tile is
+exactly `tile.width×tile.height` (≤4096 per side); the logical sheet may be up
+to 65536 per side and a single cell may straddle tile boundaries. The C crop
+handles tiling with identical flip/pivot/blend/masking; the GPU still receives
+one cropped frame, so no shader change. Invalid/ragged tile sets and single PNGs
+>4096 are typed errors (`RangeError`), never silent fallbacks.
+`streamInfo().atlases[].path` for a tiled registration is the joined tile list
+(`'a.png+b.png+...'`), with the full list in `tiles`; `atlasPin(path)` matches a
+tiled registration when any of its tile paths match.
+
+Sticky path pins are capped by `streamConfig({pinLimit})` (default 64, `0` =
+unlimited up to 4096). Lowering below the current pending count is rejected with
+`RangeError`; `streamInfo().pinLimit/pinsPending/pinPaths` expose the state.
+
+Limits: residency is deterministic incremental bookkeeping, not async disk I/O;
+the decoded cache is world-local (not shared across independent worlds), and hot
+reload keeps old buffers alive for actors that were not re-registered.
+
+### Async atlas prefetch (deterministic contract, 1.2.13)
+
+Optional layer that hides PNG **file reads** behind one worker thread. Default
+OFF; enabling never changes pixels, frame content, ordering or warnings.
+
+```js
+world.atlasAsync(true);                       // getter without an argument
+world.atlasPrefetch('atlas/imp.png');         // token > 0, 0 = already/limit
+const p = world.atlasPrefetchInfo();
+// { enabled, workers, pending, ready, consumed, failed, entries,
+//   bytesPending, bytesReady, limitBytes, requested, consumedTotal,
+//   failedTotal, bytesRead, readMs, error,
+//   paths: [{path, token, state, bytes, error}] }
+world.atlasPrefetchClear();
+```
+
+Contract:
+
+* the worker performs **file I/O only** (stdio). PNG decode stays on the main
+  thread via SDL_image; no SDL/QuickJS/GPU calls happen off-thread (same class
+  of bug as the 2026-10-18 Metal profiler crash);
+* `world.sprite`/atlas sets look up the exact canonical path before the
+  synchronous read. `ready` → the same bytes are decoded and the entry becomes
+  `consumed`; `pending`/`failed`/absent → the existing synchronous read path
+  runs (identical bytes, identical output), then the shared dedup cache applies
+  as usual;
+* a file whose size/mtime changed after the prefetch is rejected and read
+  synchronously — stale bytes never replace a frame;
+* missing/corrupt PNG: the prefetch record reports `state:'failed'` with the
+  error; registration fails exactly as it does without prefetch (no new
+  warnings, no silently wrong image);
+* async completion timing cannot affect a frame — that is why `pending` is not
+  waited on during registration.
+
+Bounds: 64 entries, 256 MiB total pending+ready bytes, 64 MiB per file.
+`atlasPrefetch` returns `0` for already-pending/ready, disabled, or exceeded
+budget (diagnostic in `info.error`); a packed payload (VFS) file is already in
+memory and is provided as `ready` without a thread.
+
+Lifecycle: worker is created lazily on the first `atlasPrefetch`, stopped by
+`atlasAsync(false)`/shutdown, joined by `world.dispose`/`re2d` shutdown; buffers
+are freed on consume/clear/dispose. `atlasPrefetchInfo()` keeps working after
+clear/disable. Dedup/tiling/residency accounting (`streamInfo`) is unchanged.
+
+Measured (see `tests/agent/re2d_atlas_prefetch_test.py`): generated game, four
+distinct atlas PNGs registered with prefetch off vs prefetch on+ready produce
+byte-identical screenshots; prefetch not ready falls back with identical output;
+120 moving-camera frames identical; registration time and the file bytes
+avoided are reported, and only the synchronous file read time is saved (decode
+and GPU work are unchanged).
 
 ### True payload streaming/residency (task-15)
 

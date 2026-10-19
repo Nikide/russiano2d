@@ -23,7 +23,7 @@ void r2d_world_span_height_bounds(const R2DWorldSpan *s,float *low,float *high)
 void r2d_world_free(R2DRe2dWorld *w)
 { if (!w) return; r2d_world_semantic_free(w);r2d_world_metadata_free(&w->metadata);
   if(w->surface_tags){for(int i=0;i<w->surface_count;i++){R2DWorldSurfaceTags *slot=&w->surface_tags[i];for(int j=0;j<slot->count;j++)free(slot->names[j]);free(slot->names);}free(w->surface_tags);}
-  free(w->sort_items);free(w->transparent_ids);free(w->surface_sky);free(w->surface_alpha);free(w->sky.pixels);r2d_bsp_free(&w->bsp); free(w->walls);free(w->spans);free(w->cells);free(w->portals);free(w->openings);free(w->surfaces);free(w->cell_nodes);free(w->span_cells);free(w->wall_portals);free(w->wall_openings);free(w->opening_spans_a);free(w->opening_spans_b);free(w->cell_refs);free(w->span_wall_offsets);free(w->span_wall_refs);free(w->cell_portal_offsets);free(w->cell_portal_refs);free(w->surface_materials);for(int i=0;i<R2D_WORLD_MAX_MATERIALS;i++)r2d_world_material_free(&w->materials[i]);r2d_world_light_free(w);memset(w,0,sizeof *w);w->bsp.root=-1; }
+  free(w->sort_items);free(w->transparent_ids);free(w->surface_sky);free(w->surface_alpha);free(w->sky.pixels);r2d_bsp_free(&w->bsp); free(w->walls);free(w->spans);free(w->cells);free(w->portals);free(w->openings);free(w->surfaces);free(w->cell_nodes);free(w->span_cells);free(w->wall_portals);free(w->wall_openings);free(w->opening_spans_a);free(w->opening_spans_b);free(w->cell_refs);free(w->span_wall_offsets);free(w->span_wall_refs);free(w->cell_portal_offsets);free(w->cell_portal_refs);free(w->surface_materials);for(int i=0;i<w->material_capacity;i++)r2d_world_material_free(&w->materials[i]);free(w->materials);free(w->decals);r2d_world_light_free(w);memset(w,0,sizeof *w);w->bsp.root=-1; }
 
 // --- Per-surface fade alpha -------------------------------------------------
 // Lazy allocation keeps legacy worlds allocation-free and byte-identical.
@@ -574,7 +574,12 @@ void r2d_world_frame_decals(const R2DRe2dWorld *w,const R2DRe2dView *v,int width
 {
     if(!w->decal_count)return;
     WorldImage im={v,width,height,ortho,rgba,depth,f,owners,true,NULL};
-    for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)if(w->decals[i].active){const R2DWorldDecal *d=&w->decals[i];if(!f->surface_seen[d->surface])continue;im.decal=d;const R2DWorldSurface *s=&w->surfaces[d->surface];
+    const int budget=w->decal_budget>0?w->decal_budget:R2D_WORLD_MAX_DECALS;
+    int rendered=0;
+    for(int i=0;i<w->decal_capacity;i++){
+        if(budget>0&&rendered>=budget)break;
+        if(!w->decals[i].active)continue;
+        const R2DWorldDecal *d=&w->decals[i];if(!f->surface_seen[d->surface])continue;rendered++;im.decal=d;const R2DWorldSurface *s=&w->surfaces[d->surface];
         if(s->kind==R2D_WORLD_WALL){const R2DWorldWall *wall=&w->walls[s->primitive];R2DSegment segment={wall->x1,wall->y1,wall->x2,wall->y2,s->primitive,false};image_wall_segment(&im,w,&segment);}
         else image_plane(&im,w,s->primitive,s->kind==R2D_WORLD_CEILING);
     }

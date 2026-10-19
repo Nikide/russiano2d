@@ -6,11 +6,16 @@
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
 
+#include <limits.h>     // INT_MAX: проверки переполнения реестров
 #include <math.h>       // sinf/expf/fabsf: бинауральная модель
 #include <string.h>     // memset: сброс линии задержки канала
 #include <stdlib.h>     // SDL_realloc-совместимые размеры
 
 // ---------------------------------------------------------------------------
+
+// Освобождение хэш-индекса путей: определение в разделе загрузки, но нужен
+// уже в r2d_audio_shutdown (он выше по файлу).
+static void r2d__sound_index_free(R2DAudio *a);
 
 static float r2d__clamp01(float v)
 {
@@ -110,6 +115,39 @@ static void SDLCALL r2d__group_fx(void *userdata, MIX_Group *group,
 
 }
 
+// Реестр шин растёт динамически: R2D_AUDIO_GROUPS_INITIAL — только первый
+// malloc, потолка нет. Переполнение индексов проверяем явно.
+static bool r2d__groups_reserve(R2DAudio *a, int need)
+{
+    if (need <= a->group_cap) return true;
+    int cap = a->group_cap > 0 ? a->group_cap : R2D_AUDIO_GROUPS_INITIAL;
+    while (cap < need) {
+        if (cap > INT_MAX / 2) {
+            R2D_ERROR("реестр аудио-шин: переполнение ёмкости");
+            return false;
+        }
+        cap *= 2;
+    }
+    R2DAudioGroup *groups = (R2DAudioGroup *)SDL_malloc((size_t)cap * sizeof *groups);
+    bool *used = (bool *)SDL_calloc((size_t)cap, sizeof *used);
+    if (!groups || !used) {
+        SDL_free(groups);
+        SDL_free(used);
+        R2D_ERROR("реестр аудио-шин: нет памяти под %d слотов", cap);
+        return false;
+    }
+    if (a->group_count > 0) {
+        memcpy(groups, a->groups, (size_t)a->group_count * sizeof *groups);
+        memcpy(used, a->group_used, (size_t)a->group_count * sizeof *used);
+    }
+    SDL_free(a->groups);
+    SDL_free(a->group_used);
+    a->groups = groups;
+    a->group_used = used;
+    a->group_cap = cap;
+    return true;
+}
+
 int r2d_audio_group(R2DAudio *a, const char *name)
 {
     if (!a || !a->ready || !a->mixer || !name || !*name) return -1;
@@ -124,10 +162,7 @@ int r2d_audio_group(R2DAudio *a, const char *name)
         if (!a->group_used[i]) { slot = i; break; }
     }
     if (slot < 0) {
-        if (a->group_count >= R2D_AUDIO_MAX_GROUPS) {
-            R2D_ERROR("достигнут лимит аудио-шин (%d)", R2D_AUDIO_MAX_GROUPS);
-            return -1;
-        }
+        if (!r2d__groups_reserve(a, a->group_count + 1)) return -1;
         slot = a->group_count++;
     }
 
@@ -177,6 +212,9 @@ bool r2d_audio_group_assign(R2DAudio *a, int channel, int group_id)
     if (group_id >= 0) {
         if (group_id >= a->group_count) return false;
         g = a->groups[group_id].handle;
+        a->channel_group[channel] = group_id;
+    } else {
+        a->channel_group[channel] = -1;
     }
     return MIX_SetTrackGroup(a->channels[channel], g);
 }
@@ -551,7 +589,8 @@ int r2d_audio_stems_set(R2DAudio *a, const int *sound_ids, int count)
     const int n = count > R2D_AUDIO_MAX_STEMS ? R2D_AUDIO_MAX_STEMS : count;
     for (int i = 0; i < n; ++i) {
         const int id = sound_ids[i];
-        if (id < 0 || id >= R2D_AUDIO_MAX_SOUNDS || !a->sounds[id]) continue;
+        // Реестр динамический: граница — фактическое число загруженных звуков.
+        if (id < 0 || id >= a->sound_count || !a->sounds[id]) continue;
         MIX_Track *track = MIX_CreateTrack(a->mixer);
         if (!track) {
             R2D_WARN("MIX_CreateTrack (слой %d): %s", i, SDL_GetError());
@@ -722,7 +761,11 @@ bool r2d_audio_init(R2DAudio *a)
     a->fx_freq       = 48000;
     a->fx_channels   = 2;
     a->music_pitch   = 1.0f;
-    for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) a->channel_pitch[i] = 1.0f;
+    a->voice_budget  = R2D_DEFAULT_AUDIO_VOICES;
+    for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
+        a->channel_pitch[i] = 1.0f;
+        a->channel_group[i] = -1;
+    }
 
     if (!MIX_Init()) {
         R2D_ERROR("MIX_Init: %s", SDL_GetError());
@@ -834,6 +877,11 @@ void r2d_audio_shutdown(R2DAudio *a)
         a->group_used[i] = false;
     }
     a->group_count = 0;
+    SDL_free(a->groups);
+    SDL_free(a->group_used);
+    a->groups = NULL;
+    a->group_used = NULL;
+    a->group_cap = 0;
     r2d_audio_stems_set(a, NULL, 0);
     if (a->music_track) {
         MIX_DestroyTrack(a->music_track);
@@ -842,7 +890,15 @@ void r2d_audio_shutdown(R2DAudio *a)
     for (int i = 0; i < a->sound_count; ++i) {
         if (a->sounds[i]) MIX_DestroyAudio(a->sounds[i]);
         a->sounds[i] = NULL;
+        SDL_free(a->sound_names[i]);
+        a->sound_names[i] = NULL;
     }
+    r2d__sound_index_free(a);
+    SDL_free(a->sounds);
+    SDL_free(a->sound_names);
+    a->sounds = NULL;
+    a->sound_names = NULL;
+    a->sound_cap = 0;
     MIX_DestroyMixer(a->mixer);
     a->mixer = NULL;
     MIX_Quit();
@@ -856,10 +912,142 @@ void r2d_audio_shutdown(R2DAudio *a)
 // Загрузка
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Реестр звуковых ассетов: рост без потолка + хэш-индекс путей
+//
+// Константы «сколько звуков можно загрузить» больше нет: слоты растут по
+// malloc. Идентификаторы только добавляются в конец (id стабилен), выгрузки
+// ассетов в API нет — поэтому free-list/generation не нужны: слот, однажды
+// выданный, жив до shutdown. Поиск по пути — открытая адресация (FNV-1a 64,
+// значение id+1), коллизии разрешает SDL_strcmp; при OOM индекс честно
+// отключается и поиск идёт линейным сканом (корректность важнее скорости).
+// ---------------------------------------------------------------------------
+
+static uint64_t r2d__path_hash64(const char *s)
+{
+    uint64_t h = 1469598103934665603ULL;
+    while (*s) {
+        h ^= (uint64_t)(unsigned char)*s++;
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+static void r2d__sound_index_free(R2DAudio *a)
+{
+    SDL_free(a->sound_index);
+    a->sound_index = NULL;
+    a->sound_index_cap = 0;
+    a->sound_index_used = 0;
+}
+
+static void r2d__sound_index_insert_raw(R2DAudio *a, int id)
+{
+    const char *key = a->sound_names[id];
+    const size_t mask = (size_t)a->sound_index_cap - 1;
+    size_t i = (size_t)r2d__path_hash64(key) & mask;
+    for (int n = 0; n < a->sound_index_cap; ++n) {
+        const int v = a->sound_index[i];
+        if (v == 0) {
+            a->sound_index[i] = id + 1;
+            a->sound_index_used++;
+            return;
+        }
+        if (SDL_strcmp(a->sound_names[v - 1], key) == 0) return;
+        a->sound_index_collisions++;
+        i = (i + 1) & mask;
+    }
+}
+
+static bool r2d__sound_index_rebuild(R2DAudio *a, int cap)
+{
+    r2d__sound_index_free(a);
+    a->sound_index = (int *)SDL_calloc((size_t)cap, sizeof(int));
+    if (!a->sound_index) return false;
+    a->sound_index_cap = cap;
+    for (int i = 0; i < a->sound_count; ++i) {
+        if (a->sounds[i] && a->sound_names[i]) r2d__sound_index_insert_raw(a, i);
+    }
+    return true;
+}
+
+// Гарантирует, что после вставки одного пути загрузка таблицы останется
+// <= 0.5. При неудаче освобождает индекс целиком (search -> linear fallback).
+static bool r2d__sound_index_ensure(R2DAudio *a, int extra)
+{
+    const int need = a->sound_index_used + extra;
+    if (a->sound_index_cap > 0 && need * 2 <= a->sound_index_cap) return true;
+
+    int cap = a->sound_index_cap > 0 ? a->sound_index_cap : 16;
+    while (cap < need * 2) {
+        if (cap > INT_MAX / 2) {
+            r2d__sound_index_free(a);
+            return false;
+        }
+        cap *= 2;
+    }
+    if (!r2d__sound_index_rebuild(a, cap)) {
+        r2d__sound_index_free(a);
+        return false;
+    }
+    return true;
+}
+
+static bool r2d__sound_reserve(R2DAudio *a, int need)
+{
+    if (need <= a->sound_cap) return true;
+    int cap = a->sound_cap > 0 ? a->sound_cap : 8;
+    while (cap < need) {
+        if (cap > INT_MAX / 2) {
+            R2D_ERROR("реестр звуков: переполнение ёмкости");
+            return false;
+        }
+        cap *= 2;
+    }
+    MIX_Audio **sounds = (MIX_Audio **)SDL_calloc((size_t)cap, sizeof *sounds);
+    char **names = (char **)SDL_calloc((size_t)cap, sizeof *names);
+    if (!sounds || !names) {
+        SDL_free(sounds);
+        SDL_free(names);
+        R2D_ERROR("реестр звуков: нет памяти под %d слотов", cap);
+        return false;
+    }
+    if (a->sound_count > 0) {
+        memcpy(sounds, a->sounds, (size_t)a->sound_count * sizeof *sounds);
+        memcpy(names, a->sound_names, (size_t)a->sound_count * sizeof *names);
+    }
+    SDL_free(a->sounds);
+    SDL_free(a->sound_names);
+    a->sounds = sounds;
+    a->sound_names = names;
+    a->sound_cap = cap;
+    return true;
+}
+
 int r2d_audio_find(const R2DAudio *a, const char *path)
 {
+    if (!a || !path) return -1;
+
+    if (a->sound_index_cap > 0 && a->sound_index) {
+        const size_t mask = (size_t)a->sound_index_cap - 1;
+        size_t i = (size_t)r2d__path_hash64(path) & mask;
+        for (int n = 0; n < a->sound_index_cap; ++n) {
+            const int v = a->sound_index[i];
+            if (v == 0) return -1;
+            if (i < (size_t)a->sound_index_cap && v - 1 < a->sound_count &&
+                a->sound_names[v - 1] &&
+                SDL_strcmp(a->sound_names[v - 1], path) == 0) {
+                return v - 1;
+            }
+            i = (i + 1) & mask;
+        }
+        return -1;
+    }
+
+    // Аварийный путь: индекс не построился (OOM). Поведение прежнее.
     for (int i = 0; i < a->sound_count; ++i) {
-        if (a->sounds[i] && SDL_strcmp(a->names[i], path) == 0) return i;
+        if (a->sounds[i] && a->sound_names[i] &&
+            SDL_strcmp(a->sound_names[i], path) == 0) return i;
     }
     return -1;
 }
@@ -870,15 +1058,10 @@ static double r2d__frames_to_sec(const R2DAudio *a, Sint64 frames);
 
 int r2d_audio_load(R2DAudio *a, const char *path)
 {
-    if (!a->ready || !path) return -1;
+    if (!a || !a->ready || !path) return -1;
 
     const int existing = r2d_audio_find(a, path);
     if (existing >= 0) return existing;
-
-    if (a->sound_count >= R2D_AUDIO_MAX_SOUNDS) {
-        R2D_ERROR("достигнут лимит звуков (%d)", R2D_AUDIO_MAX_SOUNDS);
-        return -1;
-    }
 
     // predecode = false: декодируем на лету, чтобы музыка не съедала память
     // целиком. Короткие эффекты всё равно декодируются полностью при первом
@@ -898,9 +1081,29 @@ int r2d_audio_load(R2DAudio *a, const char *path)
         return -1;
     }
 
-    const int id = a->sound_count++;
+    if (!r2d__sound_reserve(a, a->sound_count + 1)) {
+        MIX_DestroyAudio(audio);
+        return -1;
+    }
+    char *name = (char *)SDL_malloc(SDL_strlen(path) + 1);
+    if (!name) {
+        R2D_ERROR("звук %s: нет памяти под путь", path);
+        MIX_DestroyAudio(audio);
+        return -1;
+    }
+    SDL_strlcpy(name, path, SDL_strlen(path) + 1);
+
+    const int id = a->sound_count;
     a->sounds[id] = audio;
-    SDL_snprintf(a->names[id], sizeof a->names[id], "%s", path);
+    a->sound_names[id] = name;
+    a->sound_count++;
+
+    // Индекс необязателен: при OOM он отключается, find() пойдёт линейно.
+    if (r2d__sound_index_ensure(a, 1)) {
+        r2d__sound_index_insert_raw(a, id);
+    } else {
+        r2d__sound_index_free(a);
+    }
 
     // MIX_GetAudioDuration отдаёт длину в СЭМПЛ-КАДРАХ, а не в миллисекундах:
     // раньше журнал делил их на 1000 и показывал 9040 с вместо 188. Переводим
@@ -920,13 +1123,18 @@ int r2d_audio_load(R2DAudio *a, const char *path)
 
 const char *r2d_audio_name(const R2DAudio *a, int id)
 {
-    if (id < 0 || id >= a->sound_count) return "";
-    return a->names[id];
+    if (!a || id < 0 || id >= a->sound_count || !a->sound_names[id]) return "";
+    return a->sound_names[id];
+}
+
+int r2d_audio_sound_count(const R2DAudio *a)
+{
+    return a ? a->sound_count : 0;
 }
 
 double r2d_audio_duration(const R2DAudio *a, int id)
 {
-    if (id < 0 || id >= a->sound_count || !a->sounds[id]) return -1.0;
+    if (!a || id < 0 || id >= a->sound_count || !a->sounds[id]) return -1.0;
     // MIX_GetAudioDuration отдаёт длину в СЭМПЛ-КАДРАХ, а не в миллисекундах:
     // без пересчёта файл на 74 с показывал 3274 с (кадры / 1000).
     const Sint64 frames = MIX_GetAudioDuration((MIX_Audio *)a->sounds[id]);
@@ -940,26 +1148,70 @@ double r2d_audio_duration(const R2DAudio *a, int id)
 // Эффекты
 // ---------------------------------------------------------------------------
 
+// Насколько канал i менее важен, чем j (true — i первым пойдёт под вытеснение).
+// Данные берём только те, что уже есть у play(): priority, loops, момент
+// старта и громкость. Дистанцию не выдумываем — её хранит SDL_mixer.
+static bool r2d__channel_less_important(const R2DAudio *a, int i, int j)
+{
+    if (a->channel_priority[i] != a->channel_priority[j]) {
+        return a->channel_priority[i] < a->channel_priority[j];
+    }
+    // Петля защищена: при равном приоритете вытесняем one-shot, а не музыку/
+    // фон. Это следствие уже переданного в play() loops, не новая семантика.
+    const bool loop_i = a->channel_loops[i] != 0;
+    const bool loop_j = a->channel_loops[j] != 0;
+    if (loop_i != loop_j) return !loop_i;
+    // Тише — менее важно.
+    if (a->channel_volume[i] != a->channel_volume[j]) {
+        return a->channel_volume[i] < a->channel_volume[j];
+    }
+    // Старше — важнее: на равных вытесняется более НОВЫЙ звук.
+    if (a->channel_start_ns[i] != a->channel_start_ns[j]) {
+        return a->channel_start_ns[i] > a->channel_start_ns[j];
+    }
+    return i > j;   // детерминированный добор при полном равенстве
+}
+
+static int r2d__select_victim(const R2DAudio *a)
+{
+    int victim = -1;
+    for (int i = 0; i < a->voice_budget; ++i) {
+        if (victim < 0 || r2d__channel_less_important(a, i, victim)) victim = i;
+    }
+    return victim;
+}
+
+static int r2d__active_voices(const R2DAudio *a)
+{
+    int n = 0;
+    for (int i = 0; i < a->voice_budget; ++i) {
+        if (MIX_TrackPlaying(a->channels[i])) n++;
+    }
+    return n;
+}
+
 int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops,
                    int priority)
 {
-    if (!a->ready || id < 0 || id >= a->sound_count) return -1;
+    if (!a || !a->ready || a->voice_budget <= 0) return -1;
+    if (id < 0 || id >= a->sound_count || !a->sounds[id]) return -1;
 
-    // Ищем свободный канал. Если все заняты — вытесняем САМЫЙ НЕВАЖНЫЙ, а не
-    // всегда нулевой: раньше важный звук (реплика, удар) глушился первым же
-    // шагом по траве, потому что жертвой всегда был канал 0.
+    // Ищем свободный канал В ПРЕДЕЛАХ БЮДЖЕТА. Если все заняты — вытесняем
+    // САМЫЙ НЕВАЖНЫЙ, а не всегда нулевой: раньше важный звук (реплика, удар)
+    // глушился первым же шагом по траве, потому что жертвой всегда был канал 0.
     int channel = -1;
-    for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
+    for (int i = 0; i < a->voice_budget; ++i) {
         if (!MIX_TrackPlaying(a->channels[i])) { channel = i; break; }
     }
+    bool stolen = false;
     if (channel < 0) {
-        int victim = -1;
-        for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
-            if (victim < 0 || a->channel_priority[i] < a->channel_priority[victim]) victim = i;
-        }
+        const int victim = r2d__select_victim(a);
         // Вытесняем только если новый звук НЕ МЕНЕЕ важен: иначе лучше не
         // играть вовсе, чем глушить то, что игрок должен слышать.
-        if (victim >= 0 && priority >= a->channel_priority[victim]) channel = victim;
+        if (victim >= 0 && priority >= a->channel_priority[victim]) {
+            channel = victim;
+            stolen = true;
+        }
     }
     if (channel < 0) return -1;
 
@@ -984,6 +1236,12 @@ int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops,
     a->channel_volume[channel] = r2d__clamp01(volume);
     a->channel_pan[channel] = pan < -1.0f ? -1.0f : (pan > 1.0f ? 1.0f : pan);
     a->channel_priority[channel] = priority;
+    a->channel_loops[channel] = loops;
+    a->channel_start_ns[channel] = SDL_GetTicksNS();
+    if (stolen) {
+        a->voice_stolen_frame++;
+        a->voice_stolen_total++;
+    }
 
     MIX_SetTrackGain(track, a->channel_volume[channel] * a->sfx_volume);
     // Скорость (pitch) канала переживает повторный запуск: трек один и тот же,
@@ -996,6 +1254,10 @@ int r2d_audio_play(R2DAudio *a, int id, float volume, float pan, int loops,
     const bool ok = MIX_PlayTrack(track, props);
     SDL_DestroyProperties(props);
 
+    if (ok) {
+        const int active = r2d__active_voices(a);
+        if (active > a->voice_peak) a->voice_peak = active;
+    }
     return ok ? channel : -1;
 }
 
@@ -1062,12 +1324,56 @@ bool r2d_audio_channel_playing(const R2DAudio *a, int channel)
 
 int r2d_audio_active_channels(const R2DAudio *a)
 {
-    if (!a->ready) return 0;
-    int n = 0;
-    for (int i = 0; i < R2D_AUDIO_CHANNELS; ++i) {
-        if (MIX_TrackPlaying(a->channels[i])) n++;
+    if (!a || !a->ready) return 0;
+    return r2d__active_voices(a);
+}
+
+// --- Бюджет голосов и статистика (внутренний C API) -------------------------
+
+void r2d_audio_set_voice_budget(R2DAudio *a, int voices)
+{
+    if (!a) return;
+    if (voices < 0) voices = 0;
+    if (voices > R2D_AUDIO_CHANNELS) voices = R2D_AUDIO_CHANNELS;
+    if (voices == a->voice_budget) return;
+    // Голоса выше нового бюджета больше не должны микшироваться: останавливаем
+    // их сразу, иначе «бюджет 0» продолжал бы звучать до конца файла.
+    if (a->ready) {
+        for (int i = voices; i < R2D_AUDIO_CHANNELS; ++i) {
+            if (a->channels[i] && MIX_TrackPlaying(a->channels[i])) {
+                MIX_StopTrack(a->channels[i], 0);
+            }
+        }
     }
-    return n;
+    a->voice_budget = voices;
+}
+
+int r2d_audio_voice_budget(const R2DAudio *a)
+{
+    return a ? a->voice_budget : 0;
+}
+
+void r2d_audio_stats(const R2DAudio *a, R2DAudioVoiceStats *out)
+{
+    if (!out) return;
+    if (!a) {
+        memset(out, 0, sizeof *out);
+        return;
+    }
+    out->active = a->ready ? r2d__active_voices(a) : 0;
+    out->peak = a->voice_peak;
+    out->budget = a->voice_budget;
+    out->stolen_last_frame = a->voice_stolen_last_frame;
+    out->stolen_total = a->voice_stolen_total;
+    out->sound_count = a->sound_count;
+    out->group_count = a->group_count;
+}
+
+void r2d_audio_frame_tick(R2DAudio *a)
+{
+    if (!a) return;
+    a->voice_stolen_last_frame = a->voice_stolen_frame;
+    a->voice_stolen_frame = 0;
 }
 
 // ---------------------------------------------------------------------------

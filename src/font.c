@@ -59,9 +59,17 @@ static struct {
     int            atlas_w, atlas_h;
     int            pack_x, pack_y, row_h;
     int            texture;        // id текстуры в рендерере, -1 пока нет
-    bool           atlas_dirty;    // нужна полная перезаливка (новая текстура)
+    bool           atlas_dirty;    // атлас вырос: нужна НОВАЯ страница-текстура
     bool           need_upload;    // есть новые глифы, не уехавшие в GPU
+    bool           need_full;      // страница пустая: залить атлас целиком
+    // Грязный прямоугольник текущей страницы. За кадр объединяем все
+    // растеризованные глифы в один регион — одна GPU-копия вместо копии
+    // всего атласа на каждый глиф (§6.1-6.2).
+    struct { int x0, y0, x1, y1; bool valid; } dirty;
     int            synced_y;       // до какой строки атлас уже уехал в GPU
+    int            rasterized_total;  // диагностика: сколько глифов растеризовано
+    int            upload_batches;    // диагностика: сколько пачек ушло в GPU
+    int            page_count;        // страниц атласа создано (многостраничность)
 
     int  glyph_count;
     int  drawn_total;   // сколько глифов ушло в батч с запуска (тесты)
@@ -76,8 +84,7 @@ static struct {
 
 static const R2DGlyph *glyph_get(R2DFont *font, unsigned int codepoint, float size);
 static void atlas_sync(void);
-
-static int clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+static bool atlas_ensure_texture(void);
 
 // Кегль квантуется: атлас на каждый пиксель кегля распух бы, а разница в
 // растеризации между 16 и 17 px всё равно незаметна — масштабируем спрайт.
@@ -126,12 +133,13 @@ static bool atlas_reserve(int w, int h)
 
     int new_w = g.atlas ? g.atlas_w : 256;
     int new_h = g.atlas ? g.atlas_h : 256;
-    while (new_w < w && new_w < 2048) new_w *= 2;
+    // Это НЕ потолок мира: новая страница атласа создаётся при росте, поэтому
+    // страница ограничена только разумным размером одной текстуры.
+    // 4096 — предел ОДНОЙ страницы (разумный размер текстуры), а не атласа
+    // целиком: когда страница заполнена, atlas_new_page() начнёт новую.
+    while (new_w < w && new_w < 4096) new_w *= 2;
     while (new_h < h && new_h < 4096) new_h *= 2;
-    if (new_w < w || new_h < h) {
-        R2D_ERROR("шрифт: атлас глифов переполнен (%dx%d)", w, h);
-        return false;
-    }
+    if (new_w < w || new_h < h) return false;
 
     unsigned char *buffer = (unsigned char *)calloc((size_t)new_w * (size_t)new_h * 4u, 1);
     if (!buffer) {
@@ -153,18 +161,50 @@ static bool atlas_reserve(int w, int h)
     return true;
 }
 
+/** Начать новую страницу атласа: старые глифы остаются на старой текстуре. */
+static bool atlas_new_page(void)
+{
+    // Перед сменой страницы дозаливаем грязный регион СТАРОЙ страницы: иначе
+    // глифы, растеризованные в этом же вызове до переполнения, потеряли бы
+    // пиксели (спрайты уже ссылаются на старую текстуру).
+    if (g.atlas && g.texture >= 0 && (g.dirty.valid || g.need_full)) atlas_sync();
+
+    const int w = 256, h = 256;
+    unsigned char *buffer = (unsigned char *)calloc((size_t)w * (size_t)h * 4u, 1);
+    if (!buffer) {
+        R2D_ERROR("шрифт: нет памяти под новую страницу атласа %dx%d", w, h);
+        return false;
+    }
+    free(g.atlas);
+    g.atlas = buffer;
+    g.atlas_w = w;
+    g.atlas_h = h;
+    g.pack_x = g.pack_y = g.row_h = 0;
+    g.atlas_dirty = true;     // ensure_texture создаст новую текстуру-страницу
+    g.need_full = true;
+    g.dirty.valid = false;
+    g.page_count++;
+    return true;
+}
+
 // Находит место под битмап w×h в атласе. Простая полочная упаковка: глифы
 // одного кегля почти одинаковой высоты, поэтому ложится плотно.
 static bool atlas_place(int w, int h, int *out_x, int *out_y)
 {
     if (w <= 0 || h <= 0) { *out_x = 0; *out_y = 0; return true; }
+    if (w > 4096 || h > 4096) return false;   // глиф больше одной страницы
     if (g.pack_x + w > g.atlas_w) {
         g.pack_x = 0;
         g.pack_y += g.row_h + 1;
         g.row_h = 0;
     }
     if (g.pack_y + h > g.atlas_h) {
-        if (!atlas_reserve(g.atlas_w, g.pack_y + h + 8)) return false;
+        // Сначала пробуем вырасти в пределах страницы, потом — новая страница.
+        if (!atlas_reserve(g.atlas_w, g.pack_y + h + 8)) {
+            if (!atlas_new_page()) return false;
+            g.pack_x = 0; g.pack_y = 0; g.row_h = 0;
+            if (h > g.atlas_h && !atlas_reserve(g.atlas_w, h + 8)) return false;
+        }
     }
     *out_x = g.pack_x;
     *out_y = g.pack_y;
@@ -245,11 +285,25 @@ static const R2DGlyph *glyph_rasterize(R2DFont *font, unsigned int cp, float siz
                 free(bitmap);
                 out->x = px;
                 out->y = py;
-                // Атлас мог только что вырасти: текстура обязана существовать
-                // до того, как спрайт глифа будет создан (r2d_sprite_create с
-                // текстурой -1 отказывает, и текст молча исчезает).
+                // Растеризация НЕ трогает GPU: только помечаем грязный
+                // регион. Синхронизация уедет одной пачкой в начале кадра.
                 g.need_upload = true;
-                atlas_sync();
+                g.rasterized_total++;
+                if (!g.dirty.valid) {
+                    g.dirty.x0 = px;       g.dirty.y0 = py;
+                    g.dirty.x1 = px + bw;  g.dirty.y1 = py + bh;
+                    g.dirty.valid = true;
+                } else {
+                    if (px < g.dirty.x0) g.dirty.x0 = px;
+                    if (py < g.dirty.y0) g.dirty.y0 = py;
+                    if (px + bw > g.dirty.x1) g.dirty.x1 = px + bw;
+                    if (py + bh > g.dirty.y1) g.dirty.y1 = py + bh;
+                }
+                // Страница-текстура должна существовать до glyph_sprite():
+                // спрайт с текстурой -1 не создаётся, и текст молча исчезает.
+                if (!atlas_ensure_texture()) {
+                    out->missing = true;
+                }
             }
             g.glyph_count++;
             return out;
@@ -275,52 +329,79 @@ static const R2DGlyph *glyph_get(R2DFont *font, unsigned int cp, float size)
 // Синхронизация атласа с GPU
 // ---------------------------------------------------------------------------
 
+/** Создать страницу-текстуру под текущий атлас (без заливки пикселей). */
+static bool atlas_ensure_texture(void)
+{
+    if (!g.renderer || !g.atlas) return false;
+    if (g.atlas_dirty) {
+        // Атлас вырос. Старая страница остаётся живой: спрайты уже
+        // растеризованных глифов ссылаются на неё и содержат корректные UV.
+        // Новая страница получит только новые глифы — это и есть многостраничный
+        // атлас (§6.3), просто страницы создаются ростом, а не заранее.
+        g.texture = -1;
+        g.atlas_dirty = false;
+        g.need_full = true;
+        g.dirty.valid = false;
+    }
+    if (g.texture < 0) {
+        g.texture = r2d_texture_create_rgba(g.renderer, NULL, g.atlas_w, g.atlas_h);
+        if (g.texture < 0) {
+            R2D_ERROR("шрифт: не удалось создать текстуру атласа %dx%d",
+                      g.atlas_w, g.atlas_h);
+            return false;
+        }
+        g.need_full = true;
+        g.dirty.valid = false;
+    }
+    return true;
+}
+
+/**
+ * Отложенная синхронизация атласа с GPU (§6).
+ *
+ * Вызывается в начале кадра ДО сборки батча. Все глифы, растеризованные за
+ * прошлый кадр, уже объединены в один dirty-прямоугольник, поэтому в GPU уходит
+ * ОДНА копия региона (или одна полная при росте/новой странице). Никаких
+ * ожиданий fence: r2d_texture_upload_region только ставит копию в очередь.
+ */
 static void atlas_sync(void)
 {
     R2DRenderer *r = g.renderer;
     if (!r || !g.atlas) return;
+    if (!atlas_ensure_texture()) return;
 
-    if (g.atlas_dirty) {
-        // Атлас вырос: старую текстуру освободить нельзя (нет API выгрузки),
-        // поэтому создаём новую и заливаем её целиком. Рост случается редко.
-        if (g.texture >= 0) g.texture = -1;
-    }
-
-    if (g.texture < 0) {
-        g.texture = r2d_texture_create_rgba(r, g.atlas, g.atlas_w, g.atlas_h);
-        if (g.texture < 0) {
-            R2D_ERROR("шрифт: не удалось создать текстуру атласа %dx%d", g.atlas_w, g.atlas_h);
+    if (g.need_full) {
+        if (!r2d_texture_upload_region(r, g.texture, 0, 0, g.atlas_w, g.atlas_h,
+                                       g.atlas, g.atlas_w * 4)) {
+            R2D_ERROR("шрифт: не удалось поставить атлас %dx%d в очередь загрузки",
+                      g.atlas_w, g.atlas_h);
             return;
         }
-        g.atlas_dirty = false;
+        g.upload_batches++;
+        g.need_full = false;
         g.need_upload = false;
+        g.dirty.valid = false;
         g.synced_y = g.pack_y;
         return;
     }
 
-    // Атлас вырос — текстуру создали заново, и она пустая: заливаем целиком.
-    if (g.atlas_dirty) {
-        r2d_texture_upload_region(r, g.texture, 0, 0, g.atlas_w, g.atlas_h,
-                                  g.atlas, g.atlas_w * 4);
-        g.atlas_dirty = false;
+    if (g.dirty.valid) {
+        const int dw = g.dirty.x1 - g.dirty.x0;
+        const int dh = g.dirty.y1 - g.dirty.y0;
+        if (dw > 0 && dh > 0) {
+            const unsigned char *src = g.atlas +
+                ((size_t)g.dirty.y0 * (size_t)g.atlas_w + (size_t)g.dirty.x0) * 4u;
+            if (!r2d_texture_upload_region(r, g.texture, g.dirty.x0, g.dirty.y0,
+                                           dw, dh, src, g.atlas_w * 4)) {
+                R2D_ERROR("шрифт: не удалось поставить регион атласа в очередь");
+                return;
+            }
+            g.upload_batches++;
+        }
+        g.dirty.valid = false;
         g.need_upload = false;
-        g.synced_y = g.pack_y;
-        return;
+        g.synced_y = g.dirty.y1;
     }
-
-    // Новые глифы за прошлый кадр: заливаем атлас целиком.
-    //
-    // Полосками было бы дешевле, но «новые глифы» — это не один диапазон
-    // строк: глифы разных кеглей ложатся в разные полки, и часть строк
-    // оставалась незалитой (текст рисовался наполовину). Атлас 256×256 —
-    // это 256 КБ, заливка раз в кадр дешевле, чем невидимые буквы.
-    if (g.need_upload) {
-        r2d_texture_upload_region(r, g.texture, 0, 0, g.atlas_w, g.atlas_h,
-                                  g.atlas, g.atlas_w * 4);
-        g.need_upload = false;
-        g.synced_y = g.pack_y;
-    }
-    (void)clampi;
 }
 
 // Регистрирует спрайты всех уже растеризованных глифов: спрайт — это
@@ -655,7 +736,9 @@ static void layout_line(const char *text, float size, float scale, R2DFont *font
     if (out_w) *out_w = width * scale;
     if (out_h) *out_h = (asc - desc) * scale;
 
-    if (!draw) return;
+    // Новые глифы, найденные при измерении, ставятся в очередь сразу: до
+    // upload-фазы кадра ещё есть время, поэтому текст виден в этом же кадре.
+    if (!draw) { atlas_sync(); return; }
 
     float pen = x;
     if (align == R2D_TEXT_ALIGN_CENTER) pen -= width * 0.5f;
@@ -700,6 +783,8 @@ static void layout_line(const char *text, float size, float scale, R2DFont *font
         p += adv;
     }
     if (out_glyphs) *out_glyphs = drawn;
+    // Одна пачка на вызов отрисовки, а не на глиф (§6.1).
+    atlas_sync();
 }
 
 int r2d_font_draw(const char *text, float x, float y, float size, uint32_t color,
@@ -752,4 +837,11 @@ void r2d_font_stats(int *glyph_count, int *atlas_w, int *atlas_h)
     if (glyph_count) *glyph_count = g.glyph_count;
     if (atlas_w) *atlas_w = g.atlas_w;
     if (atlas_h) *atlas_h = g.atlas_h;
+}
+
+void r2d_font_upload_stats(int *rasterized, int *batches, int *pages)
+{
+    if (rasterized) *rasterized = g.rasterized_total;
+    if (batches) *batches = g.upload_batches;
+    if (pages) *pages = g.page_count;
 }

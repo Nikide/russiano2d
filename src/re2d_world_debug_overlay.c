@@ -203,8 +203,11 @@ void r2d_world_debug_overlay_draw(const R2DWorldDebugOverlayContext *ctx,
         break;
     case R2D_WORLD_DEBUG_VFX_BUDGET:
         dbg_budget_bar(rgba,width,height,0,ctx->particles_count,ctx->particles_capacity>0?ctx->particles_capacity:1,0xff40ff80u);
-        dbg_budget_bar(rgba,width,height,1,ctx->decal_count,R2D_WORLD_MAX_DECALS,0xff40c0ffu);
-        dbg_budget_bar(rgba,width,height,2,ctx->light_count,R2D_WORLD_MAX_LIGHTS,0xffffff40u);
+        // Denominators are the LIVE dynamic capacities, not the old fixed caps.
+        const int decal_capacity=ctx->world&&ctx->world->decal_capacity>0?ctx->world->decal_capacity:1;
+        const int light_capacity=ctx->world&&ctx->world->light_capacity>0?ctx->world->light_capacity:1;
+        dbg_budget_bar(rgba,width,height,1,ctx->decal_count,decal_capacity,0xff40c0ffu);
+        dbg_budget_bar(rgba,width,height,2,ctx->light_count,light_capacity,0xffffff40u);
         dbg_budget_bar(rgba,width,height,3,ctx->actors,300,0xffff8040u);
         dbg_budget_bar(rgba,width,height,4,ctx->active_regions,9,0xffff40ffu);
         dbg_budget_bar(rgba,width,height,5,ctx->stream_uploads,

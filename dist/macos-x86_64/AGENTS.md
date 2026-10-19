@@ -1,4 +1,4 @@
-# Russiano2D 1.2.11 — macOS Intel: инструкция для ИИ-агента
+# Russiano2D 1.2.12 — macOS Intel: инструкция для ИИ-агента
 
 Ты получил готовый движок и игру. Тобой можно управлять программно: движок
 читает JSON-команды со stdin и отвечает JSON-строками в stdout. Кадры идут
@@ -63,7 +63,7 @@ printf '%s\n' \
 Проверенный ответ (сокращённо):
 
 ```json
-{"event":"ready","version":"1.2.11","agent":true,"headless":true,"fixed_dt":0.01666666754}
+{"event":"ready","version":"1.2.12","agent":true,"headless":true,"fixed_dt":0.01666666754}
 {"ok":true,"state":{"frame":1,"time":0.02,"fps":60,"window":{"title":"…","w":1280,"h":720},"world":{"bodies":0},"entities":[]}}
 {"ok":true,"frames":40,"frame":41,"time":0.68}
 {"ok":true,"result":"platformer"}
@@ -13160,8 +13160,14 @@ UNLOADED -> PRELOAD -> RESIDENT -> EVICTABLE -> UNLOADED
 * per frame: bounded promotions (`promote_budget_items`), bounded uploads
   (`upload_budget_bytes` + `upload_budget_items`), then LRU eviction of
   non-active payloads until the resident byte/item budget holds;
+* pinned/visible-demand items (`pinned`/`demand` flags) outrank ordinary
+  payloads: they are promoted without the ordinary promote budget, are never
+  demoted or evicted, and form the soft residency cap when they alone exceed a
+  budget;
 * `0` upload budget means "no upload this frame"; residency budget `0` means
-  unlimited;
+  unlimited. The public `world.streamConfig()` maps `0` to unlimited for all of
+  its fields (new API only; legacy `regionConfig`/`regionBudget` keep the old
+  contract);
 * texture/atlas items use the same state machine, so `textureResident` /
   `atlasResident` queries share one contract.
 
@@ -13186,8 +13192,10 @@ material texture at init:
   `gpuStreamEvictions`;
 * a visible material is demand-loaded so a visible surface never samples white
   while its region is still PRELOAD; hidden materials still follow the cache;
-* atlas residency gates `ActorGPU` uploads (`id=1000000+actor`, kind ATLAS);
-  non-resident atlases release the GPU frame texture and are skipped;
+* atlas residency gates `ActorGPU` uploads (stable `stream_id`, kind ATLAS);
+  non-resident atlases release the GPU frame texture and are skipped; the
+  matching contact/ground shadow is suppressed (`groundShadowsSuppressed`) so a
+  shadow is never left without its sprite;
 * `r2d_world_stream_set_hook()` is installed by the GPU owner and counts every
   residency transition (`gpuStreamTransitions`), so loaders/uploaders do not
   need to poll the cache.
@@ -13196,6 +13204,161 @@ Remaining honest limitation: this is deterministic incremental residency, not
 async disk I/O; placement/eviction is real on SDL_GPU, disk loading still uses
 the existing loader. EVICTABLE copies stay GPU-resident for visual continuity
 until the cache actually evicts them (UNLOADED).
+
+### Visible-demand atlas residency + diagnostics (BASHNYA 1.2.11 report)
+
+BASHNYA reported visible flat-atlas sprites disappearing while their contact
+shadows remained, with `streamEvictions` every frame and only 82/138 atlases
+resident. Root cause on the engine side: atlas residency had no visible-demand
+input and no public budget/pin/diagnostic surface, and atlas stream ids were the
+registration array index, so unregister/re-register churn could leave stale
+residency state for a different atlas. Fixed additively:
+
+* **stable atlas stream ids** (`next_atlas_stream_id`, `R2DWorldAtlasActor.stream_id`)
+  and removal of the stream item on `world.remove(node)`; the GPU actor gate and
+  the cache now agree even when the atlas registry shifts down;
+* **visible demand** is derived natively every frame from the previous frame's
+  visible atlas actors (no per-frame JS calls): those items are demand-pinned,
+  force-promoted ahead of preload/distant payloads, touched for LRU and never
+  evicted. If the pinned set exceeds `residentBytes`/`residentItems` it stays
+  resident as a reported soft cap (`over_budget_bytes/items`);
+* **grounding gate**: a visible atlas that is not RESIDENT/EVICTABLE is not drawn
+  (existing GPU gate) and its contact/ground card is skipped as well;
+* **diagnostics**: bounded native warning ring
+  (`R2D_WORLD_STREAM_WARNING_LIMIT` = 64, one entry per atlas episode: path,
+  bytes, cell/grid, image size, node id, state, eviction reason, frame) plus
+  cumulative counters in `world.info()`;
+* **public API** (`world.streamInfo/streamConfig/atlasPin/streamWarnings/
+  takeStreamWarnings`, see `docs/highlevel/re2d.md`). Path pins are sticky: a `world.atlasPin(path,true)` issued before the atlas
+  registers is kept in a bounded 64-path pending set (`streamInfo().pinsPending/
+  pinPaths`) and applied on registration, so streamed populations do not warn on
+  their first visible frame. `streamInfo().atlases`
+  reports per-atlas `path/bytes/state/pinned/demandPinned/refs/visibleRefs/
+  lastEvictFrame/reason`; `streamConfig` sets budgets (`0` = unlimited) and
+  `atlasPin(pathOrId,on)` protects an authored PNG path or atlas id.
+
+Measured acceptance (`tests/agent/re2d_atlas_residency_test.py`, generated game
+under `build/`, 50 atlas sprites × 1024×1024 PNG = 200 MiB decoded accounting,
+4 MiB / 4-item residency budget, 4 promotions/frame):
+
+* first frame: 46/50 visible atlases not resident, 8 actor draws, 46 suppressed
+  ground cards, structured `R2D_ATLAS_NOT_RESIDENT` errors naming path+node;
+* frame 2+: visible demand promotes all 50, `visibleAtlasBlocked=0`,
+  `overBudget=1`, 50 demand pins, 100/50 actor draws (base + span-filtered pair);
+* 300 fixed-dt frames with camera motion and per-frame shot events: 0 blocked
+  frames, 0 suppressed shadows, no visible sprite lost, pinned non-visible
+  atlas stays resident;
+* `streamConfig({residentBytes:0, residentItems:0})`: no evictions,
+  `overBudget=0`, `streamInfo` reports budgets as 0;
+* native cache coverage: `tests/re2d/stream_residency_test.c` (6 Unity tests:
+  pin beats LRU, visible-demand soft cap, eviction preference/reason, budget 0
+  unlimited, deterministic promotion order, unregister/invalid input).
+
+### Shared decoded pixels (path dedup) and atlas sets (1.2.12)
+
+`world.sprite` decoded RGBA is now shared per unique canonical PNG path
+(app/VFS-resolved) inside a refcounted image cache (`src/re2d_world_atlas.c`):
+
+* one RGBA buffer per unique path and cache generation, regardless of how many
+  registrations reference it or how their grid/cell/pivot metadata differs;
+  tiled sets share per tile path;
+* refcount release on `world.remove`, `r2d_world_atlas_unregister`, scene
+  dispose and reload; the buffer is freed only when the last registration goes.
+  Hot reload/`reloadJSON` bumps the cache generation: new registrations decode
+  the file again while live actors keep their (still referenced) buffer;
+* stream accounting stays unique: the first registration accounting a shared
+  image owns its `stream_bytes`, aliases count 0, and ownership transfers to a
+  surviving registration on unregister. `residentBytes` therefore does not
+  double-count shared pixels;
+* diagnostics: `streamInfo().decodedUniqueBytes` (live decoded bytes),
+  `decodedSavedBytes` (bytes avoided by sharing), `dedupHits`, and per-atlas
+  `sharedRefs`/`pixelBytes`/`streamBytes`. `world.info().atlasesResident`
+  remains the per-registration residency count.
+
+Measured (`tests/agent/re2d_atlas_tiling_test.py`): 100 sprites on one
+2048×2048 PNG → decodedUniqueBytes 16 MiB (one buffer) instead of 1.6 GiB,
+decodedSavedBytes 1.55 GiB, dedupHits 99, 100 sharedRefs, sum of streamBytes
+16 MiB, no residency warnings; a distinct 256×256 path stays separate.
+
+Atlas sets (logical sheet >4096) are an authoring feature, see
+`docs/highlevel/re2d.md`:
+
+```js
+world.sprite(node, {
+  atlas: { files: ['a.png','b.png','c.png'],
+           tile: { width: 2048, height: 2048, columns: 3, rows: 1 } },
+  columns: 48, rows: 1, directions: 1, cell: { w: 128, h: 128 },
+});
+```
+
+`files` is row-major and must be exactly `tile.columns*tile.rows`; every tile is
+exactly `tile.width×tile.height` (≤4096 per side); the logical sheet may be up
+to 65536 per side and a single cell may straddle tile boundaries. The C crop
+handles tiling with identical flip/pivot/blend/masking; the GPU still receives
+one cropped frame, so no shader change. Invalid/ragged tile sets and single PNGs
+>4096 are typed errors (`RangeError`), never silent fallbacks.
+`streamInfo().atlases[].path` for a tiled registration is the joined tile list
+(`'a.png+b.png+...'`), with the full list in `tiles`; `atlasPin(path)` matches a
+tiled registration when any of its tile paths match.
+
+Sticky path pins are capped by `streamConfig({pinLimit})` (default 64, `0` =
+unlimited up to 4096). Lowering below the current pending count is rejected with
+`RangeError`; `streamInfo().pinLimit/pinsPending/pinPaths` expose the state.
+
+Limits: residency is deterministic incremental bookkeeping, not async disk I/O;
+the decoded cache is world-local (not shared across independent worlds), and hot
+reload keeps old buffers alive for actors that were not re-registered.
+
+### Async atlas prefetch (deterministic contract, 1.2.13)
+
+Optional layer that hides PNG **file reads** behind one worker thread. Default
+OFF; enabling never changes pixels, frame content, ordering or warnings.
+
+```js
+world.atlasAsync(true);                       // getter without an argument
+world.atlasPrefetch('atlas/imp.png');         // token > 0, 0 = already/limit
+const p = world.atlasPrefetchInfo();
+// { enabled, workers, pending, ready, consumed, failed, entries,
+//   bytesPending, bytesReady, limitBytes, requested, consumedTotal,
+//   failedTotal, bytesRead, readMs, error,
+//   paths: [{path, token, state, bytes, error}] }
+world.atlasPrefetchClear();
+```
+
+Contract:
+
+* the worker performs **file I/O only** (stdio). PNG decode stays on the main
+  thread via SDL_image; no SDL/QuickJS/GPU calls happen off-thread (same class
+  of bug as the 2026-10-18 Metal profiler crash);
+* `world.sprite`/atlas sets look up the exact canonical path before the
+  synchronous read. `ready` → the same bytes are decoded and the entry becomes
+  `consumed`; `pending`/`failed`/absent → the existing synchronous read path
+  runs (identical bytes, identical output), then the shared dedup cache applies
+  as usual;
+* a file whose size/mtime changed after the prefetch is rejected and read
+  synchronously — stale bytes never replace a frame;
+* missing/corrupt PNG: the prefetch record reports `state:'failed'` with the
+  error; registration fails exactly as it does without prefetch (no new
+  warnings, no silently wrong image);
+* async completion timing cannot affect a frame — that is why `pending` is not
+  waited on during registration.
+
+Bounds: 64 entries, 256 MiB total pending+ready bytes, 64 MiB per file.
+`atlasPrefetch` returns `0` for already-pending/ready, disabled, or exceeded
+budget (diagnostic in `info.error`); a packed payload (VFS) file is already in
+memory and is provided as `ready` without a thread.
+
+Lifecycle: worker is created lazily on the first `atlasPrefetch`, stopped by
+`atlasAsync(false)`/shutdown, joined by `world.dispose`/`re2d` shutdown; buffers
+are freed on consume/clear/dispose. `atlasPrefetchInfo()` keeps working after
+clear/disable. Dedup/tiling/residency accounting (`streamInfo`) is unchanged.
+
+Measured (see `tests/agent/re2d_atlas_prefetch_test.py`): generated game, four
+distinct atlas PNGs registered with prefetch off vs prefetch on+ready produce
+byte-identical screenshots; prefetch not ready falls back with identical output;
+120 moving-camera frames identical; registration time and the file bytes
+avoided are reported, and only the synchronous file read time is saved (decode
+and GPU work are unchanged).
 
 ### True payload streaming/residency (task-15)
 
@@ -31027,6 +31190,36 @@ world.sprite(enemy, {
 
 `directions`: 1, 4, 5+mirror, 8, 16 (1..16). `columns`/`rows` — до 64.
 
+### Atlas set (tiled sheet >4096)
+
+Один PNG ограничен 4096×4096. Лист большего размера задаётся набором тайлов
+(row-major); строка `atlas: '<path>'` остаётся неизменной, а объектная форма
+включает tiled-режим:
+
+```js
+world.sprite(node, {
+  atlas: {
+    files: ['city_0.png', 'city_1.png', 'city_2.png'], // row-major, ровно columns*rows
+    tile: { width: 2048, height: 2048, columns: 3, rows: 1 },
+  },
+  columns: 48, rows: 1, directions: 1,  // логический лист 6144×2048
+  cell: { w: 128, h: 128 },             // сетка относится к ЛОГИЧЕСКОМУ листу
+  pivot: 'feet', width: 112, height: 112, blend: 'masked',
+});
+```
+
+* `files.length` обязан быть равен `tile.columns*tile.rows`; каждый файл —
+  PNG ровно `tile.width×tile.height` (оба ≤4096). Ragged/несовпадающие размеры —
+  `RangeError`, молчаливого fallback нет.
+* Логический размер = `tile.columns*tile.width × tile.rows*tile.height` (до
+  65536 на сторону); `columns*cell.w` / `rows*cell.h` обязаны в него влезать.
+* Клетка может пересекать границу тайлов: C собирает её из нескольких тайлов
+  попиксельно, flip/pivot/blend/масштаб ведут себя так же, как у одиночного
+  листа. GPU получает уже готовый cropped frame — шейдер не меняется.
+* Пути тайлов дедуплицируются по отдельности; `atlasPin(path)` совпадает, если
+  path равен любому тайлу набора. `streamInfo().atlases[].path` для набора —
+  склеенный список `'a.png+b.png+...'`, полный список — в `tiles`.
+
 ### Packed layered character (`sprite_col`)
 
 Слои (ноги → хвост → торс → голова) можно «запечь» офлайн в один
@@ -31075,6 +31268,156 @@ policy у этого режима нет — строку анимации ст�
 попиксельная окклюзия стеной), `tests/agent/re2d_sprite_col_test.py` (упакованный
 слоистый персонаж: col 0≠2, row 0≠1, live-смена 10 кадров без re-registration,
 клэмп колонки), `demos/re2d_boomer_lab`.
+
+## Atlas residency, бюджеты и диагностика (1.2.12)
+
+Плоские атласные спрайты живут в том же budgeted residency cache, что и
+регионы/материалы (`src/re2d_world_stream.c`). Видимый атлас не должен
+исчезать молча: у каждого зарегистрированного `world.sprite` стабильный
+stream id, предыдущий кадр сообщает, какие атласы видимы, и они
+**demand-pin**'ятся — продвигаются в RESIDENT вне обычного promote-бюджета и
+никогда не вытесняются LRU, даже если суммарный размер видимых атласов больше
+budget (soft cap, over-budget виден в диагностике).
+
+```js
+world.streamConfig({ residentBytes: 6 * 1024 * 1024, residentItems: 4,
+                     uploadBytes: 0, uploadItems: 0, promoteItems: 4 });
+world.atlasPin('assets/peds/ped_0.png', true);   // явный pin по пути (или по id)
+world.atlasPin(0, false);
+
+const s = world.streamInfo();
+// {residentBytes, residentItems, budgetBytes, budgetItems, uploadBudgetBytes,
+//  uploadBudgetItems, promoteItems, pending, evictedThisFrame,
+//  promotedThisFrame, promoteDeferred, pinnedBytes, pinnedItems,
+//  overBudget, overBudgetBytes, overBudgetItems, atlasesPinned, atlasesDemand,
+//  pinsPending, pinLimit, pinPaths, decodedUniqueBytes, decodedSavedBytes,
+//  dedupHits, warnings,
+//  atlases: [{id, streamId, path, nodeId, bytes, streamBytes, state, stateName,
+//  pinned, demandPinned, refs, visibleRefs, sharedRefs, lastEvictFrame, reason,
+//  lastEvictReason, cellW, cellH, columns, rows, imageW, imageH, tileCount,
+//  tileColumns, tileRows, tileWidth, tileHeight, tiles, visible, blocked, warned}]}
+world.streamWarnings();       // peek bounded ring (oldest first)
+world.takeStreamWarnings();   // copy and clear the ring
+```
+
+* `streamConfig`: `0` = unlimited/no cap для всех полей. Это контракт именно
+  этого метода; legacy `regionConfig(size, activeRing, preloadRing,
+  uploadBytes, uploadItems)` сохраняет старую семантику `0 uploads = no uploads
+  this frame`, а `regionBudget(bytes, items)` — прежний сеттер residency.
+  Опущенные поля не меняются. `pinLimit` задаёт лимит sticky path-пинов
+  (по умолчанию 64, `0` = без лимита до 4096); понижение ниже текущего
+  `pinsPending` отклоняется (`RangeError`), а не сбрасывает пины.
+* `streamConfig.promoteItems` ограничивает только обычные (невидимые) preload
+  продвижения; видимые demand-атласы продвигаются всегда.
+* `atlasPin(pathOrId, on)`: путь сравнивается с authored PNG path (для tiled-
+  набора — с любым путём тайла); целое число — `id` из
+  `streamInfo().atlases` (индекс регистрации). Возвращает число затронутых
+  атласов (0 — не найдено). Pin защищает от LRU, но байты продолжают
+  учитываться в `pinnedBytes/residentBytes`.
+  **Path-pin «липкий»**: его можно вызвать до регистрации атласа (стриминговая
+  популяция); путь хранится в bounded pending-наборе (64 пути), и registration
+  применяет его сразу, поэтому первый видимый кадр уже resident и не пишет
+  `R2D_ATLAS_NOT_RESIDENT`. `on=false` удаляет pending-путь и снимает pin с
+  совпавших атласов; ошибка — только переполнение лимита (>64) или path
+  длиннее 511 символов (`RangeError`). Numeric-id pin — только немедленный, не
+  запоминается. `streamInfo().pinsPending` / `pinPaths` показывают pending-набор.
+* `streamWarnings()`/`takeStreamWarnings()`: bounded ring (64) записей о
+  видимом, но не резидентном атласе. `world.render`/`renderToSprite`
+  автоматически пересылает новую запись в
+  `$.debug.reportError('re2d.stream', …, {code:'R2D_ATLAS_NOT_RESIDENT'})`, один
+  раз на атлас до восстановления residency. Сообщение содержит path, bytes,
+  cell/grid, node id, state и reason; `$.debug.errors()` поэтому называет
+  конкретный атлас и узел.
+* Пока атлас не резидентен, его изображение не рисуется (GPU residency gate),
+  и его contact/ground shadow тоже подавляется — тени без спрайта нет.
+  Счётчики: `visibleAtlasBlocked`, `groundShadowsSuppressed`, а также
+  `streamPinnedBytes/Items`, `streamOverBudget*`, `streamWarnings` в
+  `world.info()`.
+* Стабильные stream id означают, что `world.remove(node)`/повторная регистрация
+  не оставляют stale residency state, который блокировал бы другой атлас.
+* **Decoded-pixel dedup**: RGBA-буфер декодированного PNG один на уникальный
+  canonical path (app/VFS-resolved) и на generation кэша; регистрации одного
+  файла делят его (`streamInfo().atlases[].sharedRefs`), разные grid/cell
+  остаются у каждой регистрации. Память освобождается, когда уходит последняя
+  ссылка (`world.remove`, dispose, scene reload); hot reload/reloadJSON
+  увеличивает generation, новые регистрации перечитывают файл. Счётчики:
+  `streamInfo().decodedUniqueBytes` (живые RGBA-байты), `decodedSavedBytes`
+  (сэкономлено шарингом), `dedupHits`; `residentBytes` не считает общие пиксели
+  дважды (`streamBytes` регистрации = 0 у алиасов).
+
+Ограничения: residency — детерминированный incremental, не async disk I/O;
+декодированные пиксели каждого `world.sprite` хранятся на регистрацию (дедуп
+по одному PNG между узлами пока не сделан); бюджет `residentBytes` по умолчанию
+8 MiB, поэтому сцена с большими атласами намеренно живёт на soft cap —
+смотрите `streamInfo().overBudget`; одиночный PNG ≤4096×4096, больший
+логический лист задаётся atlas-set формой выше (до 65536 на сторону).
+
+Проверки: `tests/re2d/stream_residency_test.c` (pin/LRU, soft cap, reasons,
+budget 0, deterministic promotion), `tests/agent/re2d_atlas_residency_test.py`
+(50 сгенерированных атласов 1024², малые бюджеты, диагностика, pin, 300
+кадров движения: ни один видимый спрайт не теряется без предупреждения).
+
+## Async PNG prefetch для атласов (детерминированный контракт, 1.2.13)
+
+Регистрация атласов читает PNG синхронно. Необязательный prefetch читает **байты
+файла** заранее в одном рабочем потоке, чтобы регистрация могла пропустить
+синхронное чтение, если байты уже готовы. По умолчанию **выключен** — поведение и
+кадры по умолчанию не меняются.
+
+```js
+world.atlasAsync(true);                       // включить (getter без аргумента)
+world.atlasPrefetch('chars/neko_sheet.png');  // token > 0; 0 = уже есть/лимит
+world.atlasPrefetch('chars/imp.png');
+
+const info = world.atlasPrefetchInfo();
+// { enabled, workers, pending, ready, consumed, failed, entries,
+//   bytesPending, bytesReady, limitBytes, requested, consumedTotal,
+//   failedTotal, bytesRead, readMs, error,
+//   paths: [{ path, token, state: 'pending'|'ready'|'failed'|'consumed',
+//             bytes, error }] }
+
+world.atlasPrefetchClear();                   // отменить pending, сбросить ready
+world.atlasAsync(false);                      // выключить, остановить поток
+```
+
+**Детерминированный контракт.** Prefetch никогда не меняет пиксели кадра,
+содержимое кадра, порядок или предупреждения:
+
+* async-часть — только файловый ввод-вывод (stdio) в рабочем потоке. Декодирование
+  PNG остаётся на главном потоке через SDL_image; из рабочего потока не делается
+  ни одного вызова SDL/QuickJS/GPU (это тот же класс, что падение GPU-профайлера).
+* `world.sprite`/`atlas-set` проверяют кэш по точному canonical пути перед
+  синхронным чтением: `ready` → декодируются те же байты и запись помечается
+  `consumed`; `pending`/`failed`/нет записи → обычное синхронное чтение
+  (идентичные байты и результат); затем работает существующий dedup.
+* если файл изменился после prefetch (size/mtime), запись отвергается и
+  используется синхронное чтение — старые байты никогда не подменяют кадр;
+* отсутствующий/битый файл: prefetch-запись получает `state:'failed'` с текстом
+  ошибки, регистрация падает/ругается ровно как без prefetch (никаких новых
+  предупреждений и никакой «тихой» подмены картинки);
+* момент завершения async-чтения не может повлиять на кадр: непрочитанное
+  просто означает синхронный путь.
+
+**Границы.** До 64 записей, до 256 MiB суммарно pending+ready, до 64 MiB на
+файл. `atlasPrefetch` возвращает
+`0`, если prefetch выключен, путь уже pending/ready, или исчерпан бюджет
+записей/байт; о лимите сообщает `info.error`. `atlasPrefetch` для не-строки или
+пустого пути — `TypeError`. Пакованный груз (VFS) уже в памяти: prefetch копирует
+его байты сразу (`ready`) без потока.
+
+**Жизненный цикл.** Рабочий поток создаётся лениво на первом `atlasPrefetch`,
+останавливается `atlasAsync(false)`/`atlasPrefetchClear`-совместимо и
+джойнится в `world.dispose`/`re2d` shutdown. `atlasPrefetchInfo()` работает после
+clear/disable и после dispose мира в пределах живого handle (все записи пусты).
+Hot reload/scene reload безопасны: prefetch не владеет узлами, а stale байты
+отсекаются проверкой size/mtime. `world.streamInfo()`/dedup/кеш поколений не
+меняются.
+
+Тесты: `tests/re2d/atlas_prefetch_test.c` (очередь, границы, dedup, ready/take/
+consumed, missing/stale, cancel, disable/shutdown, payload-байты) и
+`tests/agent/re2d_atlas_prefetch_test.py` (сгенерированная игра: prefetch off vs
+on+wait — байт-идентичные скриншоты, fallback без готовности, 120 кадров
+движения, диагностика missing/corrupt).
 
 ## Trace: мир + actor-прокси
 
@@ -38572,14 +38915,15 @@ $('#level').collisionMerge();         // геттер: включено ли с�
 $('#level').rebuild();                // пересобрать тела сейчас
 ```
 
-**Зачем слияние.** Движок держит не больше `R2D_MAX_BODIES` (8192) тел
-одновременно, и при переполнении `engine.createBody` возвращает `-1`. Раньше
-тела строились по горизонтальным полосам: плотная карта 200×100 просит до
-10 000 полос, лимит кончался, и **часть тайлов оставалась вообще без коллизий**
-— игрок проваливался сквозь пол. Теперь число тел зависит от площади
-прямоугольников, а не от числа строк, и лимит достигается только на
-патологических узорах (диагональная шахматка) — см. §19: при лимите модуль
-возвращает **failed result** и по умолчанию не публикует неполную коллизию.
+**Зачем слияние.** Реестр тел динамический (старт 1024, дальше растёт), но
+каждое тело — это память и работа Box2D, поэтому число тел важно даже без
+жёсткого потолка. Раньше тела строились по горизонтальным полосам: плотная
+карта 200×100 просила до 10 000 полос, и **часть тайлов оставалась вообще без
+коллизий** — игрок проваливался сквозь пол. Теперь число тел зависит от
+площади прямоугольников, а не от числа строк; на патологических узорах
+(диагональная шахматка) срабатывает бюджет `engine.limits().bodies_max` — см.
+§19: модуль возвращает **failed result** и по умолчанию не публикует неполную
+коллизию.
 
 **Замер (до/после, одна сборка, `collisionMerge(false)` против `true`).**
 Mac mini M4, `build/` Release (RE2D=ON), headless `--agent --fixed-dt 1/60`,
@@ -38592,7 +38936,7 @@ Mac mini M4, `build/` Release (RE2D=ON), headless `--agent --fixed-dt 1/60`,
 | сплошной блок 200×10 | 10 | 0.84 | **1** | 1.00 |
 | 980 площадок 8×1 | 980 | 4.15 | 980 | 4.48 |
 | плотный уровень (земля + стены + 24 площадки на ярус) | 556 | 2.25 | **363** | 1.92 |
-| диагональная шахматка 50 % | 8192 (лимит) | 38.90 | 8192 (лимит) | 38.98 |
+| диагональная шахматка 50 % | 8192 (тогдашний лимит) | 38.90 | 8192 (тогдашний лимит) | 38.98 |
 
 Тот же плотный уровень на текущей ревизии (фактический вывод
 `tests/agent/highlevel_tile_geometry_test.py`): тел **363**, `rebuild`
@@ -38801,7 +39145,8 @@ $('#water').tileset(null);                            // выключить
   (например, «одно тело на ряд»), должен либо включить `.collisionMerge(false)`,
   либо читать `$.tilemap.rectsOf()`.
 * Патологический узор (диагональная шахматка на всю карту) не сливается и
-  упирается в лимит тел движка 8192: по умолчанию коллизия **отклоняется**
+  упирается в текущую ёмкость реестра тел (`engine.limits().bodies_max`,
+  старт 8192 после роста): по умолчанию коллизия **отклоняется**
   целиком с failed result (`.collisionResult()`), прежнее «оставить что успело
   и предупредить» включается явно — `.collisionLimit('partial')` (§19). Для
   таких карт режьте уровень на несколько `<tilemap>`.
@@ -39205,8 +39550,9 @@ $('#level').tileOccluders();                    // геттер
 
 ## 19. Лимит тел: failed result вместо молчаливой дырки
 
-Движок держит `R2D_MAX_BODIES` тел (8192). Если тел на карту нужно больше,
-неполная коллизия **не публикуется** (спецификация §3.1 п.12, §23): карта
+Реестр тел динамический: жёсткого потолка 8192 больше нет, ёмкость растёт по
+мере надобности. Если бюджет тел на карту исчерпан, неполная коллизия
+**не публикуется** (спецификация §3.1 п.12, §23): карта
 получает failed result, а журнал — прежнее сообщение.
 
 | Политика | `.collisionLimit(...)` | Поведение при лимите |

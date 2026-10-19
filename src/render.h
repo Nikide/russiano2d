@@ -9,6 +9,7 @@
 #pragma once
 
 #include "r2d.h"
+#include "r2d_slot_pool.h"
 
 // QuickJS нужен не целиком, но объявить JSValue своими руками нельзя: в
 // QuickJS-ng это не всегда структура. При JS_NAN_BOXING (включён для wasm32)
@@ -126,6 +127,37 @@ typedef struct R2DTexture {
     size_t          cpu_bytes;
     uint32_t        cpu_stamp;      // для вытеснения по «давности»
 } R2DTexture;
+
+// ---------------------------------------------------------------------------
+// Очередь загрузки текстур (§5)
+//
+// Раньше каждое обновление региона создавало transfer-буфер, командный буфер,
+// отправляло его и ЖДАЛО fence: один глиф шрифта = один полный GPU-простой.
+// Теперь регион копируется в собственную staging-арену (CPU), а во время
+// обычной отправки кадра из неё пачкой делаются copy-проходы. Ожиданий нет.
+//
+// Запись хранит текстурный слот и его поколение: если текстуру успели
+// освободить, запись отбрасывается, а не пишет в удалённый ресурс.
+// ---------------------------------------------------------------------------
+typedef struct R2DTextureUpload {
+    SDL_GPUTexture *texture;        // разрешается на момент enqueue
+    int             texture_id;     // -1 — внутренняя текстура рендерера
+    uint32_t        generation;     // поколение слота на момент enqueue
+    uint32_t        x, y, w, h;
+    size_t          staging_offset; // смещение в staging-арене
+    size_t          staging_size;
+    bool            mipmaps;        // сгенерировать мипмапы после копирования
+} R2DTextureUpload;
+
+typedef struct R2DRetiredTexture {
+    SDL_GPUTexture *handle;
+    uint64_t        release_frame;
+} R2DRetiredTexture;
+
+typedef struct R2DRetiredTransfer {
+    SDL_GPUTransferBuffer *handle;
+    uint64_t               release_frame;
+} R2DRetiredTransfer;
 
 typedef struct R2DSprite {
     int   texture;
@@ -317,8 +349,39 @@ typedef struct R2DRenderer {
     int                      mesh_vb_capacity;
     int                      stat_mesh_cmds;
 
-    R2DTexture textures[R2D_MAX_TEXTURES];
-    int         texture_count;
+    // --- Текстуры: пул слотов вместо фиксированного массива (§7) ----------
+    // textures[] индексируется стабильным id = номер слота, поэтому публичный
+    // API (int id) не меняется. Живые id перечисляются через плотный список
+    // пула; freelist даёт O(1) создание даже после тысяч load/free.
+    R2DTexture *textures;
+    uint32_t    texture_capacity;   // ёмкость массива textures[]
+    int         texture_count;      // верхняя граница id (индексация)
+    int         texture_peak;
+    R2DSlotPool texture_slots;
+
+    // --- Очередь загрузки текстур (§5) ------------------------------------
+    R2DTextureUpload *uploads;
+    uint32_t          upload_count;
+    int               upload_cap;
+    uint8_t          *upload_staging;      // CPU-арена с копиями регионов
+    size_t            upload_staging_used;
+    size_t            upload_staging_cap;
+    SDL_GPUTransferBuffer *tex_upload_buffer;
+    Uint32            tex_upload_capacity;
+
+    // Отложенное освобождение: GPU может ещё читать ресурс прошлых кадров.
+    R2DRetiredTexture *retired_textures;
+    uint32_t           retired_count;
+    int                retired_cap;
+    R2DRetiredTransfer *retired_transfers;
+    uint32_t            retired_transfer_count;
+    int                 retired_transfer_cap;
+    uint64_t            frame_index;
+    uint32_t            stat_texture_uploads;       // регионов за кадр
+    uint32_t            stat_texture_upload_batches;
+    size_t              stat_texture_upload_bytes;
+    uint32_t            stat_texture_upload_waits;  // должно оставаться 0
+
     int         white_texture;   // индекс текстуры 1x1 для прямоугольников
     int         white_sprite;    // спрайт поверх этой текстуры
 
@@ -534,6 +597,12 @@ bool r2d_render_filter(const R2DRenderer *r);
 // только потолок и не знает, близко ли к нему.
 int  r2d_render_viewport_live_count(const R2DRenderer *r);
 int  r2d_texture_live_count(const R2DRenderer *r);
+// Текущая ёмкость реестра (не потолок: растёт по мере надобности) и пик живых.
+int  r2d_texture_capacity(const R2DRenderer *r);
+int  r2d_texture_peak(const R2DRenderer *r);
+// Диагностика очереди загрузки: регионов/пачек за последний кадр и байт.
+void r2d_texture_upload_stats(const R2DRenderer *r, int *regions, int *batches,
+                              size_t *bytes, int *fence_waits);
 bool r2d_texture_upload_region(R2DRenderer *r, int id, int x, int y, int w, int h,
                                const void *pixels, int pitch);
 

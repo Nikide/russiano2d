@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(russiano2d
-    VERSION 1.2.11
+    VERSION 1.2.12
     DESCRIPTION "Легковесный кроссплатформенный 2D-движок: SDL3 + SDL_GPU, QuickJS-ng, Box2D v3, RmlUi, экспорт в веб (WebGPU)"
     LANGUAGES C CXX)
 # Бинарник ищет библиотеки рядом с собой: если что-то осталось динамическим,
@@ -75,6 +75,10 @@ option(R2D_TEST_FREE_POISON "Затирать пиксели перед осво
 # умолчанию OFF: релизная сборка не тянет Tracy вообще. Подключение — в
 # cmake/Tracy.cmake, что видно и чего не видно — docs/BUILD.md.
 option(R2D_TRACY          "Подключить профайлер реального времени Tracy (только для разработки)" OFF)
+# LTO/IPO для релизного бинарника (§38). CMake сам включит его только там, где
+# компилятор/линкер это поддерживают; по умолчанию OFF, чтобы обычная сборка
+# оставалась быстрой, а релизный профиль был явным: -DR2D_LTO=ON.
+option(R2D_LTO "Link-time optimization для russiano2d (релизный профиль)" OFF)
 
 if(R2D_SANITIZE AND NOT MSVC)
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -142,6 +146,8 @@ if(NOT EMSCRIPTEN)
                 r2d_re2d_atlas_test r2d_world_trace_test r2d_world_mover_test r2d_world_trigger_test r2d_world_controller_test r2d_world_render_features_test r2d_re2d_semantic_test r2d_re2d_portal_test r2d_world_metadata_test r2d_world_automap_test r2d_world_particle_test r2d_world_nav_test r2d_world_secret_test r2d_world_terrain_test r2d_world_save_test r2d_world_portal_visual_test r2d_world_volume_test r2d_world_material_anim_test r2d_world_polywall_test r2d_world_polygon_test r2d_world_vfx_test r2d_world_region_test r2d_sdk_brush_test r2d_world_tools_test r2d_world_hint_test r2d_postprocess_test r2d_audio_zone_test r2d_audio_voices_test r2d_world_exr_test
                 r2d_sdk_core_test r2d_sdk_world_compile_test
                 r2d_world_stream_residency_test r2d_world_atlas_tiled_test r2d_atlas_prefetch_test
+                r2d_slot_pool_test r2d_async_backpressure_test
+                r2d_payload_lookup_test r2d_audio_sound_registry_test r2d_physics_stress_test r2d_re2d_scalability_test
                 r2d-sdk
         COMMENT "r2d_check: Unity C tests + QuickJS tests + SDK batch (CTest)"
         VERBATIM)

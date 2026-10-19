@@ -65,6 +65,8 @@ bool r2d_world_particle_pool_init(R2DWorldParticlePool *pool,
     pool->capacity = capacity;
     pool->count = 0;
     pool->overflow = 0;
+    pool->start = 0;
+    pool->peak = 0;
     pool->seed = R2D_WORLD_PARTICLE_DEFAULT_SEED;
     return true;
 }
@@ -76,6 +78,8 @@ void r2d_world_particle_clear(R2DWorldParticlePool *pool)
         memset(pool->items, 0, sizeof(*pool->items) * (size_t)pool->capacity);
     pool->count = 0;
     pool->overflow = 0;
+    pool->start = 0;
+    pool->peak = 0;
     // seed is deliberately preserved: a clear restarts the scene, not the RNG.
 }
 
@@ -129,21 +133,23 @@ static void spawn_slot(R2DWorldParticlePool *pool, int slot,
     p->radius = prototype->radius;
 }
 
-// Insert one particle. When full, the oldest slot is overwritten and the age
-// order is preserved by shifting the survivors down by one slot.
+// Insert one particle into the ring. When full, the oldest slot (ring head) is
+// overwritten and the head advances; survivors are never moved, so eviction is
+// O(1) and logical age order is preserved by the accessors.
 static void pool_spawn(R2DWorldParticlePool *pool, const R2DWorldParticle *prototype,
                        float vx, float vy, float vh)
 {
     int slot;
+    if (pool->start < 0 || pool->start >= pool->capacity) pool->start = 0;
     if (pool->count < pool->capacity) {
-        slot = pool->count;
+        slot = pool->start + pool->count;
+        if (slot >= pool->capacity) slot -= pool->capacity;
         pool->count += 1;
+        if (pool->count > pool->peak) pool->peak = pool->count;
     } else {
-        if (pool->count > 1) {
-            memmove(&pool->items[0], &pool->items[1],
-                    sizeof(pool->items[0]) * (size_t)(pool->count - 1));
-        }
-        slot = pool->capacity - 1;
+        slot = pool->start;
+        pool->start += 1;
+        if (pool->start >= pool->capacity) pool->start = 0;
         if (pool->overflow < INT_MAX) pool->overflow += 1;
     }
     spawn_slot(pool, slot, prototype, vx, vy, vh);
@@ -187,8 +193,11 @@ int r2d_world_particle_emit_burst(R2DWorldParticlePool *pool,
     if (!prototype_valid(prototype)) return -1;
     if (!isfinite(spread) || spread < 0.0f || !isfinite(speed)) return -1;
     if (!finite3(dir_x, dir_y, dir_h)) return -1;
+    // Per-call safety cap: keeps one JS/native call's loop bounded.
+    if (count > 1000000) count = 1000000;
     if (pool->count < 0) pool->count = 0;
     if (pool->count > pool->capacity) pool->count = pool->capacity;
+    if (pool->start < 0 || pool->start >= pool->capacity) pool->start = 0;
 
     float bx, by, bh;
     base_direction(dir_x, dir_y, dir_h, &bx, &by, &bh);
@@ -217,6 +226,7 @@ int r2d_world_particle_emit_continuous(R2DWorldParticlePool *pool,
     if (!isfinite(*accumulator)) return -1;
     if (pool->count < 0) pool->count = 0;
     if (pool->count > pool->capacity) pool->count = pool->capacity;
+    if (pool->start < 0 || pool->start >= pool->capacity) pool->start = 0;
 
     if (dt < 0.0f) dt = 0.0f;
     if (dt > 0.25f) dt = 0.25f;
@@ -331,10 +341,16 @@ void r2d_world_particle_step_collide(R2DWorldParticlePool *pool, float dt,
 
     if (pool->count < 0) pool->count = 0;
     if (pool->count > pool->capacity) pool->count = pool->capacity;
+    if (pool->start < 0 || pool->start >= pool->capacity) pool->start = 0;
 
+    // Compact expired particles in logical age order. The ring head stays put;
+    // survivors are copied down within the logical range (O(live) per step and
+    // no shift on emit/eviction).
     int write = 0;
     for (int i = 0; i < pool->count; ++i) {
-        R2DWorldParticle *p = &pool->items[i];
+        int slot = pool->start + i;
+        if (slot >= pool->capacity) slot -= pool->capacity;
+        R2DWorldParticle *p = &pool->items[slot];
         if (!p->active) continue;
         if (!particle_sane(p) || p->life <= 0.0f) {
             p->active = false;
@@ -399,7 +415,11 @@ void r2d_world_particle_step_collide(R2DWorldParticlePool *pool, float dt,
         }
 
         if (p->active) {
-            if (write != i) pool->items[write] = *p;
+            if (write != i) {
+                int wslot = pool->start + write;
+                if (wslot >= pool->capacity) wslot -= pool->capacity;
+                pool->items[wslot] = *p;
+            }
             write += 1;
         }
     }
@@ -419,7 +439,22 @@ int r2d_world_particle_alive(const R2DWorldParticlePool *pool)
     if (count > pool->capacity) count = pool->capacity;
     int alive = 0;
     for (int i = 0; i < count; ++i) {
-        if (pool->items[i].active) alive += 1;
+        const R2DWorldParticle *p = r2d_world_particle_at(pool, i);
+        if (p && p->active) alive += 1;
     }
     return alive;
+}
+
+const R2DWorldParticle *r2d_world_particle_at(const R2DWorldParticlePool *pool, int index)
+{
+    if (!pool || !pool->items || pool->capacity < 1) return NULL;
+    if (index < 0 || index >= pool->count) return NULL;
+    int slot = pool->start + index;
+    if (slot >= pool->capacity) slot -= pool->capacity;
+    return &pool->items[slot];
+}
+
+R2DWorldParticle *r2d_world_particle_at_mut(R2DWorldParticlePool *pool, int index)
+{
+    return (R2DWorldParticle *)r2d_world_particle_at(pool, index);
 }

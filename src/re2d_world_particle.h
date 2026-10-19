@@ -15,16 +15,26 @@
 // Semantics (exact)
 // ----------------
 // * Pool: init() zeroes the pool and storage, stores [storage,storage+capacity),
-//   sets count=overflow=0 and seed=R2D_WORLD_PARTICLE_DEFAULT_SEED. capacity
-//   must be 1..8192. The caller may overwrite pool->seed before emitting.
-//   clear() drops all particles and overflow but PRESERVES seed.
-// * Storage layout: after init/emit/step the active particles are packed at
-//   items[0..count); there are no holes. The renderer may iterate that range.
-// * Eviction: when count == capacity a new particle overwrites the oldest
-//   particle (slot 0). Remaining particles are shifted down by one and the new
-//   particle is stored at items[count-1], preserving age order. overflow counts
-//   every evicted particle (saturating at INT_MAX). Cost is O(capacity) per
-//   eviction; capacity is bounded to 8192.
+//   sets count=overflow=peak=0, start=0 and seed=R2D_WORLD_PARTICLE_DEFAULT_SEED.
+//   capacity must be 1..R2D_WORLD_PARTICLE_MAX_CAPACITY (1,048,576; the pool is
+//   caller-allocated, so a larger capacity is refused explicitly instead of
+//   being silently clamped). The caller may overwrite pool->seed before
+//   emitting. clear() drops all particles and resets overflow/peak but
+//   PRESERVES seed.
+// * Storage layout: storage is a RING buffer. `start` is the physical slot of
+//   the oldest live particle; the active particles are the logical range
+//   [0,count) in age order (oldest first). There are no holes and logical order
+//   is stable across calls, but logical index i is NOT necessarily physical
+//   slot i: use r2d_world_particle_at(pool,i) /
+//   r2d_world_particle_at_mut(pool,i), and iterate i in [0,count).
+//   items[start+i mod capacity] is the storage mapping. Direct packed-range
+//   iteration (items[0..count)) is no longer valid for a wrapped ring.
+// * Eviction: when count == capacity a new particle overwrites the OLDEST
+//   particle. The ring head advances by one slot (O(1)); no other particle is
+//   moved, so age order is preserved through the accessors. overflow counts
+//   every evicted particle (saturating at INT_MAX) and is the "evicted"
+//   telemetry counter; peak is the high-water mark of count since init/clear.
+//   Cost is O(1) per eviction regardless of capacity.
 // * Emission: emit bursts/continuous streams into the pool. The prototype is
 //   copied per particle; prototype.life is IGNORED and life is set to
 //   prototype.max_life (which must be > 0). mode must be 0..3 and blend 0..2.
@@ -45,8 +55,9 @@
 //   adds rate*dt (dt clamped to 0..0.25; rate >= 0) and spawns whole particles,
 //   keeping the fractional remainder in *accumulator. A 1e-4 tolerance prevents
 //   float rounding from losing a whole particle. Returns the number spawned or
-//   -1 on invalid arguments. Emission is capped at 1,000,000 per call to keep
-//   loops bounded; the remainder is dropped past that cap.
+//   -1 on invalid arguments. Emission (burst and continuous) is capped at
+//   1,000,000 particles per call to keep loops bounded; the remainder / surplus
+//   is dropped past that cap.
 // * Deterministic: one shared 32-bit LCG (Numerical Recipes constants) advanced
 //   three times per spawned particle. The same seed plus the same call sequence
 //   produces bit-identical particles. r2d_world_particle_random() returns a
@@ -67,13 +78,16 @@
 // * NaN safety: a particle whose stored float fields become non-finite is
 //   dropped by step() instead of poisoning the pool; invalid emitter input is
 //   rejected. No operation reads past items[0..capacity) or count.
-// * alive() counts active particles in items[0..count) (invariant: all packed
-//   entries are active); NULL pool returns 0.
+// * alive() counts the active particles in the logical range [0,count) through
+//   the ring mapping; NULL pool returns 0.
 // ===========================================================================
 #include <stdbool.h>
 #include <stdint.h>
 
-#define R2D_WORLD_PARTICLE_MAX_CAPACITY 8192
+// Caller-allocated storage ceiling. This is an explicit sanity bound, not a
+// quality target: the runtime default is 2048 and Low/Medium/High quality map
+// to 512/2048/8192 (see r2d_world_particles_set_capacity).
+#define R2D_WORLD_PARTICLE_MAX_CAPACITY (1 << 20)
 #define R2D_WORLD_PARTICLE_DEFAULT_SEED 0x9E3779B9u
 
 enum {
@@ -138,14 +152,19 @@ typedef struct {
 } R2DWorldParticle;
 
 typedef struct {
-    R2DWorldParticle *items; // borrowed caller storage
+    R2DWorldParticle *items; // borrowed caller storage (ring)
     int capacity, count, overflow;
+    // Ring head: physical slot of logical particle 0 (the oldest live one).
+    int start;
+    // High-water mark of count since init/clear (telemetry).
+    int peak;
     uint32_t seed;
 } R2DWorldParticlePool;
 
-// Bind caller-owned storage (capacity 1..8192) and reset the pool.
-// Returns false for NULL pool/storage or bad capacity; a failed call leaves the
-// pool zeroed (capacity/count/items = 0) so later calls are safe no-ops.
+// Bind caller-owned storage (capacity 1..R2D_WORLD_PARTICLE_MAX_CAPACITY) and
+// reset the pool. Returns false for NULL pool/storage or bad capacity; a failed
+// call leaves the pool zeroed (capacity/count/items = 0) so later calls are
+// safe no-ops.
 bool r2d_world_particle_pool_init(R2DWorldParticlePool *pool,
                                   R2DWorldParticle *storage, int capacity);
 
@@ -183,3 +202,21 @@ void r2d_world_particle_step_collide(R2DWorldParticlePool *pool, float dt,
 
 // Number of active particles; NULL returns 0.
 int r2d_world_particle_alive(const R2DWorldParticlePool *pool);
+
+// Ring-indexed accessors: logical index 0 is the oldest live particle and
+// count-1 the newest. Returns NULL when pool is NULL, i is outside [0,count),
+// or the pool is unbound. The pointer is valid until the next emit/step/clear.
+const R2DWorldParticle *r2d_world_particle_at(const R2DWorldParticlePool *pool, int index);
+R2DWorldParticle *r2d_world_particle_at_mut(R2DWorldParticlePool *pool, int index);
+
+// --- Runtime integration ------------------------------------------------
+// Defined by re2d_world_runtime.c; declared here so the capacity policy stays
+// next to the pool API without making this header depend on runtime types.
+// Set the runtime particle pool capacity (quality knob). Accepts
+// 1..R2D_WORLD_PARTICLE_MAX_CAPACITY. The pool is reallocated only when empty
+// (or not yet created); a request while particles are alive returns false and
+// leaves the pool untouched. The existing per-frame particle_budget is kept
+// unless it still equals the old capacity default. Returns true when the
+// requested capacity is active.
+struct R2DWorldRuntime;
+bool r2d_world_particles_set_capacity(struct R2DWorldRuntime *runtime, int capacity);

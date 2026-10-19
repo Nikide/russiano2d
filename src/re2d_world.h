@@ -96,6 +96,14 @@ typedef struct {
     int hint_portals_tested, hint_portals_cut;
     int occluder_cells_tested, occluder_cells_cut;
 } R2DWorldVisibility;
+// Default/initial bucket for the dynamic material bank. This is NOT a cap:
+// R2DRe2dWorld.material_capacity grows on demand with checked realloc and
+// material_count is the number of used definition slots. GPU residency is a
+// separate budget (see WorldGPU material texture table).
+// Политика ассетов для PNG материалов/слоёв неба (§31): выше старого
+// 2048×2048, ниже типичного аппаратного предела. GPU-предел всё равно
+// проверяется самим SDL_CreateGPUTexture и даёт явную ошибку.
+#define R2D_WORLD_MATERIAL_TEXTURE_MAX 4096
 #define R2D_WORLD_MAX_MATERIALS 64
 enum { R2D_WORLD_MASKED,R2D_WORLD_OPAQUE,R2D_WORLD_TRANSLUCENT,R2D_WORLD_ADDITIVE };
 typedef struct { uint8_t *pixels; int width,height; } R2DWorldTexture;
@@ -108,12 +116,28 @@ typedef struct {
     char name[64];
     bool used,world_uv,linear;
 } R2DWorldMaterial;
+// Legacy baked-lighting/GPU shadow-format slot count. Bake v* and the fragment
+// shader shadow header table keep this fixed width; the RUNTIME light registry
+// below grows past it dynamically (no creation rejection). Kept as a format
+// constraint, not a gameplay cap.
 #define R2D_WORLD_MAX_LIGHTS 128
+// Default decal RENDER budget (not a creation cap). Creation grows the dynamic
+// decal bank; only rendering is budgeted via deterministic eviction.
 #define R2D_WORLD_MAX_DECALS 128
+// Decal token packing: 17-bit slot + 14-bit generation in a positive int32.
+// Kept positive/opaque for JS, and slot = token % stride matches the historic
+// token%128 slot mapping used by native callers.
+#define R2D_WORLD_DECAL_TOKEN_STRIDE 131072
+#define R2D_WORLD_DECAL_GENERATION_MAX 16383
 // Decals 2.0: lifetime/fade/rotation/scale. max_life<=0 keeps legacy decals
-// (no fade, deterministic variation) byte-compatible.
-typedef struct {int surface,material;float u,v,w,h,remaining;float max_life,rotation,scale,fade_in,fade_out;unsigned generation;bool active;} R2DWorldDecal;
+// (no fade, deterministic variation) byte-compatible. priority/serial are
+// eviction telemetry policy inputs (higher priority = keep longer).
+typedef struct {int surface,material;float u,v,w,h,remaining;float max_life,rotation,scale,fade_in,fade_out;unsigned generation;bool active;int priority;uint64_t serial;} R2DWorldDecal;
+// Per-span shader/uniform budget: the fragment shader receives 16 light
+// entries; light_rebuild selects the top-16 by contribution. Not a creation cap.
 #define R2D_WORLD_LIGHTS_PER_SPAN 16
+// Shadow-quality budget (shader shadow table / shadow map slots). Lights beyond
+// this still exist and light the scene; only their shadow map is omitted.
 #define R2D_WORLD_MAX_SHADOWS 16
 typedef struct { float level,r,g,b,fog_density,fog_start,fog_r,fog_g,fog_b; } R2DWorldSpanLight;
 typedef struct { float x,y,h,radius,intensity,r,g,b; bool active,shadow,is_static; unsigned generation;
@@ -155,24 +179,31 @@ typedef struct {
     int *span_cells,*cell_refs,*wall_portals;
     int *span_wall_offsets,*span_wall_refs,*cell_portal_offsets,*cell_portal_refs;
     R2DWorldSpanLight *span_lights;
-    R2DWorldLight lights[R2D_WORLD_MAX_LIGHTS];
-    R2DWorldLightLinks light_links[R2D_WORLD_MAX_LIGHTS];
+    // Dynamic light registry: lights/links/dirty/shadow arrays grow together.
+    // light_capacity is the definition capacity; light_count the active slots.
+    R2DWorldLight *lights;
+    R2DWorldLightLinks *light_links;
     uint32_t *span_light_masks;
     uint8_t *span_light_candidates,*light_seen,*light_touched_flags;
     int *light_queue,*light_touched,light_seen_count,light_touched_count,light_updates;
-    uint8_t light_dirty_slots[R2D_WORLD_MAX_LIGHTS];
+    uint8_t *light_dirty_slots;
+    int light_capacity,span_light_words;
     bool light_full_dirty;
     bool baked_lighting,authored_lighting;
-    R2DWorldDecal decals[R2D_WORLD_MAX_DECALS];
-    int decal_count;
-    uint8_t shadow_mask[R2D_WORLD_MAX_LIGHTS];
-    uint64_t shadow_geometry_revision[R2D_WORLD_MAX_LIGHTS];
+    // Dynamic decal bank + render budget/eviction telemetry.
+    R2DWorldDecal *decals;
+    int decal_capacity,decal_count,decal_budget,decal_evicted;
+    uint64_t decal_sequence;
+    uint8_t *shadow_mask;
+    uint64_t *shadow_geometry_revision;
     R2DWorldLighting lighting;
     uint8_t *span_light_counts;
     int *span_light_refs;
     bool light_dirty,cell_rays_complete;
     int light_count,light_pairs,light_overflow;
-    R2DWorldMaterial materials[R2D_WORLD_MAX_MATERIALS];
+    // Dynamic material definition bank (checked realloc on demand).
+    R2DWorldMaterial *materials;
+    int material_capacity;
     int *surface_materials,material_count;
     uint64_t geometry_revision;
     int *wall_openings,*opening_spans_a,*opening_spans_b;
@@ -332,12 +363,23 @@ void r2d_world_frame_visible(const R2DRe2dWorld *,const R2DRe2dView *,int,int,ui
 
 bool r2d_world_set_lighting(R2DRe2dWorld *,const R2DWorldLighting *);
 bool r2d_world_set_span_light(R2DRe2dWorld *,int,const R2DWorldSpanLight *);
+// Light token packing: 17-bit slot + 14-bit generation, positive opaque int.
+// Legacy generation*128+slot tokens (slots 0..127) remain accepted so existing
+// native callers/tests that build tokens from the old formula keep working.
+#define R2D_WORLD_LIGHT_TOKEN_STRIDE 131072
+#define R2D_WORLD_LIGHT_GENERATION_MAX 16383
 // Generation-tagged light tokens reject stale remove/update calls.
 int r2d_world_light_create(R2DRe2dWorld *,const R2DWorldLight *);
 bool r2d_world_light_update(R2DRe2dWorld *,int,const R2DWorldLight *);
 bool r2d_world_light_remove(R2DRe2dWorld *,int);
 bool r2d_world_light_rebuild(R2DRe2dWorld *);
 void r2d_world_light_free(R2DRe2dWorld *);
+// Resolve an opaque light token to a live registry slot (-1 when stale).
+int r2d_world_light_slot(const R2DRe2dWorld *,int token);
+// Reload support: free/move only the dynamic light registry (lights/links/dirty/
+// shadow arrays), leaving span lighting untouched.
+void r2d_world_light_registry_free(R2DRe2dWorld *);
+bool r2d_world_light_registry_move(R2DRe2dWorld *dst,R2DRe2dWorld *src);
 void r2d_world_light_invalidate_box(R2DRe2dWorld *,float,float,float,float,float,float);
 struct R2dJson;
 bool r2d_world_span_light_json(const struct R2dJson *,R2DWorldSpanLight *);
@@ -368,6 +410,9 @@ float r2d_world_ceiling_height(const R2DWorldSpan *,float,float);
 bool r2d_world_span_opening(const R2DWorldSpan *,const R2DWorldPortal *,const R2DWorldOpening *);
 
 void r2d_world_material_free(R2DWorldMaterial *);
+// Ensure the dynamic material bank has at least `slots` definition slots.
+// Existing definitions are preserved; new slots are zeroed. Not a hard cap.
+bool r2d_world_material_ensure(R2DRe2dWorld *,int slots);
 // Copies independent RGBA images transactionally; caller retains input ownership.
 int r2d_world_material_set(R2DRe2dWorld *,const R2DWorldMaterial *);
 int r2d_world_material_find(const R2DRe2dWorld *,const char *);
@@ -390,6 +435,11 @@ void r2d_world_material_probe(const R2DRe2dWorld *,int,float,float,const float[3
 int r2d_world_decal_create(R2DRe2dWorld *,const R2DWorldDecal *);
 bool r2d_world_decal_remove(R2DRe2dWorld *,int);
 void r2d_world_decal_step(R2DRe2dWorld *,float);
+// Render budget (0 = unlimited). Creation is never rejected by this budget; it
+// only bounds composition and guides deterministic eviction. Returns the
+// applied budget.
+int r2d_world_decal_budget(R2DRe2dWorld *,int budget);
+int r2d_world_decal_active_count(const R2DRe2dWorld *);
 // Decals 2.0 fade factor in 0..1 (1 for legacy decals without max_life).
 float r2d_world_decal_alpha(const R2DWorldDecal *);
 bool r2d_world_decal_color(const R2DRe2dWorld *,const R2DWorldDecal *,int,float,float,float,float,float,const float[3],const float[3],float,uint32_t *);

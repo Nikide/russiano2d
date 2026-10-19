@@ -249,6 +249,51 @@
 > listeners continue to work.
 
 
+## 1.2.12 — 2026-10-19
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+3 коммита в релизе.
+
+### Исправления
+
+- Re2D: atlas residency — не терять видимые спрайты, диагностика и pinning (`7025ec681`)
+  Исправлен отчёт re2d_gta_test 1.2.11: видимые flat-atlas спрайты исчезали,
+  оставляя контактные тени, без ошибок.
+  Причины:
+  - LRU не учитывал видимый спрос: атласы видимых актёров вытеснялись при
+  превышении resident-бюджета (default 8 MiB);
+  - stream id атласа был индексом массива регистрации: remove/re-register
+  (пулы педов/машин) сдвигал id и оставлял residency на чужом атласе;
+  - grounding pass рисовал контактную тень, даже когда атлас актёра не resident
+  и изображение не загружено.
+  Исправления:
+  - demand/pin в stream cache: visible atlases пиннятся и force-promote,
+  никогда не вытесняются; бюджет для pinned — мягкий (overBudget виден);
+  …
+
+### Добавлено
+
+- Re2D: atlas dedup, tiled atlas sets >4096, pinLimit, async PNG prefetch (`93599cecb`)
+  Закрыты оставшиеся ограничения atlas residency из отчёта 1.2.11.
+  1) Decoded-pixel path dedup: refcounted RGBA-кэш на канонический PNG-путь
+  (per world + generation). Регистрации делят пиксели, хранят grid/cell/
+  pivot/stream metadata; освобождение при последней ссылке; hot reload
+  бампает generation. streamInfo: decodedUniqueBytes/decodedSavedBytes/
+  dedupHits, per-atlas sharedRefs/pixelBytes/streamBytes; residentBytes не
+  double-count'ит общие пиксели. 100 спрайтов на одном 2048x2048 PNG =
+  ~16.8 MB вместо ~1.6 GB (99 hits, saved 1.55 GB).
+  2) Настраиваемый лимит sticky path-пинов: streamConfig({pinLimit})
+  (default 64, 0=unlimited, hard max 4096); понижение ниже текущих пинов
+  отклоняется RangeError без потери пинов; streamInfo().pinLimit/
+  pinsPending/pinPaths. Sticky pin-before-registration сохранён.
+  …
+
+### Прочее
+
+- chore: graphify-out в .gitignore (локальный граф/кэш не в репозитории) (`502cb1768`)
+
+<!-- release-notes:end -->
 ## 1.2.11 — 2026-10-18
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

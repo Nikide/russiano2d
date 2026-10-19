@@ -178,7 +178,10 @@ static int run_suite(void)
     r2d_world_decal_step(&w,.04f);
     CHECK(w.decal_count==0&&!r2d_world_decal_remove(&w,paint_token),"native decal lifetime invalidates its handle");
     paint.remaining=0;int decal_tokens[R2D_WORLD_MAX_DECALS];for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)decal_tokens[i]=r2d_world_decal_create(&w,&paint);
-    CHECK(w.decal_count==R2D_WORLD_MAX_DECALS&&r2d_world_decal_create(&w,&paint)<0&&decal_tokens[0]!=paint_token,"bounded decal pool and generations prevent ABA reuse");
+    // Хранилище декалей динамическое (§15): 129-я декаль создаётся, а
+    // ограничивается только рендер-бюджет — вытесняется самая старая.
+    const int decal_extra=r2d_world_decal_create(&w,&paint);
+    CHECK(decal_extra>=0&&w.decal_count==R2D_WORLD_MAX_DECALS&&w.decal_evicted>0&&decal_tokens[0]!=paint_token,"dynamic decal storage evicts by budget and generations prevent ABA reuse");
     for(int i=0;i<R2D_WORLD_MAX_DECALS;i++)r2d_world_decal_remove(&w,decal_tokens[i]);
     material.emissive.pixels=NULL;material.emissive.width=material.emissive.height=0;material.normal=(R2DWorldTexture){normal_pixel,1,1};strcpy(material.name,"test-normal");
     int normal_mat=r2d_world_material_set(&w,&material);r2d_world_surface_material(&w,0,normal_mat);
@@ -189,7 +192,7 @@ static int run_suite(void)
     CHECK(debug_normal[0]<-.99f&&debug_emissive[0]==0,"normal diagnostics use the same tangent-space decode as shading");
     r2d_world_material_color(&w,0,0,0xffffffff,0,0,40,50,1.5f,normal,tangent,0,&material_color);
     CHECK(facing_color>100&&(material_color&255)==0,"optional normal changes native direct-light response without changing topology");r2d_world_light_remove(&w,normal_light);
-    int old_materials=w.material_count;material.albedo.width=4096;
+    int old_materials=w.material_count;material.albedo.width=R2D_WORLD_MATERIAL_TEXTURE_MAX+1;
     CHECK(r2d_world_material_set(&w,&material)<0&&w.material_count==old_materials,"invalid material replacement preserves old owned images");
     R2DWorldSpanLight fog={.5f,1,1,1,.1f,0,0,0,1};r2d_world_set_span_light(&w,0,&fog);r2d_world_light_rebuild(&w);
     uint32_t near_color=r2d_world_lit_color(&w,0,0xffffffff,50,50,1,0,0,1,0),far_color=r2d_world_lit_color(&w,0,0xffffffff,50,50,1,0,0,1,30);
@@ -202,7 +205,9 @@ static int run_suite(void)
     lamp.radius=-1;CHECK(r2d_world_light_create(&w,&lamp)<0&&w.light_count==0,"invalid light radius does not mutate pool");
     lamp.radius=2;lamp.x=10000;lamp.y=10000;
     for(int i=0;i<128;i++)r2d_world_light_create(&w,&lamp);
-    CHECK(w.light_count==128&&r2d_world_light_create(&w,&lamp)<0&&r2d_world_light_rebuild(&w)&&w.light_pairs==0,"128-light stress obeys pool budget and culls outside-map lights");
+    // Сброс «грязных» слотов после массового создания: дальше проверяем, что
+    // rebuild трогает только изменённый свет.
+    CHECK(r2d_world_light_rebuild(&w)&&w.light_pairs==0,"mass-created lights are culled outside the map");
     int one_token=(int)(w.lights[0].generation*128);lamp.x=50;lamp.y=50;lamp.h=1.5f;lamp.radius=200;
     CHECK(r2d_world_light_update(&w,one_token,&lamp)&&r2d_world_light_rebuild(&w)&&w.light_updates==1&&w.span_light_counts[0]==1,"one changed light rebuilds only its native associations");
     r2d_world_portal_set_closed(&w,0,true);r2d_world_light_rebuild(&w);
@@ -213,6 +218,13 @@ static int run_suite(void)
     CHECK(w.span_light_counts[0]==16&&w.span_light_candidates[0]==20&&w.span_light_refs[15]==15,"incremental light masks retain deterministic slot priority at overflow");
     r2d_world_light_remove(&w,one_token);r2d_world_light_rebuild(&w);
     CHECK(w.light_updates==1&&w.span_light_counts[0]==16&&w.span_light_refs[0]==1&&w.span_light_refs[15]==16,"removal promotes the next overflow candidate without rebuilding other lights");
+    // 128 — бывший compile-time потолок. Теперь реестр динамический: после
+    // удаления одного света создаём ещё один (№128 по счёту) — успешно, а
+    // бюджеты 16/16 решают только, что попадёт в кадр.
+    lamp.x=10000;lamp.y=10000;
+    const int extra_light=r2d_world_light_create(&w,&lamp);
+    CHECK(extra_light>=0&&w.light_count==128&&r2d_world_light_rebuild(&w),"dynamic light registry creates beyond the legacy 128 slots");
+    r2d_world_light_remove(&w,extra_light);
     portal.cell_b=8;
     CHECK(!r2d_world_build_cells(&w,NULL,0,stack,4,cells,2,&portal,1,openings,2,err,sizeof err)&&w.cell_count==2&&strstr(err,"portal"),"invalid portal reference preserves old world and names geometry");
     portal.cell_b=1;portal.ax=portal.bx=99;
@@ -505,6 +517,9 @@ static void test_surface_fade_suite(void)
     R2DRe2dWorld additive_world = {0};
     additive_world.surface_count = 1;
     additive_world.surface_materials = additive_refs;
+    // Материалы теперь динамический массив: нулевая структура обязана сначала
+    // получить слот, иначе materials[0] — разыменование NULL.
+    CHECK(r2d_world_material_ensure(&additive_world, 1), "dynamic material registry allocates on demand");
     additive_world.materials[0].blend = R2D_WORLD_ADDITIVE;
     additive_world.materials[0].used = true;
     CHECK(r2d_world_surface_fade_set(&additive_world, 0, 0.5f) &&
@@ -512,6 +527,9 @@ static void test_surface_fade_suite(void)
           "additive surfaces stay additive under a fade");
     CHECK(r2d_world_surface_blend(&additive_world, 0) != R2D_WORLD_TRANSLUCENT,
           "fade never downgrades an additive material");
+    // surface_materials указывает на стек: полный r2d_world_free освободил бы
+    // его. Освобождаем только то, что реально выделил движок.
+    free(additive_world.materials);
     free(additive_world.surface_alpha);
     r2d_world_free(&w);
     r2d_world_free(&w); // double free stays safe

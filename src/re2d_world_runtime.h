@@ -28,8 +28,14 @@
 #include <quickjs.h>
 struct R2DWorldVfx;
 // Runtime owns native actor registration and final-frame resources. Bindings only configure/call.
-#define R2D_WORLD_ATLAS_ACTOR_LIMIT 1024
+// Initial atlas registry bucket. This is NOT a hard cap: the registry doubles
+// with checked overflow-safe growth as memory allows (see atlas_commit and the
+// actor registry below). Kept named so preallocation/diagnostics have a stable
+// starting size.
+#define R2D_WORLD_ATLAS_ACTOR_INITIAL 64
 // Bounded native warning ring for visible atlases that are not resident yet.
+// Ring size is a diagnostics-memory budget (oldest entry overwritten); it never
+// bounds actor/atlas creation.
 // BASHNYA atlas-residency report: this is the diagnostic that names the atlas
 // path, node and reason instead of silently dropping the sprite.
 #define R2D_WORLD_STREAM_WARNING_LIMIT 64
@@ -83,7 +89,6 @@ typedef struct R2DWorldAtlasActor {
 // Frame entry kinds. RotSprite entries use native synthesis; atlas entries reuse
 // an already cropped square image and do not touch the Re2DSprite runtime.
 enum { R2D_WORLD_FRAME_ROTSPRITE = 0, R2D_WORLD_FRAME_ATLAS = 1, R2D_WORLD_FRAME_PARTICLE = 2 };
-#define R2D_WORLD_HIT_PROXY_LIMIT 2048
 // World hit proxy lifecycle follows node add/remove: the registry owns a JS
 // reference, not node lifetime. bottom/top are offsets from node.depth so a
 // moving actor needs no per-move native update; coordinates are read at trace
@@ -98,9 +103,6 @@ typedef struct R2DWorldHitEntry {
     R2DWorldHitZone zones[R2D_WORLD_HIT_ZONES];
     int zone_count;
 } R2DWorldHitEntry;
-#define R2D_WORLD_MOVER_LIMIT 128
-#define R2D_WORLD_TRIGGER_LIMIT 256
-#define R2D_WORLD_SECRET_LIMIT 256
 typedef struct R2DWorldMoverEntry {
     R2DWorldMover mover;
     int token,span,portal,kind;
@@ -115,7 +117,6 @@ typedef struct R2DWorldTriggerEntry {
     unsigned generation,events;
     bool active;
 } R2DWorldTriggerEntry;
-#define R2D_WORLD_CONTROLLER_LIMIT 64
 typedef struct { R2DWorldControllerConfig config; int token; bool active; } R2DWorldControllerEntry;
 typedef struct R2DWorldAudioSource {
     bool active,hrtf,occluded,virtualized;
@@ -136,6 +137,11 @@ typedef struct R2DWorldRuntime {
     float *depth;
     R2DWorldPixelOwner *owners;
     int debug_view,visible_lights,shadowed_lights,visible_actor_count;
+    // Scalability telemetry exposed through world.info(): registry sizes and
+    // budget decisions (candidates vs selected, decal evictions, etc.).
+    int diag_light_candidates,diag_lights_selected,diag_shadows_selected;
+    int diag_decals_total,diag_decals_rendered,diag_decals_evicted;
+    int diag_hit_proxies,diag_triggers,diag_movers,diag_controllers;
     double frame_ms,visibility_ms,light_cull_ms,surface_ms,actor_ms,composition_ms,upload_ms;
     double trace_ms,controller_ms,nav_ms;
     int trace_calls,controller_calls,nav_queries;
@@ -159,8 +165,10 @@ typedef struct R2DWorldRuntime {
     int mover_count,mover_capacity,next_mover_token;
     R2DWorldTriggerEntry *triggers;
     int trigger_count,trigger_capacity,next_trigger_token;
-    R2DWorldControllerEntry controllers[R2D_WORLD_CONTROLLER_LIMIT];
-    int next_controller_token;
+    // Controller configs share the same checked grow-on-demand registry pattern
+    // as movers/triggers/secrets (no fixed compile-time capacity).
+    R2DWorldControllerEntry *controllers;
+    int controller_count,controller_capacity,next_controller_token;
     // P1 nav graph: built on demand, arrays owned by the runtime.
     R2DWorldNavNode *nav_nodes;
     R2DWorldNavEdge *nav_edges;
@@ -332,10 +340,19 @@ typedef struct R2DWorldRuntime {
     // cell refs stay valid while walls remain inside their span footprint.
     struct R2DWorldPolywallGroup *polywalls;
     int polywall_count, polywall_capacity;
-    // P2 material animation: per material slot, stepped with worldStep.
-    R2DWorldMaterialAnim material_anims[R2D_WORLD_MAX_MATERIALS];
-    bool material_anim_active[R2D_WORLD_MAX_MATERIALS];
-    int actor_count,actor_capacity,frame_count;
+    // P2 material animation: parallel to the dynamic material bank. Both arrays
+    // grow with world.material_capacity (never a fixed 64-slot cap).
+    R2DWorldMaterialAnim *material_anims;
+    bool *material_anim_active;
+    int material_anim_capacity;
+    // Per-frame light culling scratch (visible flags + nearest-first selection).
+    // Runtime-owned and grown with the dynamic light registry, so no per-frame
+    // allocation is needed for worlds with thousands of lights.
+    uint8_t *light_flags;
+    int light_flags_capacity;
+    int *light_kept;
+    int light_kept_capacity;
+    int actor_count,actor_capacity,frame_count,frame_capacity;
     struct R2DWorldRuntime *next;
     bool registered;
     void *gpu;
@@ -390,6 +407,10 @@ void r2d_world_mover_free(R2DWorldRuntime *);
 int r2d_world_trigger_create(R2DWorldRuntime *,int type,const char *id,const char *target,float x,float y,float radius,float bottom,float top,bool once,float cooldown);
 bool r2d_world_trigger_remove(R2DWorldRuntime *,int token);
 void r2d_world_trigger_advance(R2DWorldRuntime *,float dt);
+// Active-entry counts for callers that size a token buffer without a fixed
+// compile-time trigger/secret capacity (bindings, native tooling).
+int r2d_world_trigger_active_count(const R2DWorldRuntime *);
+int r2d_world_secret_active_count(const R2DWorldRuntime *);
 int r2d_world_trigger_tick(R2DWorldRuntime *,float px,float py,float feet,int *tokens,int capacity);
 int r2d_world_trigger_use_at(R2DWorldRuntime *,float x,float y,float h,int *tokens,int capacity);
 int r2d_world_trigger_shoot_at(R2DWorldRuntime *,float x,float y,float h,float radius,int *tokens,int capacity);
@@ -409,6 +430,9 @@ void r2d_world_nav_free(R2DWorldRuntime *);
 // drawn by the native compositor. Renderer hints only; no JS pool.
 bool r2d_world_particles_ready(R2DWorldRuntime *);
 void r2d_world_particles_budget(R2DWorldRuntime *,int budget);
+// Runtime particle capacity (default 2048; quality presets 512/2048/8192).
+// Reallocates only while the pool is empty; the per-frame budget stays separate.
+bool r2d_world_particles_set_capacity(R2DWorldRuntime *,int capacity);
 // P4 aim assist: nearest registered hit proxy inside a cone/range.
 typedef struct { float x,y,z; int node; float angle; } R2DWorldAimAssist;
 bool r2d_world_aim_assist(JSContext *,R2DWorldRuntime *,const float from[3],const float dir[3],float cone_rad,float range,int mask,R2DWorldAimAssist *out);

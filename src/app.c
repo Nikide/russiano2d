@@ -50,10 +50,78 @@ static void r2d__pick_base_path(R2DApp *app)
     app->base_path_owned = app->base_path != NULL;
 }
 
+// --- Растущие текстовые буферы (§29) ---------------------------------------
+// 1 КиБ стартует, дальше удвоение. 4 МиБ — safety-предел одного буфера:
+// защищает от повреждённого/бесконечного ввода, но не мешает обычной вставке.
+#define R2D_TEXT_BUF_INITIAL     1024
+#define R2D_TEXT_BUF_SAFETY_MAX  (4u * 1024u * 1024u)
+
+static bool r2d__text_buf_reserve(char **buf, int *cap, int need)
+{
+    if (need <= *cap) return true;
+    if (need > (int)R2D_TEXT_BUF_SAFETY_MAX) return false;
+    int next = *cap > 0 ? *cap : R2D_TEXT_BUF_INITIAL;
+    while (next < need) {
+        if (next > (int)R2D_TEXT_BUF_SAFETY_MAX / 2) { next = (int)R2D_TEXT_BUF_SAFETY_MAX; break; }
+        next *= 2;
+    }
+    char *grown = (char *)SDL_realloc(*buf, (size_t)next);
+    if (!grown) return false;
+    *buf = grown;
+    *cap = next;
+    return true;
+}
+
+static void r2d__text_buf_clear(char **buf, int *cap, int *len)
+{
+    if (!*buf && !r2d__text_buf_reserve(buf, cap, R2D_TEXT_BUF_INITIAL)) return;
+    (*buf)[0] = '\0';
+    *len = 0;
+}
+
+// Дописать UTF-8; возвращает false, если упёрлись в safety-предел.
+static bool r2d__text_buf_append(char **buf, int *cap, int *len,
+                                 const char *text, bool replace)
+{
+    const size_t n = text ? SDL_strlen(text) : 0;
+    if (replace) *len = 0;
+    if (n == 0) {
+        if (*buf) (*buf)[0] = '\0';
+        return true;
+    }
+    if (n > (size_t)R2D_TEXT_BUF_SAFETY_MAX) return false;
+    const int need = *len + (int)n + 1;
+    if (need > (int)R2D_TEXT_BUF_SAFETY_MAX) {
+        R2D_WARN("текстовый ввод превысил safety-предел %u байт — хвост отброшен",
+                 (unsigned)R2D_TEXT_BUF_SAFETY_MAX);
+        return false;
+    }
+    if (!r2d__text_buf_reserve(buf, cap, need)) return false;
+    SDL_memcpy(*buf + *len, text, n);
+    *len += (int)n;
+    (*buf)[*len] = '\0';
+    return true;
+}
+
 bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vsync,
                   bool headless, const char *gpu_driver)
 {
     SDL_zero(*app);
+    // Текстовые буферы выделяем сразу: геттеры возвращают их даже до первого
+    // события, а NULL-указатель в них означал бы пустую строку неявно.
+    if (!r2d__text_buf_reserve(&app->text_input, &app->text_input_cap, R2D_TEXT_BUF_INITIAL) ||
+        !r2d__text_buf_reserve(&app->text_pending, &app->text_pending_cap, R2D_TEXT_BUF_INITIAL) ||
+        !r2d__text_buf_reserve(&app->text_editing, &app->text_editing_cap, R2D_TEXT_BUF_INITIAL)) {
+        return false;
+    }
+    app->text_input[0] = app->text_pending[0] = app->text_editing[0] = '\0';
+    // Подписчики на SDL-события: 8 слотов как раньше, но массив растёт.
+    app->event_listener_cap = 8;
+    app->event_listeners = (void (**)(void *, const SDL_Event *))
+        SDL_calloc((size_t)app->event_listener_cap, sizeof(*app->event_listeners));
+    app->event_listener_user = (void **)
+        SDL_calloc((size_t)app->event_listener_cap, sizeof(*app->event_listener_user));
+    if (!app->event_listeners || !app->event_listener_user) return false;
     // Время физики по умолчанию идёт как есть: SDL_zero обнулил бы множитель,
     // и мир встал бы намертво (см. R2DApp.time_scale).
     app->time_scale = 1.0f;
@@ -677,6 +745,12 @@ const char *r2d_app_cursor(const R2DApp *app)
 void r2d_app_shutdown(R2DApp *app)
 {
     free_cursors();
+    SDL_free(app->event_listeners);     app->event_listeners = NULL;
+    SDL_free(app->event_listener_user); app->event_listener_user = NULL;
+    app->event_listener_cap = 0;
+    SDL_free(app->text_input);   app->text_input = NULL;   app->text_input_cap = 0;
+    SDL_free(app->text_pending); app->text_pending = NULL; app->text_pending_cap = 0;
+    SDL_free(app->text_editing); app->text_editing = NULL; app->text_editing_cap = 0;
     if (app->base_path_owned) SDL_free((void *)app->base_path);
     app->base_path = NULL;
     app->base_path_owned = false;
@@ -853,19 +927,19 @@ void r2d_app_begin_frame(R2DApp *app)
     // Виртуальный ввод пришёл между кадрами — переносим его в буфер кадра
     // здесь, иначе очистка стёрла бы его до того, как игра увидит символы.
     if (app->text_pending_len > 0) {
-        SDL_memcpy(app->text_input, app->text_pending, (size_t)app->text_pending_len);
-        app->text_input_len = app->text_pending_len;
-        app->text_input[app->text_input_len] = '\0';
-        app->text_pending[0] = '\0';
-        app->text_pending_len = 0;
+        if (r2d__text_buf_append(&app->text_input, &app->text_input_cap,
+                                 &app->text_input_len, app->text_pending, true)) {
+            app->text_pending[0] = '\0';
+            app->text_pending_len = 0;
+        }
     } else {
-        app->text_input[0] = '\0';
-        app->text_input_len = 0;
+        r2d__text_buf_clear(&app->text_input, &app->text_input_cap,
+                            &app->text_input_len);
     }
     // Композиция IME живёт до нового события или конца кадра: очищаем здесь,
     // иначе подчёркнутый предпросмотр «залипал» бы на экране.
-    app->text_editing[0] = '\0';
-    app->text_editing_len = 0;
+    r2d__text_buf_clear(&app->text_editing, &app->text_editing_cap,
+                        &app->text_editing_len);
     app->text_editing_start = 0;
 
     r2d__open_gamepads(app);
@@ -925,14 +999,8 @@ void r2d_app_begin_frame(R2DApp *app)
         case SDL_EVENT_TEXT_INPUT:
             // Готовый UTF-8 от платформы: раскладка, IME и compose уже учтены.
             if (ev.text.text && *ev.text.text) {
-                const int room = (int)sizeof(app->text_input) - 1 - app->text_input_len;
-                if (room > 0) {
-                    const size_t n = SDL_strlen(ev.text.text);
-                    const size_t take = (n < (size_t)room) ? n : (size_t)room;
-                    SDL_memcpy(app->text_input + app->text_input_len, ev.text.text, take);
-                    app->text_input_len += (int)take;
-                    app->text_input[app->text_input_len] = '\0';
-                }
+                r2d__text_buf_append(&app->text_input, &app->text_input_cap,
+                                     &app->text_input_len, ev.text.text, false);
             }
             break;
 
@@ -941,12 +1009,12 @@ void r2d_app_begin_frame(R2DApp *app)
             // НЕ вставляем — он придёт событием TEXT_INPUT. Без этого
             // пользователь не видел, что набирает на японском или китайском.
             const char *editing = ev.edit.text ? ev.edit.text : "";
-            const size_t n = SDL_strlen(editing);
-            const size_t cap = sizeof app->text_editing - 1;
-            const size_t take = n > cap ? cap : n;
-            SDL_memcpy(app->text_editing, editing, take);
-            app->text_editing[take] = '\0';
-            app->text_editing_len = (int)take;
+            if (!r2d__text_buf_append(&app->text_editing, &app->text_editing_cap,
+                                      &app->text_editing_len, editing, true)) {
+                // safety-предел: оставляем пустой предпросмотр, а не мусор.
+                r2d__text_buf_clear(&app->text_editing, &app->text_editing_cap,
+                                    &app->text_editing_len);
+            }
             app->text_editing_start = ev.edit.start;
             break;
         }
@@ -1264,7 +1332,7 @@ bool r2d_pad_rumble_triggers(R2DApp *app, float left, float right, uint32_t dura
 
 const char *r2d_app_text_editing(const R2DApp *app)
 {
-    return app ? app->text_editing : "";
+    return (app && app->text_editing) ? app->text_editing : "";
 }
 
 int r2d_app_text_editing_start(const R2DApp *app)
@@ -1368,9 +1436,22 @@ void r2d_app_resolve_path(const R2DApp *app, char *out, size_t out_size, const c
 void r2d_app_add_event_listener(R2DApp *app, void (*fn)(void *user, const SDL_Event *ev), void *user)
 {
     if (!fn) return;
-    if (app->event_listener_count >= (int)(sizeof app->event_listeners / sizeof app->event_listeners[0])) {
-        R2D_WARN("достигнут лимит подписчиков на события SDL");
-        return;
+    if (app->event_listener_count >= app->event_listener_cap) {
+        const int next = app->event_listener_cap > 0 ? app->event_listener_cap * 2 : 8;
+        if (next <= app->event_listener_cap) return;
+        void (**fns)(void *, const SDL_Event *) = (void (**)(void *, const SDL_Event *))
+            SDL_realloc(app->event_listeners, (size_t)next * sizeof(*fns));
+        if (!fns) { R2D_WARN("нет памяти под нового подписчика SDL-событий"); return; }
+        app->event_listeners = fns;
+        void **users = (void **)SDL_realloc(app->event_listener_user,
+                                            (size_t)next * sizeof(*users));
+        if (!users) { R2D_WARN("нет памяти под нового подписчика SDL-событий"); return; }
+        app->event_listener_user = users;
+        for (int k = app->event_listener_cap; k < next; ++k) {
+            app->event_listeners[k] = NULL;
+            app->event_listener_user[k] = NULL;
+        }
+        app->event_listener_cap = next;
     }
     const int i = app->event_listener_count++;
     app->event_listeners[i] = fn;
@@ -1502,18 +1583,13 @@ void r2d_app_virtual_text(R2DApp *app, const char *utf8)
     if (!app || !utf8 || !*utf8) return;
     // Пишем в pending: команда приходит между кадрами, а буфер кадра будет
     // очищен на ближайшем begin_frame — там pending и станет вводом кадра.
-    const int room = (int)sizeof(app->text_pending) - 1 - app->text_pending_len;
-    if (room <= 0) return;
-    const size_t n = SDL_strlen(utf8);
-    const size_t take = (n < (size_t)room) ? n : (size_t)room;
-    SDL_memcpy(app->text_pending + app->text_pending_len, utf8, take);
-    app->text_pending_len += (int)take;
-    app->text_pending[app->text_pending_len] = '\0';
+    r2d__text_buf_append(&app->text_pending, &app->text_pending_cap,
+                         &app->text_pending_len, utf8, false);
 }
 
 const char *r2d_app_text_input(const R2DApp *app)
 {
-    if (!app) return "";
+    if (!app || !app->text_input) return "";
     return app->text_input;
 }
 

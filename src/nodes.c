@@ -1132,7 +1132,10 @@ static void tween_write(JSContext *ctx, JSValueConst node, int prop, double v)
         if (body >= 0 && s && s->physics) {
             // moveToX/moveToY: вторая координата и угол — из трансформов тела.
             const int id = (int)body;
-            if (id < R2D_MAX_BODIES) {
+            // Реестр тел динамический: проверяем живость, а не старую
+            // compile-time константу, иначе тело с id >= R2D_INITIAL_BODIES
+            // молча не получало бы moveTo.
+            if (r2d_physics_is_alive(s->physics, id)) {
                 const float *t = s->physics->transforms;
                 const float x = prop == TP_X ? (float)v : t[id * 3];
                 const float y = prop == TP_Y ? (float)v : t[id * 3 + 1];

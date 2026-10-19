@@ -1,12 +1,75 @@
 #include "re2d_world_vfx.h"
 #include "json.h"
 
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-// Native VFX library: fixed pools, no per-frame allocation, no mutable globals.
-// Only bundle parsing allocates (through r2d_json) and frees before returning.
+// Native VFX library: runtime-allocated pools, no per-frame allocation, no
+// mutable globals. Allocation happens in init/set_quality and when the bundle
+// registry or a preset list grows; r2d_world_vfx_free releases it.
+
+// Explicit sanity ceiling for quality requests (not a gameplay limit).
+#define R2D_WORLD_VFX_CAPACITY_LIMIT (1 << 20)
+#define R2D_WORLD_VFX_TRAIL_POINTS_LIMIT 1024
+
+static int clamp_int(int v,int lo,int hi)
+{
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+// Release a bundle's owned preset arrays (never the trail preset, whose point
+// pointers are NULL until it is copied into the runtime pool).
+static void bundle_release(R2DWorldVfxBundle *bundle)
+{
+    if (!bundle) return;
+    free(bundle->particles);
+    free(bundle->cards);
+    memset(bundle,0,sizeof *bundle);
+}
+
+R2DWorldVfxQuality r2d_world_vfx_default_quality(void)
+{
+    R2DWorldVfxQuality q;
+    q.max_bundles = R2D_WORLD_VFX_MAX_BUNDLES;
+    q.max_cards = R2D_WORLD_VFX_MAX_CARDS;
+    q.max_trails = R2D_WORLD_VFX_MAX_TRAILS;
+    q.trail_points = R2D_WORLD_VFX_TRAIL_POINTS;
+    q.temp_lights = R2D_WORLD_VFX_MAX_LIGHTS;
+    q.particles = R2D_WORLD_VFX_MAX_PARTICLES;
+    return q;
+}
+
+// NULL or all-zero quality selects the defaults; partial structs are filled
+// with defaults field-by-field. Out-of-range fields are rejected (not clamped)
+// so a bad quality configuration is visible instead of silently degraded.
+static bool sanitize_quality(const R2DWorldVfxQuality *in,R2DWorldVfxQuality *out)
+{
+    R2DWorldVfxQuality q = r2d_world_vfx_default_quality();
+    if (in) {
+        if (in->max_bundles > 0) q.max_bundles = in->max_bundles;
+        if (in->max_cards > 0) q.max_cards = in->max_cards;
+        if (in->max_trails > 0) q.max_trails = in->max_trails;
+        if (in->trail_points > 0) q.trail_points = in->trail_points;
+        if (in->temp_lights > 0) q.temp_lights = in->temp_lights;
+        if (in->particles > 0) q.particles = in->particles;
+    }
+    if (q.max_bundles < 1 || q.max_bundles > R2D_WORLD_VFX_CAPACITY_LIMIT) return false;
+    if (q.max_cards < 1 || q.max_cards > R2D_WORLD_VFX_CAPACITY_LIMIT) return false;
+    if (q.max_trails < 1 || q.max_trails > R2D_WORLD_VFX_CAPACITY_LIMIT) return false;
+    if (q.trail_points < 1 || q.trail_points > R2D_WORLD_VFX_TRAIL_POINTS_LIMIT) return false;
+    if (q.temp_lights < 1 || q.temp_lights > R2D_WORLD_VFX_CAPACITY_LIMIT) return false;
+    if (q.particles < 1 || q.particles > R2D_WORLD_VFX_CAPACITY_LIMIT) return false;
+    // Keep the flat trail storage inside one addressable int-sized element
+    // count; calloc still checks the byte multiplication.
+    if ((long long)q.max_trails * (long long)q.trail_points > INT_MAX) return false;
+    *out = q;
+    return true;
+}
 
 static bool finite3(float a,float b,float c)
 {
@@ -390,28 +453,41 @@ static bool parse_bundle(const char *name,const char *json,
     bool ok = true;
     const R2dJson *particles = r2d_json_get(root,"particles");
     if (particles) {
-        if (particles->type != R2D_JSON_ARR ||
-            particles->count > R2D_WORLD_VFX_MAX_PARTICLE_PRESETS) {
-            ok = set_error(error,error_size,"vfx: particles must be an array of at most 4 presets");
-        } else {
-            for (int i = 0; ok && i < particles->count; i++) {
-                ok = parse_particle_preset(r2d_json_at(particles,i),
-                                           &bundle->particles[bundle->particle_count],
-                                           error,error_size);
-                if (ok) bundle->particle_count++;
+        if (particles->type != R2D_JSON_ARR || particles->count < 0) {
+            ok = set_error(error,error_size,"vfx: particles must be an array");
+        } else if (particles->count > 0) {
+            // Preset lists grow with the definition instead of a fixed #4 cap.
+            bundle->particles = (R2DWorldVfxParticlePreset *)calloc(
+                (size_t)particles->count,sizeof *bundle->particles);
+            if (!bundle->particles) {
+                ok = set_error(error,error_size,"vfx: out of memory for particle presets");
+            } else {
+                bundle->particle_capacity = particles->count;
+                for (int i = 0; ok && i < particles->count; i++) {
+                    ok = parse_particle_preset(r2d_json_at(particles,i),
+                                               &bundle->particles[bundle->particle_count],
+                                               error,error_size);
+                    if (ok) bundle->particle_count++;
+                }
             }
         }
     }
     const R2dJson *cards = ok ? r2d_json_get(root,"cards") : NULL;
     if (ok && cards) {
-        if (cards->type != R2D_JSON_ARR || cards->count > R2D_WORLD_VFX_MAX_CARD_PRESETS) {
-            ok = set_error(error,error_size,"vfx: cards must be an array of at most 4 presets");
-        } else {
-            for (int i = 0; ok && i < cards->count; i++) {
-                ok = parse_card_preset(r2d_json_at(cards,i),
-                                       &bundle->cards[bundle->card_count],
-                                       error,error_size);
-                if (ok) bundle->card_count++;
+        if (cards->type != R2D_JSON_ARR || cards->count < 0) {
+            ok = set_error(error,error_size,"vfx: cards must be an array");
+        } else if (cards->count > 0) {
+            bundle->cards = (R2DWorldVfxCard *)calloc((size_t)cards->count,sizeof *bundle->cards);
+            if (!bundle->cards) {
+                ok = set_error(error,error_size,"vfx: out of memory for card presets");
+            } else {
+                bundle->card_capacity = cards->count;
+                for (int i = 0; ok && i < cards->count; i++) {
+                    ok = parse_card_preset(r2d_json_at(cards,i),
+                                           &bundle->cards[bundle->card_count],
+                                           error,error_size);
+                    if (ok) bundle->card_count++;
+                }
             }
         }
     }
@@ -456,14 +532,14 @@ static bool parse_bundle(const char *name,const char *json,
     }
     bundle->used = ok;
     r2d_json_free(root);
-    if (!ok) memset(bundle,0,sizeof *bundle);
+    if (!ok) bundle_release(bundle);
     return ok;
 }
 
 static R2DWorldVfxBundle *find_bundle(R2DWorldVfx *vfx,const char *name)
 {
-    if (!vfx || !name) return NULL;
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_BUNDLES; i++) {
+    if (!vfx || !vfx->bundles || !name) return NULL;
+    for (int i = 0; i < vfx->bundle_capacity; i++) {
         if (vfx->bundles[i].used && strcmp(vfx->bundles[i].name,name) == 0)
             return &vfx->bundles[i];
     }
@@ -475,14 +551,130 @@ static const R2DWorldVfxBundle *find_bundle_const(const R2DWorldVfx *vfx,const c
     return find_bundle((R2DWorldVfx *)vfx,name);
 }
 
-void r2d_world_vfx_init(R2DWorldVfx *vfx,R2DWorldParticlePool *particles,int light_budget)
+// Release the spawn-time pools (not the bundle registry).
+static void release_pools(R2DWorldVfx *vfx)
 {
     if (!vfx) return;
+    free(vfx->cards); vfx->cards = NULL; vfx->card_capacity = 0;
+    free(vfx->trails); vfx->trails = NULL; vfx->trail_capacity = 0;
+    free(vfx->lights); vfx->lights = NULL; vfx->light_capacity = 0;
+    free(vfx->trail_x); vfx->trail_x = NULL;
+    free(vfx->trail_y); vfx->trail_y = NULL;
+    free(vfx->trail_h); vfx->trail_h = NULL;
+    free(vfx->decal_tokens); vfx->decal_tokens = NULL;
+    free(vfx->decal_life); vfx->decal_life = NULL;
+    vfx->decal_capacity = 0;
+    vfx->decal_count = 0;
+}
+
+// Point every trail at its slice of the flat point storage.
+static void relink_trails(R2DWorldVfx *vfx)
+{
+    const int points = vfx->quality.trail_points;
+    for (int i = 0; i < vfx->trail_capacity; i++) {
+        vfx->trails[i].x = vfx->trail_x + (size_t)i * (size_t)points;
+        vfx->trails[i].y = vfx->trail_y + (size_t)i * (size_t)points;
+        vfx->trails[i].h = vfx->trail_h + (size_t)i * (size_t)points;
+        vfx->trails[i].point_capacity = points;
+    }
+}
+
+static bool allocate_pools(R2DWorldVfx *vfx,const R2DWorldVfxQuality *q)
+{
+    vfx->cards = (R2DWorldVfxCard *)calloc((size_t)q->max_cards,sizeof *vfx->cards);
+    vfx->trails = (R2DWorldVfxTrail *)calloc((size_t)q->max_trails,sizeof *vfx->trails);
+    vfx->lights = (R2DWorldVfxLight *)calloc((size_t)q->temp_lights,sizeof *vfx->lights);
+    vfx->decal_tokens = (int *)calloc((size_t)q->max_cards,sizeof *vfx->decal_tokens);
+    vfx->decal_life = (float *)calloc((size_t)q->max_cards,sizeof *vfx->decal_life);
+    const size_t points = (size_t)q->max_trails * (size_t)q->trail_points;
+    vfx->trail_x = (float *)calloc(points,sizeof *vfx->trail_x);
+    vfx->trail_y = (float *)calloc(points,sizeof *vfx->trail_y);
+    vfx->trail_h = (float *)calloc(points,sizeof *vfx->trail_h);
+    if (!vfx->cards || !vfx->trails || !vfx->lights || !vfx->decal_tokens ||
+        !vfx->decal_life || !vfx->trail_x || !vfx->trail_y || !vfx->trail_h) {
+        release_pools(vfx);
+        return false;
+    }
+    vfx->card_capacity = q->max_cards;
+    vfx->trail_capacity = q->max_trails;
+    vfx->light_capacity = q->temp_lights;
+    vfx->decal_capacity = q->max_cards;
+    for (int i = 0; i < vfx->light_capacity; i++) vfx->lights[i].token = -1;
+    relink_trails(vfx);
+    return true;
+}
+
+bool r2d_world_vfx_init_quality(R2DWorldVfx *vfx,R2DWorldParticlePool *particles,
+                                int light_budget,const R2DWorldVfxQuality *quality)
+{
+    if (!vfx) return false;
+    // init resets the manager. Callers re-initialising an owner must call
+    // r2d_world_vfx_free first (the runtime does that in its teardown).
     memset(vfx,0,sizeof *vfx);
+    R2DWorldVfxQuality q;
+    if (!sanitize_quality(quality,&q)) return false;
+    vfx->quality = q;
     vfx->particles = particles;
-    vfx->light_budget = light_budget < 0 ? 0 :
-        (light_budget > R2D_WORLD_VFX_MAX_LIGHTS ? R2D_WORLD_VFX_MAX_LIGHTS : light_budget);
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_LIGHTS; i++) vfx->lights[i].token = -1;
+    vfx->light_budget = clamp_int(light_budget,0,q.temp_lights);
+    vfx->bundles = (R2DWorldVfxBundle *)calloc((size_t)q.max_bundles,sizeof *vfx->bundles);
+    if (!vfx->bundles) return false;
+    vfx->bundle_capacity = q.max_bundles;
+    if (!allocate_pools(vfx,&q)) {
+        free(vfx->bundles); vfx->bundles = NULL; vfx->bundle_capacity = 0;
+        return false;
+    }
+    return true;
+}
+
+void r2d_world_vfx_init(R2DWorldVfx *vfx,R2DWorldParticlePool *particles,int light_budget)
+{
+    (void)r2d_world_vfx_init_quality(vfx,particles,light_budget,NULL);
+}
+
+void r2d_world_vfx_free(R2DWorldVfx *vfx)
+{
+    if (!vfx) return;
+    if (vfx->bundles) {
+        for (int i = 0; i < vfx->bundle_capacity; i++) bundle_release(&vfx->bundles[i]);
+        free(vfx->bundles);
+    }
+    release_pools(vfx);
+    memset(vfx,0,sizeof *vfx);
+}
+
+bool r2d_world_vfx_set_quality(R2DWorldVfx *vfx,const R2DWorldVfxQuality *quality)
+{
+    if (!vfx) return false;
+    R2DWorldVfxQuality q;
+    if (!sanitize_quality(quality,&q)) return false;
+    if (!vfx->bundles) return r2d_world_vfx_init_quality(vfx,vfx->particles,vfx->light_budget,&q);
+
+    // Replacement pools are allocated first so a failure leaves the current
+    // manager usable. Live effects are dropped by the swap (quality changes are
+    // explicitly not hot); registered definitions survive.
+    R2DWorldVfx temp;
+    memset(&temp,0,sizeof temp);
+    temp.quality = q;
+    if (!allocate_pools(&temp,&q)) return false;
+    release_pools(vfx);
+    vfx->quality = q;
+    vfx->cards = temp.cards; vfx->card_capacity = temp.card_capacity;
+    vfx->trails = temp.trails; vfx->trail_capacity = temp.trail_capacity;
+    vfx->lights = temp.lights; vfx->light_capacity = temp.light_capacity;
+    vfx->trail_x = temp.trail_x; vfx->trail_y = temp.trail_y; vfx->trail_h = temp.trail_h;
+    vfx->decal_tokens = temp.decal_tokens; vfx->decal_life = temp.decal_life;
+    vfx->decal_capacity = temp.decal_capacity; vfx->decal_count = 0;
+    vfx->card_cursor = vfx->trail_cursor = vfx->light_cursor = 0;
+    vfx->cards_evicted = vfx->trails_evicted = vfx->decals_evicted = 0;
+    vfx->light_overflow = 0;
+    vfx->light_budget = clamp_int(vfx->light_budget,0,q.temp_lights);
+    relink_trails(vfx);
+    return true;
+}
+
+R2DWorldVfxQuality r2d_world_vfx_get_quality(const R2DWorldVfx *vfx)
+{
+    return vfx ? vfx->quality : r2d_world_vfx_default_quality();
 }
 
 void r2d_world_vfx_bind(R2DWorldVfx *vfx,R2DWorldParticlePool *particles)
@@ -507,14 +699,34 @@ bool r2d_world_vfx_define(R2DWorldVfx *vfx,const char *name,const char *json,
     if (!parse_bundle(name,json,&parsed,error,error_size)) return false;
     R2DWorldVfxBundle *slot = find_bundle(vfx,name);
     if (!slot) {
-        for (int i = 0; i < R2D_WORLD_VFX_MAX_BUNDLES; i++) {
-            if (!vfx->bundles[i].used) { slot = &vfx->bundles[i]; break; }
+        if (vfx->bundle_count >= vfx->bundle_capacity) {
+            // Grow the registry instead of rejecting bundle #65.
+            int capacity = vfx->bundle_capacity > 0 ? vfx->bundle_capacity : 1;
+            while (capacity <= vfx->bundle_count) {
+                if (capacity > INT_MAX / 2) {
+                    bundle_release(&parsed);
+                    return set_error(error,error_size,"vfx: bundle registry exhausted");
+                }
+                capacity *= 2;
+            }
+            R2DWorldVfxBundle *grown = (R2DWorldVfxBundle *)realloc(
+                vfx->bundles,(size_t)capacity * sizeof *vfx->bundles);
+            if (!grown) {
+                bundle_release(&parsed);
+                return set_error(error,error_size,"vfx: out of memory growing the bundle registry");
+            }
+            memset(grown + vfx->bundle_capacity,0,
+                   (size_t)(capacity - vfx->bundle_capacity) * sizeof *grown);
+            vfx->bundles = grown;
+            vfx->bundle_capacity = capacity;
         }
+        slot = &vfx->bundles[vfx->bundle_count];
     }
-    if (!slot) return set_error(error,error_size,"vfx: bundle registry is full");
-    if (!slot->used) vfx->bundle_count++;
+    const bool replacing = slot->used;
+    if (replacing) bundle_release(slot);
     parsed.used = true;
     *slot = parsed;
+    if (!replacing) vfx->bundle_count++;
     return true;
 }
 
@@ -528,35 +740,67 @@ static float spawn_dir(float authored,float override)
     return override != 0.0f ? override : authored;
 }
 
+// Deterministic pool eviction policy for the spawn-time pools: prefer an
+// inactive slot; otherwise replace the OLDEST active entry (largest elapsed
+// life fraction, ties broken by the lowest index). No random failure and no
+// dependence on insertion history beyond the simulated age.
+static int oldest_card(const R2DWorldVfx *vfx)
+{
+    int oldest = -1;
+    float best = 2.0f;
+    for (int i = 0; i < vfx->card_capacity; i++) {
+        const R2DWorldVfxCard *card = &vfx->cards[i];
+        if (!card->active) continue;
+        float fraction = card->max_life > 0.0f ? card->life / card->max_life : 0.0f;
+        if (oldest < 0 || fraction < best) { best = fraction; oldest = i; }
+    }
+    return oldest;
+}
+
 static int alloc_card(R2DWorldVfx *vfx)
 {
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_CARDS; i++) {
+    for (int i = 0; i < vfx->card_capacity; i++) {
         if (!vfx->cards[i].active) return i;
     }
-    const int index = vfx->card_cursor++ % R2D_WORLD_VFX_MAX_CARDS;
+    const int index = oldest_card(vfx);
+    if (index >= 0) vfx->cards_evicted++;
     return index;
+}
+
+static int oldest_trail(const R2DWorldVfx *vfx)
+{
+    int oldest = -1;
+    float best = 2.0f;
+    for (int i = 0; i < vfx->trail_capacity; i++) {
+        const R2DWorldVfxTrail *trail = &vfx->trails[i];
+        if (!trail->active) continue;
+        float fraction = trail->max_life > 0.0f ? trail->life / trail->max_life : 0.0f;
+        if (oldest < 0 || fraction < best) { best = fraction; oldest = i; }
+    }
+    return oldest;
 }
 
 static int alloc_trail(R2DWorldVfx *vfx)
 {
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_TRAILS; i++) {
+    for (int i = 0; i < vfx->trail_capacity; i++) {
         if (!vfx->trails[i].active) return i;
     }
-    const int index = vfx->trail_cursor++ % R2D_WORLD_VFX_MAX_TRAILS;
+    const int index = oldest_trail(vfx);
+    if (index >= 0) vfx->trails_evicted++;
     return index;
 }
 
 static int active_lights(const R2DWorldVfx *vfx)
 {
     int count = 0;
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_LIGHTS; i++) if (vfx->lights[i].active) count++;
+    for (int i = 0; i < vfx->light_capacity; i++) if (vfx->lights[i].active) count++;
     return count;
 }
 
 static int worst_light(const R2DWorldVfx *vfx)
 {
     int worst = -1;
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_LIGHTS; i++) {
+    for (int i = 0; i < vfx->light_capacity; i++) {
         if (!vfx->lights[i].active) continue;
         if (worst < 0 || vfx->lights[i].priority < vfx->lights[worst].priority) worst = i;
     }
@@ -565,7 +809,7 @@ static int worst_light(const R2DWorldVfx *vfx)
 
 static void remove_light_record(R2DWorldVfx *vfx,int index)
 {
-    if (index < 0 || index >= R2D_WORLD_VFX_MAX_LIGHTS) return;
+    if (index < 0 || index >= vfx->light_capacity) return;
     R2DWorldVfxLight *light = &vfx->lights[index];
     if (light->active && light->token >= 0 && vfx->hooks.light_remove)
         vfx->hooks.light_remove(vfx->hooks.user,light->token);
@@ -588,13 +832,20 @@ static bool spawn_light(R2DWorldVfx *vfx,const R2DWorldVfxLight *template,
         index = worst;
     }
     if (index < 0) {
-        for (int i = 0; i < R2D_WORLD_VFX_MAX_LIGHTS; i++) {
+        for (int i = 0; i < vfx->light_capacity; i++) {
             if (!vfx->lights[i].active) { index = i; break; }
         }
     }
     if (index < 0) {
-        vfx->light_overflow++;
-        return false;
+        // The light pool itself is full; steal from the lowest priority.
+        const int worst = worst_light(vfx);
+        if (worst >= 0 && template->priority > vfx->lights[worst].priority) {
+            remove_light_record(vfx,worst);
+            index = worst;
+        } else {
+            vfx->light_overflow++;
+            return false;
+        }
     }
     R2DWorldVfxLight *light = &vfx->lights[index];
     memset(light,0,sizeof *light);
@@ -619,8 +870,10 @@ static bool spawn_light(R2DWorldVfx *vfx,const R2DWorldVfxLight *template,
 
 static void push_trail_point(R2DWorldVfxTrail *trail,float x,float y,float h)
 {
-    const int max = R2D_WORLD_VFX_TRAIL_POINTS;
+    const int max = trail->point_capacity;
+    if (max <= 0 || !trail->x) return;
     int count = trail->count;
+    if (count < 0) count = 0;
     if (count < max) count++;
     for (int i = count - 1; i > 0; i--) {
         trail->x[i] = trail->x[i - 1];
@@ -635,14 +888,25 @@ static bool spawn_decal(R2DWorldVfx *vfx,const R2DWorldVfxDecalPreset *decal,
                         float x,float y,float h,float dx,float dy,float dh)
 {
     if (!vfx || !decal || !vfx->hooks.decal_spawn) return false;
+    // Decal bookkeeping is oldest-first; when full, release the oldest tracked
+    // decal deterministically instead of silently leaking the new token.
+    if (vfx->decal_count >= vfx->decal_capacity) {
+        if (vfx->decal_capacity <= 0) return false;
+        if (vfx->hooks.decal_remove)
+            vfx->hooks.decal_remove(vfx->hooks.user,vfx->decal_tokens[0]);
+        memmove(vfx->decal_tokens,vfx->decal_tokens + 1,
+                (size_t)(vfx->decal_count - 1) * sizeof *vfx->decal_tokens);
+        memmove(vfx->decal_life,vfx->decal_life + 1,
+                (size_t)(vfx->decal_count - 1) * sizeof *vfx->decal_life);
+        vfx->decal_count--;
+        vfx->decals_evicted++;
+    }
     const int token = vfx->hooks.decal_spawn(vfx->hooks.user,x,y,h,dx,dy,dh,
         decal->material,decal->width,decal->height,decal->life);
     if (token < 0) return false;
-    if (vfx->decal_count < R2D_WORLD_VFX_MAX_CARDS) {
-        vfx->decal_tokens[vfx->decal_count] = token;
-        vfx->decal_life[vfx->decal_count] = decal->life > 0.0f ? decal->life : -1.0f;
-        vfx->decal_count++;
-    }
+    vfx->decal_tokens[vfx->decal_count] = token;
+    vfx->decal_life[vfx->decal_count] = decal->life > 0.0f ? decal->life : -1.0f;
+    vfx->decal_count++;
     vfx->decals_spawned++;
     return true;
 }
@@ -665,25 +929,31 @@ int r2d_world_vfx_spawn(R2DWorldVfx *vfx,const char *name,
     result.flash_ms = bundle->flash_ms;
     result.flash_color = bundle->flash_color;
 
-    if (vfx->particles && bundle->particle_count > 0) {
+    if (vfx->particles && bundle->particle_count > 0 && bundle->particles) {
         vfx->particles->seed = seed;
-        for (int i = 0; i < bundle->particle_count; i++) {
+        // Quality budget: one bundle spawn never emits more than quality.particles.
+        int budget = vfx->quality.particles;
+        for (int i = 0; i < bundle->particle_count && budget > 0; i++) {
             R2DWorldVfxParticlePreset *preset = &bundle->particles[i];
             if (preset->count <= 0) continue;
+            int count = preset->count;
+            if (count > budget) count = budget;
             R2DWorldParticle prototype = preset->proto;
             prototype.x = x; prototype.y = y; prototype.h = h;
             const float dir_x = spawn_dir(preset->dir_x,dx);
             const float dir_y = spawn_dir(preset->dir_y,dy);
             const float dir_h = spawn_dir(preset->dir_h,dh);
             const int spawned = r2d_world_particle_emit_burst(vfx->particles,&prototype,
-                preset->count,preset->spread,preset->speed,dir_x,dir_y,dir_h);
+                count,preset->spread,preset->speed,dir_x,dir_y,dir_h);
             if (spawned < 0) return -1;
+            budget -= spawned;
             result.particles += spawned;
             vfx->particles_spawned += spawned;
         }
     }
     for (int i = 0; i < bundle->card_count; i++) {
         const int index = alloc_card(vfx);
+        if (index < 0) break;
         R2DWorldVfxCard *card = &vfx->cards[index];
         *card = bundle->cards[i];
         card->active = true;
@@ -702,22 +972,33 @@ int r2d_world_vfx_spawn(R2DWorldVfx *vfx,const char *name,
     }
     if (bundle->has_trail) {
         const int index = alloc_trail(vfx);
-        R2DWorldVfxTrail *trail = &vfx->trails[index];
-        *trail = bundle->trail;
-        trail->active = true;
-        trail->life = trail->max_life;
-        trail->count = 1;
-        trail->accum = 0.0f;
-        trail->head_x = trail->x[0] = x;
-        trail->head_y = trail->y[0] = y;
-        trail->head_h = trail->h[0] = h;
-        if (dx != 0.0f || dy != 0.0f || dh != 0.0f) {
-            trail->vx += dx * trail->speed;
-            trail->vy += dy * trail->speed;
-            trail->vh += dh * trail->speed;
+        if (index >= 0) {
+            R2DWorldVfxTrail *trail = &vfx->trails[index];
+            // Preserve the pool-owned point slices across the preset copy.
+            float *px = trail->x, *py = trail->y, *ph = trail->h;
+            const int point_capacity = trail->point_capacity;
+            *trail = bundle->trail;
+            trail->x = px; trail->y = py; trail->h = ph;
+            trail->point_capacity = point_capacity;
+            trail->active = true;
+            trail->life = trail->max_life;
+            trail->count = point_capacity > 0 ? 1 : 0;
+            trail->accum = 0.0f;
+            if (trail->count > 0) {
+                trail->head_x = trail->x[0] = x;
+                trail->head_y = trail->y[0] = y;
+                trail->head_h = trail->h[0] = h;
+            } else {
+                trail->head_x = x; trail->head_y = y; trail->head_h = h;
+            }
+            if (dx != 0.0f || dy != 0.0f || dh != 0.0f) {
+                trail->vx += dx * trail->speed;
+                trail->vy += dy * trail->speed;
+                trail->vh += dh * trail->speed;
+            }
+            result.trails++;
+            vfx->trails_spawned++;
         }
-        result.trails++;
-        vfx->trails_spawned++;
     }
     if (bundle->has_light) {
         if (spawn_light(vfx,&bundle->light,x,y,h)) result.lights++;
@@ -736,7 +1017,7 @@ void r2d_world_vfx_step(R2DWorldVfx *vfx,float dt)
     if (!vfx || !isfinite(dt) || dt <= 0.0f) return;
     if (dt > 0.25f) dt = 0.25f;
 
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_CARDS; i++) {
+    for (int i = 0; i < vfx->card_capacity; i++) {
         R2DWorldVfxCard *card = &vfx->cards[i];
         if (!card->active) continue;
         card->x += card->vx * dt;
@@ -771,7 +1052,7 @@ void r2d_world_vfx_step(R2DWorldVfx *vfx,float dt)
         }
     }
 
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_TRAILS; i++) {
+    for (int i = 0; i < vfx->trail_capacity; i++) {
         R2DWorldVfxTrail *trail = &vfx->trails[i];
         if (!trail->active) continue;
         trail->head_x += trail->vx * dt;
@@ -792,7 +1073,7 @@ void r2d_world_vfx_step(R2DWorldVfx *vfx,float dt)
         }
     }
 
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_LIGHTS; i++) {
+    for (int i = 0; i < vfx->light_capacity; i++) {
         R2DWorldVfxLight *light = &vfx->lights[i];
         if (!light->active) continue;
         light->life -= dt;
@@ -832,17 +1113,22 @@ void r2d_world_vfx_step_particles(R2DWorldVfx *vfx,float dt)
 void r2d_world_vfx_clear(R2DWorldVfx *vfx)
 {
     if (!vfx) return;
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_LIGHTS; i++) remove_light_record(vfx,i);
+    for (int i = 0; i < vfx->light_capacity; i++) remove_light_record(vfx,i);
     if (vfx->hooks.decal_remove) {
         for (int i = 0; i < vfx->decal_count; i++)
             vfx->hooks.decal_remove(vfx->hooks.user,vfx->decal_tokens[i]);
     }
     vfx->decal_count = 0;
-    memset(vfx->cards,0,sizeof vfx->cards);
-    memset(vfx->trails,0,sizeof vfx->trails);
+    if (vfx->cards && vfx->card_capacity > 0)
+        memset(vfx->cards,0,(size_t)vfx->card_capacity * sizeof *vfx->cards);
+    if (vfx->trails && vfx->trail_capacity > 0) {
+        memset(vfx->trails,0,(size_t)vfx->trail_capacity * sizeof *vfx->trails);
+        relink_trails(vfx);
+    }
     vfx->fx_spawns = vfx->particles_spawned = vfx->cards_spawned = 0;
     vfx->trails_spawned = vfx->lights_spawned = vfx->decals_spawned = 0;
     vfx->light_overflow = 0;
+    vfx->cards_evicted = vfx->trails_evicted = vfx->decals_evicted = 0;
 }
 
 void r2d_world_vfx_info(const R2DWorldVfx *vfx,R2DWorldVfxInfo *out)
@@ -854,19 +1140,28 @@ void r2d_world_vfx_info(const R2DWorldVfx *vfx,R2DWorldVfxInfo *out)
         out->particles_alive = r2d_world_particle_alive(vfx->particles);
         out->particle_capacity = vfx->particles->capacity;
         out->particle_overflow = vfx->particles->overflow;
+        out->particle_peak = vfx->particles->peak;
     }
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_CARDS; i++) {
+    out->cards_capacity = vfx->card_capacity;
+    out->cards_evicted = vfx->cards_evicted;
+    for (int i = 0; i < vfx->card_capacity; i++) {
         if (!vfx->cards[i].active) continue;
         out->cards++;
         if (vfx->cards[i].distortion != R2D_VFX_DISTORTION_NONE) out->distortion_cards++;
     }
-    for (int i = 0; i < R2D_WORLD_VFX_MAX_TRAILS; i++)
+    out->trails_capacity = vfx->trail_capacity;
+    out->trails_evicted = vfx->trails_evicted;
+    for (int i = 0; i < vfx->trail_capacity; i++)
         if (vfx->trails[i].active) out->trails++;
     out->temp_lights = active_lights(vfx);
+    out->light_capacity = vfx->light_capacity;
     out->light_budget = vfx->light_budget;
     out->light_overflow = vfx->light_overflow;
     out->decals = vfx->decal_count;
+    out->decals_capacity = vfx->decal_capacity;
+    out->decals_evicted = vfx->decals_evicted;
     out->bundles = vfx->bundle_count;
+    out->bundle_capacity = vfx->bundle_capacity;
     out->fx_spawns = vfx->fx_spawns;
     out->particles_spawned = vfx->particles_spawned;
     out->cards_spawned = vfx->cards_spawned;
@@ -878,8 +1173,7 @@ void r2d_world_vfx_info(const R2DWorldVfx *vfx,R2DWorldVfxInfo *out)
 void r2d_world_vfx_light_budget(R2DWorldVfx *vfx,int budget)
 {
     if (!vfx) return;
-    vfx->light_budget = budget < 0 ? 0 :
-        (budget > R2D_WORLD_VFX_MAX_LIGHTS ? R2D_WORLD_VFX_MAX_LIGHTS : budget);
+    vfx->light_budget = clamp_int(budget,0,vfx->light_capacity);
     while (active_lights(vfx) > vfx->light_budget) {
         const int worst = worst_light(vfx);
         if (worst < 0) break;

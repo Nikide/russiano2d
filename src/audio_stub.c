@@ -81,6 +81,24 @@ bool r2d_audio_channel_playing(const R2DAudio *a, int channel)
 
 int r2d_audio_active_channels(const R2DAudio *a) { R2D_UNUSED(a); return 0; }
 
+// Внутренний C API бюджета/статистики: интерфейс тот же, поведения нет.
+void r2d_audio_set_voice_budget(R2DAudio *a, int voices)
+{
+    if (a) a->voice_budget = voices > 0 ? voices : 0;
+}
+int r2d_audio_voice_budget(const R2DAudio *a) { return a ? a->voice_budget : 0; }
+void r2d_audio_stats(const R2DAudio *a, R2DAudioVoiceStats *out)
+{
+    if (!out) return;
+    SDL_zero(*out);
+    if (!a) return;
+    out->budget = a->voice_budget;
+    out->sound_count = a->sound_count;
+    out->group_count = a->group_count;
+}
+void r2d_audio_frame_tick(R2DAudio *a) { R2D_UNUSED(a); }
+int r2d_audio_sound_count(const R2DAudio *a) { R2D_UNUSED(a); return 0; }
+
 void r2d_audio_set_channel_volume(R2DAudio *a, int channel, float v)
 {
     R2D_UNUSED(a); R2D_UNUSED(channel); R2D_UNUSED(v);

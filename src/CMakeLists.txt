@@ -32,6 +32,7 @@ set(R2D_SOURCES
     light.h    light.cpp
     app.h      app.c
     render.h   render.c
+    r2d_slot_pool.h r2d_slot_pool.c
     profile.h  profile.c
     physics.h  physics.c
     http.h     http.c
@@ -235,6 +236,18 @@ if(R2D_EMBED_SCRIPTS)
 endif()
 
 add_executable(russiano2d ${R2D_SOURCES})
+
+# §38: релизный профиль. Один таргет, никаких изменений в поведении.
+if(R2D_LTO)
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT _r2d_ipo_ok OUTPUT _r2d_ipo_msg LANGUAGES C CXX)
+    if(_r2d_ipo_ok)
+        message(STATUS "  LTO ............. включён")
+        set_property(TARGET russiano2d PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    else()
+        message(WARNING "R2D_LTO=ON, но IPO не поддерживается: ${_r2d_ipo_msg}")
+    endif()
+endif()
 
 # Тестовая сборка: см. R2D_TEST_FREE_POISON в корневом CMakeLists.txt.
 # В релизном пути определения нет — ни одной лишней инструкции.

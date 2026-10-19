@@ -9,6 +9,218 @@
 #define R2D_TO_PX(m) ((m) * R2D_PX_PER_M)
 
 // ---------------------------------------------------------------------------
+// §36. Проверяемый рост реестров тел/суставов/событий
+//
+// Раньше тела, суставы и события контакта лежали в массивах фиксированного
+// размера: создание тела сканировало всю ёмкость, sync/stay обходили ВСЕ слоты,
+// а 129-е событие за кадр молча терялось. Теперь ёмкость — стартовое значение,
+// дальше массивы удваиваются. Рост проверяет required <= UINT32_MAX и
+// capacity * sizeof(T) <= SIZE_MAX; при отказе аллокатора данные не меняются,
+// а вызывающий получает false (и обязан сообщить об ошибке, а не «потерять»).
+// ---------------------------------------------------------------------------
+
+/** realloc с проверкой переполнения: false — памяти нет, *data не тронут. */
+static bool r2d__grow_bytes(void **data, size_t element_size, uint32_t capacity,
+                            size_t multiplier)
+{
+    if (!data || element_size == 0 || multiplier == 0) return false;
+    if ((size_t)capacity > SIZE_MAX / element_size) return false;
+    size_t bytes = (size_t)capacity * element_size;
+    if (multiplier > 1) {
+        if (bytes > SIZE_MAX / multiplier) return false;
+        bytes *= multiplier;
+    }
+    void *grown = realloc(*data, bytes);
+    if (!grown) return false;
+    *data = grown;
+    return true;
+}
+
+/**
+ * Довести ёмкость массивов тел до required.
+ *
+ * Все массивы индексируются слотом, поэтому растут согласованно: при отказе
+ * любого realloc ранее выросшие массивы остаются валидными (realloc сохраняет
+ * данные), а body_capacity не увеличивается — повторный вызов просто повторит
+ * рост. Утечки нет: указатели принадлежат структуре и освобождаются в shutdown.
+ */
+static bool r2d__reserve_body_arrays(R2DPhysics *p, uint32_t required)
+{
+    if (!p) return false;
+    if (required <= p->body_capacity) return true;
+    if (required < R2D_INITIAL_BODIES) required = R2D_INITIAL_BODIES;
+
+    uint32_t next = p->body_capacity ? p->body_capacity : R2D_INITIAL_BODIES;
+    while (next < required) {
+        if (next > UINT32_MAX / 2u) { next = required; break; }
+        next *= 2u;
+    }
+    if (next < required) return false;
+    // transforms — три float на слот: отдельная проверка умножения.
+    if ((size_t)next > SIZE_MAX / (sizeof(float) * 3u)) return false;
+
+    if (!r2d__grow_bytes((void **)&p->bodies, sizeof(b2BodyId), next, 1)) return false;
+    if (!r2d__grow_bytes((void **)&p->transforms, sizeof(float), next, 3)) return false;
+    if (!r2d__grow_bytes((void **)&p->one_way, sizeof(bool), next, 1)) return false;
+    if (!r2d__grow_bytes((void **)&p->one_way_nx, sizeof(float), next, 1)) return false;
+    if (!r2d__grow_bytes((void **)&p->one_way_ny, sizeof(float), next, 1)) return false;
+    if (!r2d__grow_bytes((void **)&p->one_way_ignore, sizeof(bool), next, 1)) return false;
+    if (!r2d__grow_bytes((void **)&p->contact_stay, sizeof(bool), next, 1)) return false;
+    p->body_capacity = next;
+    return true;
+}
+
+/**
+ * Выдать слот тела. O(1): freelist пула. Когда свободных слотов нет, пул
+ * удваивает ёмкость, а следом растут slot-массивы. R2D_SLOT_NONE — память
+ * кончилась (вызывающий пишет ошибку и не создаёт тело).
+ */
+static uint32_t r2d__body_slot_alloc(R2DPhysics *p)
+{
+    if (!p) return R2D_SLOT_NONE;
+    // Ёмкость пула могла вырасти в прошлый раз, а массивы — не успеть.
+    if (p->body_capacity < p->body_pool.slot_capacity
+        && !r2d__reserve_body_arrays(p, p->body_pool.slot_capacity)) {
+        return R2D_SLOT_NONE;
+    }
+    if (p->body_pool.free_head == R2D_SLOT_NONE) {
+        if (p->body_pool.slot_capacity == UINT32_MAX) return R2D_SLOT_NONE;
+        const uint32_t need = p->body_pool.slot_capacity + 1u;
+        if (!r2d_slot_pool_reserve(&p->body_pool, need)) return R2D_SLOT_NONE;
+        if (!r2d__reserve_body_arrays(p, p->body_pool.slot_capacity)) return R2D_SLOT_NONE;
+    }
+    return r2d_slot_pool_alloc(&p->body_pool);
+}
+
+/** Довести ёмкость массивов суставов до required (см. тела выше). */
+static bool r2d__reserve_joint_arrays(R2DPhysics *p, uint32_t required)
+{
+    if (!p) return false;
+    if (required <= p->joint_capacity) return true;
+    if (required < R2D_INITIAL_JOINTS) required = R2D_INITIAL_JOINTS;
+
+    uint32_t next = p->joint_capacity ? p->joint_capacity : R2D_INITIAL_JOINTS;
+    while (next < required) {
+        if (next > UINT32_MAX / 2u) { next = required; break; }
+        next *= 2u;
+    }
+    if (next < required) return false;
+    if (!r2d__grow_bytes((void **)&p->joints, sizeof(b2JointId), next, 1)) return false;
+    p->joint_capacity = next;
+    return true;
+}
+
+/** Выдать слот сустава (тот же freelist-пул, что у тел). */
+static uint32_t r2d__joint_slot_alloc(R2DPhysics *p)
+{
+    if (!p) return R2D_SLOT_NONE;
+    if (p->joint_capacity < p->joint_pool.slot_capacity
+        && !r2d__reserve_joint_arrays(p, p->joint_pool.slot_capacity)) {
+        return R2D_SLOT_NONE;
+    }
+    if (p->joint_pool.free_head == R2D_SLOT_NONE) {
+        if (p->joint_pool.slot_capacity == UINT32_MAX) return R2D_SLOT_NONE;
+        const uint32_t need = p->joint_pool.slot_capacity + 1u;
+        if (!r2d_slot_pool_reserve(&p->joint_pool, need)) return R2D_SLOT_NONE;
+        if (!r2d__reserve_joint_arrays(p, p->joint_pool.slot_capacity)) return R2D_SLOT_NONE;
+    }
+    return r2d_slot_pool_alloc(&p->joint_pool);
+}
+
+/** Есть ли слот в пределах массивов (id пришёл из внешнего кода). */
+static bool r2d__body_slot_bounds(const R2DPhysics *p, int id)
+{
+    return p && id >= 0 && (uint32_t)id < p->body_capacity
+        && (uint32_t)id < p->body_pool.slot_capacity;
+}
+
+/** Довести буфер событий до required. false — память кончилась. */
+static bool r2d__contact_reserve(R2DPhysics *p, uint32_t required)
+{
+    if (!p) return false;
+    if (required <= p->contacts.capacity) return true;
+    if (required == 0) return true;
+
+    uint32_t next = p->contacts.capacity ? p->contacts.capacity : R2D_INITIAL_CONTACT_EVENTS;
+    while (next < required) {
+        if (next > UINT32_MAX / 2u) { next = required; break; }
+        next *= 2u;
+    }
+    if (next < required) return false;
+    if ((size_t)next > SIZE_MAX / sizeof(R2DContactEvent)) return false;
+
+    R2DContactEvent *items = (R2DContactEvent *)realloc(
+        p->contacts.items, (size_t)next * sizeof(R2DContactEvent));
+    if (!items) return false;
+    p->contacts.items = items;
+    p->contacts.capacity = next;
+    return true;
+}
+
+/**
+ * Новый элемент буфера событий. NULL — память кончилась: вызывающий обязан
+ * прекратить сбор, а флаг contact_oom и R2D_ERROR уже выставлены (событие не
+ * «потеряно молча»).
+ */
+static R2DContactEvent *r2d__contact_push(R2DPhysics *p)
+{
+    if (!p) return NULL;
+    if (p->contacts.count == UINT32_MAX) {
+        if (!p->contact_oom) {
+            p->contact_oom = true;
+            R2D_ERROR("события контакта: счётчик достиг UINT32_MAX — новые события не записаны");
+        }
+        return NULL;
+    }
+    if (!r2d__contact_reserve(p, p->contacts.count + 1u)) {
+        if (!p->contact_oom) {
+            p->contact_oom = true;
+            R2D_ERROR("события контакта: нет памяти под буфер (count=%u) — события не записаны",
+                      p->contacts.count);
+        }
+        return NULL;
+    }
+    R2DContactEvent *c = &p->contacts.items[p->contacts.count++];
+    if (p->contacts.count > p->contacts.peak) p->contacts.peak = p->contacts.count;
+    SDL_zerop(c);
+    return c;
+}
+
+/** Довести вектор int до required (пары began/ended/stay). */
+static bool r2d__intvec_reserve(R2DPhysics *p, R2DIntVec *v, uint32_t required,
+                                const char *what)
+{
+    if (!p || !v) return false;
+    if (required <= v->capacity) return true;
+    if (required == 0) return true;
+
+    uint32_t next = v->capacity ? v->capacity : R2D_INITIAL_CONTACT_EVENTS;
+    while (next < required) {
+        if (next > UINT32_MAX / 2u) { next = required; break; }
+        next *= 2u;
+    }
+    if (next < required || (size_t)next > SIZE_MAX / sizeof(int)) {
+        if (!p->contact_oom) {
+            p->contact_oom = true;
+            R2D_ERROR("события контакта: переполнение вектора %s", what ? what : "пар");
+        }
+        return false;
+    }
+    int *items = (int *)realloc(v->items, (size_t)next * sizeof(int));
+    if (!items) {
+        if (!p->contact_oom) {
+            p->contact_oom = true;
+            R2D_ERROR("события контакта: нет памяти под вектор %s", what ? what : "пар");
+        }
+        return false;
+    }
+    v->items = items;
+    v->capacity = next;
+    return true;
+}
+
+
+// ---------------------------------------------------------------------------
 // §7. Ошибки физики: машиночитаемое кольцо
 //
 // Лог человека и ответ машине — разные вещи (§17): игра и агент должны
@@ -99,15 +311,15 @@ static bool r2d__pre_solve(b2ShapeId shape_a, b2ShapeId shape_b,
     const int id_a = r2d__body_id_of_shape(shape_a);
     const int id_b = r2d__body_id_of_shape(shape_b);
 
-    const bool ow_a = (id_a >= 0 && id_a < R2D_MAX_BODIES && p->one_way[id_a]);
-    const bool ow_b = (id_b >= 0 && id_b < R2D_MAX_BODIES && p->one_way[id_b]);
+    const bool ow_a = (r2d__body_slot_bounds(p, id_a) && p->one_way[id_a]);
+    const bool ow_b = (r2d__body_slot_bounds(p, id_b) && p->one_way[id_b]);
     if (!ow_a && !ow_b) return true;
 
     // Спрыгивание: тело, которому сейчас запрещено опираться на односторонние
     // платформы, не сталкивается с ними вовсе. Проверяем до нормалей — для
     // пропускаемой пары незачем считать поворот и скалярное произведение.
-    if (ow_a && id_b >= 0 && id_b < R2D_MAX_BODIES && p->one_way_ignore[id_b]) return false;
-    if (ow_b && id_a >= 0 && id_a < R2D_MAX_BODIES && p->one_way_ignore[id_a]) return false;
+    if (ow_a && r2d__body_slot_bounds(p, id_b) && p->one_way_ignore[id_b]) return false;
+    if (ow_b && r2d__body_slot_bounds(p, id_a) && p->one_way_ignore[id_a]) return false;
 
     // Нормаль манифолда направлена от A к B. Для платформы нужна её
     // мировая нормаль: поворачиваем локальную на угол тела.
@@ -129,6 +341,32 @@ static bool r2d__pre_solve(b2ShapeId shape_a, b2ShapeId shape_b,
     // Порог в 0.1 отсекает «касательные» контакты у самой кромки: иначе
     // игрок иногда цепляется за угол платформы, пролетая мимо снизу.
     return side > 0.1f;
+}
+
+/** Освободить все динамические реестры (без обращения к Box2D). */
+static void r2d__physics_free_storage(R2DPhysics *p)
+{
+    if (!p) return;
+    r2d_slot_pool_shutdown(&p->body_pool);
+    r2d_slot_pool_shutdown(&p->joint_pool);
+    free(p->bodies);             p->bodies = NULL;
+    free(p->transforms);         p->transforms = NULL;
+    free(p->one_way);            p->one_way = NULL;
+    free(p->one_way_nx);         p->one_way_nx = NULL;
+    free(p->one_way_ny);         p->one_way_ny = NULL;
+    free(p->one_way_ignore);     p->one_way_ignore = NULL;
+    free(p->contact_stay);       p->contact_stay = NULL;
+    free(p->contacts.items);     p->contacts.items = NULL;
+    free(p->began_pairs.items);  p->began_pairs.items = NULL;
+    free(p->ended_pairs.items);  p->ended_pairs.items = NULL;
+    free(p->stay_pairs.items);   p->stay_pairs.items = NULL;
+    free(p->joints);             p->joints = NULL;
+    p->body_capacity = 0;
+    p->joint_capacity = 0;
+    p->contacts.capacity = 0;
+    p->began_pairs.capacity = 0;
+    p->ended_pairs.capacity = 0;
+    p->stay_pairs.capacity = 0;
 }
 
 void r2d_physics_init(R2DPhysics *p, float gravity_x, float gravity_y)
@@ -155,13 +393,39 @@ void r2d_physics_init(R2DPhysics *p, float gravity_x, float gravity_y)
     }
 
     b2World_SetPreSolveCallback(p->world, r2d__pre_solve, p);
+
+    // Стартовые ёмкости реестров: дальше они растут сами. Если памяти нет,
+    // физика не притворяется рабочей: мир уничтожается, world_valid = false,
+    // игра получает явную ошибку вместо падения на первом create.
+    bool ok = r2d_slot_pool_init(&p->body_pool, R2D_INITIAL_BODIES)
+           && r2d__reserve_body_arrays(p, R2D_INITIAL_BODIES)
+           && r2d_slot_pool_init(&p->joint_pool, R2D_INITIAL_JOINTS)
+           && r2d__reserve_joint_arrays(p, R2D_INITIAL_JOINTS)
+           && r2d__contact_reserve(p, R2D_INITIAL_CONTACT_EVENTS);
+    if (!ok) {
+        R2D_ERROR("физика: не хватило памяти на стартовые реестры "
+                  "(тел %u, суставов %u, контактов %u)",
+                  (unsigned)R2D_INITIAL_BODIES, (unsigned)R2D_INITIAL_JOINTS,
+                  (unsigned)R2D_INITIAL_CONTACT_EVENTS);
+        b2DestroyWorld(p->world);
+        r2d__physics_free_storage(p);
+        SDL_zero(*p);
+        p->world_valid = false;
+        return;
+    }
+    p->body_capacity = p->body_pool.slot_capacity;
+    p->joint_capacity = p->joint_pool.slot_capacity;
 }
 
 void r2d_physics_shutdown(R2DPhysics *p)
 {
+    if (!p) return;
     if (p->world_valid) {
         b2DestroyWorld(p->world);
     }
+    // Указатели на массивы — не часть мира Box2D: без явного free они утекали
+    // бы при каждом перезапуске сцены/игры.
+    r2d__physics_free_storage(p);
     SDL_zero(*p);
 }
 
@@ -177,61 +441,67 @@ static void r2d__event_bodies(R2DPhysics *p, R2DContactEvent *c,
     c->b = r2d__body_id_of_shape(sb);
     c->shape_a = r2d__shape_index_of_shape(sa);
     c->shape_b = r2d__shape_index_of_shape(sb);
-    c->gen_a = (c->a >= 0 && c->a < R2D_MAX_BODIES) ? p->generations[c->a] : 0;
-    c->gen_b = (c->b >= 0 && c->b < R2D_MAX_BODIES) ? p->generations[c->b] : 0;
+    c->gen_a = r2d__body_slot_bounds(p, c->a) ? r2d_slot_pool_generation(&p->body_pool, (uint32_t)c->a) : 0;
+    c->gen_b = r2d__body_slot_bounds(p, c->b) ? r2d_slot_pool_generation(&p->body_pool, (uint32_t)c->b) : 0;
     c->sensor = (b2Shape_IsValid(sa) && b2Shape_IsSensor(sa))
              || (b2Shape_IsValid(sb) && b2Shape_IsSensor(sb));
 }
 
 /** Есть ли пара (a, b) в списке этого кадра. */
-static bool r2d__pair_seen(const int *list, int count, int a, int b)
+static bool r2d__pair_seen(const R2DIntVec *v, int a, int b)
 {
-    for (int i = 0; i + 1 < count; i += 2) {
-        if (list[i] == a && list[i + 1] == b) return true;
+    for (uint32_t i = 0; i + 1 < v->count; i += 2) {
+        if (v->items[i] == a && v->items[i + 1] == b) return true;
     }
     return false;
 }
 
-/** Запомнить пару (a, b) этого кадра. */
-static void r2d__pair_add(int *list, int *count, int cap, int a, int b)
+/** Запомнить пару (a, b) этого кадра. false — память кончилась. */
+static bool r2d__pair_add(R2DPhysics *p, R2DIntVec *v, int a, int b,
+                          const char *what)
 {
-    if (list == NULL || count == NULL) return;
-    if (*count + 2 > cap) return;
-    if (r2d__pair_seen(list, *count, a, b)) return;
-    list[*count] = a;
-    list[*count + 1] = b;
-    *count += 2;
+    if (!p || !v) return false;
+    if (r2d__pair_seen(v, a, b)) return true;
+    if (v->count > UINT32_MAX - 2u) return false;
+    if (!r2d__intvec_reserve(p, v, v->count + 2u, what)) return false;
+    v->items[v->count++] = a;
+    v->items[v->count++] = b;
+    return true;
 }
 
 /** Четвёрка (тело, форма) уже дала stay в этом кадре? Порядок пар не важен. */
 static bool r2d__stay_seen(const R2DPhysics *p, int a, int sa, int b, int sb)
 {
-    for (int i = 0; i + 3 < p->stay_count; i += 4) {
-        const bool same = p->stay_pairs[i] == a && p->stay_pairs[i + 1] == sa
-                       && p->stay_pairs[i + 2] == b && p->stay_pairs[i + 3] == sb;
-        const bool mirror = p->stay_pairs[i] == b && p->stay_pairs[i + 1] == sb
-                         && p->stay_pairs[i + 2] == a && p->stay_pairs[i + 3] == sa;
+    const R2DIntVec *v = &p->stay_pairs;
+    for (uint32_t i = 0; i + 3 < v->count; i += 4) {
+        const bool same = v->items[i] == a && v->items[i + 1] == sa
+                       && v->items[i + 2] == b && v->items[i + 3] == sb;
+        const bool mirror = v->items[i] == b && v->items[i + 1] == sb
+                         && v->items[i + 2] == a && v->items[i + 3] == sa;
         if (same || mirror) return true;
     }
     return false;
 }
 
-static void r2d__stay_add(R2DPhysics *p, int a, int sa, int b, int sb)
+static bool r2d__stay_add(R2DPhysics *p, int a, int sa, int b, int sb)
 {
-    if (p->stay_count + 4 > R2D_MAX_CONTACT_EVENTS * 4) return;
-    p->stay_pairs[p->stay_count++] = a;
-    p->stay_pairs[p->stay_count++] = sa;
-    p->stay_pairs[p->stay_count++] = b;
-    p->stay_pairs[p->stay_count++] = sb;
+    R2DIntVec *v = &p->stay_pairs;
+    if (v->count > UINT32_MAX - 4u) return false;
+    if (!r2d__intvec_reserve(p, v, v->count + 4u, "stay")) return false;
+    v->items[v->count++] = a;
+    v->items[v->count++] = sa;
+    v->items[v->count++] = b;
+    v->items[v->count++] = sb;
+    return true;
 }
 
 /**
  * §7. Фаза stay для тел, которые её запросили.
  *
  * Box2D присылает begin/end/hit, но не «всё ещё касаюсь»: это состояние
- * читается из текущих контактов тела. Обход делается ТОЛЬКО для тел с
- * включённым stay (r2d_physics_set_contact_stay) — иначе цена платилась бы
- * всеми динамическими телами каждый кадр.
+ * читается из текущих контактов тела. Обход идёт по DENSE-списку живых тел
+ * (а не по всей ёмкости реестра), и только для тел с включённым stay — иначе
+ * цена платилась бы всеми динамическими телами каждый кадр.
  *
  * Касание, начавшееся в этом же кадре, пропускается: у него уже есть begin.
  * Один контакт, который видят оба участника, отправляется один раз.
@@ -239,29 +509,30 @@ static void r2d__stay_add(R2DPhysics *p, int a, int sa, int b, int sb)
 static void r2d__collect_stay(R2DPhysics *p)
 {
     bool any = false;
-    for (int i = 0; i < R2D_MAX_BODIES; ++i) {
-        if (p->alive[i] && p->contact_stay[i]) { any = true; break; }
+    for (uint32_t k = 0; k < p->body_pool.alive_count; ++k) {
+        const uint32_t id = p->body_pool.dense[k];
+        if (p->contact_stay[id]) { any = true; break; }
     }
     if (!any) return;
 
     b2ContactData data[R2D_MAX_SHAPES_PER_BODY * 4];
     const int cap = (int)(sizeof data / sizeof data[0]);
-    for (int id = 0; id < R2D_MAX_BODIES; ++id) {
-        if (!p->alive[id] || !p->contact_stay[id]) continue;
+    for (uint32_t k = 0; k < p->body_pool.alive_count; ++k) {
+        const uint32_t id = p->body_pool.dense[k];
+        if (!p->contact_stay[id]) continue;
         const int n = b2Body_GetContactData(p->bodies[id], data, cap);
-        for (int i = 0; i < n && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
+        for (int i = 0; i < n; ++i) {
             if (data[i].manifold.pointCount == 0) continue;
             const int a = r2d__body_id_of_shape(data[i].shapeIdA);
             const int b = r2d__body_id_of_shape(data[i].shapeIdB);
             if (a < 0 || b < 0) continue;
-            if (r2d__pair_seen(p->began_pairs, p->began_count, a, b)) continue;
+            if (r2d__pair_seen(&p->began_pairs, a, b)) continue;
             const int sa = r2d__shape_index_of_shape(data[i].shapeIdA);
             const int sb = r2d__shape_index_of_shape(data[i].shapeIdB);
             if (r2d__stay_seen(p, a, sa, b, sb)) continue;
-            r2d__stay_add(p, a, sa, b, sb);
-
-            R2DContactEvent *c = &p->contacts[p->contact_count++];
-            SDL_zerop(c);
+            if (!r2d__stay_add(p, a, sa, b, sb)) return;
+            R2DContactEvent *c = r2d__contact_push(p);
+            if (!c) return;
             c->kind = R2D_CONTACT_STAY;
             r2d__event_bodies(p, c, data[i].shapeIdA, data[i].shapeIdB);
             if (!c->sensor) {
@@ -288,10 +559,10 @@ void r2d_physics_step(R2DPhysics *p, float dt)
     // r2d_physics_begin_contacts), а копим события всех подшагов — иначе
     // выживали бы только события последнего и урон «через раз» терялся.
     if (!p->contact_accumulating) {
-        p->contact_count = 0;
-        p->began_count = 0;
-        p->ended_count = 0;
-        p->stay_count = 0;
+        p->contacts.count = 0;
+        p->began_pairs.count = 0;
+        p->ended_pairs.count = 0;
+        p->stay_pairs.count = 0;
     }
     if (!p->world_valid) return;
     const b2ContactEvents ev = b2World_GetContactEvents(p->world);
@@ -299,10 +570,10 @@ void r2d_physics_step(R2DPhysics *p, float dt)
     // §7: пары этого кадра. begin нужен, чтобы stay не повторял уже
     // отправленный begin; end — чтобы один и тот же разрыв не пришёл дважды
     // (у пары может закончиться несколько форм подряд).
-    for (int i = 0; i < ev.beginCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
+    for (int i = 0; i < ev.beginCount; ++i) {
         const b2ContactBeginTouchEvent *e = &ev.beginEvents[i];
-        R2DContactEvent *c = &p->contacts[p->contact_count++];
-        SDL_zerop(c);
+        R2DContactEvent *c = r2d__contact_push(p);
+        if (!c) break;
         c->kind = R2D_CONTACT_BEGIN;
         r2d__event_bodies(p, c, e->shapeIdA, e->shapeIdB);
         // Манифолд begin-события записан до солвера: точка есть, импульс нулевой.
@@ -318,25 +589,25 @@ void r2d_physics_step(R2DPhysics *p, float dt)
             c->ny = e->manifold.normal.y;
             c->has_normal = true;
         }
-        r2d__pair_add(p->began_pairs, &p->began_count, R2D_MAX_CONTACT_EVENTS * 2, c->a, c->b);
+        r2d__pair_add(p, &p->began_pairs, c->a, c->b, "began");
     }
-    for (int i = 0; i < ev.endCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
+    for (int i = 0; i < ev.endCount; ++i) {
         const b2ContactEndTouchEvent *e = &ev.endEvents[i];
         const int a = r2d__body_id_of_shape(e->shapeIdA);
         const int b = r2d__body_id_of_shape(e->shapeIdB);
         // Повторный end по той же паре тел в одном кадре не отправляем: у игры
         // на узле одно событие `separate`, и два подряд — это баг для неё.
-        if (r2d__pair_seen(p->ended_pairs, p->ended_count, a, b)) continue;
-        R2DContactEvent *c = &p->contacts[p->contact_count++];
-        SDL_zerop(c);
+        if (r2d__pair_seen(&p->ended_pairs, a, b)) continue;
+        R2DContactEvent *c = r2d__contact_push(p);
+        if (!c) break;
         c->kind = R2D_CONTACT_END;
         r2d__event_bodies(p, c, e->shapeIdA, e->shapeIdB);
-        r2d__pair_add(p->ended_pairs, &p->ended_count, R2D_MAX_CONTACT_EVENTS * 2, a, b);
+        r2d__pair_add(p, &p->ended_pairs, a, b, "ended");
     }
-    for (int i = 0; i < ev.hitCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
+    for (int i = 0; i < ev.hitCount; ++i) {
         const b2ContactHitEvent *e = &ev.hitEvents[i];
-        R2DContactEvent *c = &p->contacts[p->contact_count++];
-        SDL_zerop(c);
+        R2DContactEvent *c = r2d__contact_push(p);
+        if (!c) break;
         c->kind = R2D_CONTACT_HIT;
         r2d__event_bodies(p, c, e->shapeIdA, e->shapeIdB);
         c->nx = e->normal.x;
@@ -351,71 +622,101 @@ void r2d_physics_step(R2DPhysics *p, float dt)
     // нормали нет вовсе, поэтому has_normal = has_point = false. «Нормаль 0,0»
     // для сенсора была бы выдумкой (hurtbox не имеет поверхности).
     const b2SensorEvents sev = b2World_GetSensorEvents(p->world);
-    for (int i = 0; i < sev.beginCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
+    for (int i = 0; i < sev.beginCount; ++i) {
         const b2SensorBeginTouchEvent *e = &sev.beginEvents[i];
-        R2DContactEvent *c = &p->contacts[p->contact_count++];
-        SDL_zerop(c);
+        R2DContactEvent *c = r2d__contact_push(p);
+        if (!c) break;
         c->kind = R2D_CONTACT_BEGIN;
         r2d__event_bodies(p, c, e->sensorShapeId, e->visitorShapeId);
         c->sensor = true;
-        r2d__pair_add(p->began_pairs, &p->began_count, R2D_MAX_CONTACT_EVENTS * 2, c->a, c->b);
+        r2d__pair_add(p, &p->began_pairs, c->a, c->b, "began");
     }
-    for (int i = 0; i < sev.endCount && p->contact_count < R2D_MAX_CONTACT_EVENTS; ++i) {
+    for (int i = 0; i < sev.endCount; ++i) {
         const b2SensorEndTouchEvent *e = &sev.endEvents[i];
         const int a = r2d__body_id_of_shape(e->sensorShapeId);
         const int b = r2d__body_id_of_shape(e->visitorShapeId);
-        if (r2d__pair_seen(p->ended_pairs, p->ended_count, a, b)) continue;
-        R2DContactEvent *c = &p->contacts[p->contact_count++];
-        SDL_zerop(c);
+        if (r2d__pair_seen(&p->ended_pairs, a, b)) continue;
+        R2DContactEvent *c = r2d__contact_push(p);
+        if (!c) break;
         c->kind = R2D_CONTACT_END;
         r2d__event_bodies(p, c, e->sensorShapeId, e->visitorShapeId);
         c->sensor = true;
-        r2d__pair_add(p->ended_pairs, &p->ended_count, R2D_MAX_CONTACT_EVENTS * 2, a, b);
+        r2d__pair_add(p, &p->ended_pairs, a, b, "ended");
     }
     // §7: фаза stay — для тел, которые её попросили. Касание, начавшееся в этом
     // же кадре, не дублируется: у него уже есть begin.
     r2d__collect_stay(p);
-    if (p->contact_count >= R2D_MAX_CONTACT_EVENTS && !p->overflow_logged) {
-        p->overflow_logged = true;
-        R2D_WARN("события контакта: буфер переполнен, часть событий в кадре потеряна");
-    }
+    // Совместимость с прямым чтением script.c (см. physics.h).
+    p->contact_count = (int)p->contacts.count;
 }
 
 const R2DContactEvent *r2d_physics_contacts(const R2DPhysics *p, int *count)
 {
-    if (count) *count = p ? p->contact_count : 0;
-    return p ? p->contacts : NULL;
+    if (count) *count = p ? (int)p->contacts.count : 0;
+    return p ? p->contacts.items : NULL;
 }
 
 void r2d_physics_clear_contacts(R2DPhysics *p)
 {
     if (p) {
+        p->contacts.count = 0;
         p->contact_count = 0;
         p->contact_accumulating = false;
-        p->began_count = 0;
-        p->ended_count = 0;
-        p->stay_count = 0;
+        p->began_pairs.count = 0;
+        p->ended_pairs.count = 0;
+        p->stay_pairs.count = 0;
     }
 }
 
 void r2d_physics_begin_contacts(R2DPhysics *p)
 {
     if (p) {
+        p->contacts.count = 0;
         p->contact_count = 0;
         p->contact_accumulating = true;
         // §7: пары кадра считаются заново — иначе end «прошлого» кадра
         // подавил бы законный end нового.
-        p->began_count = 0;
-        p->ended_count = 0;
-        p->stay_count = 0;
+        p->began_pairs.count = 0;
+        p->ended_pairs.count = 0;
+        p->stay_pairs.count = 0;
     }
 }
+
+// --- Диагностика ёмкостей (debug-страница) ----------------------------------
+
+void r2d_physics_stats(const R2DPhysics *p, R2DPhysicsStats *out)
+{
+    if (!out) return;
+    SDL_zero(*out);
+    if (!p) return;
+    out->bodies_live = p->body_pool.alive_count;
+    out->bodies_capacity = p->body_capacity;
+    out->bodies_peak = p->body_peak;
+    out->joints_live = p->joint_pool.alive_count;
+    out->joints_capacity = p->joint_capacity;
+    out->joints_peak = p->joint_peak;
+    out->contacts_count = p->contacts.count;
+    out->contacts_capacity = p->contacts.capacity;
+    out->contacts_peak = p->contacts.peak;
+    out->contact_oom = p->contact_oom;
+}
+
+uint32_t r2d_physics_body_capacity(const R2DPhysics *p) { return p ? p->body_capacity : 0; }
+uint32_t r2d_physics_body_peak(const R2DPhysics *p) { return p ? p->body_peak : 0; }
+uint32_t r2d_physics_joint_capacity(const R2DPhysics *p) { return p ? p->joint_capacity : 0; }
+uint32_t r2d_physics_joint_peak(const R2DPhysics *p) { return p ? p->joint_peak : 0; }
+uint32_t r2d_physics_contact_capacity(const R2DPhysics *p) { return p ? p->contacts.capacity : 0; }
+uint32_t r2d_physics_contact_peak(const R2DPhysics *p) { return p ? p->contacts.peak : 0; }
+uint32_t r2d_physics_contact_count(const R2DPhysics *p) { return p ? p->contacts.count : 0; }
+bool r2d_physics_contact_oom(const R2DPhysics *p) { return p ? p->contact_oom : false; }
 
 void r2d_physics_sync(R2DPhysics *p)
 {
     if (!p->world_valid) return;
-    for (int i = 0; i < R2D_MAX_BODIES; ++i) {
-        if (!p->alive[i]) continue;
+    // Только живые тела (dense-список), а не вся ёмкость реестра: при 100
+    // живых из 8000 слотов sync больше не делает 8000 итераций.
+    for (uint32_t k = 0; k < p->body_pool.alive_count; ++k) {
+        const uint32_t i = p->body_pool.dense[k];
         const b2Vec2 pos = b2Body_GetPosition(p->bodies[i]);
         const float angle = b2Rot_GetAngle(b2Body_GetRotation(p->bodies[i]));
         // Наружу отдаём пиксели — рендер и игровой код живут в них.
@@ -613,7 +914,7 @@ static b2ShapeId r2d__make_shape(b2BodyId body, const b2ShapeDef *sd, const R2DB
 /** Найти форму тела по НАШЕМУ индексу (0 — основная, дальше добавленные). */
 static b2ShapeId r2d__shape_at(const R2DPhysics *p, int id, int index)
 {
-    if (!p || id < 0 || id >= R2D_MAX_BODIES || !p->alive[id]) return b2_nullShapeId;
+    if (!p || !r2d__body_slot_bounds(p, id) || !p->body_pool.slots[id].alive) return b2_nullShapeId;
     b2ShapeId shapes[R2D_MAX_SHAPES_PER_BODY];
     const int count = b2Body_GetShapes(p->bodies[id], shapes,
                                        (int)(sizeof shapes / sizeof shapes[0]));
@@ -656,22 +957,25 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
 {
     if (!p->world_valid || !d) return -1;
 
-    int id = -1;
-    for (int i = 0; i < R2D_MAX_BODIES; ++i) {
-        if (!p->alive[i]) { id = i; break; }
-    }
-    if (id < 0) {
-        // Лимит тел — не «тихий отказ»: ошибка уходит и в лог, и в кольцо для
-        // машины. Игра по ней понимает, что часть карты осталась без коллизии.
-        r2d__push_error(p, R2D_PERR_BODY_LIMIT, -1, -1, (float)R2D_MAX_BODIES,
-                        "достигнут лимит тел: тело не создано");
-        R2D_ERROR("достигнут лимит физических тел (%d)", R2D_MAX_BODIES);
+    // O(1) слот через freelist; реестр при нехватке удваивается. Нет памяти —
+    // это ошибка, а не «тихий отказ»: она уходит и в лог, и в кольцо для
+    // машины. Фиксированного лимита тел больше нет.
+    const uint32_t slot = r2d__body_slot_alloc(p);
+    if (slot == R2D_SLOT_NONE) {
+        r2d__push_error(p, R2D_PERR_BODY_LIMIT, -1, -1, (float)p->body_capacity,
+                        "нет памяти под тело: тело не создано");
+        R2D_ERROR("физика: не удалось выделить слот тела (ёмкость %u)",
+                  (unsigned)p->body_capacity);
         return -1;
     }
+    const int id = (int)slot;
 
     // §7: форма проверяется ДО b2CreateBody — некорректный контур не должен
     // тихо превратиться в другое тело.
-    if (!r2d__validate_desc(p, d, id, 0)) return -1;
+    if (!r2d__validate_desc(p, d, id, 0)) {
+        r2d_slot_pool_free(&p->body_pool, slot);
+        return -1;
+    }
 
     b2BodyDef def = b2DefaultBodyDef();
     switch (d->type) {
@@ -689,6 +993,7 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
     b2BodyId body = b2CreateBody(p->world, &def);
     if (!b2Body_IsValid(body)) {
         R2D_ERROR("b2CreateBody вернул невалидное тело");
+        r2d_slot_pool_free(&p->body_pool, slot);
         return -1;
     }
 
@@ -705,12 +1010,12 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
     if (!b2Shape_IsValid(shape)) {
         R2D_ERROR("не удалось создать форму тела (kind=%d)", d->shape);
         b2DestroyBody(body);
+        r2d_slot_pool_free(&p->body_pool, slot);
         return -1;
     }
     b2Shape_SetUserData(shape, R2D__SHAPE_TAG(id, 0));
 
-    p->one_way[id]  = d->one_way;
-    p->one_way[id]  = d->one_way;
+    p->one_way[id] = d->one_way;
     // Новое тело не наследует «спрыгивание» от прежнего владельца id.
     p->one_way_ignore[id] = false;
     if (d->one_way) {
@@ -726,12 +1031,10 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
     }
 
     p->bodies[id] = body;
-    p->alive[id]  = true;
-    // §7: поколение растёт при каждом создании. Событие контакта несёт его, и
-    // JS отличает «то же тело» от «новый узел на том же id».
-    p->generations[id]++;
+    // §7: поколение уже выросло при выдаче слота (пул). Событие контакта несёт
+    // его, и JS отличает «то же тело» от «новый узел на том же id».
     p->contact_stay[id] = false;
-    p->live_count++;
+    if (p->body_pool.alive_count > p->body_peak) p->body_peak = p->body_pool.alive_count;
     p->transforms[id * 3 + 0] = d->x;
     p->transforms[id * 3 + 1] = d->y;
     p->transforms[id * 3 + 2] = d->angle;
@@ -751,7 +1054,7 @@ int r2d_physics_create(R2DPhysics *p, const R2DBodyDesc *d)
 int r2d_physics_add_shape(R2DPhysics *p, int id, const R2DBodyDesc *d, float dx, float dy)
 {
     if (!p || !p->world_valid || !d) return -1;
-    if (id < 0 || id >= R2D_MAX_BODIES || !p->alive[id]) return -1;
+    if (!r2d__body_slot_bounds(p, id) || !p->body_pool.slots[id].alive) return -1;
 
     const int index = b2Body_GetShapeCount(p->bodies[id]);
     if (index >= R2D_MAX_SHAPES_PER_BODY) {
@@ -812,7 +1115,7 @@ int r2d_physics_shape_set(R2DPhysics *p, int id, int index, const R2DBodyDesc *d
                           float dx, float dy, float angle)
 {
     if (!p || !p->world_valid || !d) return -1;
-    if (id < 0 || id >= R2D_MAX_BODIES || !p->alive[id]) return -1;
+    if (!r2d__body_slot_bounds(p, id) || !p->body_pool.slots[id].alive) return -1;
     const b2ShapeId old = r2d__shape_at(p, id, index);
     if (!b2Shape_IsValid(old)) {
         r2d__push_error(p, R2D_PERR_SHAPE_INDEX, id, index, -1.0f,
@@ -989,7 +1292,7 @@ int r2d_physics_shape_overlaps(R2DPhysics *p, int id, int index,
 /** Сколько форм у тела (0 — тела нет). */
 int r2d_physics_shape_count(const R2DPhysics *p, int id)
 {
-    if (!p || id < 0 || id >= R2D_MAX_BODIES || !p->alive[id]) return 0;
+    if (!p || !r2d__body_slot_bounds(p, id) || !p->body_pool.slots[id].alive) return 0;
     return b2Body_GetShapeCount(p->bodies[id]);
 }
 
@@ -1127,19 +1430,31 @@ int r2d_physics_create_box(R2DPhysics *p, float x, float y, float half_w, float 
 
 void r2d_physics_destroy(R2DPhysics *p, int id)
 {
-    if (!p->world_valid || id < 0 || id >= R2D_MAX_BODIES || !p->alive[id]) return;
+    if (!p->world_valid || !r2d__body_slot_bounds(p, id)
+        || !p->body_pool.slots[id].alive) return;
     // Суставы, державшиеся за это тело, Box2D уничтожит вместе с ним —
-    // помечаем их мёртвыми, чтобы JS не дёргал невалидные id.
-    for (int i = 0; i < R2D_MAX_JOINTS; ++i) {
-        if (!p->joint_alive[i]) continue;
-        const b2BodyId ba = b2Joint_GetBodyA(p->joints[i]);
-        const b2BodyId bb = b2Joint_GetBodyB(p->joints[i]);
+    // освобождаем их слоты, чтобы JS не дёргал невалидные id и чтобы ёмкость
+    // пула не утекала. Идём по живым суставам, а не по всей ёмкости.
+    for (uint32_t k = 0; k < p->joint_pool.alive_count; ++k) {
+        const uint32_t jid = p->joint_pool.dense[k];
+        if (!b2Joint_IsValid(p->joints[jid])) {
+            // Box2D уже потерял сустав (например, тело удалили раньше через
+            // b2DestroyBody из другого места) — слот тоже освобождаем.
+            r2d_slot_pool_free(&p->joint_pool, jid);
+            // После free последний живой элемент переехал на позицию k —
+            // обрабатываем её повторно.
+            --k;
+            continue;
+        }
+        const b2BodyId ba = b2Joint_GetBodyA(p->joints[jid]);
+        const b2BodyId bb = b2Joint_GetBodyB(p->joints[jid]);
         if (B2_ID_EQUALS(ba, p->bodies[id]) || B2_ID_EQUALS(bb, p->bodies[id])) {
-            p->joint_alive[i] = false;
+            r2d_slot_pool_free(&p->joint_pool, jid);
+            --k;
         }
     }
     b2DestroyBody(p->bodies[id]);
-    p->alive[id] = false;
+    r2d_slot_pool_free(&p->body_pool, (uint32_t)id);
     p->one_way[id] = false;
     // Флаг живёт на теле: новый владелец этого id не должен унаследовать
     // «спрыгивание» от прошлого.
@@ -1147,19 +1462,18 @@ void r2d_physics_destroy(R2DPhysics *p, int id)
     // §7: stay-события снимаются вместе с телом. Поколение НЕ сбрасываем — оно
     // как раз и отличает события уничтоженного тела от нового владельца id.
     p->contact_stay[id] = false;
-    p->live_count--;
 }
 
 bool r2d_physics_is_alive(const R2DPhysics *p, int id)
 {
-    if (id < 0 || id >= R2D_MAX_BODIES) return false;
-    if (!p->alive[id]) return false;
+    if (!p || !r2d__body_slot_bounds(p, id)) return false;
+    if (!r2d_slot_pool_alive(&p->body_pool, (uint32_t)id)) return false;
     return p->world_valid && b2Body_IsValid(p->bodies[id]);
 }
 
 int r2d_physics_live_count(const R2DPhysics *p)
 {
-    return p->live_count;
+    return p ? (int)p->body_pool.alive_count : 0;
 }
 
 void r2d_physics_set_velocity(R2DPhysics *p, int id, float vx, float vy)
@@ -1301,7 +1615,7 @@ void r2d_physics_set_one_way_ignore(R2DPhysics *p, int id, bool on)
 
 bool r2d_physics_one_way_ignore(const R2DPhysics *p, int id)
 {
-    if (id < 0 || id >= R2D_MAX_BODIES) return false;
+    if (!r2d__body_slot_bounds(p, id)) return false;
     return p->one_way_ignore[id];
 }
 
@@ -1315,14 +1629,14 @@ void r2d_physics_set_contact_stay(R2DPhysics *p, int id, bool on)
 
 bool r2d_physics_contact_stay(const R2DPhysics *p, int id)
 {
-    if (id < 0 || id >= R2D_MAX_BODIES) return false;
+    if (!r2d__body_slot_bounds(p, id)) return false;
     return p->contact_stay[id];
 }
 
 uint32_t r2d_physics_generation(const R2DPhysics *p, int id)
 {
-    if (!p || id < 0 || id >= R2D_MAX_BODIES) return 0;
-    return p->generations[id];
+    if (!p || !r2d__body_slot_bounds(p, id)) return 0;
+    return r2d_slot_pool_generation(&p->body_pool, (uint32_t)id);
 }
 
 // --- Контакты: импульс, точки, «касаются ли сейчас» -----------------------
@@ -1473,12 +1787,13 @@ bool r2d_physics_get_filter(const R2DPhysics *p, int id, uint64_t *category_bits
 static int r2d__body_of_shape(const R2DPhysics *p, b2ShapeId shape)
 {
     if (!b2Shape_IsValid(shape)) return -1;
+    // Форма движка несёт id тела в user data, поэтому поиск O(1): раньше
+    // каждый луч/запрос линейно обходил ВСЮ ёмкость реестра тел.
+    const int id = r2d__body_id_of_shape(shape);
+    if (!r2d__body_slot_bounds(p, id) || !p->body_pool.slots[id].alive) return -1;
     const b2BodyId body = b2Shape_GetBody(shape);
-    for (int i = 0; i < R2D_MAX_BODIES; ++i) {
-        if (!p->alive[i]) continue;
-        if (B2_ID_EQUALS(p->bodies[i], body)) return i;
-    }
-    return -1;
+    if (!B2_ID_EQUALS(p->bodies[id], body)) return -1;
+    return id;
 }
 
 typedef struct R2DRayCtx {
@@ -1728,8 +2043,7 @@ int r2d_physics_query_circle(const R2DPhysics *p, float x, float y, float radius
     int m = 0;
     for (int i = 0; i < n; ++i) {
         const int id = cand[i];
-        if (id < 0 || id >= R2D_MAX_BODIES) continue;
-        if (!b2Body_IsValid(p->bodies[id])) continue;
+        if (!r2d_physics_is_alive(p, id)) continue;
 
         const b2Vec2 center = b2Body_GetPosition(p->bodies[id]);
         const float dx = center.x * R2D_PX_PER_M - x;
@@ -1777,20 +2091,21 @@ int r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
                              bool enable_motor, float motor_speed, float max_motor_torque)
 {
     if (!p->world_valid) return -1;
-    if (a < 0 || b < 0 || a >= R2D_MAX_BODIES || b >= R2D_MAX_BODIES) return -1;
-    if (!p->alive[a] || !p->alive[b]) {
+    if (!r2d__body_slot_bounds(p, a) || !r2d__body_slot_bounds(p, b)) return -1;
+    if (!p->body_pool.slots[a].alive || !p->body_pool.slots[b].alive) {
         R2D_WARN("сустав: тело %d или %d не существует", a, b);
         return -1;
     }
 
-    int id = -1;
-    for (int i = 0; i < R2D_MAX_JOINTS; ++i) {
-        if (!p->joint_alive[i]) { id = i; break; }
-    }
-    if (id < 0) {
-        R2D_ERROR("достигнут лимит суставов (%d)", R2D_MAX_JOINTS);
+    // O(1) слот сустава: freelist, при нехватке пул удваивается. Лимита 64
+    // больше нет — 65-й и 1000-й сустав создаются штатно.
+    const uint32_t slot = r2d__joint_slot_alloc(p);
+    if (slot == R2D_SLOT_NONE) {
+        R2D_ERROR("сустав: не удалось выделить слот (ёмкость %u)",
+                  (unsigned)p->joint_capacity);
         return -1;
     }
+    const int id = (int)slot;
 
     const b2Vec2 wa = { R2D_TO_M(ax), R2D_TO_M(ay) };
     const b2Vec2 wb = { R2D_TO_M(bx), R2D_TO_M(by) };
@@ -1908,6 +2223,7 @@ int r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
 
     if (!b2Joint_IsValid(joint)) {
         R2D_ERROR("не удалось создать сустав (type=%d)", type);
+        r2d_slot_pool_free(&p->joint_pool, slot);
         return -1;
     }
 
@@ -1919,31 +2235,32 @@ int r2d_physics_create_joint(R2DPhysics *p, int type, int a, int b,
     b2Joint_WakeBodies(joint);
 
     p->joints[id] = joint;
-    p->joint_alive[id] = true;
+    if (p->joint_pool.alive_count > p->joint_peak) p->joint_peak = p->joint_pool.alive_count;
     return id;
 }
 
 void r2d_physics_destroy_joint(R2DPhysics *p, int id)
 {
-    if (!p->world_valid || id < 0 || id >= R2D_MAX_JOINTS || !p->joint_alive[id]) return;
+    if (!p || !p->world_valid) return;
+    if (id < 0 || (uint32_t)id >= p->joint_capacity
+        || !r2d_slot_pool_alive(&p->joint_pool, (uint32_t)id)) return;
     if (b2Joint_IsValid(p->joints[id])) {
         b2DestroyJoint(p->joints[id]);
     }
-    p->joint_alive[id] = false;
+    r2d_slot_pool_free(&p->joint_pool, (uint32_t)id);
 }
 
 bool r2d_physics_joint_alive(const R2DPhysics *p, int id)
 {
-    if (!p || id < 0 || id >= R2D_MAX_JOINTS) return false;
-    return p->joint_alive[id] && b2Joint_IsValid(p->joints[id]);
+    if (!p || id < 0 || (uint32_t)id >= p->joint_capacity) return false;
+    if (!r2d_slot_pool_alive(&p->joint_pool, (uint32_t)id)) return false;
+    return b2Joint_IsValid(p->joints[id]);
 }
 
 int r2d_physics_joint_count(const R2DPhysics *p)
 {
     if (!p) return 0;
-    int n = 0;
-    for (int i = 0; i < R2D_MAX_JOINTS; ++i) {
-        if (p->joint_alive[i] && b2Joint_IsValid(p->joints[i])) n++;
-    }
-    return n;
+    // Слоты освобождаются при destroy_joint и при удалении тела, поэтому
+    // alive_count пула и есть число живых суставов (без обхода ёмкости).
+    return (int)p->joint_pool.alive_count;
 }

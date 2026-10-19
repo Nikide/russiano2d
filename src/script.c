@@ -1439,11 +1439,44 @@ static JSValue r2d__js_body_enabled(JSContext *ctx, JSValueConst this_val, int a
 }
 
 // Zero-copy: Float32Array смотрит прямо в массив трансформов в C.
+// Реестр тел динамический: при росте transforms[] переезжает, поэтому
+// представление пересобирается под новую ёмкость (иначе JS читал бы старую).
+static bool r2d__refresh_transforms(R2DScript *s)
+{
+    if (!s || !s->physics) return false;
+    const uint32_t cap = r2d_physics_body_capacity(s->physics);
+    if (cap == 0) return false;
+    if (s->transforms_valid && s->transforms_capacity == cap) return true;
+
+    if (s->transforms_valid) {
+        JS_FreeValue(s->ctx, s->transforms_array);
+        s->transforms_array = JS_UNDEFINED;
+        s->transforms_valid = false;
+    }
+    const size_t bytes = sizeof(float) * 3u * (size_t)cap;
+    JSValue ab = JS_NewArrayBuffer(s->ctx, (uint8_t *)s->physics->transforms, bytes,
+                                   NULL, NULL, false);
+    if (JS_IsException(ab)) { r2d__capture_error(s); return false; }
+    JSValue args[3];
+    args[0] = ab;
+    args[1] = JS_NewInt32(s->ctx, 0);
+    args[2] = JS_NewInt32(s->ctx, (int)(cap * 3u));
+    JSValue ta = JS_NewTypedArray(s->ctx, 3, args, JS_TYPED_ARRAY_FLOAT32);
+    JS_FreeValue(s->ctx, args[1]);
+    JS_FreeValue(s->ctx, args[2]);
+    JS_FreeValue(s->ctx, ab);
+    if (JS_IsException(ta)) { r2d__capture_error(s); return false; }
+    s->transforms_array = ta;
+    s->transforms_valid = true;
+    s->transforms_capacity = cap;
+    return true;
+}
+
 static JSValue r2d__js_get_transforms(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
     R2DScript *s = r2d__script_of(ctx);
-    if (!s || !s->physics || !s->transforms_valid) return JS_NULL;
+    if (!s || !s->physics || !r2d__refresh_transforms(s)) return JS_NULL;
     return JS_DupValue(ctx, s->transforms_array);
 }
 
@@ -1599,12 +1632,17 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     const int shaders = (s && s->renderer) ? r2d_render_user_shader_count(s->renderer) : 0;
 
     JS_SetPropertyStr(ctx, o, "textures", JS_NewInt32(ctx, textures));
-    JS_SetPropertyStr(ctx, o, "textures_max", JS_NewInt32(ctx, R2D_MAX_TEXTURES));
+    JS_SetPropertyStr(ctx, o, "textures_max",
+                      JS_NewInt32(ctx, s && s->renderer ? r2d_texture_capacity(s->renderer) : 0));
     JS_SetPropertyStr(ctx, o, "sprites", JS_NewInt32(ctx, sprites));
     JS_SetPropertyStr(ctx, o, "bodies", JS_NewInt32(ctx, bodies));
-    JS_SetPropertyStr(ctx, o, "bodies_max", JS_NewInt32(ctx, R2D_MAX_BODIES));
+    JS_SetPropertyStr(ctx, o, "bodies_max",
+                      JS_NewInt32(ctx, s && s->physics
+                                       ? (int)r2d_physics_body_capacity(s->physics) : 0));
     JS_SetPropertyStr(ctx, o, "joints", JS_NewInt32(ctx, joints));
-    JS_SetPropertyStr(ctx, o, "joints_max", JS_NewInt32(ctx, 64));
+    JS_SetPropertyStr(ctx, o, "joints_max",
+                      JS_NewInt32(ctx, s && s->physics
+                                       ? (int)r2d_physics_joint_capacity(s->physics) : 0));
     JS_SetPropertyStr(ctx, o, "user_shaders", JS_NewInt32(ctx, shaders));
     // Слот 0 занят обычным спрайтом: реально игра может занять на один
     // шейдер меньше, и само сообщение движка при переполнении называет то
@@ -1624,10 +1662,13 @@ static JSValue r2d__js_limits(JSContext *ctx, JSValueConst this_val, int argc, J
     JS_SetPropertyStr(ctx, o, "viewports_max", JS_NewInt32(ctx, R2D_MAX_VIEWPORTS));
     JS_SetPropertyStr(ctx, o, "query_max", JS_NewInt32(ctx, R2D_MAX_QUERY));
     JS_SetPropertyStr(ctx, o, "contact_events", JS_NewInt32(ctx, contacts));
-    JS_SetPropertyStr(ctx, o, "contact_events_max", JS_NewInt32(ctx, R2D_MAX_CONTACT_EVENTS));
+    JS_SetPropertyStr(ctx, o, "contact_events_max",
+                      JS_NewInt32(ctx, s && s->physics
+                                       ? (int)r2d_physics_contact_capacity(s->physics) : 0));
     JS_SetPropertyStr(ctx, o, "text_queue_max", JS_NewInt32(ctx, 2048));
     JS_SetPropertyStr(ctx, o, "ui_callbacks", JS_NewInt32(ctx, callbacks));
-    JS_SetPropertyStr(ctx, o, "ui_callbacks_max", JS_NewInt32(ctx, 256));
+    JS_SetPropertyStr(ctx, o, "ui_callbacks_max",
+                      JS_NewInt32(ctx, s ? s->callback_cap : 0));
     JS_SetPropertyStr(ctx, o, "documents_max", JS_NewInt32(ctx, 64));
     // Слои: сколько эффектов узлов занято из бюджета C (R2D_MAX_NODE_FX).
     JS_SetPropertyStr(ctx, o, "node_fx", JS_NewInt32(ctx,
@@ -2985,6 +3026,30 @@ static JSValue r2d__js_ui_layout_rect(JSContext *ctx, JSValueConst this_val,
     return result;
 }
 
+// --- Пул обработчиков UI (§27) ---------------------------------------------
+// Массив JSValue растёт с проверкой переполнения. Стартовая ёмкость 256
+// сохранена для совместимости с диагностикой, но это не потолок.
+#define R2D_CALLBACK_INITIAL 256
+#define R2D_CALLBACK_MAX     (1 << 20)
+
+static bool r2d__callbacks_reserve(R2DScript *s, int need)
+{
+    if (!s) return false;
+    if (need <= s->callback_cap) return true;
+    if (need > R2D_CALLBACK_MAX) return false;
+    int next = s->callback_cap > 0 ? s->callback_cap : R2D_CALLBACK_INITIAL;
+    while (next < need) {
+        if (next > R2D_CALLBACK_MAX / 2) { next = R2D_CALLBACK_MAX; break; }
+        next *= 2;
+    }
+    JSValue *grown = (JSValue *)realloc(s->callbacks, (size_t)next * sizeof(JSValue));
+    if (!grown) return false;
+    for (int i = s->callback_cap; i < next; ++i) grown[i] = JS_UNDEFINED;
+    s->callbacks = grown;
+    s->callback_cap = next;
+    return true;
+}
+
 static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -2999,15 +3064,18 @@ static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JS
     const char *element = r2d__arg_str(ctx, argc, argv, 1);
     const char *event = r2d__arg_str(ctx, argc, argv, 2);
 
-    const int cap = (int)(sizeof s->callbacks / sizeof s->callbacks[0]);
+    if (!r2d__callbacks_reserve(s, R2D_CALLBACK_INITIAL)) {
+        return JS_ThrowInternalError(ctx, "R2D_UI_LISTENER_LIMIT: нет памяти под пул обработчиков UI");
+    }
+    int cap = s->callback_cap;
     // Ключ идемпотентности — ПАРА+ОБРАБОТЧИК. Раньше ключом была только пара
     // элемент+событие, и второй РАЗНЫЙ обработчик молча выбрасывался. Теперь
     // повторная подписка тем же обработчиком возвращает прежний id (без
     // второго слушателя), а другой обработчик получает свой слот.
     if (element && event) {
-        int existing[256];
-        const int count = r2d_gui_listener_query(s->gui, doc, element, event,
-                                                 existing, cap);
+        int *existing = (int *)malloc((size_t)cap * sizeof(int));
+        const int count = existing
+            ? r2d_gui_listener_query(s->gui, doc, element, event, existing, cap) : 0;
         for (int i = 0; i < count; ++i) {
             const int id = existing[i];
             if (id < 0 || id >= cap) continue;
@@ -3015,9 +3083,11 @@ static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JS
                 && JS_IsStrictEqual(ctx, s->callbacks[id], argv[3])) {
                 JS_FreeCString(ctx, element);
                 JS_FreeCString(ctx, event);
+                free(existing);
                 return JS_NewInt32(ctx, id);
             }
         }
+        free(existing);
     }
 
     // Свободный слот ищем по пулу: после off слот возвращается, поэтому
@@ -3033,12 +3103,19 @@ static JSValue r2d__js_ui_on(JSContext *ctx, JSValueConst this_val, int argc, JS
         }
     }
     if (slot < 0) {
-        if (element) JS_FreeCString(ctx, element);
-        if (event) JS_FreeCString(ctx, event);
-        return JS_ThrowInternalError(ctx,
-            "R2D_UI_LISTENER_LIMIT: все %d слотов обработчиков UI заняты "
-            "(активно %d из %d) — снимите лишние через engine.ui.off(...) "
-            "или doc.off(...)", cap, live, cap);
+        // Свободных слотов нет — пул растёт, а не отказывает на 256-й
+        // подписке (§27). После роста повторяем поиск один раз.
+        if (!r2d__callbacks_reserve(s, cap * 2)) {
+            if (element) JS_FreeCString(ctx, element);
+            if (event) JS_FreeCString(ctx, event);
+            return JS_ThrowInternalError(ctx,
+                "R2D_UI_LISTENER_LIMIT: все %d слотов обработчиков UI заняты "
+                "(активно %d) и пул не вырос — снимите лишние через "
+                "engine.ui.off(...) или doc.off(...)", cap, live);
+        }
+        cap = s->callback_cap;
+        slot = cap - (cap / 2);   // первый слот новой половины заведомо свободен
+        live = 0;
     }
 
     // Слот НЕ занимаем заранее: если слушателя не поставили, JS-значение
@@ -3088,9 +3165,10 @@ static JSValue r2d__js_ui_off(JSContext *ctx, JSValueConst this_val, int argc, J
         return JS_NewInt32(ctx, 0);
     }
 
-    const int cap = (int)(sizeof s->callbacks / sizeof s->callbacks[0]);
-    int ids[256];
-    const int count = r2d_gui_listener_query(s->gui, doc, element, event, ids, cap);
+    const int cap = s->callback_cap;
+    int *ids = (int *)malloc((size_t)(cap > 0 ? cap : 1) * sizeof(int));
+    const int count = ids
+        ? r2d_gui_listener_query(s->gui, doc, element, event, ids, cap) : 0;
     int removed = 0;
     for (int i = 0; i < count; ++i) {
         const int id = ids[i];
@@ -3111,6 +3189,7 @@ static JSValue r2d__js_ui_off(JSContext *ctx, JSValueConst this_val, int argc, J
         if (r2d_gui_remove_listener(s->gui, id)) removed++;
     }
 
+    free(ids);
     JS_FreeCString(ctx, element);
     JS_FreeCString(ctx, event);
     return JS_NewInt32(ctx, removed);
@@ -3122,7 +3201,7 @@ static void r2d__ui_callback_detached(void *user, int callback_id)
 {
     R2DScript *s = (R2DScript *)user;
     if (!s || !s->ctx) return;
-    const int cap = (int)(sizeof s->callbacks / sizeof s->callbacks[0]);
+    const int cap = s->callback_cap;
     if (callback_id < 0 || callback_id >= cap) return;
     if (JS_IsUndefined(s->callbacks[callback_id])) return;
     JS_FreeValue(s->ctx, s->callbacks[callback_id]);
@@ -3136,10 +3215,7 @@ static void r2d__gui_dispatch(void *user, int callback_id, const char *element_i
 {
     R2DScript *s = (R2DScript *)user;
     if (!s || !s->ctx) return;
-    if (callback_id < 0
-        || callback_id >= (int)(sizeof s->callbacks / sizeof s->callbacks[0])) {
-        return;
-    }
+    if (callback_id < 0 || callback_id >= s->callback_cap) return;
 
     JSContext *ctx = s->ctx;
     // Дублируем ссылку на время вызова: обработчик может снять САМ СЕБЯ
@@ -6498,10 +6574,13 @@ static void r2d__free_js_values(R2DScript *s)
     if (!s->ctx) return;
     // Слоты возвращаются (free-list — поиск), поэтому значение может лежать
     // в любом слоте: обходим ВЕСЬ массив, а не только high-water callback_count.
-    for (size_t i = 0; i < sizeof s->callbacks / sizeof s->callbacks[0]; ++i) {
+    for (int i = 0; i < s->callback_cap; ++i) {
         JS_FreeValue(s->ctx, s->callbacks[i]);
         s->callbacks[i] = JS_UNDEFINED;
     }
+    free(s->callbacks);
+    s->callbacks = NULL;
+    s->callback_cap = 0;
     s->callback_count = 0;
 
     JS_FreeValue(s->ctx, s->update_fn);
@@ -6651,10 +6730,13 @@ static bool r2d__create_context(R2DScript *s)
     s->engine_obj = JS_UNDEFINED;
     s->transforms_array = JS_UNDEFINED;
     s->transforms_valid = false;
+    s->transforms_capacity = 0;
     s->callback_count = 0;
-    for (size_t i = 0; i < sizeof s->callbacks / sizeof s->callbacks[0]; ++i) {
-        s->callbacks[i] = JS_UNDEFINED;
+    if (!r2d__callbacks_reserve(s, R2D_CALLBACK_INITIAL)) {
+        R2D_ERROR("не удалось выделить пул обработчиков UI");
+        return false;
     }
+    for (int i = 0; i < s->callback_cap; ++i) s->callbacks[i] = JS_UNDEFINED;
 
     // globalThis.engine
     JSValue global = JS_GetGlobalObject(s->ctx);
@@ -6691,36 +6773,7 @@ static bool r2d__create_context(R2DScript *s)
     }
 
     // Float32Array поверх C-массива трансформов: без копирования каждый кадр.
-    if (s->physics) {
-        const size_t bytes = sizeof(float) * 3u * (size_t)R2D_MAX_BODIES;
-        JSValue ab = JS_NewArrayBuffer(s->ctx, (uint8_t *)s->physics->transforms, bytes,
-                                       NULL, NULL, false);
-        if (!JS_IsException(ab)) {
-            // ВАЖНО: JS_NewTypedArray передаёт аргументы прямо в конструктор
-            // типизированного массива, а тот при ArrayBuffer безусловно читает
-            // argv[1] (смещение) и argv[2] (длина). С одним аргументом он
-            // прочитал бы мусор со стека и создал массив длиной 0.
-            JSValue args[3];
-            args[0] = ab;
-            args[1] = JS_NewInt32(s->ctx, 0);
-            args[2] = JS_NewInt32(s->ctx, R2D_MAX_BODIES * 3);
-
-            JSValue ta = JS_NewTypedArray(s->ctx, 3, args, JS_TYPED_ARRAY_FLOAT32);
-
-            JS_FreeValue(s->ctx, args[1]);
-            JS_FreeValue(s->ctx, args[2]);
-            JS_FreeValue(s->ctx, ab);
-
-            if (!JS_IsException(ta)) {
-                s->transforms_array = ta;
-                s->transforms_valid = true;
-            } else {
-                r2d__capture_error(s);
-            }
-        } else {
-            r2d__capture_error(s);
-        }
-    }
+    if (s->physics) r2d__refresh_transforms(s);
 
     return true;
 }
@@ -7223,7 +7276,7 @@ int r2d_script_callback_count(const R2DScript *s)
     // Живые обработчики, а не high-water: после off слот свободен, и
     // $.debug.limits().ui_callbacks должен это показывать.
     int live = 0;
-    for (size_t i = 0; i < sizeof s->callbacks / sizeof s->callbacks[0]; ++i) {
+    for (int i = 0; i < s->callback_cap; ++i) {
         if (!JS_IsUndefined(s->callbacks[i])) live++;
     }
     return live;

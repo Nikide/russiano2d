@@ -291,8 +291,6 @@ static SDL_GPUTexture *r2d__create_texture_levels(R2DRenderer *r, int w, int h,
     SDL_zero(info);
     info.type         = SDL_GPU_TEXTURETYPE_2D;
     info.format       = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    // Мипмапы SDL строит, РИСУЯ уровни, поэтому текстуре нужен COLOR_TARGET.
-    // Для одноуровневых он ни к чему — не просим лишнего.
     info.usage        = SDL_GPU_TEXTUREUSAGE_SAMPLER;
     if (levels > 1) info.usage |= SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
     info.width              = (Uint32)w;
@@ -308,92 +306,314 @@ static SDL_GPUTexture *r2d__create_texture_levels(R2DRenderer *r, int w, int h,
     return tex;
 }
 
-// Заливает RGBA8-пиксели в текстуру через одноразовый command buffer.
+// ---------------------------------------------------------------------------
+// Очередь загрузки текстур (§5)
+//
+// Вместо «создать transfer-буфер, отправить, дождаться fence» на каждое
+// обновление региона — копирование в CPU-staging и один пачечный copy pass
+// во время обычной отправки кадра. Синхронных ожиданий здесь нет.
+// ---------------------------------------------------------------------------
+
+#define R2D_TEXTURE_RETIRE_FRAMES 3u
+#define R2D_STAGING_ALIGN 256u
+
+static bool r2d__staging_reserve(R2DRenderer *r, size_t need)
+{
+    if (need <= r->upload_staging_cap) return true;
+    size_t next = r->upload_staging_cap ? r->upload_staging_cap : 64u * 1024u;
+    while (next < need) {
+        if (next > SIZE_MAX / 2u) { next = need; break; }
+        next *= 2u;
+    }
+    if (next < need || next > (size_t)UINT32_MAX * 4u) {
+        R2D_ERROR("очередь загрузки текстур: запрошено слишком много staging-памяти (%zu байт)", need);
+        return false;
+    }
+    uint8_t *grown = (uint8_t *)realloc(r->upload_staging, next);
+    if (!grown) {
+        R2D_ERROR("очередь загрузки текстур: нет памяти под staging (%zu байт)", next);
+        return false;
+    }
+    r->upload_staging = grown;
+    r->upload_staging_cap = next;
+    return true;
+}
+
+static void r2d__uploads_drop_texture(R2DRenderer *r, int texture_id, SDL_GPUTexture *handle)
+{
+    if (!r || r->upload_count == 0) return;
+    uint32_t w = 0;
+    for (uint32_t i = 0; i < r->upload_count; ++i) {
+        const R2DTextureUpload *u = &r->uploads[i];
+        const bool match = (texture_id >= 0) ? (u->texture_id == texture_id)
+                                             : (u->texture_id < 0 && u->texture == handle);
+        if (match) continue;
+        if (w != i) r->uploads[w] = r->uploads[i];
+        w++;
+    }
+    r->upload_count = w;
+}
+
+/** Поставить регион в очередь. pixels копируется сразу: владелец может его менять. */
+static bool r2d__upload_enqueue(R2DRenderer *r, SDL_GPUTexture *tex, int texture_id,
+                                uint32_t generation, int x, int y, int w, int h,
+                                const void *pixels, int pitch, bool mipmaps)
+{
+    if (!r || !tex || !pixels || w <= 0 || h <= 0 || pitch <= 0) return false;
+    if (w > 65536 || h > 65536) {
+        R2D_ERROR("загрузка текстуры: регион %dx%d подозрительно велик", w, h);
+        return false;
+    }
+    const size_t row_bytes = (size_t)w * 4u;
+    const size_t total = row_bytes * (size_t)h;
+    if (h != 0 && total / (size_t)h != row_bytes) {
+        R2D_ERROR("загрузка текстуры: переполнение размера региона %dx%d", w, h);
+        return false;
+    }
+    const size_t offset = (r->upload_staging_used + (R2D_STAGING_ALIGN - 1u))
+                        & ~(size_t)(R2D_STAGING_ALIGN - 1u);
+    if (!r2d__staging_reserve(r, offset + total)) return false;
+    if (!r2d__grow((void **)&r->uploads, &r->upload_cap, (int)r->upload_count + 1,
+                   sizeof(R2DTextureUpload))) {
+        return false;
+    }
+
+    const uint8_t *src = (const uint8_t *)pixels;
+    uint8_t *dst = r->upload_staging + offset;
+    for (int row = 0; row < h; ++row) {
+        SDL_memcpy(dst + (size_t)row * row_bytes, src + (size_t)row * (size_t)pitch, row_bytes);
+    }
+
+    R2DTextureUpload *u = &r->uploads[r->upload_count++];
+    SDL_zero(*u);
+    u->texture = tex;
+    u->texture_id = texture_id;
+    u->generation = generation;
+    u->x = (uint32_t)x; u->y = (uint32_t)y;
+    u->w = (uint32_t)w; u->h = (uint32_t)h;
+    u->staging_offset = offset;
+    u->staging_size = total;
+    u->mipmaps = mipmaps;
+    r->upload_staging_used = offset + total;
+    return true;
+}
+
+static void r2d__retire_texture(R2DRenderer *r, SDL_GPUTexture *tex)
+{
+    if (!r || !tex) return;
+    if (!r2d__grow((void **)&r->retired_textures, &r->retired_cap,
+                   (int)r->retired_count + 1, sizeof(R2DRetiredTexture))) {
+        // Пул отложенных ресурсов сам по себе не вырос: без него остаётся
+        // только немедленное освобождение. Честно сообщаем, а не течём.
+        R2D_ERROR("не удалось отложить освобождение текстуры — освобождаю сразу");
+        SDL_ReleaseGPUTexture(r->device, tex);
+        return;
+    }
+    r->retired_textures[r->retired_count++] =
+        (R2DRetiredTexture){ tex, r->frame_index + R2D_TEXTURE_RETIRE_FRAMES };
+}
+
+static void r2d__retire_transfer(R2DRenderer *r, SDL_GPUTransferBuffer *tb)
+{
+    if (!r || !tb) return;
+    if (!r2d__grow((void **)&r->retired_transfers, &r->retired_transfer_cap,
+                   (int)r->retired_transfer_count + 1, sizeof(R2DRetiredTransfer))) {
+        R2D_ERROR("не удалось отложить освобождение transfer-буфера — освобождаю сразу");
+        SDL_ReleaseGPUTransferBuffer(r->device, tb);
+        return;
+    }
+    r->retired_transfers[r->retired_transfer_count++] =
+        (R2DRetiredTransfer){ tb, r->frame_index + R2D_TEXTURE_RETIRE_FRAMES };
+}
+
+/** Освободить ресурсы, которые GPU уже гарантированно не читает. */
+static void r2d__release_retired(R2DRenderer *r)
+{
+    uint32_t w = 0;
+    for (uint32_t i = 0; i < r->retired_count; ++i) {
+        R2DRetiredTexture *t = &r->retired_textures[i];
+        if (t->release_frame <= r->frame_index) {
+            SDL_ReleaseGPUTexture(r->device, t->handle);
+        } else {
+            if (w != i) r->retired_textures[w] = *t;
+            w++;
+        }
+    }
+    r->retired_count = w;
+
+    w = 0;
+    for (uint32_t i = 0; i < r->retired_transfer_count; ++i) {
+        R2DRetiredTransfer *t = &r->retired_transfers[i];
+        if (t->release_frame <= r->frame_index) {
+            SDL_ReleaseGPUTransferBuffer(r->device, t->handle);
+        } else {
+            if (w != i) r->retired_transfers[w] = *t;
+            w++;
+        }
+    }
+    r->retired_transfer_count = w;
+}
+
+/** Один пачечный copy pass; вызывается из r2d_render_upload с буфером кадра. */
+static void r2d__texture_uploads_flush(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
+{
+    if (!r || !cmd) return;
+    r->stat_texture_uploads = 0;
+    r->stat_texture_upload_batches = 0;
+    r->stat_texture_upload_bytes = 0;
+    if (r->upload_count == 0) {
+        r->upload_staging_used = 0;
+        return;
+    }
+
+    // Отбрасываем записи освобождённых/переиспользованных текстур: запись
+    // хранит поколение, поэтому старый слот не получит чужие пиксели.
+    uint32_t valid = 0;
+    for (uint32_t i = 0; i < r->upload_count; ++i) {
+        R2DTextureUpload *u = &r->uploads[i];
+        bool keep = true;
+        if (u->texture_id >= 0) {
+            const uint32_t id = (uint32_t)u->texture_id;
+            keep = id < r->texture_slots.slot_capacity &&
+                   r2d_slot_pool_valid(&r->texture_slots, id, u->generation) &&
+                   r->textures[id].handle == u->texture;
+        }
+        if (!keep) continue;
+        if (valid != i) r->uploads[valid] = *u;
+        valid++;
+    }
+    r->upload_count = valid;
+    if (valid == 0) {
+        r->upload_staging_used = 0;
+        return;
+    }
+
+    size_t need = 0;
+    for (uint32_t i = 0; i < valid; ++i) {
+        const size_t end = r->uploads[i].staging_offset + r->uploads[i].staging_size;
+        if (end > need) need = end;
+    }
+    if (need > (size_t)UINT32_MAX) {
+        R2D_ERROR("очередь загрузки текстур: пачка больше 4 ГиБ не поддерживается");
+        r->upload_count = 0;
+        r->upload_staging_used = 0;
+        return;
+    }
+
+    if (!r->tex_upload_buffer || r->tex_upload_capacity < (Uint32)need) {
+        Uint32 cap = r->tex_upload_buffer ? r->tex_upload_capacity : 256u * 1024u;
+        while (cap < (Uint32)need) {
+            if (cap > (Uint32)1 << 30) { cap = (Uint32)need; break; }
+            cap *= 2u;
+        }
+        SDL_GPUTransferBufferCreateInfo tb;
+        SDL_zero(tb);
+        tb.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tb.size = cap;
+        SDL_GPUTransferBuffer *grown = SDL_CreateGPUTransferBuffer(r->device, &tb);
+        if (!grown) {
+            R2D_ERROR("SDL_CreateGPUTransferBuffer (текстуры): %s", SDL_GetError());
+            r->upload_count = 0;
+            r->upload_staging_used = 0;
+            return;
+        }
+        if (r->tex_upload_buffer) r2d__retire_transfer(r, r->tex_upload_buffer);
+        r->tex_upload_buffer = grown;
+        r->tex_upload_capacity = cap;
+    }
+
+    // cycle=true: SDL сам следит за тем, что предыдущие кадры ещё читают буфер.
+    void *mapped = SDL_MapGPUTransferBuffer(r->device, r->tex_upload_buffer, true);
+    if (!mapped) {
+        R2D_ERROR("SDL_MapGPUTransferBuffer (текстуры): %s", SDL_GetError());
+        r->upload_count = 0;
+        r->upload_staging_used = 0;
+        return;
+    }
+    SDL_memcpy(mapped, r->upload_staging, need);
+    SDL_UnmapGPUTransferBuffer(r->device, r->tex_upload_buffer);
+
+    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
+    for (uint32_t i = 0; i < valid; ++i) {
+        R2DTextureUpload *u = &r->uploads[i];
+        SDL_GPUTextureTransferInfo src;
+        SDL_zero(src);
+        src.transfer_buffer = r->tex_upload_buffer;
+        src.offset = (Uint32)u->staging_offset;
+        src.pixels_per_row = u->w;
+        src.rows_per_layer = u->h;
+
+        SDL_GPUTextureRegion dst;
+        SDL_zero(dst);
+        dst.texture = u->texture;
+        dst.x = u->x; dst.y = u->y;
+        dst.w = u->w; dst.h = u->h; dst.d = 1;
+        SDL_UploadToGPUTexture(cp, &src, &dst, false);
+
+        r->stat_texture_uploads++;
+        r->stat_texture_upload_bytes += u->staging_size;
+    }
+    SDL_EndGPUCopyPass(cp);
+
+    // Мипмапы строятся после закрытия copy pass и только один раз на текстуру.
+    for (uint32_t i = 0; i < valid; ++i) {
+        if (!r->uploads[i].mipmaps) continue;
+        bool seen = false;
+        for (uint32_t j = 0; j < i; ++j) {
+            if (r->uploads[j].mipmaps && r->uploads[j].texture == r->uploads[i].texture) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen) SDL_GenerateMipmapsForGPUTexture(cmd, r->uploads[i].texture);
+    }
+
+    r->stat_texture_upload_batches++;
+    r->upload_count = 0;
+    r->upload_staging_used = 0;
+}
+
+// Заливает RGBA8-пиксели в текстуру через очередь загрузки (без fence).
 static bool r2d__upload_pixels(R2DRenderer *r, SDL_GPUTexture *tex,
                                 const void *pixels, int w, int h, int pitch,
                                 bool mipmaps)
 {
-    const Uint32 row_bytes = (Uint32)w * 4u;
-    const Uint32 total     = row_bytes * (Uint32)h;
-
-    SDL_GPUTransferBufferCreateInfo tb_info;
-    SDL_zero(tb_info);
-    tb_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    tb_info.size  = total;
-    SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer(r->device, &tb_info);
-    if (!tb) {
-        R2D_ERROR("SDL_CreateGPUTransferBuffer: %s", SDL_GetError());
-        return false;
-    }
-
-    void *dst = SDL_MapGPUTransferBuffer(r->device, tb, false);
-    if (!dst) {
-        R2D_ERROR("SDL_MapGPUTransferBuffer: %s", SDL_GetError());
-        SDL_ReleaseGPUTransferBuffer(r->device, tb);
-        return false;
-    }
-    const Uint8 *src = (const Uint8 *)pixels;
-    for (int y = 0; y < h; ++y) {
-        SDL_memcpy((Uint8 *)dst + (size_t)y * row_bytes, src + (size_t)y * pitch, row_bytes);
-    }
-    SDL_UnmapGPUTransferBuffer(r->device, tb);
-
-    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(r->device);
-    if (!cmd) {
-        R2D_ERROR("SDL_AcquireGPUCommandBuffer: %s", SDL_GetError());
-        SDL_ReleaseGPUTransferBuffer(r->device, tb);
-        return false;
-    }
-
-    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
-
-    // Для текстур нужен SDL_GPUTextureTransferInfo (с раскладкой строк),
-    // а не SDL_GPUTransferBufferLocation. Данные упакованы плотно, поэтому
-    // 0 означает «взять размеры из региона».
-    SDL_GPUTextureTransferInfo src_loc;
-    SDL_zero(src_loc);
-    src_loc.transfer_buffer = tb;
-    src_loc.offset          = 0;
-    src_loc.pixels_per_row  = 0;
-    src_loc.rows_per_layer  = 0;
-
-    SDL_GPUTextureRegion region;
-    SDL_zero(region);
-    region.texture = tex;
-    region.w       = (Uint32)w;
-    region.h       = (Uint32)h;
-    region.d       = 1;
-
-    SDL_UploadToGPUTexture(cp, &src_loc, &region, false);
-    SDL_EndGPUCopyPass(cp);
-
-    // Мипмапы: SDL строит пирамиду сам. Вызывать ВНЕ проходов — copy pass уже
-    // закрыт, а командный буфер ещё не отправлен.
-    if (mipmaps && tex) SDL_GenerateMipmapsForGPUTexture(cmd, tex);
-
-    SDL_GPUFence *fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
-    if (fence) {
-        SDL_GPUFence *fences[1] = { fence };
-        SDL_WaitForGPUFences(r->device, true, fences, 1);
-        SDL_ReleaseGPUFence(r->device, fence);
-    }
-    SDL_ReleaseGPUTransferBuffer(r->device, tb);
-    return true;
+    return r2d__upload_enqueue(r, tex, -1, 0, 0, 0, w, h, pixels, pitch, mipmaps);
 }
 
-// Занять слот в таблице текстур: сначала свободный из уже отжитых, потом новый.
-//
-// Раньше все вызывающие делали `texture_count++` напрямую, и таблица росла
-// только вверх: выгруженная текстура навсегда съедала слот, а viewport.create
-// вообще писал за границу массива (256 слотов) и портил поля рендерера.
-// Возвращает -1, только если свободных слотов нет вовсе.
+// Занять слот в реестре текстур. Реестр динамический (§7): id остаётся
+// индексом слота, а freelist даёт O(1) переиспользование после free.
+// Возвращает -1 только при нехватке памяти.
 static int r2d__texture_slot_alloc(R2DRenderer *r)
 {
-    for (int i = 0; i < r->texture_count; ++i) {
-        if (!r->textures[i].alive) return i;
+    const uint32_t slot = r2d_slot_pool_alloc(&r->texture_slots);
+    if (slot == R2D_SLOT_NONE) {
+        R2D_ERROR("нет памяти под новый слот текстуры (реестр вырос до %u)",
+                  r2d_slot_pool_capacity(&r->texture_slots));
+        return -1;
     }
-    if (r->texture_count < R2D_MAX_TEXTURES) return r->texture_count++;
-    return -1;
+    const uint32_t old_capacity = r->texture_capacity;
+    if (!r2d_grow_array((void **)&r->textures, sizeof(R2DTexture),
+                        &r->texture_capacity, slot + 1u)) {
+        r2d_slot_pool_free(&r->texture_slots, slot);
+        R2D_ERROR("нет памяти под таблицу текстур (%u слотов)", slot + 1u);
+        return -1;
+    }
+    // Freelist выдаёт слоты С ВЕРХУ (LIFO), поэтому texture_count сразу
+    // становится верхней границей, а слоты ниже ещё не выделялись. Их
+    // обязательно обнулить: иначе циклы `i < texture_count` читают мусор
+    // (ASan: bool=190) и shutdown освобождает случайные указатели.
+    if (r->texture_capacity > old_capacity) {
+        SDL_memset(&r->textures[old_capacity], 0,
+                   (size_t)(r->texture_capacity - old_capacity) * sizeof(R2DTexture));
+    }
+    R2DTexture *t = &r->textures[slot];
+    SDL_zero(*t);
+    t->alive = false;
+    r->texture_count = (int)r->texture_slots.slot_count;
+    const int live = (int)r2d_slot_pool_count(&r->texture_slots);
+    if (live > r->texture_peak) r->texture_peak = live;
+    return (int)slot;
 }
 
 // Средний цвет непрозрачных пикселей RGBA32-буфера. Пиксели с alpha < 16 не
@@ -688,16 +908,12 @@ int r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h)
     if (!r || !r->device || w <= 0 || h <= 0 || w > 16384 || h > 16384) return -1;
 
     const int slot = r2d__texture_slot_alloc(r);
-    if (slot < 0) {
-        R2D_ERROR("достигнут лимит текстур (%d)", R2D_MAX_TEXTURES);
-        return -1;
-    }
+    if (slot < 0) return -1;   // причина уже сообщена аллокатором
 
     SDL_GPUTexture *tex = r2d__create_texture_usage(
         r, w, h, SDL_GPU_TEXTUREUSAGE_SAMPLER);
-    if (!tex) return -1;
-    if (pixels && !r2d__upload_pixels(r, tex, pixels, w, h, w * 4, false)) {
-        SDL_ReleaseGPUTexture(r->device, tex);
+    if (!tex) {
+        r2d_slot_pool_free(&r->texture_slots, (uint32_t)slot);
         return -1;
     }
 
@@ -707,6 +923,20 @@ int r2d_texture_create_rgba(R2DRenderer *r, const void *pixels, int w, int h)
     t->height = h;
     t->alive  = true;
     t->has_avg = false;
+
+    // Пиксели уходят в общую очередь загрузки: никакого ожидания fence.
+    // Текстуру нельзя отрисовывать до ближайшего flush кадра, но он идёт
+    // до первого draw pass (main.c), поэтому видимая задержка не меняется.
+    if (pixels && !r2d__upload_enqueue(r, tex, slot,
+                                       r2d_slot_pool_generation(&r->texture_slots,
+                                                                (uint32_t)slot),
+                                       0, 0, w, h, pixels, w * 4, false)) {
+        t->alive = false;
+        t->handle = NULL;
+        SDL_ReleaseGPUTexture(r->device, tex);
+        r2d_slot_pool_free(&r->texture_slots, (uint32_t)slot);
+        return -1;
+    }
     if (pixels) {
         r2d__texture_average(pixels, w, h, w * 4, t->avg, &t->has_avg);
         r2d__texture_thumb(pixels, w, h, w * 4, t);
@@ -723,66 +953,23 @@ bool r2d_texture_upload_region(R2DRenderer *r, int id, int x, int y, int w, int 
                                const void *pixels, int pitch)
 {
     if (!r || !pixels || id < 0 || id >= r->texture_count) return false;
-    if (!r->textures[id].alive || w <= 0 || h <= 0) return false;
-
-    const Uint32 row_bytes = (Uint32)w * 4u;
-    const Uint32 total     = row_bytes * (Uint32)h;
-
-    SDL_GPUTransferBufferCreateInfo tb_info;
-    SDL_zero(tb_info);
-    tb_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    tb_info.size  = total;
-    SDL_GPUTransferBuffer *tb = SDL_CreateGPUTransferBuffer(r->device, &tb_info);
-    if (!tb) return false;
-
-    void *dst = SDL_MapGPUTransferBuffer(r->device, tb, false);
-    if (!dst) {
-        SDL_ReleaseGPUTransferBuffer(r->device, tb);
-        return false;
-    }
-    const Uint8 *src = (const Uint8 *)pixels;
-    for (int row = 0; row < h; ++row) {
-        SDL_memcpy((Uint8 *)dst + (size_t)row * row_bytes,
-                   src + (size_t)row * (size_t)pitch, row_bytes);
-    }
-    SDL_UnmapGPUTransferBuffer(r->device, tb);
-
-    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(r->device);
-    if (!cmd) {
-        SDL_ReleaseGPUTransferBuffer(r->device, tb);
-        return false;
+    R2DTexture *t = &r->textures[id];
+    if (!t->alive || !t->handle || w <= 0 || h <= 0) return false;
+    if (x < 0 || y < 0 || x + w > t->width || y + h > t->height) {
+        // Обрезка до текстуры вместо тихой записи за её пределы.
+        if (x < 0) { w += x; x = 0; }
+        if (y < 0) { h += y; y = 0; }
+        if (x + w > t->width) w = t->width - x;
+        if (y + h > t->height) h = t->height - y;
+        if (w <= 0 || h <= 0) return false;
     }
 
-    SDL_GPUCopyPass *cp = SDL_BeginGPUCopyPass(cmd);
-
-    SDL_GPUTextureTransferInfo src_loc;
-    SDL_zero(src_loc);
-    src_loc.transfer_buffer = tb;
-    src_loc.offset          = 0;
-
-    SDL_GPUTextureRegion region;
-    SDL_zero(region);
-    region.texture = r->textures[id].handle;
-    region.x       = (Uint32)x;
-    region.y       = (Uint32)y;
-    region.w       = (Uint32)w;
-    region.h       = (Uint32)h;
-    region.d       = 1;
-
-    SDL_UploadToGPUTexture(cp, &src_loc, &region, false);
-    SDL_EndGPUCopyPass(cp);
-
-    SDL_GPUFence *fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
-    if (fence) {
-        SDL_GPUFence *fences[1] = { fence };
-        SDL_WaitForGPUFences(r->device, true, fences, 1);
-        SDL_ReleaseGPUFence(r->device, fence);
-    }
-    SDL_ReleaseGPUTransferBuffer(r->device, tb);
-
-    // Байты нового региона обязаны попасть на GPU до того, как их увидит
-    // отрисовка следующего кадра: атлас глифов дорисовывается по ходу игры.
-    return true;
+    // Регион лишь КОПИРУЕТСЯ в staging и ставится в очередь: GPU-копия уйдёт
+    // общим copy pass кадра. Синхронного ожидания fence здесь больше нет —
+    // именно оно превращало каждый новый глиф в простой CPU/GPU.
+    return r2d__upload_enqueue(r, t->handle, id,
+                               r2d_slot_pool_generation(&r->texture_slots, (uint32_t)id),
+                               x, y, w, h, pixels, pitch, false);
 }
 
 static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps);
@@ -803,10 +990,7 @@ static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
     if (existing >= 0) return existing;
 
     const int slot = r2d__texture_slot_alloc(r);
-    if (slot < 0) {
-        R2D_ERROR("достигнут лимит текстур (%d)", R2D_MAX_TEXTURES);
-        return -1;
-    }
+    if (slot < 0) return -1;   // причина уже сообщена аллокатором
 
     // В собранной игре картинки лежат в грузе: читаем из памяти, а на диск
     // обращаемся только если файла там нет.
@@ -841,10 +1025,26 @@ static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
     const int h = rgba->h;
     const Uint32 levels = mipmaps ? r2d__mip_levels(w, h) : 1;
     SDL_GPUTexture *tex = r2d__create_texture_levels(r, w, h, levels);
-    if (!tex || !r2d__upload_pixels(r, tex, rgba->pixels, w, h, rgba->pitch, mipmaps)) {
-        if (tex) SDL_ReleaseGPUTexture(r->device, tex);
+    if (!tex) {
         if (rgba != loaded) SDL_DestroySurface(rgba);
         SDL_DestroySurface(loaded);
+        r2d_slot_pool_free(&r->texture_slots, (uint32_t)slot);
+        return -1;
+    }
+    R2DTexture *t = &r->textures[slot];
+    t->handle = tex;
+    t->width  = w;
+    t->height = h;
+    t->alive  = true;
+    if (!r2d__upload_enqueue(r, tex, slot,
+                             r2d_slot_pool_generation(&r->texture_slots, (uint32_t)slot),
+                             0, 0, w, h, rgba->pixels, rgba->pitch, mipmaps)) {
+        t->alive = false;
+        t->handle = NULL;
+        SDL_ReleaseGPUTexture(r->device, tex);
+        if (rgba != loaded) SDL_DestroySurface(rgba);
+        SDL_DestroySurface(loaded);
+        r2d_slot_pool_free(&r->texture_slots, (uint32_t)slot);
         return -1;
     }
 
@@ -881,11 +1081,6 @@ static int r2d_texture_load_ex(R2DRenderer *r, const char *path, bool mipmaps)
     SDL_DestroySurface(loaded);
 
     const int id = slot;
-    R2DTexture *t = &r->textures[id];
-    t->handle = tex;
-    t->width  = w;
-    t->height = h;
-    t->alive  = true;
     SDL_memcpy(t->avg, avg, sizeof avg);
     t->has_avg = has_avg;
     t->thumb = thumb;
@@ -945,7 +1140,11 @@ bool r2d_texture_free(R2DRenderer *r, int id)
     R2DTexture *t = &r->textures[id];
     if (!t->alive) return false;
 
-    if (t->handle) SDL_ReleaseGPUTexture(r->device, t->handle);
+    // Отложенное уничтожение: кадр, который уже отправлен, мог ещё читать
+    // эту текстуру. Ресурс уйдёт не раньше, чем через R2D_TEXTURE_RETIRE_FRAMES
+    // кадров (см. r2d__release_retired).
+    r2d__uploads_drop_texture(r, id, t->handle);
+    if (t->handle) r2d__retire_texture(r, t->handle);
     t->handle = NULL;
     t->alive = false;
     t->width = 0;
@@ -961,18 +1160,33 @@ bool r2d_texture_free(R2DRenderer *r, int id)
             r->sprites[i].alive = false;
         }
     }
+    r2d_slot_pool_free(&r->texture_slots, (uint32_t)id);
     return true;
 }
 
 // Сколько живых текстур сейчас (для отладочного отчёта о лимитах).
 int r2d_texture_live_count(const R2DRenderer *r)
 {
-    int live = 0;
-    if (!r) return 0;
-    for (int i = 0; i < r->texture_count; ++i) {
-        if (r->textures[i].alive) live++;
-    }
-    return live;
+    return r ? (int)r2d_slot_pool_count(&r->texture_slots) : 0;
+}
+
+int r2d_texture_capacity(const R2DRenderer *r)
+{
+    return r ? (int)r2d_slot_pool_capacity(&r->texture_slots) : 0;
+}
+
+int r2d_texture_peak(const R2DRenderer *r)
+{
+    return r ? r->texture_peak : 0;
+}
+
+void r2d_texture_upload_stats(const R2DRenderer *r, int *regions, int *batches,
+                              size_t *bytes, int *fence_waits)
+{
+    if (regions) *regions = r ? (int)r->stat_texture_uploads : 0;
+    if (batches) *batches = r ? (int)r->stat_texture_upload_batches : 0;
+    if (bytes) *bytes = r ? r->stat_texture_upload_bytes : 0;
+    if (fence_waits) *fence_waits = r ? (int)r->stat_texture_upload_waits : 0;
 }
 
 int r2d_texture_find(const R2DRenderer *r, const char *path)
@@ -1120,6 +1334,10 @@ int r2d_render_clip_count(const R2DRenderer *r)
 
 void r2d_render_begin_frame(R2DRenderer *r, int screen_w, int screen_h)
 {
+    // Кадр начинается: освобождаем GPU-ресурсы, которые уже пережили
+    // безопасную задержку (см. r2d__retire_texture).
+    r->frame_index++;
+    r2d__release_retired(r);
     r->screen_w       = screen_w > 0 ? screen_w : 1;
     r->screen_h       = screen_h > 0 ? screen_h : 1;
     r->cmd_count      = 0;
@@ -1801,6 +2019,11 @@ static bool r2d__ensure_upload_buffer(R2DRenderer *r, uint32_t bytes)
 
 void r2d_render_upload(R2DRenderer *r, SDL_GPUCommandBuffer *cmd)
 {
+    // Текстуры (атлас глифов, обновления регионов, загрузки из скрипта) идут
+    // первыми: copy pass обязан закончиться до render pass. Если геометрии в
+    // этом кадре нет, функция раньше выходила и текстуры не доезжали вовсе.
+    if (r && cmd) r2d__texture_uploads_flush(r, cmd);
+
     // Треугольники могут быть и без спрайтов: тогда r->index_count == 0,
     // но буферы всё равно должны быть созданы и залиты.
     if (r->index_count == 0 && r->tri_vertex_count == 0 && r->light_vertex_count == 0
@@ -2314,7 +2537,10 @@ void r2d_render_draw_mesh(R2DRenderer *r, SDL_GPUCommandBuffer *cmd, SDL_GPURend
         SDL_zero(tex);
         // Текстура ПАКЕТА. У «белого» меша (texture < 0) — белая текстура, как
         // было раньше; иначе сэмплим по u/v ту, что просила игра.
-        const int ti = (mb->texture >= 0 && mb->texture < R2D_MAX_TEXTURES
+        // Реестр динамический: граница id — texture_count, а не compile-time
+        // константа; мёртвый слот тоже не должен попасть в выборку.
+        const int ti = (mb->texture >= 0 && mb->texture < r->texture_count
+                        && r->textures[mb->texture].alive
                         && r->textures[mb->texture].handle)
                            ? mb->texture : r->white_texture;
         // Меш рисует тот же спрайтовый фрагментный шейдер, поэтому ему нужны
@@ -2877,8 +3103,7 @@ int r2d_render_viewport_create(R2DRenderer *r, int w, int h)
     // границу массива R2DTexture и затирал поля рендерера.
     const int tex_id = r2d__texture_slot_alloc(r);
     if (tex_id < 0) {
-        R2D_ERROR("viewport.create: нет свободного слота текстуры (лимит %d)",
-                  R2D_MAX_TEXTURES);
+        R2D_ERROR("viewport.create: нет памяти под слот текстуры истории");
         return -1;
     }
 
@@ -2887,6 +3112,7 @@ int r2d_render_viewport_create(R2DRenderer *r, int w, int h)
     if (!target || !history) {
         if (target) SDL_ReleaseGPUTexture(r->device, target);
         if (history) SDL_ReleaseGPUTexture(r->device, history);
+        r2d_slot_pool_free(&r->texture_slots, (uint32_t)tex_id);
         R2D_ERROR("viewport.create: %s", SDL_GetError());
         return -1;
     }
@@ -2918,19 +3144,18 @@ bool r2d_render_viewport_destroy(R2DRenderer *r, int id)
     if (r->bound_viewport == id) r->bound_viewport = -1;
     if (vp->target) SDL_ReleaseGPUTexture(r->device, vp->target);
     if (vp->history) {
-        // Текстура зарегистрирована в таблице — освобождаем её один раз.
-        // Слот помечается мёртвым и переиспользуется следующим
-        // loadTexture/viewport.create: иначе цикл create/destroy копил бы слоты
-        // до переполнения таблицы.
+        // Текстура зарегистрирована в реестре — освобождаем её через общий
+        // путь (отложенное уничтожение + возврат слота в freelist). Раньше
+        // слот просто помечался мёртвым, и пул не знал о свободном месте.
+        int tex_id = -1;
         for (int i = 0; i < r->texture_count; ++i) {
             if (r->textures[i].alive && r->textures[i].handle == vp->history) {
-                r->textures[i].alive = false;
-                r->textures[i].handle = NULL;
-                r->textures[i].name[0] = '\0';
+                tex_id = i;
                 break;
             }
         }
-        SDL_ReleaseGPUTexture(r->device, vp->history);
+        if (tex_id >= 0) r2d_texture_free(r, tex_id);
+        else SDL_ReleaseGPUTexture(r->device, vp->history);
     }
     if (vp->sprite >= 0 && vp->sprite < r->sprite_count) {
         r->sprites[vp->sprite].alive = false;
@@ -3424,6 +3649,16 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     r->clear_g = 0.10f;
     r->clear_b = 0.13f;
     r->clear_a = 1.0f;
+    // Реестр текстур — пул слотов (§7): стартовая ёмкость небольшая, дальше
+    // растёт по мере загрузки контента. R2D_MAX_TEXTURES больше не потолок.
+    if (!r2d_slot_pool_init(&r->texture_slots, R2D_INITIAL_TEXTURES)) {
+        R2D_ERROR("не удалось инициализировать пул текстур");
+        return false;
+    }
+    r->texture_capacity = 0;
+    r->texture_count = 0;
+    r->texture_peak = 0;
+    r->frame_index = 0;
     // Z-буфер включён по умолчанию: спрайты пишут z = 0, поэтому порядок
     // отрисовки между ними сохраняется, а меш может закрывать собой спрайты.
     // Игра может выключить тест (r2d_render_set_depth) для интерфейса.
@@ -3553,13 +3788,14 @@ bool r2d_render_init(R2DRenderer *r, SDL_GPUDevice *device, SDL_Window *window)
     {
         SDL_GPUTexture *white = r2d__create_texture(r, 1, 1);
         const Uint32 pixel = 0xFFFFFFFFu;
-        if (!white || !r2d__upload_pixels(r, white, &pixel, 1, 1, 4, false)) {
+        const int id = r2d__texture_slot_alloc(r);
+        if (!white || id < 0 || !r2d__upload_pixels(r, white, &pixel, 1, 1, 4, false)) {
             R2D_ERROR("не удалось создать белую текстуру");
             if (white) SDL_ReleaseGPUTexture(device, white);
+            if (id >= 0) r2d_slot_pool_free(&r->texture_slots, (uint32_t)id);
             r2d_render_shutdown(r);
             return false;
         }
-        const int id = r->texture_count++;
         r->textures[id].handle = white;
         r->textures[id].width  = 1;
         r->textures[id].height = 1;
@@ -3705,8 +3941,38 @@ void r2d_render_shutdown(R2DRenderer *r)
     for (int i = 0; i < r->texture_count; ++i) {
         if (r->textures[i].alive && r->textures[i].handle) {
             SDL_ReleaseGPUTexture(r->device, r->textures[i].handle);
+            r->textures[i].handle = NULL;
         }
+        if (r->textures[i].thumb) { SDL_free(r->textures[i].thumb); r->textures[i].thumb = NULL; }
+        if (r->textures[i].cpu) { SDL_free(r->textures[i].cpu); r->textures[i].cpu = NULL; }
     }
+    // Отложенные ресурсы и очередь загрузки: при выключении ждать GPU уже
+    // нечего — устройство уничтожается вызывающим.
+    for (uint32_t i = 0; i < r->retired_count; ++i) {
+        if (r->retired_textures[i].handle)
+            SDL_ReleaseGPUTexture(r->device, r->retired_textures[i].handle);
+    }
+    for (uint32_t i = 0; i < r->retired_transfer_count; ++i) {
+        if (r->retired_transfers[i].handle)
+            SDL_ReleaseGPUTransferBuffer(r->device, r->retired_transfers[i].handle);
+    }
+    if (r->tex_upload_buffer) SDL_ReleaseGPUTransferBuffer(r->device, r->tex_upload_buffer);
+    free(r->upload_staging);   r->upload_staging = NULL;
+    free(r->uploads);          r->uploads = NULL;
+    free(r->retired_textures); r->retired_textures = NULL;
+    free(r->retired_transfers); r->retired_transfers = NULL;
+    free(r->textures);         r->textures = NULL;
+    r2d_slot_pool_shutdown(&r->texture_slots);
+    r->texture_count = 0;
+    r->texture_capacity = 0;
+    r->upload_count = 0;
+    r->upload_cap = 0;
+    r->upload_staging_used = 0;
+    r->upload_staging_cap = 0;
+    r->retired_count = r->retired_cap = 0;
+    r->retired_transfer_count = r->retired_transfer_cap = 0;
+    r->tex_upload_buffer = NULL;
+    r->tex_upload_capacity = 0;
     if (r->sampler)  SDL_ReleaseGPUSampler(r->device, r->sampler);
     if (r->linear_sampler) SDL_ReleaseGPUSampler(r->device, r->linear_sampler);
     if (r->black_texture)  SDL_ReleaseGPUTexture(r->device, r->black_texture);
@@ -4079,6 +4345,20 @@ static JSValue r2d__js_render_info(JSContext *ctx, JSValueConst this_val,
     JS_SetPropertyStr(ctx, o, "batches", JS_NewInt32(ctx, r ? r->stat_batches : 0));
     JS_SetPropertyStr(ctx, o, "draw_calls", JS_NewInt32(ctx, r ? r->stat_draws : 0));
 
+    // §5/§42. Очередь загрузки текстур и реестр: сколько регионов/пачек ушло
+    // в GPU за кадр и сколько было синхронных ожиданий fence (цель — 0).
+    JS_SetPropertyStr(ctx, o, "texture_uploads",
+                      JS_NewInt32(ctx, r ? (int)r->stat_texture_uploads : 0));
+    JS_SetPropertyStr(ctx, o, "texture_upload_batches",
+                      JS_NewInt32(ctx, r ? (int)r->stat_texture_upload_batches : 0));
+    JS_SetPropertyStr(ctx, o, "texture_upload_bytes",
+                      JS_NewFloat64(ctx, r ? (double)r->stat_texture_upload_bytes : 0.0));
+    JS_SetPropertyStr(ctx, o, "texture_fence_waits",
+                      JS_NewInt32(ctx, r ? (int)r->stat_texture_upload_waits : 0));
+    JS_SetPropertyStr(ctx, o, "texture_slots",
+                      JS_NewInt32(ctx, r ? (int)r2d_slot_pool_capacity(&r->texture_slots) : 0));
+    JS_SetPropertyStr(ctx, o, "texture_peak", JS_NewInt32(ctx, r ? r->texture_peak : 0));
+
     // Цели кадра: имя, размер и факт участия в этом кадре. В списке только те
     // цели, которые реально существуют (созданы) — «нулевых» записей нет,
     // иначе инспектор показывал бы буфер, которого нет.
@@ -4136,7 +4416,8 @@ static JSValue r2d__js_render_info(JSContext *ctx, JSValueConst this_val,
             }
         }
         JS_SetPropertyStr(ctx, tex, "count", JS_NewInt32(ctx, live));
-        JS_SetPropertyStr(ctx, tex, "max", JS_NewInt32(ctx, R2D_MAX_TEXTURES));
+        JS_SetPropertyStr(ctx, tex, "max",
+                          JS_NewInt32(ctx, r ? r2d_texture_capacity(r) : 0));
         JS_SetPropertyStr(ctx, tex, "pixels", JS_NewFloat64(ctx, pixels));
         JS_SetPropertyStr(ctx, o, "textures", tex);
     }

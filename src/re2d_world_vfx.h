@@ -2,15 +2,17 @@
 // ===========================================================================
 // Re2D: native VFX library (R-03, roadmap sections 108-116).
 //
-// Constrained 2.5D VFX data and fixed pools for world/screen cards, pooled
-// trails, temporary lights, decals and effect bundles. No ECS, no mesh, no
-// per-spark JS node: one native step owns all effects on the world.
+// Constrained 2.5D VFX data and runtime-allocated pools for world/screen cards,
+// pooled trails, temporary lights, decals and effect bundles. No ECS, no mesh,
+// no per-spark JS node: one native step owns all effects on the world.
 //
 // Particles are emitted into the existing R2DWorldParticlePool. Particle
 // collision modes live in re2d_world_particle.h and are also driven here with
-// world support/blocked queries. This module never allocates per frame and
-// owns no mutable globals. Bundle parsing is one-shot (r2d_json) and stores
-// all data in fixed-size arrays.
+// world support/blocked queries. This module never allocates per frame: all
+// pool storage is allocated once by r2d_world_vfx_init/_init_quality and
+// released by r2d_world_vfx_free. Bundle parsing is one-shot (r2d_json); the
+// bundle registry and per-bundle preset lists grow on demand, while the
+// spawn-time pools stay budgeted by the current R2DWorldVfxQuality.
 //
 // FX bundle format (JSON, same shape as high-level fxDefine):
 //   {
@@ -28,7 +30,7 @@
 //     "flash": {"color":"#fff0c0","ms":60}
 //   }
 //
-// Counters: cards/trails/lights/decals/distortion are bounded by the constants
+// Counters: cards/trails/lights/decals are bounded by the quality capacities
 // below. Temp lights respect `light_budget` with deterministic stealing by
 // priority. Decals use existing world decal slots and require a used material.
 // ===========================================================================
@@ -38,6 +40,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// Default quality capacities. These are DEFAULTS, not hard limits: the bundle
+// registry and the per-bundle preset lists grow on demand, and
+// r2d_world_vfx_set_quality() can resize the spawn-time pools at runtime.
 #define R2D_WORLD_VFX_MAX_BUNDLES 64
 #define R2D_WORLD_VFX_MAX_CARDS 128
 #define R2D_WORLD_VFX_MAX_TRAILS 32
@@ -93,10 +98,13 @@ typedef struct {
 
 typedef struct {
     bool active;
-    int count;             // live points, 1..R2D_WORLD_VFX_TRAIL_POINTS
-    float x[R2D_WORLD_VFX_TRAIL_POINTS];
-    float y[R2D_WORLD_VFX_TRAIL_POINTS];
-    float h[R2D_WORLD_VFX_TRAIL_POINTS];
+    int count;             // live points, 1..point_capacity
+    // Points are slices of the VFX-owned trail storage; the renderer indexes
+    // x/y/h[0..count) with 0 = newest. Never freed by the trail itself.
+    float *x;
+    float *y;
+    float *h;
+    int point_capacity;
     float head_x,head_y,head_h;
     float vx,vy,vh;
     float speed;
@@ -134,11 +142,13 @@ typedef struct {
     char name[R2D_WORLD_VFX_NAME_MAX];
     bool used;
     int particle_count;
-    R2DWorldVfxParticlePreset particles[R2D_WORLD_VFX_MAX_PARTICLE_PRESETS];
+    int particle_capacity;
+    R2DWorldVfxParticlePreset *particles; // growable, owned by the registry
     int card_count;
-    R2DWorldVfxCard cards[R2D_WORLD_VFX_MAX_CARD_PRESETS];
+    int card_capacity;
+    R2DWorldVfxCard *cards;               // growable, owned by the registry
     bool has_trail;
-    R2DWorldVfxTrail trail;
+    R2DWorldVfxTrail trail;               // preset only: x/y/h stay NULL
     bool has_light;
     R2DWorldVfxLight light;
     bool has_decal;
@@ -149,22 +159,47 @@ typedef struct {
     uint32_t flash_color;
 } R2DWorldVfxBundle;
 
+// Runtime pool capacities. max_bundles is the INITIAL registry capacity (the
+// registry doubles on demand); the others are hard spawn-time budgets for the
+// current quality level. particles is the per-bundle-spawn particle emission
+// cap (the particle pool itself remains caller-owned).
+typedef struct {
+    int max_bundles;
+    int max_cards;
+    int max_trails;
+    int trail_points;
+    int temp_lights;
+    int particles;
+} R2DWorldVfxQuality;
+
+// Zero-initialised quality means "defaults"; use r2d_world_vfx_default_quality.
+R2DWorldVfxQuality r2d_world_vfx_default_quality(void);
+
 typedef struct {
     int particles_alive;
     int particle_capacity;
-    int particle_overflow;
+    int particle_overflow;   // particles evicted from the ring (== evicted)
+    int particle_peak;       // pool high-water mark since init/clear
     int particles_spawned;
     int cards;
+    int cards_capacity;
     int cards_spawned;
+    int cards_evicted;       // oldest card replaced because the pool was full
     int trails;
+    int trails_capacity;
     int trails_spawned;
+    int trails_evicted;      // oldest trail replaced because the pool was full
     int temp_lights;
+    int light_capacity;
     int light_budget;
-    int light_overflow;
+    int light_overflow;      // lights refused by budget/priority or allocation
     int decals;
+    int decals_capacity;
     int decals_spawned;
+    int decals_evicted;      // oldest tracked decal replaced when the pool was full
     int distortion_cards;
     int bundles;
+    int bundle_capacity;
     int fx_spawns;
     int emitters;          // active trails (continuous effect emitters)
 } R2DWorldVfxInfo;
@@ -198,36 +233,65 @@ typedef struct {
 } R2DWorldVfxHooks;
 
 typedef struct R2DWorldVfx {
-    R2DWorldVfxBundle bundles[R2D_WORLD_VFX_MAX_BUNDLES];
-    R2DWorldVfxCard cards[R2D_WORLD_VFX_MAX_CARDS];
-    R2DWorldVfxTrail trails[R2D_WORLD_VFX_MAX_TRAILS];
-    R2DWorldVfxLight lights[R2D_WORLD_VFX_MAX_LIGHTS];
+    R2DWorldVfxQuality quality;
+    // Growable registry: bundle_count live entries in bundle_capacity slots.
+    R2DWorldVfxBundle *bundles;
+    int bundle_count,bundle_capacity;
+    // Runtime spawn pools, allocated once per quality change.
+    R2DWorldVfxCard *cards;
+    int card_capacity;
+    R2DWorldVfxTrail *trails;
+    int trail_capacity;
+    R2DWorldVfxLight *lights;
+    int light_capacity;
     int card_cursor,trail_cursor,light_cursor;
-    int decal_tokens[R2D_WORLD_VFX_MAX_CARDS];
-    float decal_life[R2D_WORLD_VFX_MAX_CARDS];
-    int decal_count;
+    // Trail point storage: each trails[i] x/y/h points into these slices.
+    float *trail_x,*trail_y,*trail_h;
+    // Decal bookkeeping pool (tokens tracked by the library).
+    int *decal_tokens;
+    float *decal_life;
+    int decal_capacity,decal_count;
     R2DWorldVfxHooks hooks;          // borrowed host callbacks
     R2DWorldParticlePool *particles; // borrowed; NULL = no particle emission
     int light_budget;
     uint32_t last_seed;
-    int bundle_count,fx_spawns;
+    int fx_spawns;
     int particles_spawned,cards_spawned,trails_spawned,lights_spawned,decals_spawned;
-    int light_overflow;
+    int cards_evicted,trails_evicted,decals_evicted,light_overflow;
 } R2DWorldVfx;
 
-// Bind borrowed particle storage and reset all pools. light_budget is clamped
-// to 0..R2D_WORLD_VFX_MAX_LIGHTS; NULL vfx is a no-op.
+// Allocate the default quality pools and reset all state. Returns false and
+// leaves a safe, empty manager when allocation fails (all pools NULL/0).
+// Existing callers can keep using the void form below.
+bool r2d_world_vfx_init_quality(R2DWorldVfx *vfx,R2DWorldParticlePool *particles,
+                                int light_budget,const R2DWorldVfxQuality *quality);
+
+// Bind borrowed particle storage and reset all pools with the default quality.
+// light_budget is clamped to 0..quality.temp_lights; NULL vfx is a no-op.
 void r2d_world_vfx_init(R2DWorldVfx *vfx,R2DWorldParticlePool *particles,int light_budget);
+
+// Release every heap pool and registry. Registered definitions are dropped.
+// Safe on NULL and on an already-freed/zeroed manager.
+void r2d_world_vfx_free(R2DWorldVfx *vfx);
+
+// Resize the spawn-time pools. Registered bundle definitions are preserved;
+// live cards/trails/lights/decals are dropped (quality changes are not hot).
+// The bundle registry only grows (never shrinks below the registered count).
+// Returns false (state untouched) for invalid/NULL input or allocation failure.
+bool r2d_world_vfx_set_quality(R2DWorldVfx *vfx,const R2DWorldVfxQuality *quality);
+R2DWorldVfxQuality r2d_world_vfx_get_quality(const R2DWorldVfx *vfx);
 
 // Replace the borrowed particle pool (created lazily by the runtime). NULL is
 // ignored. Hooks may be updated independently.
 void r2d_world_vfx_bind(R2DWorldVfx *vfx,R2DWorldParticlePool *particles);
 void r2d_world_vfx_hooks(R2DWorldVfx *vfx,const R2DWorldVfxHooks *hooks);
 
-// Parse one FX bundle JSON into the fixed registry. Returns false and writes a
-// human-readable ASCII error when name/text is invalid, the registry is full,
-// or any parsed field is out of range. Re-defining an existing name replaces
-// it. No partial bundle is stored on failure.
+// Parse one FX bundle JSON into the growable registry. Returns false and writes
+// a human-readable ASCII error when name/text is invalid or any parsed field is
+// out of range. The registry and per-bundle preset arrays grow on demand, so
+// there is no fixed "#65 bundle" rejection; only allocation failure stops it.
+// Re-defining an existing name replaces it. No partial bundle is stored on
+// failure.
 bool r2d_world_vfx_define(R2DWorldVfx *vfx,const char *name,const char *json,
                           char *error,size_t error_size);
 
@@ -256,7 +320,7 @@ void r2d_world_vfx_clear(R2DWorldVfx *vfx);
 
 void r2d_world_vfx_info(const R2DWorldVfx *vfx,R2DWorldVfxInfo *out);
 
-// Light budget setter/getter. Values are clamped to 0..MAX_LIGHTS; lowering the
-// budget removes the lowest-priority lights immediately.
+// Light budget setter/getter. Values are clamped to 0..quality.temp_lights;
+// lowering the budget removes the lowest-priority lights immediately.
 void r2d_world_vfx_light_budget(R2DWorldVfx *vfx,int budget);
 int  r2d_world_vfx_get_light_budget(const R2DWorldVfx *vfx);
