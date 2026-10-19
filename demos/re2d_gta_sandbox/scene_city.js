@@ -27,6 +27,10 @@ export default function installCity($) {
             const city = buildCity();
             const world = $.re2dWorld.fromJSON(JSON.stringify(city.map)).backend('gpu');
             world.sky({ color: '#86a9cc' });
+            // Атласы игрока/пешеходов/машин нужны каждый кадр: держим их
+            // residency-pin'ом, чтобы первый кадр не мигал без спрайтов.
+            world.atlasPin(PED_ATLAS, true);
+            world.atlasPin(CAR_ATLAS, true);
             world.atmosphere({ heightDensity: 0, hazeStrength: 0 });
             world.camera({ mode: 'topdown', x: city.playerStart.x, y: city.playerStart.y, h: 520, orthoHeight: 1150, near: 2 });
 

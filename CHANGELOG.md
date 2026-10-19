@@ -1,3 +1,32 @@
+> Unreleased / Re2D atlas residency (re2d_gta_test 1.2.11): видимые flat-atlas
+> спрайты могли молча исчезать, оставляя контактные тени. Причины и фиксы:
+> (1) LRU не учитывал видимый спрос и вытеснял атласы видимых актёров при
+> превышении resident-бюджета; теперь видимые атласы получают demand-pin и
+> force-promote, никогда не вытесняются, а бюджет для них — мягкий (over-budget
+> виден в streamInfo). (2) id residency-слота был индексом массива регистрации:
+> remove/re-register сдвигал его и оставлял состояние на чужом атласе; теперь
+> у каждой регистрации стабильный stream_id, unregister освобождает слот.
+> (3) grounding pass рисовал контактную тень, даже когда изображение актёра
+> заблокировано residency; теперь тень подавляется вместе с изображением
+> (groundShadowsSuppressed). Диагностика: `world.streamInfo()` (бюджеты,
+> resident/pinned/overBudget, atlases[] с path/nodeId/bytes/state/pinned/refs/
+> visibleRefs/lastEvictFrame/reason, warnings, pinsPending/pinPaths),
+> `world.streamConfig(...)` (0 = unlimited), `world.atlasPin(path,on)` (sticky
+> path-пин до регистрации, bounded 64), `world.streamWarnings()/
+> takeStreamWarnings()`; highlevel `render/renderToSprite` автоматически
+> репортит `R2D_ATLAS_NOT_RESIDENT` в `$.debug.errors()` один раз на эпизод с
+> path+node; новые счётчики streamPinned*/streamOverBudget*/visibleAtlasBlocked/
+> groundShadowsSuppressed. Демо-city пиннит атласы игрока/педов/машин.
+> Тесты: tests/re2d/stream_residency_test.c (6, включая pin-before-registration),
+> tests/agent/re2d_atlas_residency_test.py (50 крупных атласов, 300 кадров,
+> churn/rebuild, budgets, pin, soft cap, no shadow-without-sprite), ctest
+> 170/170, huge-world и renderer-parity регрессии зелёные. Ограничения:
+> pending path-пины ограничены 64; дедупликации decoded-пикселей по PNG-пути
+> между регистрациями пока нет (память считается per registration); атласы >
+> 4096 требуют author-side downscale/tile/atlas-set (рецепты в
+> docs/RE2D_HUGE_WORLD.md); residency остаётся детерминированным incremental
+> bookkeeping, не async I/O.
+>
 > Unreleased / GTA sandbox follow-up: закрыты три ограничения прошлого среза.
 > (1) Brush-generated cells теперь переносят `tags`/`ceilingTags`: brush и
 > world/bounds поддерживают массивы тегов, compiler берёт floor tags у

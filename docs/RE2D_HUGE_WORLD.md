@@ -78,8 +78,14 @@ UNLOADED -> PRELOAD -> RESIDENT -> EVICTABLE -> UNLOADED
 * per frame: bounded promotions (`promote_budget_items`), bounded uploads
   (`upload_budget_bytes` + `upload_budget_items`), then LRU eviction of
   non-active payloads until the resident byte/item budget holds;
+* pinned/visible-demand items (`pinned`/`demand` flags) outrank ordinary
+  payloads: they are promoted without the ordinary promote budget, are never
+  demoted or evicted, and form the soft residency cap when they alone exceed a
+  budget;
 * `0` upload budget means "no upload this frame"; residency budget `0` means
-  unlimited;
+  unlimited. The public `world.streamConfig()` maps `0` to unlimited for all of
+  its fields (new API only; legacy `regionConfig`/`regionBudget` keep the old
+  contract);
 * texture/atlas items use the same state machine, so `textureResident` /
   `atlasResident` queries share one contract.
 
@@ -104,8 +110,10 @@ material texture at init:
   `gpuStreamEvictions`;
 * a visible material is demand-loaded so a visible surface never samples white
   while its region is still PRELOAD; hidden materials still follow the cache;
-* atlas residency gates `ActorGPU` uploads (`id=1000000+actor`, kind ATLAS);
-  non-resident atlases release the GPU frame texture and are skipped;
+* atlas residency gates `ActorGPU` uploads (stable `stream_id`, kind ATLAS);
+  non-resident atlases release the GPU frame texture and are skipped; the
+  matching contact/ground shadow is suppressed (`groundShadowsSuppressed`) so a
+  shadow is never left without its sprite;
 * `r2d_world_stream_set_hook()` is installed by the GPU owner and counts every
   residency transition (`gpuStreamTransitions`), so loaders/uploaders do not
   need to poll the cache.
@@ -114,6 +122,62 @@ Remaining honest limitation: this is deterministic incremental residency, not
 async disk I/O; placement/eviction is real on SDL_GPU, disk loading still uses
 the existing loader. EVICTABLE copies stay GPU-resident for visual continuity
 until the cache actually evicts them (UNLOADED).
+
+### Visible-demand atlas residency + diagnostics (BASHNYA 1.2.11 report)
+
+BASHNYA reported visible flat-atlas sprites disappearing while their contact
+shadows remained, with `streamEvictions` every frame and only 82/138 atlases
+resident. Root cause on the engine side: atlas residency had no visible-demand
+input and no public budget/pin/diagnostic surface, and atlas stream ids were the
+registration array index, so unregister/re-register churn could leave stale
+residency state for a different atlas. Fixed additively:
+
+* **stable atlas stream ids** (`next_atlas_stream_id`, `R2DWorldAtlasActor.stream_id`)
+  and removal of the stream item on `world.remove(node)`; the GPU actor gate and
+  the cache now agree even when the atlas registry shifts down;
+* **visible demand** is derived natively every frame from the previous frame's
+  visible atlas actors (no per-frame JS calls): those items are demand-pinned,
+  force-promoted ahead of preload/distant payloads, touched for LRU and never
+  evicted. If the pinned set exceeds `residentBytes`/`residentItems` it stays
+  resident as a reported soft cap (`over_budget_bytes/items`);
+* **grounding gate**: a visible atlas that is not RESIDENT/EVICTABLE is not drawn
+  (existing GPU gate) and its contact/ground card is skipped as well;
+* **diagnostics**: bounded native warning ring
+  (`R2D_WORLD_STREAM_WARNING_LIMIT` = 64, one entry per atlas episode: path,
+  bytes, cell/grid, image size, node id, state, eviction reason, frame) plus
+  cumulative counters in `world.info()`;
+* **public API** (`world.streamInfo/streamConfig/atlasPin/streamWarnings/
+  takeStreamWarnings`, see `docs/highlevel/re2d.md`). Path pins are sticky: a `world.atlasPin(path,true)` issued before the atlas
+  registers is kept in a bounded 64-path pending set (`streamInfo().pinsPending/
+  pinPaths`) and applied on registration, so streamed populations do not warn on
+  their first visible frame. `streamInfo().atlases`
+  reports per-atlas `path/bytes/state/pinned/demandPinned/refs/visibleRefs/
+  lastEvictFrame/reason`; `streamConfig` sets budgets (`0` = unlimited) and
+  `atlasPin(pathOrId,on)` protects an authored PNG path or atlas id.
+
+Measured acceptance (`tests/agent/re2d_atlas_residency_test.py`, generated game
+under `build/`, 50 atlas sprites × 1024×1024 PNG = 200 MiB decoded accounting,
+4 MiB / 4-item residency budget, 4 promotions/frame):
+
+* first frame: 46/50 visible atlases not resident, 8 actor draws, 46 suppressed
+  ground cards, structured `R2D_ATLAS_NOT_RESIDENT` errors naming path+node;
+* frame 2+: visible demand promotes all 50, `visibleAtlasBlocked=0`,
+  `overBudget=1`, 50 demand pins, 100/50 actor draws (base + span-filtered pair);
+* 300 fixed-dt frames with camera motion and per-frame shot events: 0 blocked
+  frames, 0 suppressed shadows, no visible sprite lost, pinned non-visible
+  atlas stays resident;
+* `streamConfig({residentBytes:0, residentItems:0})`: no evictions,
+  `overBudget=0`, `streamInfo` reports budgets as 0;
+* native cache coverage: `tests/re2d/stream_residency_test.c` (6 Unity tests:
+  pin beats LRU, visible-demand soft cap, eviction preference/reason, budget 0
+  unlimited, deterministic promotion order, unregister/invalid input).
+
+Limits: residency is deterministic incremental bookkeeping, not async disk I/O;
+decoded pixels are per registration (no PNG-path dedup across nodes yet); the
+supported atlas sheet size stays ≤4096×4096. Larger production atlases need a
+documented recipe: downscale cells, tile the sheet into several ≤4096 PNGs, or
+build an author-side atlas set and register one `world.sprite` per sheet. Tiling
+inside the engine is not implemented (P2 in the report).
 
 ### True payload streaming/residency (task-15)
 

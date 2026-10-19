@@ -79,10 +79,10 @@ both directions (file->CMake and CMake->file).
 - `vfx/`: **2**
 - `streaming/`: **4**
 
-Tracked tests: **50**; CMake-wired: **50**; CMake source references: **50**.
+Tracked tests: **50**; CMake-wired: **50**; CMake source references: **51**.
 
 Untracked files (new work not yet wired) are reported as warnings, not
-as part of the compatibility contract: none.
+as part of the compatibility contract: `stream_residency_test.c`.
 
 ## Moving later
 

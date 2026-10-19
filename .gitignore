@@ -124,3 +124,6 @@ sdk/state.local.json
 # доступы к хостингу. Файлы остаются на диске.
 # Прогресс, который game_test пишет в свой файл: не часть репозитория.
 build/test_game_save_*.json
+
+# Graphify generated graph/cache (local tooling)
+graphify-out/

@@ -212,8 +212,9 @@ static void gpu_stream_sync(R2DWorldRuntime *w,WorldGPU *g)
     w->gpu_textures_resident=resident;
     int atlas_resident=0;
     for(int a=0;a<w->atlas_count;a++){
-        const R2DStreamState state=r2d_world_stream_state(&w->stream,1000000+a,
-                                                          R2D_STREAM_ATLAS);
+        // Stable stream id, not the array index: the registry shifts on unregister.
+        const R2DStreamState state=r2d_world_stream_state(&w->stream,
+            w->atlas_actors[a].stream_id,R2D_STREAM_ATLAS);
         if(state==R2D_STREAM_RESIDENT||state==R2D_STREAM_EVICTABLE)atlas_resident++;
     }
     w->gpu_atlases_resident=atlas_resident;
@@ -223,9 +224,10 @@ static bool actor_stream_blocked(const R2DWorldRuntime *w,int frame_index)
 {
     if(!w->stream_ready||frame_index<0||frame_index>=w->frame_count)return false;
     if(w->frame_kinds[frame_index]!=R2D_WORLD_FRAME_ATLAS)return false;
-    const int atlas=(int)w->frame_keys[frame_index]-1;
-    if(atlas<0||atlas>=w->atlas_count)return false;
-    const int slot=r2d_world_stream_find(&w->stream,1000000+atlas,R2D_STREAM_ATLAS);
+    // frame_keys stores the stable atlas stream id (not an array index).
+    const int stream_id=(int)w->frame_keys[frame_index];
+    if(stream_id<=0)return false;
+    const int slot=r2d_world_stream_find(&w->stream,stream_id,R2D_STREAM_ATLAS);
     if(slot<0)return false; // fallback: atlas asset not registered in the cache
     const R2DStreamState state=w->stream.items[slot].state;
     return state==R2D_STREAM_UNLOADED||state==R2D_STREAM_PRELOAD;

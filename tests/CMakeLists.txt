@@ -541,6 +541,20 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_world_stream_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# BASHNYA atlas residency: pins outrank LRU, visible-demand soft cap, eviction
+# preference/reasons, unlimited budgets and deterministic promotion order.
+add_executable(r2d_world_stream_residency_test re2d/stream_residency_test.c
+    "${CMAKE_SOURCE_DIR}/src/re2d_world_stream.c")
+target_include_directories(r2d_world_stream_residency_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_world_stream_residency_test PRIVATE r2d_unity)
+if(NOT MSVC)
+    target_link_libraries(r2d_world_stream_residency_test PRIVATE m)
+endif()
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_world_stream_residency_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_world_stream_residency_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # Distant region impostors (R-04 P1): baked cards, PVS/occluder collect,
 # nearest-first order, region-local coordinates.
 add_executable(r2d_world_impostor_test re2d/impostor_test.c

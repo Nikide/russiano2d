@@ -487,6 +487,27 @@ function worldWrapper($, native) {
                     native.regionBudget(residentBytes, maxItems);
                     return this;
                 },
+                // Atlas/stream residency diagnostics and control (additive).
+                // streamInfo() reports per-atlas state/pin/refs/eviction reason;
+                // streamConfig() sets budgets (0 = unlimited, unlike the legacy
+                // regionConfig upload contract); atlasPin() protects an atlas.
+                streamInfo() { return native.streamInfo(); },
+                streamConfig(options = {}) {
+                    if (typeof options !== 'object' || options === null || Array.isArray(options))
+                        throw new TypeError('Re2D World: streamConfig expects an options object');
+                    for (const key of Object.keys(options))
+                        if (!['residentBytes','residentItems','uploadBytes','uploadItems','promoteItems'].includes(key))
+                            throw new TypeError(`Re2D World: streamConfig unknown option "${key}"`);
+                    native.streamConfig(options);
+                    return this;
+                },
+                atlasPin(pathOrId, on = true) {
+                    if (typeof pathOrId !== 'string' && !Number.isFinite(pathOrId))
+                        throw new TypeError('Re2D World: atlasPin expects an atlas path or atlas id');
+                    return native.atlasPin(pathOrId, +!!on);
+                },
+                streamWarnings() { return native.streamWarnings(); },
+                takeStreamWarnings() { return native.takeStreamWarnings(); },
                 regionLod(near, mid, far, impostor, hidden) {
                     native.regionLod(near, mid, far, impostor, hidden);
                     return this;
@@ -1640,7 +1661,35 @@ function rendererWorldWrapper($, native) {
             projection === 'orthographic' ? (view.orthoHeight ?? (topdown ? 1200 : 400)) : 0);
         return world;
     };
-    world.renderToSprite = (view = null,width = 320,height = 180) => {if(view)world.camera(view);return native.frameRegistered(width,height);};
+    // Auto-report visible-not-resident atlases once per episode through
+    // $.debug.reportError, so a vanished visible sprite always has a structured
+    // R2D_ATLAS_NOT_RESIDENT entry naming path/node instead of failing silently.
+    // Native emits each warning once per episode (cleared when it becomes
+    // resident again); lastStreamWarningSeq dedupes peeks across frames.
+    let lastStreamWarningSeq = 0;
+    const reportStreamWarnings = () => {
+        if (!$.debug || typeof $.debug.reportError !== 'function') return;
+        let list = [];
+        try { list = native.streamWarnings() || []; } catch (e) { return; }
+        for (const warning of list) {
+            if (!warning || typeof warning.seq !== 'number' ||
+                warning.seq <= lastStreamWarningSeq) continue;
+            lastStreamWarningSeq = warning.seq;
+            try {
+                $.debug.reportError('re2d.stream', new Error(
+                    `visible atlas not resident: ${warning.path || '(no path)'} ` +
+                    `(${Math.round((warning.bytes || 0) / 1024)} KiB, cell ` +
+                    `${warning.cellW}x${warning.cellH}, grid ${warning.columns}x${warning.rows}, ` +
+                    `node ${warning.nodeId || '(none)'}, ${warning.stateName || 'unloaded'}, ` +
+                    `reason ${warning.reason || 'none'})`), {
+                    code: 'R2D_ATLAS_NOT_RESIDENT', subsystem: 're2d.stream',
+                    operation: 'atlas residency', nodeId: warning.nodeId || null,
+                    assetPath: warning.path || null, recoverable: true, data: warning,
+                });
+            } catch (e) { /* diagnostics never break the frame */ }
+        }
+    };
+    world.renderToSprite = (view = null,width = 320,height = 180) => {if(view)world.camera(view);const sprite=native.frameRegistered(width,height);reportStreamWarnings();return sprite;};
     world.render = (view = null,width = 320,height = 180) => {
         const sprite = world.renderToSprite(view,width,height);
         engine.drawSprite(sprite,engine.width/2,engine.height/2,engine.width,engine.height,0,0xffffffff);

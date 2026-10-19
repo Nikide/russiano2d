@@ -214,6 +214,80 @@ policy у этого режима нет — строку анимации ст�
 слоистый персонаж: col 0≠2, row 0≠1, live-смена 10 кадров без re-registration,
 клэмп колонки), `demos/re2d_boomer_lab`.
 
+## Atlas residency, бюджеты и диагностика (1.2.12)
+
+Плоские атласные спрайты живут в том же budgeted residency cache, что и
+регионы/материалы (`src/re2d_world_stream.c`). Видимый атлас не должен
+исчезать молча: у каждого зарегистрированного `world.sprite` стабильный
+stream id, предыдущий кадр сообщает, какие атласы видимы, и они
+**demand-pin**'ятся — продвигаются в RESIDENT вне обычного promote-бюджета и
+никогда не вытесняются LRU, даже если суммарный размер видимых атласов больше
+budget (soft cap, over-budget виден в диагностике).
+
+```js
+world.streamConfig({ residentBytes: 6 * 1024 * 1024, residentItems: 4,
+                     uploadBytes: 0, uploadItems: 0, promoteItems: 4 });
+world.atlasPin('assets/peds/ped_0.png', true);   // явный pin по пути (или по id)
+world.atlasPin(0, false);
+
+const s = world.streamInfo();
+// {residentBytes, residentItems, budgetBytes, budgetItems, uploadBudgetBytes,
+//  uploadBudgetItems, promoteItems, pending, evictedThisFrame,
+//  promotedThisFrame, promoteDeferred, pinnedBytes, pinnedItems,
+//  overBudget, overBudgetBytes, overBudgetItems, atlasesPinned, atlasesDemand,
+//  warnings, atlases: [{id, streamId, path, nodeId, bytes, state, stateName,
+//  pinned, demandPinned, refs, visibleRefs, lastEvictFrame, reason,
+//  lastEvictReason, cellW, cellH, columns, rows, imageW, imageH,
+//  visible, blocked, warned}]}
+world.streamWarnings();       // peek bounded ring (oldest first)
+world.takeStreamWarnings();   // copy and clear the ring
+```
+
+* `streamConfig`: `0` = unlimited/no cap для всех полей. Это контракт именно
+  этого метода; legacy `regionConfig(size, activeRing, preloadRing,
+  uploadBytes, uploadItems)` сохраняет старую семантику `0 uploads = no uploads
+  this frame`, а `regionBudget(bytes, items)` — прежний сеттер residency.
+  Опущенные поля не меняются.
+* `streamConfig.promoteItems` ограничивает только обычные (невидимые) preload
+  продвижения; видимые demand-атласы продвигаются всегда.
+* `atlasPin(pathOrId, on)`: путь сравнивается с authored PNG path; целое число
+  — `id` из `streamInfo().atlases` (индекс регистрации). Возвращает число
+  затронутых атласов (0 — не найдено). Pin защищает от LRU, но байты
+  продолжают учитываться в `pinnedBytes/residentBytes`.
+  **Path-pin «липкий»**: его можно вызвать до регистрации атласа (стриминговая
+  популяция); путь хранится в bounded pending-наборе (64 пути), и registration
+  применяет его сразу, поэтому первый видимый кадр уже resident и не пишет
+  `R2D_ATLAS_NOT_RESIDENT`. `on=false` удаляет pending-путь и снимает pin с
+  совпавших атласов; ошибка — только переполнение лимита (>64) или path
+  длиннее 511 символов (`RangeError`). Numeric-id pin — только немедленный, не
+  запоминается. `streamInfo().pinsPending` / `pinPaths` показывают pending-набор.
+* `streamWarnings()`/`takeStreamWarnings()`: bounded ring (64) записей о
+  видимом, но не резидентном атласе. `world.render`/`renderToSprite`
+  автоматически пересылает новую запись в
+  `$.debug.reportError('re2d.stream', …, {code:'R2D_ATLAS_NOT_RESIDENT'})`, один
+  раз на атлас до восстановления residency. Сообщение содержит path, bytes,
+  cell/grid, node id, state и reason; `$.debug.errors()` поэтому называет
+  конкретный атлас и узел.
+* Пока атлас не резидентен, его изображение не рисуется (GPU residency gate),
+  и его contact/ground shadow тоже подавляется — тени без спрайта нет.
+  Счётчики: `visibleAtlasBlocked`, `groundShadowsSuppressed`, а также
+  `streamPinnedBytes/Items`, `streamOverBudget*`, `streamWarnings` в
+  `world.info()`.
+* Стабильные stream id означают, что `world.remove(node)`/повторная регистрация
+  не оставляют stale residency state, который блокировал бы другой атлас.
+
+Ограничения: residency — детерминированный incremental, не async disk I/O;
+декодированные пиксели каждого `world.sprite` хранятся на регистрацию (дедуп
+по одному PNG между узлами пока не сделан); бюджет `residentBytes` по умолчанию
+8 MiB, поэтому сцена с большими атласами намеренно живёт на soft cap —
+смотрите `streamInfo().overBudget`; поддерживаемый размер листа ≤4096×4096,
+больше — только downscale/tile/atlas set (см. `docs/RE2D_HUGE_WORLD.md`).
+
+Проверки: `tests/re2d/stream_residency_test.c` (pin/LRU, soft cap, reasons,
+budget 0, deterministic promotion), `tests/agent/re2d_atlas_residency_test.py`
+(50 сгенерированных атласов 1024², малые бюджеты, диагностика, pin, 300
+кадров движения: ни один видимый спрайт не теряется без предупреждения).
+
 ## Trace: мир + actor-прокси
 
 `world.trace` — единый луч по статическому миру и зарегистрированным

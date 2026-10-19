@@ -27,6 +27,26 @@
 struct R2DWorldVfx;
 // Runtime owns native actor registration and final-frame resources. Bindings only configure/call.
 #define R2D_WORLD_ATLAS_ACTOR_LIMIT 1024
+// Bounded native warning ring for visible atlases that are not resident yet.
+// BASHNYA atlas-residency report: this is the diagnostic that names the atlas
+// path, node and reason instead of silently dropping the sprite.
+#define R2D_WORLD_STREAM_WARNING_LIMIT 64
+#define R2D_WORLD_STREAM_WARNING_PATH 512
+#define R2D_WORLD_STREAM_WARNING_NODE 96
+typedef struct {
+    uint64_t seq;           // monotonic; JS dedupes auto-reports by seq
+    int atlas_id;           // atlas actor registration index when reported
+    int stream_id;          // stable stream item id (1000000+)
+    uint64_t bytes;
+    int cell_w, cell_h, columns, rows;
+    int image_w, image_h;
+    int frame;
+    int state;              // R2DStreamState at report time
+    int evict_reason;       // R2DStreamEvictReason of the last eviction
+    char path[R2D_WORLD_STREAM_WARNING_PATH];
+    char node_id[R2D_WORLD_STREAM_WARNING_NODE];
+} R2DWorldStreamWarning;
+
 // One flat directional atlas sprite registered from an existing `$` node. The
 // atlas image and the cropped square frame live here; world depth/light/fog and
 // direction selection are native, so game scripts do not project per frame.
@@ -42,6 +62,14 @@ typedef struct R2DWorldAtlasActor {
     uint8_t *frame;
     int frame_side;
     int last_column,last_row,last_flip,frame_revision;
+    // Stable per-registration stream id. Atlas actor slots shift on unregister, so
+    // an array index would let stale residency state block the wrong atlas.
+    int stream_id;
+    char *path;             // authored atlas PNG path (diagnostics/pinning)
+    char *node_id;          // authored $ node id (diagnostics)
+    bool last_visible;      // previous-frame visibility (visible-demand input)
+    bool warned;            // visible-not-resident already reported this episode
+    bool pinned;            // explicit world.atlasPin() request
 } R2DWorldAtlasActor;
 // Frame entry kinds. RotSprite entries use native synthesis; atlas entries reuse
 // an already cropped square image and do not touch the Re2DSprite runtime.
@@ -178,7 +206,21 @@ typedef struct R2DWorldRuntime {
     R2DStreamStats stream_stats;
     uint64_t stream_total_uploads,stream_total_upload_bytes,stream_total_evictions;
     bool stream_ready;
-    int stream_asset_revision;
+    uint64_t stream_asset_revision;
+    // Stable atlas stream ids + registry revision (see R2DWorldAtlasActor).
+    uint64_t atlas_registry_revision;
+    int next_atlas_stream_id;
+    // Sticky path pins: world.atlasPin(path,true) may run before the atlas is
+    // registered (streamed populations); registration consults this set.
+    R2DStreamPinSet path_pins;
+    // Bounded diagnostics ring for visible-not-resident atlases.
+    R2DWorldStreamWarning stream_warnings[R2D_WORLD_STREAM_WARNING_LIMIT];
+    int stream_warning_count;      // valid entries, oldest..newest logical order
+    int stream_warning_head;       // next overwrite slot
+    uint64_t stream_warning_seq;
+    uint64_t stream_frame;         // monotonic residency frame counter
+    int visible_atlas_blocked;     // visible atlas actors not resident this frame
+    int ground_shadows_suppressed; // grounding cards skipped for blocked atlases
     // Task-15: true per-region payload residency (index packets moved by
     // R2DWorldStreamIO). Master world arrays remain the correctness fallback for
     // queries/visibility/render/nav, so an unloaded region never dangles.
@@ -425,6 +467,21 @@ bool r2d_world_region_lod_config(R2DWorldRuntime *,const R2DWorldRegionLodConfig
 // Residency raw budget (0 resident bytes = unlimited, max_items 0 = unlimited).
 // Used by tests/benchmarks to force deterministic evictions.
 bool r2d_world_region_budget(R2DWorldRuntime *,uint64_t resident_bytes,int max_resident_items);
+// Public stream budget setter behind world.streamConfig(). Unlike the low-level
+// cache contract, 0 means "unlimited/no cap" for every field here: resident
+// bytes/items, per-frame upload bytes/items and per-frame promotions. Callers
+// that need the legacy "0 uploads = freeze this frame" contract keep using
+// r2d_world_region_config()/r2d_world_region_budget().
+bool r2d_world_stream_config(R2DWorldRuntime *,uint64_t resident_bytes,int resident_items,
+                             uint64_t upload_bytes,int upload_items,int promote_items);
+// Explicit atlas pin by authored path (all registered actors with that path) or
+// by atlas actor id (0..atlas_count-1). Returns the number of matched atlases.
+int r2d_world_atlas_pin(R2DWorldRuntime *,const char *path_or_null,int atlas_id,bool pinned);
+// Visible-but-not-resident warning ring. `warnings()` peeks (oldest first);
+// `take_warnings()` copies and clears. Return the number of entries available
+// (bounded by R2D_WORLD_STREAM_WARNING_LIMIT).
+int r2d_world_stream_warnings(R2DWorldRuntime *,R2DWorldStreamWarning *out,int capacity);
+int r2d_world_take_stream_warnings(R2DWorldRuntime *,R2DWorldStreamWarning *out,int capacity);
 // Override only the five LOD distance bands (budgets stay at defaults). Used by
 // benchmarks/tests to force deterministic light/decal/sprite culling.
 bool r2d_world_region_lod_bands(R2DWorldRuntime *,float near_distance,float mid_distance,

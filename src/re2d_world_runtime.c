@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define ACTOR_LIMIT 4096
+static int atlas_stream_slot(const R2DWorldRuntime *w,int stream_id);
 // P0/P1 visual features are native configuration, not per-frame JS work. A
 // runtime starts with the medium preset; the pure feature module owns the
 // validation/preset table, so the C tests and the renderer share one contract.
@@ -382,9 +383,15 @@ bool r2d_world_regions_ensure(R2DWorldRuntime *w)
 
     // Budgeted residency cache. Per-region BSP/surface payloads are registered;
     // material textures/atlases are merged by stream_sync_assets().
-    int stream_capacity=regions*2+512+w->world.material_count;
+    int stream_capacity=regions*2+512+w->world.material_count+R2D_WORLD_ATLAS_ACTOR_LIMIT;
     if(stream_capacity<1024)stream_capacity=1024;
     if(stream_capacity>R2D_WORLD_STREAM_MAX_ITEMS)stream_capacity=R2D_WORLD_STREAM_MAX_ITEMS;
+    w->next_atlas_stream_id=1000000;
+    w->stream_asset_revision=~(uint64_t)0;
+    // A region-grid rebuild reinitializes the stream cache: atlas stream ids must
+    // be re-assigned so they cannot collide with ids from the previous cache.
+    if(w->atlas_count>0)w->atlas_registry_revision++;
+    for(int a=0;a<w->atlas_count;a++)w->atlas_actors[a].stream_id=w->next_atlas_stream_id++;
     w->stream_ready=r2d_world_stream_init(&w->stream,stream_capacity);
     if(w->stream_ready){
         if(w->stream_budget.resident_budget_bytes==0)w->stream_budget.resident_budget_bytes=8u*1024u*1024u;
@@ -480,6 +487,80 @@ bool r2d_world_region_budget(R2DWorldRuntime *w,uint64_t resident_bytes,int max_
     return true;
 }
 
+bool r2d_world_stream_config(R2DWorldRuntime *w,uint64_t resident_bytes,int resident_items,
+                             uint64_t upload_bytes,int upload_items,int promote_items)
+{
+    if(!w||w->rendering)return false;
+    if(resident_items<0||upload_items<0||promote_items<0)return false;
+    // Public contract: 0 = unlimited/no cap. The low-level cache contract keeps
+    // its historical "0 uploads = freeze this frame"; map 0 to internal maxima
+    // here so streamConfig({...:0}) means "no limit", not "disable streaming".
+    w->stream_budget.resident_budget_bytes=resident_bytes;
+    w->stream_budget.max_resident_items=resident_items;
+    w->stream_budget.upload_budget_bytes=upload_bytes?upload_bytes:~(uint64_t)0;
+    w->stream_budget.upload_budget_items=upload_items?upload_items:INT32_MAX;
+    w->stream_budget.promote_budget_items=promote_items?promote_items:INT32_MAX;
+    return true;
+}
+
+int r2d_world_atlas_pin(R2DWorldRuntime *w,const char *path_or_null,int atlas_id,bool pinned)
+{
+    if(!w||w->rendering)return 0;
+    if(path_or_null&&path_or_null[0]){
+        // Path pins are sticky: store/remove before matching so an atlas that is
+        // registered later (streamed population) is pinned on registration.
+        if(!r2d_world_stream_pin_path(&w->path_pins,path_or_null,pinned))return -1;
+        int matched=0;
+        for(int a=0;a<w->atlas_count;a++){
+            R2DWorldAtlasActor *actor=&w->atlas_actors[a];
+            if(!actor->path||strcmp(actor->path,path_or_null)!=0)continue;
+            actor->pinned=pinned;
+            const int slot=atlas_stream_slot(w,actor->stream_id);
+            if(slot>=0)w->stream.items[slot].pinned=pinned;
+            matched++;
+        }
+        return matched;
+    }
+    // Numeric pins are runtime-local atlas ids; immediate only, never sticky.
+    if(atlas_id<0)return 0;
+    int matched=0;
+    for(int a=0;a<w->atlas_count;a++){
+        if(a!=atlas_id)continue;
+        R2DWorldAtlasActor *actor=&w->atlas_actors[a];
+        actor->pinned=pinned;
+        const int slot=atlas_stream_slot(w,actor->stream_id);
+        if(slot>=0)w->stream.items[slot].pinned=pinned;
+        matched++;
+    }
+    return matched;
+}
+
+static int warnings_copy(R2DWorldRuntime *w,R2DWorldStreamWarning *out,int capacity,bool clear)
+{
+    if(!w)return 0;
+    const int count=w->stream_warning_count;
+    const int start=count==R2D_WORLD_STREAM_WARNING_LIMIT?w->stream_warning_head:0;
+    int written=0;
+    for(int i=0;i<count;i++){
+        const R2DWorldStreamWarning *entry=
+            &w->stream_warnings[(start+i)%R2D_WORLD_STREAM_WARNING_LIMIT];
+        if(out&&written<capacity)out[written]=*entry;
+        written++;
+    }
+    if(clear){w->stream_warning_count=0;w->stream_warning_head=0;}
+    return written;
+}
+
+int r2d_world_stream_warnings(R2DWorldRuntime *w,R2DWorldStreamWarning *out,int capacity)
+{
+    return warnings_copy(w,out,capacity,false);
+}
+
+int r2d_world_take_stream_warnings(R2DWorldRuntime *w,R2DWorldStreamWarning *out,int capacity)
+{
+    return warnings_copy(w,out,capacity,true);
+}
+
 bool r2d_world_region_lod_bands(R2DWorldRuntime *w,float near_distance,float mid_distance,
                                 float far_distance,float impostor_distance,float hidden_distance)
 {
@@ -564,8 +645,11 @@ static bool region_asset_xy(JSContext *ctx,JSValueConst node,float *x,float *y)
 static void runtime_stream_sync_assets(JSContext *ctx,R2DWorldRuntime *w)
 {
     if(!w->stream_ready||!w->region_ready)return;
-    const int revision=w->world.material_count*131+w->atlas_count*17+
-        (int)(w->world.geometry_revision&0x7fffffff);
+    // Atlas registration uses a monotonic registry revision: unregister+register
+    // with an unchanged atlas_count must still (re)register the new stream items.
+    const uint64_t revision=(uint64_t)w->world.material_count*131u+
+        w->atlas_registry_revision*17u+
+        (w->world.geometry_revision&0x7fffffffu);
     if(revision==w->stream_asset_revision)return;
     w->stream_asset_revision=revision;
     for(int m=0;m<w->world.material_count;m++){
@@ -596,12 +680,90 @@ static void runtime_stream_sync_assets(JSContext *ctx,R2DWorldRuntime *w)
     }
     for(int a=0;a<w->atlas_count;a++){
         const R2DWorldAtlasActor *actor=&w->atlas_actors[a];
-        if(!actor->atlas)continue;
+        if(!actor->atlas||actor->stream_id<=0)continue;
         float x=0,y=0;int region=-1;
         if(region_asset_xy(ctx,actor->node,&x,&y))
             region=r2d_world_region_at(&w->regions,x,y);
         const uint64_t bytes=(uint64_t)actor->atlas_w*actor->atlas_h*4u;
-        r2d_world_stream_register(&w->stream,1000000+a,R2D_STREAM_ATLAS,region,bytes,30);
+        r2d_world_stream_register(&w->stream,actor->stream_id,R2D_STREAM_ATLAS,
+                                  region,bytes,30);
+        // One registered actor per stable stream item today (no path dedup yet);
+        // visible_refs is refreshed by runtime_apply_atlas_demand().
+        r2d_world_stream_refs(&w->stream,actor->stream_id,R2D_STREAM_ATLAS,1,0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Atlas visible-demand residency + diagnostics (BASHNYA atlas report).
+//
+// Atlas stream items use a stable per-registration id (see R2DWorldAtlasActor),
+// not an array index: unregistering shifts actor slots, and an index-based id
+// would let stale residency state block a different atlas.
+// ---------------------------------------------------------------------------
+static int atlas_stream_slot(const R2DWorldRuntime *w,int stream_id)
+{
+    if(!w||!w->stream_ready||stream_id<=0)return -1;
+    return r2d_world_stream_find(&w->stream,stream_id,R2D_STREAM_ATLAS);
+}
+
+static R2DStreamState atlas_stream_state(const R2DWorldRuntime *w,int stream_id)
+{
+    const int slot=atlas_stream_slot(w,stream_id);
+    return slot<0?R2D_STREAM_UNLOADED:w->stream.items[slot].state;
+}
+
+static void runtime_stream_warning_push(R2DWorldRuntime *w,
+                                        const R2DWorldStreamWarning *warning)
+{
+    w->stream_warnings[w->stream_warning_head]=*warning;
+    w->stream_warnings[w->stream_warning_head].seq=++w->stream_warning_seq;
+    w->stream_warning_head=(w->stream_warning_head+1)%R2D_WORLD_STREAM_WARNING_LIMIT;
+    if(w->stream_warning_count<R2D_WORLD_STREAM_WARNING_LIMIT)w->stream_warning_count++;
+}
+
+// One warning per visible-not-resident episode: `warned` is cleared as soon as
+// the atlas becomes RESIDENT/EVICTABLE again. Never spams per frame.
+static void runtime_atlas_warn(R2DWorldRuntime *w,int atlas_index,R2DStreamState state)
+{
+    if(atlas_index<0||atlas_index>=w->atlas_count)return;
+    R2DWorldAtlasActor *actor=&w->atlas_actors[atlas_index];
+    if(actor->warned)return;
+    actor->warned=true;
+    R2DWorldStreamWarning warning;
+    memset(&warning,0,sizeof warning);
+    warning.atlas_id=atlas_index;
+    warning.stream_id=actor->stream_id;
+    warning.bytes=(uint64_t)actor->atlas_w*(uint64_t)actor->atlas_h*4u;
+    warning.cell_w=actor->cell_w;warning.cell_h=actor->cell_h;
+    warning.columns=actor->columns;warning.rows=actor->rows;
+    warning.image_w=actor->atlas_w;warning.image_h=actor->atlas_h;
+    warning.frame=(int)w->stream_frame;
+    warning.state=(int)state;
+    const int slot=atlas_stream_slot(w,actor->stream_id);
+    warning.evict_reason=slot<0?R2D_STREAM_EVICT_NONE:w->stream.items[slot].evict_reason;
+    SDL_strlcpy(warning.path,actor->path?actor->path:"",sizeof warning.path);
+    SDL_strlcpy(warning.node_id,actor->node_id?actor->node_id:"",sizeof warning.node_id);
+    runtime_stream_warning_push(w,&warning);
+}
+
+// Derived before the residency update from the previous frame's visible atlas
+// actors (no per-frame JS calls). Visible atlases are demand-pinned, promoted
+// ahead of ordinary payloads, and protected from LRU eviction.
+static void runtime_apply_atlas_demand(R2DWorldRuntime *w)
+{
+    if(!w->stream_ready)return;
+    for(int a=0;a<w->atlas_count;a++){
+        R2DWorldAtlasActor *actor=&w->atlas_actors[a];
+        const int slot=atlas_stream_slot(w,actor->stream_id);
+        if(slot<0)continue;
+        R2DStreamItem *item=&w->stream.items[slot];
+        if(item->state==R2D_STREAM_RESIDENT||item->state==R2D_STREAM_EVICTABLE)
+            actor->warned=false;
+        item->pinned=actor->pinned;
+        item->demand=actor->last_visible;
+        item->refs=1;
+        item->visible_refs=actor->last_visible?1:0;
+        if(actor->last_visible)item->last_used=w->stream_frame;
     }
 }
 
@@ -675,6 +837,8 @@ void r2d_world_regions_frame(R2DWorldRuntime *w,const R2DRe2dView *view)
     w->region_preload_count=set->metrics.preload_count;
     w->region_visibility_ms=(float)((SDL_GetPerformanceCounter()-phase)*ms);
     phase=SDL_GetPerformanceCounter();
+    w->stream_frame++;
+    runtime_apply_atlas_demand(w);
     r2d_world_stream_update(&w->stream,w->region_states,set->region_count,
         &w->stream_budget,(uint64_t)w->frame_count,&w->stream_stats);
     w->region_stream_ms=(float)((SDL_GetPerformanceCounter()-phase)*ms);
@@ -762,11 +926,11 @@ void r2d_world_runtime_actors_free(R2DWorldRuntime *w)
 {
     r2d_world_gpu_free(w);
     for(int i=0;i<w->actor_count;i++)JS_FreeValueRT(w->runtime,w->actors[i]);
-    for(int i=0;i<w->atlas_count;i++){JS_FreeValueRT(w->runtime,w->atlas_actors[i].node);free(w->atlas_actors[i].atlas);free(w->atlas_actors[i].frame);}
+    for(int i=0;i<w->atlas_count;i++){JS_FreeValueRT(w->runtime,w->atlas_actors[i].node);free(w->atlas_actors[i].atlas);free(w->atlas_actors[i].frame);free(w->atlas_actors[i].path);free(w->atlas_actors[i].node_id);}
     for(int i=0;i<w->hit_count;i++)JS_FreeValueRT(w->runtime,w->hit_entries[i].node);
     for(int i=0;i<w->trigger_count;i++){free(w->triggers[i].id);free(w->triggers[i].target);}
     free(w->actors);free(w->frame_handles);free(w->frame_positions);free(w->frame_images);free(w->frame_sizes);
-    free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_tints);free(w->frame_keys);free(w->atlas_actors);
+    free(w->frame_kinds);free(w->frame_revisions);free(w->frame_blends);free(w->frame_tints);free(w->frame_keys);free(w->atlas_actors);r2d_world_stream_pin_set_free(&w->path_pins);
     free(w->hit_entries);free(w->trace_scratch);free(w->movers);free(w->triggers);
     free(w->batch_items);free(w->batch_instances);free(w->batch_groups);
     w->batch_items=NULL;w->batch_instances=NULL;w->batch_groups=NULL;
@@ -840,6 +1004,7 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
 {
     for(int a=0;a<w->atlas_count;a++) {
         R2DWorldAtlasActor *actor=&w->atlas_actors[a];
+        actor->last_visible=false;
         float x,y,depth,ww,hh,facing;
         if(!field(ctx,actor->node,"x",&x)||!field(ctx,actor->node,"y",&y)||!field(ctx,actor->node,"depth",&depth)||
            !field(ctx,actor->node,"w",&ww)||!field(ctx,actor->node,"h",&hh)||!field(ctx,actor->node,"angle",&facing))return false;
@@ -899,6 +1064,14 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
         const int span=r2d_world_span_at(&w->world,wx,py_,bottom+hsq*0.5f);
         bool visible=span>=0&&w->visibility.span_seen[span]&&r2d_world_sprite_visible(view,width,height,wx,py_,bottom,wsq,hsq,ortho);
         if(visible&&lod.hidden){visible=false;w->lod_hidden_atlas++;}
+        actor->last_visible=visible;
+        if(visible&&w->stream_ready){
+            const R2DStreamState state=atlas_stream_state(w,actor->stream_id);
+            if(state==R2D_STREAM_UNLOADED||state==R2D_STREAM_PRELOAD){
+                w->visible_atlas_blocked++;
+                runtime_atlas_warn(w,a,state);
+            }else actor->warned=false;
+        }
         if(visible) {
             if(!actor->frame||actor->frame_side!=side) {
                 uint8_t *frame=realloc(actor->frame,(size_t)side*(size_t)side*4u);
@@ -919,7 +1092,7 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
         float *p=w->frame_positions+index*5;p[0]=wx;p[1]=py_;p[2]=bottom;p[3]=wsq;p[4]=hsq;
         w->frame_kinds[index]=R2D_WORLD_FRAME_ATLAS;
         w->frame_sizes[index]=side;
-        w->frame_keys[index]=(uint64_t)(a+1);
+        w->frame_keys[index]=(uint64_t)actor->stream_id;
         w->frame_revisions[index]=actor->frame_revision;
         w->frame_blends[index]=actor->blend;
         w->frame_tints[index*4]=w->frame_tints[index*4+1]=w->frame_tints[index*4+2]=w->frame_tints[index*4+3]=1.0f;
@@ -953,6 +1126,19 @@ bool r2d_world_render_ground_card(R2DWorldRuntime *w,const R2DRe2dView *v,int wi
 {
     if(!w||!v||!out||!w->frame_images||!w->frame_positions)return false;
     if(actor<0||actor>=w->frame_count||!w->frame_images[actor])return false;
+    // Never draw a contact shadow without its atlas image: the GPU skips a
+    // non-resident atlas actor, so its grounding card must be skipped too.
+    if(w->stream_ready&&w->frame_kinds&&w->frame_kinds[actor]==R2D_WORLD_FRAME_ATLAS){
+        const int slot=r2d_world_stream_find(&w->stream,(int)w->frame_keys[actor],
+                                             R2D_STREAM_ATLAS);
+        if(slot>=0){
+            const R2DStreamState state=w->stream.items[slot].state;
+            if(state==R2D_STREAM_UNLOADED||state==R2D_STREAM_PRELOAD){
+                w->ground_shadows_suppressed++;
+                return false;
+            }
+        }
+    }
     const R2DWorldRenderFeatures *f=&w->render_features;
     if(!f->grounding||!f->contact_shadow)return false;
     const float *p=w->frame_positions+actor*5;
@@ -1095,7 +1281,7 @@ int r2d_world_runtime_frame(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView 
     r2d_world_regions_frame(w,view);
     r2d_world_audio_step(w,view);
     Uint64 frame_start=SDL_GetPerformanceCounter(),phase=frame_start;double ms=1000.0/SDL_GetPerformanceFrequency();
-    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->particles_drawn=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;w->lod_hidden_actors=w->lod_throttled_actors=w->lod_hidden_atlas=0;w->lod_culled_lights=w->lod_culled_particles=w->lod_culled_decals=0;w->audio_region_culled=0;w->gpu_lod_culled_lights=w->gpu_lod_culled_decals=w->gpu_sprite_dir_reduced=0;r2d_world_render_counters_reset(&w->render_counters);int result=-1;
+    w->rendering=true;w->frame_count=0;w->visible_actor_count=0;w->visible_atlas_count=0;w->particles_drawn=0;w->poses_updated=w->poses_deferred=0;w->gpu_draws=w->gpu_material_batches=w->gpu_shadow_updates=0;w->gpu_draw_ground=0;w->gpu_draw_vfx=0;w->shadow_ms=w->gpu_submit_ms=w->gpu_completion_ms=0;w->lod_hidden_actors=w->lod_throttled_actors=w->lod_hidden_atlas=0;w->lod_culled_lights=w->lod_culled_particles=w->lod_culled_decals=0;w->audio_region_culled=0;w->visible_atlas_blocked=0;w->ground_shadows_suppressed=0;w->gpu_lod_culled_lights=w->gpu_lod_culled_decals=w->gpu_sprite_dir_reduced=0;r2d_world_render_counters_reset(&w->render_counters);int result=-1;
     for(int i=0;i<w->actor_count;i++)if(!collect(ctx,w,view,w->actors[i],0,false,0,0))goto done;
     if(w->disposed){JS_ThrowTypeError(ctx,"Re2D World: world disposed during actor query");goto done;}
     if(width!=w->width||height!=w->height||!w->owners) {
@@ -1446,6 +1632,29 @@ bool r2d_world_atlas_register(JSContext *ctx,R2DWorldRuntime *w,JSValueConst nod
     actor.columns=columns;actor.rows=rows;actor.directions=directions;actor.mirror=mirror;
     actor.cell_w=cell_w;actor.cell_h=cell_h;actor.pivot_mode=pivot;actor.pivot_x=pivot_x;actor.pivot_y=pivot_y;
     actor.width=width;actor.height=height;actor.blend=blend;actor.offset_x=offset_x;actor.offset_y=offset_y;actor.offset_h=offset_h;
+    actor.stream_id=w->next_atlas_stream_id++;
+    actor.path=SDL_strdup(path?path:"");
+    if(!actor.path){JS_FreeValue(ctx,actor.node);free(actor.atlas);JS_ThrowOutOfMemory(ctx);return false;}
+    // Authored $ node id is diagnostics-only; a missing id is not an error.
+    JSValue id_value=JS_GetPropertyStr(ctx,node,"id");
+    if(JS_IsException(id_value)){JS_FreeValue(ctx,actor.node);free(actor.path);free(actor.atlas);JS_ThrowOutOfMemory(ctx);return false;}
+    if(JS_IsString(id_value)){
+        const char *id_text=JS_ToCString(ctx,id_value);
+        if(!id_text){JS_FreeValue(ctx,id_value);JS_FreeValue(ctx,actor.node);free(actor.path);free(actor.atlas);JS_ThrowOutOfMemory(ctx);return false;}
+        actor.node_id=(char *)calloc(1,R2D_WORLD_STREAM_WARNING_NODE);
+        if(actor.node_id)SDL_strlcpy(actor.node_id,id_text,R2D_WORLD_STREAM_WARNING_NODE);
+        JS_FreeCString(ctx,id_text);
+        if(!actor.node_id){JS_FreeValue(ctx,id_value);JS_FreeValue(ctx,actor.node);free(actor.path);free(actor.atlas);JS_ThrowOutOfMemory(ctx);return false;}
+    }
+    JS_FreeValue(ctx,id_value);
+    if(!actor.node_id){
+        actor.node_id=(char *)calloc(1,R2D_WORLD_STREAM_WARNING_NODE);
+        if(!actor.node_id){JS_FreeValue(ctx,actor.node);free(actor.path);free(actor.atlas);JS_ThrowOutOfMemory(ctx);return false;}
+    }
+    // A pin requested before this atlas was registered still applies to its
+    // very first visible frame (sticky path pins).
+    actor.pinned=r2d_world_stream_path_pinned(&w->path_pins,actor.path);
+    w->atlas_registry_revision++;
     w->atlas_actors[w->atlas_count++]=actor;return true;
 }
 bool r2d_world_atlas_unregister(JSContext *ctx,R2DWorldRuntime *w,JSValueConst node)
@@ -1453,10 +1662,17 @@ bool r2d_world_atlas_unregister(JSContext *ctx,R2DWorldRuntime *w,JSValueConst n
     if(w->rendering){JS_ThrowTypeError(ctx,"Re2D World: atlas registry is busy");return false;}
     bool removed=false;
     for(int i=w->atlas_count-1;i>=0;i--)if(same(node,w->atlas_actors[i].node)){
-        JS_FreeValue(ctx,w->atlas_actors[i].node);free(w->atlas_actors[i].atlas);free(w->atlas_actors[i].frame);
+        R2DWorldAtlasActor *actor=&w->atlas_actors[i];
+        // Drop the stable stream slot with the actor so no stale residency state
+        // can block a different atlas after the registry shifts down.
+        if(w->stream_ready&&actor->stream_id>0)
+            r2d_world_stream_unregister(&w->stream,actor->stream_id,R2D_STREAM_ATLAS);
+        JS_FreeValue(ctx,actor->node);free(actor->atlas);free(actor->frame);
+        free(actor->path);free(actor->node_id);
         memmove(w->atlas_actors+i,w->atlas_actors+i+1,(size_t)(w->atlas_count-i-1)*sizeof(R2DWorldAtlasActor));
         w->atlas_count--;removed=true;
     }
+    if(removed)w->atlas_registry_revision++;
     return removed?true:true;
 }
 
