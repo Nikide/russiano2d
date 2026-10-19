@@ -25,7 +25,7 @@ SDK не владеет игрой: проекты и ассеты остают�
 
 | Часть | Где | Что это |
 |---|---|---|
-| Приложение SDK | [`sdk/`](../sdk) | обычный проект R2D: `project.json`, `main.js`, RmlUi-документы `sdk/ui/*.rml`. Запуск: `./build/russiano2d --game sdk` или скриптом [`./run_sdk.sh`](../run_sdk.sh) |
+| Приложение SDK | [`sdk/`](../sdk) | обычный проект R2D: `project.json`, `main.js`, RmlUi-документы `sdk/ui/*.rml`. Запуск: кликабельный `russiano2d-sdk` (двойной клик), `build-xmake/.../release/russiano2d --game sdk` или [`./run_sdk.sh`](../run_sdk.sh) |
 | Реестр компонентов | [`sdk_tools.json`](../sdk_tools.json) | единственный список инструментов; launcher строит каталог по нему |
 | Нативный бэкенд | [`sdk/native/`](../sdk/native) | C-бинарник `r2d-sdk` (`build/r2d-sdk`) без Python/Node.js/shell |
 | Мост GUI → бэкенд | `$.sdk` ([highlevel/sdk.md](highlevel/sdk.md)) | включается `"toolHost": true` в `project.json` |
@@ -92,7 +92,7 @@ python3 tests/agent/sdk_splash_test.py   # живой движок + прове�
 Classic 2D — `sprite-studio`, `animation-studio`, `tilemap-studio`, `particle-studio`,
 `collision-tools`, `parallax-tools`, `font-tools`, `audio-tools`, `input-tools`, `rmlui-studio`;
 Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `code-check`, `api-browser`;
-автоматизация — `automation`; нарратив — `vn-narrative`. Экран, которому нужен файл (`assets` в
+автоматизация — `automation`; готовые решения — `vn-narrative` (Visual Novel Maker). Экран, которому нужен файл (`assets` в
 записи), без файла ведёт в Asset Browser с
 фильтром и подсказкой `SDK_PICK_ASSET`; студии с `export const standalone = true` открываются сразу.
 
@@ -340,18 +340,32 @@ spans скомпилированной карты после compile, до эт�
 
 ## 10. Запуск и поставка
 
-Текущий SDK запускается из исходного checkout: `cmake --build build`, затем
-`./build/russiano2d --game sdk`. Нативный CLI — `build/r2d-sdk`. Хостовый
-CMake собирает его автоматически; в Emscripten этот target не включается.
-Опубликованные `dist/` 0.1.22 не содержат завершённый SDK.
-`tools/release.py` пока упаковывает engine/game/assets, а не SDK-приложение.
-Проверенная упаковка SDK остаётся в [TASKS.md](TASKS.md) §5.
+SDK — обычный проект движка. Сборка и запуск из checkout:
 
-Короткий путь — [`./run_sdk.sh`](../run_sdk.sh): находит бинарник движка
-(`R2D_BINARY` → `build/russiano2d` → `build/nikiniki2d` → `build-release/russiano2d`),
-при необходимости собирает (`--build`, `NO_BUILD=1` отключает), проверяет наличие
-`build/r2d-sdk` и запускает движок с `--game sdk` **из корня репозитория** — от
-каталога запуска зависят `sdk_tools.json` и `sdk/state.local.json`. Свои флаги
+```bash
+xmake f -p macosx -a arm64 -m release -o build-xmake/macos-arm64
+xmake build -y
+./build-xmake/macos-arm64/macosx/arm64/release/russiano2d --game sdk
+```
+
+Нативный CLI — `r2d-sdk` в том же каталоге `release/`; Xmake собирает его
+автоматически. В Emscripten этот target не включается. В релизном пакете
+рядом лежит `russiano2d-sdk` и `sdk/`.
+
+Для запуска двойным кликом есть отдельный бинарник **`russiano2d-sdk`**
+(Windows — `russiano2d-sdk.exe`): он находит `sdk/project.json` рядом с собой
+или вверх по дереву, переходит в каталог SDK и запускает
+`russiano2d --game sdk`. Пакет SDK содержит этот файл в корне, поэтому
+«нажал на бинарник — открылся SDK» работает без терминала и shell-скриптов.
+Аргументы пробрасываются: `russiano2d-sdk --headless --frames 60`; явный
+`--game` пользователя имеет приоритет.
+
+Короткий путь — [`./run_sdk.sh`](../run_sdk.sh): находит бинарник Xmake-сборки
+(`R2D_BINARY` → `build-xmake/macos-<arch>/**/release/russiano2d` → старые
+каталоги `build/`), при необходимости собирает (`--build`, `NO_BUILD=1`
+отключает), проверяет `r2d-sdk` рядом с движком и запускает `--game sdk`
+**из корня репозитория** — от каталога запуска зависят `sdk_tools.json` и
+`sdk/state.local.json`. Свои флаги
 движка передаются дальше как есть:
 
 ```bash

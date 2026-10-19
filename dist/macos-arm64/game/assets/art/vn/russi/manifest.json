@@ -1,0 +1,21 @@
+{
+  "frame": [
+    136,
+    0,
+    1408,
+    2304
+  ],
+  "poses": {
+    "angry": "russi_angry.png",
+    "blush": "russi_blush.png",
+    "caring": "russi_caring.png",
+    "happy": "russi_happy.png",
+    "jealous": "russi_jealous.png",
+    "neutral": "russi_neutral.png",
+    "shy": "russi_shy.png"
+  },
+  "size": [
+    636,
+    1152
+  ]
+}

@@ -237,6 +237,15 @@ endif()
 
 add_executable(russiano2d ${R2D_SOURCES})
 
+# Кликабельный запуск SDK: тот же runtime, ничего второго. Двойной клик по
+# russiano2d-sdk запускает `russiano2d --game sdk` (docs/SDK.md §1).
+if(NOT EMSCRIPTEN)
+    add_executable(russiano2d-sdk sdk_launcher.c)
+    target_link_libraries(russiano2d-sdk PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
+    set_target_properties(russiano2d-sdk PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+endif()
+
 # §38: релизный профиль. Один таргет, никаких изменений в поведении.
 if(R2D_LTO)
     include(CheckIPOSupported)

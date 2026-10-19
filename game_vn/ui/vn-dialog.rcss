@@ -1,0 +1,80 @@
+/*
+ * Панель реплики новеллы.
+ *
+ * Ширина и перенос строк — забота RmlUi: текст течёт по ширине блока, поэтому
+ * длинная реплика переносится сама, без ручных замеров ширины строки.
+ */
+
+body {
+    font-family: Noto Sans;
+    width: 100%;
+    height: 100%;
+    color: #eef3ff;
+}
+
+#vn-box {
+    position: absolute;
+    left: 50%;
+    margin-left: -450px;
+    bottom: 24px;
+    width: 900px;
+    padding: 16px 26px 20px 26px;
+    background-color: rgba(8, 13, 26, 214);
+    border-radius: 16px;
+    border-width: 1px;
+    border-color: rgba(255, 179, 217, 56);
+}
+
+/* display задаём явно: без него блоки текут в одну строку с текстом. */
+#vn-speaker {
+    display: block;
+    font-size: 24px;
+    color: #ffb3d9;
+    margin-bottom: 4px;
+}
+
+#vn-speaker.off {
+    display: none;
+}
+
+#vn-text {
+    display: block;
+    font-size: 26px;
+    line-height: 1.38;
+    color: #eef3ff;
+    margin-top: 0px;
+    margin-bottom: 0px;
+}
+
+#vn-choices {
+    display: block;
+    margin-top: 14px;
+}
+
+.vn-choice {
+    display: block;
+    width: 100%;
+    padding: 9px 14px;
+    margin-top: 7px;
+    font-size: 22px;
+    text-align: center;
+    color: #e8f0ff;
+    background-color: rgba(27, 36, 54, 240);
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: rgba(120, 140, 180, 70);
+}
+
+.vn-choice:hover {
+    background-color: rgba(52, 68, 104, 245);
+    border-color: rgba(255, 179, 217, 160);
+}
+
+.vn-choice.selected {
+    background-color: rgba(59, 74, 114, 240);
+    border-color: rgba(255, 179, 217, 200);
+}
+
+.vn-choice.off {
+    display: none;
+}

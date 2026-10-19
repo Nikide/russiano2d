@@ -1,0 +1,17 @@
+{
+ "cards": [
+  {
+   "kind": "sprite",
+   "life": 1.0,
+   "size": 30,
+   "endSize": 44,
+   "alpha": 0.8,
+   "endAlpha": 0,
+   "color": "#d0b0ff",
+   "blend": "additive",
+   "mode": "billboard",
+   "rotation": 0.2,
+   "spin": 0.5
+  }
+ ]
+}

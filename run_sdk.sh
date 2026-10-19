@@ -25,8 +25,8 @@
 #
 # Переменные окружения:
 #   R2D_BINARY  — готовый бинарник движка (перебивает поиск по каталогам);
-#   BUILD_DIR   — каталог сборки (по умолчанию `build`);
-#   JOBS        — параллелизм `cmake --build` (по умолчанию все ядра);
+#   BUILD_DIR   — каталог сборки Xmake (по умолчанию `build-xmake/macos-<arch>`);
+#   JOBS        — параллелизм Xmake;
 #   NO_BUILD=1  — не собирать даже если бинарника нет (запуск упадёт с подсказкой);
 #   R2D_*       — обычные переменные движка (`R2D_GAME_DIR`, `R2D_GPU`, …)
 #                 передаются как есть.
@@ -37,7 +37,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
 GAME="sdk"
-BUILD_DIR="${BUILD_DIR:-build}"
+case "$(uname -m)" in arm64) _r2d_default_build=build-xmake/macos-arm64 ;; *) _r2d_default_build=build-xmake/macos-x86_64 ;; esac
+BUILD_DIR="${BUILD_DIR:-$_r2d_default_build}"
 JOBS="${JOBS:-}"
 FORCE_BUILD=0
 NO_BUILD="${NO_BUILD:-0}"
@@ -75,22 +76,18 @@ find_engine() {
         echo "!! R2D_BINARY=$R2D_BINARY не исполняется и не найден в PATH." >&2
         return 1
     fi
-    for candidate in "$BUILD_DIR/russiano2d" "$BUILD_DIR/nikiniki2d" "build-release/russiano2d"; do
+    for candidate in "$BUILD_DIR/russiano2d" "$BUILD_DIR/nikiniki2d" "build-release/russiano2d" $(find "$BUILD_DIR" -path "*/release/russiano2d" -type f 2>/dev/null | head -1); do
         [ -x "$candidate" ] && { printf '%s\n' "$candidate"; return 0; }
     done
     return 1
 }
 
 engine_build() {
-    local jobs=()
-    [ -n "$JOBS" ] && jobs=(-j "$JOBS")
-    if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
-        step "Конфигурация сборки ($BUILD_DIR)"
-        cmake -S "$ROOT" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE="${BUILD_TYPE:-Release}"
-    fi
+    command -v xmake >/dev/null 2>&1 || { echo "!! xmake не найден (brew install xmake)" >&2; return 1; }
+    step "Конфигурация Xmake ($BUILD_DIR)"
+    xmake f -y -p macosx -a "$(uname -m)" -m release -o "$BUILD_DIR"
     step "Сборка движка и r2d-sdk"
-    # ${arr[@]+…} — чтобы пустой массив не спотыкался о set -u в bash 3.2 (macOS).
-    cmake --build "$BUILD_DIR" ${jobs[@]+"${jobs[@]}"}
+    xmake build -y
 }
 
 ENGINE=""
@@ -113,9 +110,10 @@ fi
 # Без `r2d-sdk` SDK-приложение всё равно откроется: `$.sdk.available()` вернёт
 # false, и тяжёлые операции (bake, импорт моделей) будут недоступны. Об этом
 # честно предупреждаем, но запуск не отменяем.
-if [ ! -x "$BUILD_DIR/r2d-sdk" ]; then
-    echo "!! $BUILD_DIR/r2d-sdk не найден: инструменты SDK будут недоступны."
-    echo "   Соберите его: cmake --build $BUILD_DIR --target r2d-sdk"
+R2D_SDK="$(dirname "$ENGINE")/r2d-sdk"
+if [ ! -x "$R2D_SDK" ]; then
+    echo "!! $R2D_SDK не найден: инструменты SDK будут недоступны."
+    echo "   Соберите: xmake build -y r2d-sdk"
 fi
 
 # --- Каталоги данных --------------------------------------------------------

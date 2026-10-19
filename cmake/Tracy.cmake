@@ -75,7 +75,7 @@ else()
     FetchContent_Declare(tracy
         GIT_REPOSITORY https://github.com/wolfpld/tracy.git
         GIT_TAG        30997d5ca6bb632cc10807a1da8a6d3de0aeeb3c  # v0.14.1
-        GIT_SHALLOW    TRUE)
+        GIT_SHALLOW    FALSE)
     FetchContent_MakeAvailable(tracy)
 endif()
 

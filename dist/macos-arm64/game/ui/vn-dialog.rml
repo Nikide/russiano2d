@@ -1,0 +1,26 @@
+<rml>
+<head>
+    <link type="text/rcss" href="vn-dialog.rcss"/>
+    <title>Руси-тян: реплика</title>
+</head>
+<body>
+    <!--
+        Панель реплики для новеллы: перенос строк, шрифт и рамка — забота RmlUi,
+        а текст, выборы и клавиатуру ведёт $.dialog (см. docs/highlevel/timeline.md,
+        опция dialogView). Кнопок выбора ровно шесть — как у $.dialog: элементы
+        создаются один раз, поэтому подписка на клик не теряется.
+    -->
+    <div id="vn-box">
+        <div id="vn-speaker"></div>
+        <p id="vn-text"></p>
+        <div id="vn-choices">
+            <button id="vn-choice-0" class="vn-choice"></button>
+            <button id="vn-choice-1" class="vn-choice"></button>
+            <button id="vn-choice-2" class="vn-choice"></button>
+            <button id="vn-choice-3" class="vn-choice"></button>
+            <button id="vn-choice-4" class="vn-choice"></button>
+            <button id="vn-choice-5" class="vn-choice"></button>
+        </div>
+    </div>
+</body>
+</rml>

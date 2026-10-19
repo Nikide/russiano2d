@@ -456,7 +456,7 @@ python3 tools/visibility_sweep.py     --cwd dist/macos-arm64 --game ../my_game  
 
 * CI/headless-окружение способно прогнать игровой тест **без видимого окна**
   (`--agent --headless`). GitHub Actions
-  ([ci.yml](../.github/workflows/ci.yml), [release.yml](../.github/workflows/release.yml))
+  ([ci.yml](../.github/workflows/ci.yml)); релизы собирает локальный `build_and_push`, CI их не публикует
   собирает Linux/Windows и гоняет Unity-тесты через `ctest`; GPU/агентские
   Python-тесты в CI не входят.
 * При падении тест-раннер отдаёт достаточно структурированного контекста,

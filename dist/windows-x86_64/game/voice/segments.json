@@ -1,0 +1,250 @@
+{
+  "audio": "MiniMax_2026-10-06_12_34_45_Crazy_Girl(1).wav",
+  "lines": [
+    {
+      "file": "tl3.mp3",
+      "node": "tl3",
+      "seconds": 4.8
+    },
+    {
+      "file": "tl4.mp3",
+      "node": "tl4",
+      "seconds": 6.89
+    },
+    {
+      "file": "tl5.mp3",
+      "node": "tl5",
+      "seconds": 8.04
+    },
+    {
+      "file": "tl6.mp3",
+      "node": "tl6",
+      "seconds": 8.06
+    },
+    {
+      "file": "tl7.mp3",
+      "node": "tl7",
+      "seconds": 5.35
+    },
+    {
+      "file": "tl8.mp3",
+      "node": "tl8",
+      "seconds": 2.03
+    },
+    {
+      "file": "tl9.mp3",
+      "node": "tl9",
+      "seconds": 6.41
+    },
+    {
+      "file": "tl10.mp3",
+      "node": "tl10",
+      "seconds": 5.03
+    },
+    {
+      "file": "tl11.mp3",
+      "node": "tl11",
+      "seconds": 2.57
+    },
+    {
+      "file": "tl12.mp3",
+      "node": "tl12",
+      "seconds": 10.0
+    },
+    {
+      "file": "tl14.mp3",
+      "node": "tl14",
+      "seconds": 5.7
+    },
+    {
+      "file": "tl15.mp3",
+      "node": "tl15",
+      "seconds": 3.78
+    },
+    {
+      "file": "tl16.mp3",
+      "node": "tl16",
+      "seconds": 12.56
+    },
+    {
+      "file": "tl17.mp3",
+      "node": "tl17",
+      "seconds": 6.15
+    },
+    {
+      "file": "tl18.mp3",
+      "node": "tl18",
+      "seconds": 4.48
+    },
+    {
+      "file": "tl19.mp3",
+      "node": "tl19",
+      "seconds": 11.56
+    },
+    {
+      "file": "tl20.mp3",
+      "node": "tl20",
+      "seconds": 5.35
+    },
+    {
+      "file": "tl21.mp3",
+      "node": "tl21",
+      "seconds": 11.28
+    },
+    {
+      "file": "tl22.mp3",
+      "node": "tl22",
+      "seconds": 7.48
+    },
+    {
+      "file": "tl23.mp3",
+      "node": "tl23",
+      "seconds": 3.57
+    },
+    {
+      "file": "tl24.mp3",
+      "node": "tl24",
+      "seconds": 2.86
+    },
+    {
+      "file": "tl25.mp3",
+      "node": "tl25",
+      "seconds": 10.64
+    },
+    {
+      "file": "tl26.mp3",
+      "node": "tl26",
+      "seconds": 8.75
+    },
+    {
+      "file": "tl27.mp3",
+      "node": "tl27",
+      "seconds": 10.43
+    },
+    {
+      "file": "tl28.mp3",
+      "node": "tl28",
+      "seconds": 10.36
+    },
+    {
+      "file": "tl29.mp3",
+      "node": "tl29",
+      "seconds": 8.56
+    },
+    {
+      "file": "tl30.mp3",
+      "node": "tl30",
+      "seconds": 2.44
+    },
+    {
+      "file": "tl31.mp3",
+      "node": "tl31",
+      "seconds": 7.48
+    },
+    {
+      "file": "tl32.mp3",
+      "node": "tl32",
+      "seconds": 5.45
+    },
+    {
+      "file": "tl33.mp3",
+      "node": "tl33",
+      "seconds": 4.62
+    },
+    {
+      "file": "tl34.mp3",
+      "node": "tl34",
+      "seconds": 5.58
+    },
+    {
+      "file": "tl35.mp3",
+      "node": "tl35",
+      "seconds": 3.47
+    },
+    {
+      "file": "tl37.mp3",
+      "node": "tl37",
+      "seconds": 5.52
+    },
+    {
+      "file": "tl38.mp3",
+      "node": "tl38",
+      "seconds": 7.87
+    },
+    {
+      "file": "tl39.mp3",
+      "node": "tl39",
+      "seconds": 7.57
+    },
+    {
+      "file": "tl40.mp3",
+      "node": "tl40",
+      "seconds": 5.13
+    },
+    {
+      "file": "tl41.mp3",
+      "node": "tl41",
+      "seconds": 2.72
+    },
+    {
+      "file": "tl42.mp3",
+      "node": "tl42",
+      "seconds": 8.07
+    },
+    {
+      "file": "tl43.mp3",
+      "node": "tl43",
+      "seconds": 1.89
+    },
+    {
+      "file": "tl44.mp3",
+      "node": "tl44",
+      "seconds": 7.18
+    },
+    {
+      "file": "tl45.mp3",
+      "node": "tl45",
+      "seconds": 9.69
+    },
+    {
+      "file": "tl46.mp3",
+      "node": "tl46",
+      "seconds": 7.38
+    },
+    {
+      "file": "tl48.mp3",
+      "node": "tl48",
+      "seconds": 5.65
+    },
+    {
+      "file": "tl49.mp3",
+      "node": "tl49",
+      "seconds": 7.81
+    },
+    {
+      "file": "tl50.mp3",
+      "node": "tl50",
+      "seconds": 3.79
+    },
+    {
+      "file": "tl51.mp3",
+      "node": "tl51",
+      "seconds": 1.74
+    },
+    {
+      "file": "tl52.mp3",
+      "node": "tl52",
+      "seconds": 7.86
+    },
+    {
+      "file": "tl54.mp3",
+      "node": "tl54",
+      "seconds": 9.76
+    },
+    {
+      "file": "tl55.mp3",
+      "node": "tl55",
+      "seconds": 5.19
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # VN narrative architecture (P0/P1)
 
+Авторский редактор `.scene`: [VN_MAKER.md](VN_MAKER.md).
+
 Единый narrative runtime: **одна** машина реплик и один RML/RCSS presentation
 слой. Story scenes, timeline, cutscene и обычные диалоги идут через `$.dialog`;
 четвёртого UI-движка нет.

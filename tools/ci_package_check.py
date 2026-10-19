@@ -27,8 +27,9 @@ REQUIRED = (
     "sdk/tools/world-editor.js",
 )
 BINARIES = {
-    "linux": ("russiano2d", "r2d-sdk"),
-    "windows": ("russiano2d.exe", "r2d-sdk.exe"),
+    "linux": ("russiano2d", "r2d-sdk", "russiano2d-sdk"),
+    "macos": ("russiano2d", "r2d-sdk", "russiano2d-sdk"),
+    "windows": ("russiano2d.exe", "r2d-sdk.exe", "russiano2d-sdk.exe"),
 }
 FORBIDDEN_PARTS = (".DS_Store", "__pycache__", ".pyc", ".git/", "build-autobuild/",
                    "dist-ci/", "/.cache/")
@@ -62,7 +63,7 @@ def normalized(name):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--archive", required=True)
-    p.add_argument("--platform", choices=("linux-x86_64", "linux-aarch64", "windows-x86_64"),
+    p.add_argument("--platform", choices=("linux-x86_64", "linux-aarch64", "macos-arm64", "macos-x86_64", "windows-x86_64"),
                    help="платформа: выбирает имена бинарников")
     p.add_argument("--version", default=None, help="ожидаемая версия (по умолчанию из CMakeLists)")
     args = p.parse_args()
@@ -101,7 +102,7 @@ def main():
         except Exception as exc:  # noqa: BLE001
             check(False, "VERSION читается: %s" % exc)
 
-    binaries = BINARIES["windows" if (args.platform or "").startswith("windows") else "linux"]
+    binaries = BINARIES["windows" if (args.platform or "").startswith("windows") else ("macos" if (args.platform or "").startswith("macos") else "linux")]
     for binary in binaries:
         check(binary in flat, "исполняемый файл %s в корне" % binary)
     for required in REQUIRED:

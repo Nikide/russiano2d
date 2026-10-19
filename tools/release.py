@@ -44,6 +44,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import zipfile
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -380,14 +381,23 @@ def collect_runtime_files(
     suffix = '.exe' if binary.lower().endswith('.exe') else ''
     sdk_binary = os.path.join(os.path.dirname(binary), 'r2d-sdk' + suffix)
     files.append((sdk_binary, 'r2d-sdk' + suffix))
+    # Кликабельный запуск SDK (двойной клик): тот же runtime, `--game sdk`.
+    launcher = os.path.join(os.path.dirname(binary), 'russiano2d-sdk' + suffix)
+    if os.path.exists(launcher):
+        files.append((launcher, 'russiano2d-sdk' + suffix))
     for name in package_root_entries():
         files.append((name, name))
     for name in DOC_FILES:
         if os.path.exists(os.path.join(ROOT, name)):
             files.append((name, name))
-    for directory in ("assets", "game"):
-        if os.path.isdir(os.path.join(ROOT, directory)):
-            files.append((directory, directory))
+    # Игра по умолчанию — демо VN (game_vn). Платформер из game/ в пакет
+    # больше не кладём; он остаётся в репозитории как демо.
+    if os.path.isdir(os.path.join(ROOT, "game_vn")):
+        files.append(("game_vn", "game"))
+    elif os.path.isdir(os.path.join(ROOT, "game")):
+        files.append(("game", "game"))
+    if os.path.isdir(os.path.join(ROOT, "assets")):
+        files.append(("assets", "assets"))
     if with_demos and os.path.isdir(os.path.join(ROOT, "demos")):
         files.append(("demos", "demos"))
     return files
@@ -580,7 +590,12 @@ def bundle_macos_libs(target: str, binaries: Sequence[str]) -> None:
             continue
         seen.add(name)
         dest = os.path.join(lib_dir, name)
+        if os.path.exists(dest):
+            os.chmod(dest, 0o644)
         shutil.copy2(dep, dest)
+        # Homebrew dylib'ы бывают read-only; install_name_tool должен уметь
+        # переписать файл, иначе упаковка падает на втором прогоне.
+        os.chmod(dest, 0o755)
         copied.append(dest)
         # Библиотека ссылается на свои зависимости по @rpath и ищет их рядом.
         subprocess.run(["install_name_tool", "-id", "@rpath/" + name, dest],
@@ -748,6 +763,23 @@ def package_platform(
             if actual != platform_name:
                 raise SystemExit('ошибка: %s имеет архитектуру %s, запрошена %s' % (executable, actual, platform_name))
 
+    # build_and_push передаёт бинарник из dist/<platform>, а target — тот же
+    # каталог. Не удаляем источник вместе с target: сначала копируем бинарники
+    # и lib/ во временную папку, упаковка читает уже её.
+    staged = None
+    target_abs = os.path.abspath(target)
+    binary_abs = os.path.abspath(os.path.join(ROOT, binary))
+    if binary_abs.startswith(target_abs + os.sep):
+        staged = tempfile.mkdtemp(prefix='r2d-package-')
+        for name in (os.path.basename(binary), 'r2d-sdk' + suffix, 'russiano2d-sdk' + suffix):
+            source = os.path.join(os.path.dirname(binary_abs), name)
+            if os.path.isfile(source):
+                shutil.copy2(source, os.path.join(staged, name))
+        source_lib = os.path.join(os.path.dirname(binary_abs), 'lib')
+        if os.path.isdir(source_lib):
+            shutil.copytree(source_lib, os.path.join(staged, 'lib'), dirs_exist_ok=True)
+        binary = os.path.join(staged, os.path.basename(binary))
+
     if os.path.isdir(target) and os.listdir(target) and not force:
         raise SystemExit(
             "ошибка: %s уже существует и не пуст.\n"
@@ -846,6 +878,8 @@ def package_platform(
 
     # Сводные суммы по архивам всего релиза.
     _write_global_sums(out_dir)
+    if staged:
+        shutil.rmtree(staged, ignore_errors=True)
 
 
 #: Мусор операционной системы и Python, который не должен попадать в пакет:
@@ -1313,12 +1347,12 @@ def main(argv: List[str]) -> int:
     log("  git push origin main && git push origin v%s" % version)
     log("  (origin пушит сразу на hub.mos.ru и gitverse.ru)")
     log("  сверка: git ls-remote origin main && git ls-remote gitverse main")
-    log("  проверить релиз на gitverse.ru (его соберёт CI по тегу)")
+    log("  релиз и ассеты публикует build_and_push (tools/release_publish.py)")
     return 0
 
 
 def run_package_only(options: Options, version: str) -> int:
-    """Режим CI: упаковать уже собранный бинарник, ничего не собирая."""
+    """Упаковать уже собранный бинарник (вызывает build_and_push), ничего не собирая."""
     if not options.platforms:
         options.platforms = [host_platform()]
     unknown = [name for name in options.platforms if name not in PLATFORMS]

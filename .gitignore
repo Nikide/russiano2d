@@ -8,6 +8,30 @@
 # --- Build output ---
 build/
 build-*/
+# --- Xmake / Zig / native build junk ---
+.xmake/
+.zig-cache/
+zig-cache/
+zig-out/
+*.dSYM/
+*.obj
+*.lib
+*.exp
+*.ilk
+*.idb
+*.pdb
+*.dwo
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+.ninja_deps
+.ninja_log
+build.ninja
+rules.ninja
+CMakeUserPresets.json
+Testing/
+
 out/
 bin/
 # dist/ СОЗНАТЕЛЬНО не игнорируется: готовые сборки раздаются прямо из
@@ -85,6 +109,8 @@ push_and_deploy.sh
 # старых копий на других машинах, чтобы они тоже не попали в git.
 build_and_push.sh
 build_and_push.command
+build_and_push
+build-xmake/
 
 # «к удалению/» и «отклонено/» — личные каталоги разбора: что-то вынесено из
 # проекта, что-то отложено. Историю хранит git, таскать это в каждом клоне

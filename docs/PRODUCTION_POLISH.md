@@ -431,9 +431,9 @@ DevTools и Agent должны использовать **один introspection
 
 Политика сборок фиксируется явно:
 
-- Windows x86_64 собирается **только GitHub-hosted runner'ом**;
-- Linux x86_64 собирается **только GitHub-hosted runner'ом**;
-- Linux ARM64, если он остаётся поддерживаемой целью, собирается **GitHub runner'ом**;
+- Windows x86_64 собирается локально `build_and_push` (Xmake + Zig);
+- Linux x86_64 собирается локально `build_and_push` (Xmake + Zig);
+- Linux ARM64 вне релизной матрицы;
 - macOS собирается **локально на рабочем Mac**, а не дублируется GitHub-hosted macOS runner'ом;
 - `R2D_ENABLE_RE2D=ON` проверяется в соответствующих поддерживаемых профилях;
 - `R2D_ENABLE_RE2D=OFF` проверяется как полноценная 2D-сборка.
@@ -2697,9 +2697,9 @@ job CI), у каждого незакрытого пункта — причин�
 
 ## Build
 
-- [x] Windows x86_64 собирается GitHub runner'ом — `.github/workflows/release.yml` — кросс-сборка MinGW на hosted-раннере
-- [x] Linux x86_64 собирается GitHub runner'ом — `.github/workflows/release.yml`
-- [x] Linux ARM64 собирается GitHub runner'ом или явно documented unsupported — `.github/workflows/release.yml`
+- [x] Windows x86_64 собирается локально — `tools/release_build.sh` (Xmake + Zig cross)
+- [x] Linux x86_64 собирается локально — `tools/release_build.sh` (Xmake + Zig cross)
+- [x] Linux ARM64 — явно вне релизной матрицы (macOS arm64/x86_64, Linux x86_64, Windows x86_64) — `tools/release_build.sh`
 - [x] macOS собирается локально на рабочем Mac — `tools/autobuild.py` + `tests/macos_package_smoke_test.py`
 - [x] macOS clean build проходит — `tests/macos_package_smoke_test.py` (чистая сборка в build-macos-clean)
 - [x] macOS package smoke проходит — `tests/macos_package_smoke_test.py`
@@ -2779,11 +2779,11 @@ job CI), у каждого незакрытого пункта — причин�
 ## Release
 
 - [x] one source of version — `tests/package_docs_refresh_test.py`
-- [x] tag `vX.Y.Z` соответствует версии проекта — `.github/workflows/release.yml` — шаг сверки тега с версией
-- [x] GitHub Actions автоматически создаёт Release — `.github/workflows/release.yml`
+- [x] tag `vX.Y.Z` соответствует версии проекта — проверка в `build_and_push` до тега — `tools/release.py`
+- [x] GitHub Release создаётся локально — `tools/release_publish.py`
 - [x] Release создаётся ровно один раз — `tests/release_ownership_test.py`
-- [x] Windows artifact приходит из GitHub runner — `.github/workflows/release.yml`
-- [x] Linux artifact приходит из GitHub runner — `.github/workflows/release.yml`
+- [x] Windows artifact собирается локально — `tools/release_build.sh`
+- [x] Linux artifact собирается локально — `tools/release_build.sh`
 - [x] macOS artifact приходит из локальной Mac-сборки — `tools/attach_macos_release.py`
 - [x] локальный script не создаёт GitHub Release — `tests/release_ownership_test.py`
 - [x] `SHA256SUMS` опубликован — `tools/release.py`
@@ -2791,7 +2791,7 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] licenses — `tools/release.py` — лицензии входят в пакет, проверяет `tests/agent/sdk_package_test.py`
 - [x] docs match runtime — `tests/doc_claims_test.py`
 - [x] no P0 defects — §6.3 закрыт: сползание на склоне 30° без ввода не больше 1 px за 120 кадров (после правки измерено 0.000 px) и не больше 2 px за 600 кадров, `tests/agent/slope_hold_test.py` + `tests/agent/highlevel_physics_slopes_test.py`
-- [x] Windows/Linux CI green — `.github/workflows/release.yml`, прогон 38862722918: static, linux-x86_64, linux-aarch64 и windows-x86_64 (кросс-сборка MinGW) зелёные, артефакты `release-linux-x86_64`, `release-linux-aarch64`, `release-windows-x86_64` собраны
+- [x] Windows/Linux CI green — `.github/workflows/ci.yml` (валидация), релизные артефакты собираются локально
 - [x] локальный macOS acceptance green — `tests/macos_package_smoke_test.py` + полный локальный набор `tools/run_tests.py`
 - [x] API freeze declared — §63 объявлен и проверяется машинно: `tests/api_freeze_test.py` сверяет публичную поверхность (`$.`-неймспейсы с методами, публичные константы со значениями и биндинги `engine.*`, снимок 2026-10-16 — 3012 имён) со снимком `tests/api_freeze_baseline.txt`. Любое появление, исчезновение или изменение значения имени валит гейт; намеренное изменение — только осознанным обновлением снимка (`--write`) с объяснением в CHANGELOG
 

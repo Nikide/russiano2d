@@ -1,7 +1,7 @@
 name: Quality - docs, policy and hygiene (does not block release)
 # QUALITY (docs/RELEASING.md): документация, policy, чеклисты и гигиена.
 # Это отдельный workflow: его красный статус виден, но GitHub Release не
-# зависит от него. Релизные гейты - только build/test/package в release.yml.
+# зависит от него. Релизы собирает и публикует локальный build_and_push.
 on:
   push:
     branches: ['**']

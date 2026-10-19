@@ -42,7 +42,7 @@ workflow:
     - if: '$CI_PIPELINE_SOURCE == "trigger"'
     - when: never
 
-stages: [static, build, package, release]
+stages: [static, build, package]
 
 default:
   tags: ["appsechub"]
@@ -147,69 +147,3 @@ windows-x86_64:
     expire_in: 30 days
 
 # --- macOS: не собираем, забираем готовое из витрины dist/ -------------------
-macos-artifacts:
-  stage: package
-  image: ubuntu:24.04
-  script:
-    - |
-      set -e
-      version=$(python3 -c "import sys; sys.path.insert(0,'tools'); import release; print(release.read_version())")
-      echo "версия проекта: $version"
-      mkdir -p out
-      found=0
-      for a in dist/russiano2d-v$version-macos-*.tar.gz; do
-        [ -e "$a" ] || continue
-        cp "$a" out/ && found=$((found+1))
-        echo "забран из витрины: $a"
-      done
-      if [ "$found" -eq 0 ]; then
-        echo "!! в dist/ нет macOS-архивов версии $version — соберите их локально"
-        echo "   (python3 tools/autobuild.py --platforms macos-arm64,macos-x86_64 --out dist)"
-        exit 1
-      fi
-  artifacts:
-    name: "russiano2d-$CI_COMMIT_REF_SLUG-macos"
-    paths:
-      - out/*.tar.gz
-    expire_in: 30 days
-
-# --- Релиз по тегу vX.Y.Z: Linux + Windows + macOS из dist/ ------------------
-release:
-  stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
-  needs: [linux-x86_64, windows-x86_64, macos-artifacts]
-  rules:
-    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/
-  script:
-    - |
-      set -e
-      version=$(python3 -c "import sys; sys.path.insert(0,'tools'); import release; print(release.read_version())" 2>/dev/null || echo "")
-      echo "тег: $CI_COMMIT_TAG, версия проекта: ${version:-неизвестна}"
-      if [ -n "$version" ] && [ "$CI_COMMIT_TAG" != "v$version" ]; then
-        echo "!! тег $CI_COMMIT_TAG не совпадает с версией проекта v$version"
-        exit 1
-      fi
-  release:
-    tag_name: $CI_COMMIT_TAG
-    name: "Russiano2D $CI_COMMIT_TAG"
-    # Декларативный `release:` GitLab не читает описание из файла (переменные
-    # подставляются, а `$(cat …)` — нет), поэтому тело короткое, а полные
-    # заметки из dist/RELEASE_NOTES_<версия>.md приложены ссылкой: файл лежит
-    # в репозитории на этом теге, его пишет tools/release_notes.py.
-    description: |
-      Собрано CI: Linux x86_64, Windows x86_64 (MinGW).
-      macOS (arm64, x86_64) собран на рабочем Mac и взят из dist/ репозитория.
-      Контрольные суммы — в архивах и в SHA256SUMS.txt артефактов job'ов.
-      Полные заметки релиза — по ссылке «Заметки релиза» ниже.
-    assets:
-      links:
-        - name: "Заметки релиза"
-          url: "$CI_PROJECT_URL/-/raw/$CI_COMMIT_TAG/dist/RELEASE_NOTES_${CI_COMMIT_TAG#v}.md"
-        - name: "Linux x86_64"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/dist-ci/russiano2d-v${CI_COMMIT_TAG#v}-linux-x86_64.tar.gz?job=linux-x86_64"
-        - name: "Windows x86_64"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/dist-ci/russiano2d-v${CI_COMMIT_TAG#v}-windows-x86_64.zip?job=windows-x86_64"
-        - name: "macOS arm64"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/out/russiano2d-v${CI_COMMIT_TAG#v}-macos-arm64.tar.gz?job=macos-artifacts"
-        - name: "macOS x86_64"
-          url: "$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/out/russiano2d-v${CI_COMMIT_TAG#v}-macos-x86_64.tar.gz?job=macos-artifacts"

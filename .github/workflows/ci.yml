@@ -1,7 +1,8 @@
-name: CI - build and Unity tests
-# BUILD/TEST (docs/RELEASING.md): только компиляция и существующие тесты.
-# Качество (docs, policy, гигиена) живёт в quality.yml и НЕ блокирует релиз.
-# Linux/Windows - единственные платформы CI; macOS собирается локально.
+name: CI - native build validation (no releases)
+# CI VALIDATION ONLY (docs/RELEASING.md). Релизы собирает и публикует локальный
+# build_and_push (Xmake, все 4 платформы). GitHub Actions проверяет, что код
+# собирается нативно на Linux/Windows и Unity-тесты проходят; тег здесь ничего
+# не публикует и не собирает релизные артефакты.
 on:
   push:
     branches: ['**']
@@ -44,7 +45,7 @@ jobs:
         run: ctest --test-dir build-2d-ci --output-on-failure --parallel "$(nproc)"
 
   windows-cross-build:
-    name: Windows x86_64 - MinGW cross-build (build-only, see release.yml)
+    name: Windows x86_64 - MinGW cross-build (validation only)
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -83,7 +84,7 @@ jobs:
     name: Windows MSVC - diagnostic (non-blocking)
     # Наблюдение за родным MSVC: сейчас CL.exe падает внутренней ошибкой в
     # кодогенерации, поэтому job необязателен. Релизный Windows-артефакт
-    # собирается MinGW-кросс-сборкой выше и в release.yml.
+    # собирается локально build_and_push (Xmake + Zig), здесь — только проверка компиляции.
     runs-on: windows-2022
     timeout-minutes: 60
     continue-on-error: true

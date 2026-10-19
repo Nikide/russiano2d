@@ -268,6 +268,17 @@
 > listeners continue to work.
 
 
+## 1.3.0 — 2026-10-19
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+1 коммит в релизе.
+
+### Прочее
+
+- Fix Emscripten build: moduleRoot stub in SDK host (`cdd9a804e`)
+
+<!-- release-notes:end -->
 ## 1.2.13 — 2026-10-19
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

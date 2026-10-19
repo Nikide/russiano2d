@@ -9,6 +9,7 @@ import { escapeHtml, assetTypeLabel, formatUpdated, formatSize, dirOf } from './
 const MAX_ASSET_ROWS = 300;
 
 const CATEGORY_LABELS = {
+    solutions: 'ГОТОВЫЕ РЕШЕНИЯ',
     shell: 'ОБОЛОЧКА',
     backend: 'НАТИВНЫЙ БЭКЕНД',
     'classic-2d': 'КЛАССИЧЕСКИЙ 2D',
@@ -16,7 +17,7 @@ const CATEGORY_LABELS = {
     automation: 'АВТОМАТИЗАЦИЯ',
     devtools: 'ОТЛАДКА',
 };
-const CATEGORY_ORDER = ['shell', 'classic-2d', 're2d', 'automation', 'devtools', 'backend'];
+const CATEGORY_ORDER = ['solutions', 'shell', 'classic-2d', 're2d', 'automation', 'devtools', 'backend'];
 
 export function categoryLabel(category) {
     return CATEGORY_LABELS[category] || String(category || 'ПРОЧЕЕ').toUpperCase();

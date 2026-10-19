@@ -7,14 +7,15 @@
 
 <p align="center">
   <a href="https://r2d.nikiniki.ru/"><b>Сайт движка</b></a> ·
-  <a href="https://r2d.nikiniki.ru/doc/"><b>Документация на сайте</b></a> ·
-  <a href="https://r2d.nikiniki.ru/#download"><b>Готовые сборки и SDK</b></a>
+  <a href="https://r2d.nikiniki.ru/doc/"><b>Документация</b></a> ·
+  <a href="https://github.com/Nikide/russiano2d/releases"><b>Скачать релизы</b></a>
 </p>
 
-Лёгкий кроссплатформенный **2D-движок для платформеров**: ядро на C/C++
-(SDL3 + SDL_GPU, Box2D v3, QuickJS-ng, SDL3_mixer, RmlUi), игровая логика —
-JavaScript. Вся работа с движком идёт через одну точку входа — `$` в стиле
-jQuery; низкоуровневого `engine.*` в игре нет.
+Лёгкий кроссплатформенный **2D-движок**: платформеры, визуальные новеллы и
+другие 2D-игры. Ядро на C/C++ (SDL3 + SDL_GPU, Box2D v3, QuickJS-ng,
+SDL3_mixer, RmlUi), игровая логика — JavaScript. Вся работа с движком идёт
+через одну точку входа — `$` в стиле jQuery; низкоуровневого `engine.*` в игре
+нет.
 
 Игра — это **код и данные**, а не проект в визуальном редакторе: уровень,
 логика и интерфейс описываются текстом, поэтому их удобно читать, diff'ить,
@@ -22,20 +23,48 @@ jQuery; низкоуровневого `engine.*` в игре нет.
 
 ## Собрать и запустить
 
+Каноническая сборка — **Xmake** (CMake остаётся только внутри сторонних
+пакетов и вспомогательных инструментов).
+
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build --target russiano2d -j 8
-./build/russiano2d --game game          # игра по умолчанию: меню и платформер
+# macOS arm64; для других платформ см. docs/BUILD.md
+xmake f -p macosx -a arm64 -m release -o build-xmake/macos-arm64
+xmake build -y
+
+./build-xmake/macos-arm64/macosx/arm64/release/russiano2d --game game
+./build-xmake/macos-arm64/macosx/arm64/release/russiano2d --game sdk   # SDK
 ```
 
-Две конфигурации сборки:
+В репозитории `game/` — платформер (рабочий пример). В **релизных пакетах**
+игра по умолчанию — демо визуальной новеллы «Руси-тян: Бака!» (`game_vn/`).
 
-| Сборка | Что внутри |
+Зависимости для локальной сборки: `xmake`, `zig` (Linux/Windows cross),
+`mingw-w64` (Windows), `CMake 3.31` и `m4` для autotools-зависимостей.
+Docker и VM не используются.
+
+## Релизы
+
+Все четыре платформы собираются и публикуются **локально** одной командой:
+
+```bash
+build_and_push
+```
+
+Она спрашивает сообщение и версию, собирает macOS arm64/x86_64, Linux x86_64
+и Windows x86_64 в `dist/`, проверяет пакеты, гоняет Unity-тесты, ставит тег
+и публикует релизы на GitHub/GitVerse/hub.mos. Сайт бинарники не раздаёт:
+кнопки скачивания ведут на GitHub Releases.
+
+Подробности — [docs/RELEASING.md](docs/RELEASING.md).
+
+## Документация
+
+| Документ | О чём |
 |---|---|
-| по умолчанию | всё, включая необязательный слой 3D-авторинга спрайтов (RE2D / Real2D / RotSprite, Re2D World) |
-| `-DR2D_ENABLE_RE2D=OFF` | **сборка 2D-платформера**: без 3D-авторинга, EXR-неба и его демо; `$.re2dEnabled` сообщает игре, что слой выключен |
-
-Подробности — [docs/BUILD.md](docs/BUILD.md), философия и константы —
-[docs/PHILOSOPHY.md](docs/PHILOSOPHY.md), справочник API —
-[docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md), первый платформер шаг за
-шагом — [docs/tutorial-platformer.md](docs/tutorial-platformer.md).
+| [docs/BUILD.md](docs/BUILD.md) | сборка движка, SDK и упаковка игр |
+| [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) | философия и константы проекта |
+| [docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md) | справочник `$` API |
+| [docs/tutorial-platformer.md](docs/tutorial-platformer.md) | первый платформер шаг за шагом |
+| [docs/SDK.md](docs/SDK.md) | SDK, инструменты и World Editor |
+| [docs/VN_MAKER.md](docs/VN_MAKER.md) | Visual Novel Maker |
+| [docs/RELEASING.md](docs/RELEASING.md) | локальный релизный процесс |

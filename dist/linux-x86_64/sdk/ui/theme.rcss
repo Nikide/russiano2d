@@ -1,0 +1,276 @@
+/* ---------------------------------------------------------------------------
+   Russiano2D SDK — общая тема. Палитра и формы взяты с сайта (site/style.css):
+
+     фон        #0b0e14   панель  #141926   панель-2  #1a2030   линия  #232b3d
+     текст      #e9edf6   тусклый #97a2b8   акцент    #ff5a3c   акцент-2 #ffb03a
+     успех      #4ad991   код     #0a0d13   скругление 14 / 10 / 6
+
+   RmlUi не поддерживает CSS-переменные, поэтому значения повторены литералами:
+   при смене палитры правится этот файл (его подключают shell.rcss и studio.rcss).
+   Весь интерфейс — RmlUi (docs/UI_RMLUI_LAW.md).
+   --------------------------------------------------------------------------- */
+
+/* --- Заголовки и текст --------------------------------------------------- */
+h2 { display: block; font-size: 26px; color: #e9edf6; margin: 0px 0px 6px 0px; }
+h3 { display: block; font-size: 12px; color: #ffb03a; margin: 22px 0px 8px 0px; letter-spacing: 2px; }
+h4 { display: block; font-size: 12px; color: #ffb03a; margin: 16px 0px 6px 0px; letter-spacing: 2px; }
+.lead { display: block; color: #97a2b8; font-size: 15px; margin-bottom: 14px; }
+.hint { display: block; color: #7b87a0; font-size: 12px; margin: 5px 0px; }
+.empty { display: block; color: #6f7a92; padding: 10px 12px; }
+.sub { color: #97a2b8; }
+.dirty { color: #ffb03a; }
+.mono { font-size: 13px; color: #cdd5e6; }
+.accent { color: #ff5a3c; }
+
+/* --- Кнопки --------------------------------------------------------------- */
+.btn {
+    display: inline-block;
+    padding: 8px 16px;
+    margin-right: 6px;
+    color: #e9edf6;
+    background-color: #141926;
+    border-width: 1px;
+    border-color: #2b3550;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.12s cubic-out, border-color 0.12s cubic-out;
+}
+.btn:hover { background-color: #1c2335; border-color: #46547a; }
+.btn:active { background-color: #0f131c; border-color: #ff5a3c; transform: translateY(1px); }
+
+.btn.primary {
+    color: #1a0c06;
+    border-color: #ff5a3c;
+    background-color: #ff6a3c;
+}
+.btn.primary:hover { border-color: #ffb03a; background-color: #ff7a4c; }
+.btn.primary:active { background-color: #e8502f; transform: translateY(1px); }
+
+.btn.on { color: #ffb03a; border-color: #ff5a3c; background-color: #2a1a1c; }
+.btn.on:hover { background-color: #34201f; }
+.btn.off { color: #5d6882; }
+.btn.small { padding: 4px 11px; font-size: 12px; border-radius: 8px; }
+.btn.danger:hover { border-color: #ff5a3c; color: #ff9d88; }
+
+/* --- Поля ввода ------------------------------------------------------------ */
+input.field, select.field {
+    display: block;
+    flex: 1 1 0;
+    min-width: 40px;
+    height: 18px;
+    padding: 7px 10px;
+    color: #e9edf6;
+    background-color: #0a0d13;
+    border-width: 1px;
+    border-color: #2b3550;
+    border-radius: 8px;
+    cursor: text;
+}
+input.field:hover { border-color: #46547a; }
+input.field:focus { border-color: #ff5a3c; background-color: #0c1018; }
+textarea.area {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    color: #d7deee;
+    font-size: 12px;
+    background-color: #0a0d13;
+    border-width: 1px;
+    border-color: #2b3550;
+    border-radius: 8px;
+}
+textarea.area:focus { border-color: #ff5a3c; }
+
+.field-row { display: flex; flex-direction: row; align-items: center; margin: 4px 0px; }
+.field-row > label { width: 84px; flex: 0 0 84px; color: #97a2b8; font-size: 13px; }
+.field-row > .btn { margin-right: 6px; }
+.pair { display: flex; flex-direction: row; flex: 1 1 0; }
+.pair > input.field { margin-right: 6px; }
+.form-row { display: flex; flex-direction: row; align-items: center; margin: 8px 0px; }
+.form-row > * { margin-right: 8px; }
+
+/* --- Панели, списки и строки ------------------------------------------------ */
+.panel {
+    display: block;
+    padding: 16px 18px;
+    background-color: #141926;
+    border-width: 1px;
+    border-color: #232b3d;
+    border-radius: 14px;
+}
+.list {
+    display: block;
+    max-height: 300px;
+    overflow-y: auto;
+    background-color: #0f131c;
+    border-width: 1px;
+    border-color: #232b3d;
+    border-radius: 10px;
+}
+.list.tall, .list.grow { max-height: 460px; }
+.list.short { max-height: 230px; }
+.row { display: block; padding: 6px 12px; cursor: pointer; }
+.row:hover { background-color: #171e2f; }
+.row:active { background-color: #1f2740; }
+.row.sel { background-color: #2a1a1c; }
+.row-name { color: #e9edf6; margin-right: 12px; }
+.row-dir { color: #6f7a92; margin-right: 12px; font-size: 12px; }
+.row-type { color: #ffb03a; margin-right: 12px; font-size: 12px; }
+.row-size { color: #7b87a0; margin-right: 12px; font-size: 12px; }
+.row-tool { color: #4ad991; font-size: 12px; }
+
+.chip {
+    display: inline-block;
+    margin: 4px 6px 4px 0px;
+    padding: 3px 12px;
+    color: #97a2b8;
+    font-size: 12px;
+    background-color: #141926;
+    border-width: 1px;
+    border-color: #232b3d;
+    border-radius: 14px;
+    cursor: pointer;
+}
+.chip:hover { color: #e9edf6; border-color: #46547a; }
+.chip.on { color: #1a0c06; background-color: #ffb03a; border-color: #ffb03a; }
+
+.kv { display: block; padding: 3px 0px; font-size: 13px; color: #cdd5e6; }
+.k { display: inline-block; width: 120px; color: #7b87a0; }
+.v { color: #e9edf6; }
+
+.pill {
+    display: inline-block;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: #97a2b8;
+    background-color: #0f131c;
+    border-width: 1px;
+    border-color: #232b3d;
+    border-radius: 14px;
+}
+.pill.ok { color: #4ad991; border-color: #1f5a41; }
+.pill.busy { color: #ffb03a; border-color: #6a4a15; }
+.pill.fail { color: #ff8a78; border-color: #6a2a22; }
+
+/* --- Карточки инструментов ---------------------------------------------------- */
+.cat { display: block; width: 100%; margin: 20px 0px 4px 0px; color: #ffb03a; font-size: 12px; letter-spacing: 2px; }
+.cards { display: block; }
+.card {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin: 8px 0px;
+    padding: 14px 18px;
+    background-color: #141926;
+    border-width: 1px;
+    border-color: #232b3d;
+    border-radius: 14px;
+}
+.card-body { display: block; flex: 1 1 0; min-width: 0px; }
+.card:hover { border-color: #3a4560; background-color: #171e2d; }
+.card.invalid { border-color: #6a2a22; background-color: #1a1214; }
+.card-head { display: block; margin-bottom: 4px; }
+.card-name { font-size: 17px; color: #e9edf6; margin-right: 10px; }
+.tag {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 1px 9px;
+    font-size: 11px;
+    color: #ffb03a;
+    background-color: #2a1f12;
+    border-radius: 10px;
+}
+.tag-bad { color: #ff9d88; background-color: #3a1a16; }
+.tag-new { color: #4ad991; background-color: #12281f; }
+.card-desc { display: block; color: #b4bdd0; margin: 2px 0px 5px 0px; }
+.card-meta { display: block; color: #6f7a92; font-size: 12px; }
+.card-note { display: block; color: #ff9d88; font-size: 13px; margin-top: 4px; }
+.card-actions { display: block; flex: 0 0 auto; margin: 0px 0px 0px 18px; }
+.card-actions .btn { margin-right: 0px; }
+
+/* --- Диагностика ------------------------------------------------------------------ */
+.diag-strip {
+    display: block;
+    height: 96px;
+    overflow-y: auto;
+    padding: 4px 14px;
+    background-color: #0a0d13;
+    border-top-width: 1px;
+    border-color: #232b3d;
+}
+.diag { display: block; padding: 3px 0px; }
+.diag-sev { display: inline-block; width: 72px; font-size: 11px; letter-spacing: 1px; }
+.diag-code { color: #e9edf6; margin-right: 10px; font-size: 13px; }
+.diag-asset { color: #6f7a92; font-size: 12px; }
+.diag-msg { display: block; margin-left: 72px; color: #97a2b8; font-size: 12px; }
+.diag-err .diag-sev { color: #ff8a78; }
+.diag-warn .diag-sev { color: #ffb03a; }
+.diag-info .diag-sev { color: #6cc7ff; }
+
+.log {
+    display: block;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 10px 14px;
+    color: #b4bdd0;
+    font-size: 12px;
+    white-space: pre-wrap;
+    background-color: #0a0d13;
+    border-width: 1px;
+    border-color: #232b3d;
+    border-radius: 10px;
+}
+.log.tall-log { max-height: 470px; min-height: 120px; margin-top: 12px; }
+
+/* --- Выбранная карточка ---------------------------------------------------------------- */
+.card.on { border-color: #ff5a3c; background-color: #1d1618; }
+
+/* --- Тестер ввода и плитки ----------------------------------------------------------------- */
+.tester { display: block; margin: 14px; padding: 12px 14px; background-color: #0f131c; border-width: 1px; border-color: #232b3d; border-radius: 14px; }
+.tile {
+    display: inline-block;
+    width: 150px;
+    margin: 4px 6px 4px 0px;
+    padding: 8px 12px;
+    background-color: #141926;
+    border-width: 1px;
+    border-color: #232b3d;
+    border-radius: 10px;
+    transition: background-color 0.08s cubic-out, border-color 0.08s cubic-out;
+}
+.tile.lit { background-color: #ff5a3c; border-color: #ffb03a; }
+.tile-name { display: block; color: #e9edf6; }
+.tile-keys { display: block; color: #6f7a92; font-size: 11px; }
+.tile.lit .tile-name, .tile.lit .tile-keys { color: #1a0c06; }
+.row.lit { background-color: #3a1f1b; }
+
+/* --- Полосы прокрутки ---------------------------------------------------------------------
+   Без этих правил RmlUi не знает ширину полосы у `overflow: auto`, резервирует под неё всю
+   доступную ширину и схлопывает содержимое (так ломался каталог инструментов). */
+scrollbarvertical { width: 12px; margin: 0px; }
+scrollbarvertical slidertrack { background-color: transparent; }
+scrollbarvertical sliderbar { width: 6px; margin: 0px 3px; background-color: #2b3550; border-radius: 3px; }
+scrollbarvertical sliderbar:hover { background-color: #46547a; }
+scrollbarvertical sliderbar:active { background-color: #ff5a3c; }
+scrollbarvertical sliderarrowdec, scrollbarvertical sliderarrowinc { width: 0px; height: 0px; }
+scrollbarhorizontal { height: 12px; margin: 0px; }
+scrollbarhorizontal slidertrack { background-color: transparent; }
+scrollbarhorizontal sliderbar { height: 6px; margin: 3px 0px; background-color: #2b3550; border-radius: 3px; }
+scrollbarhorizontal sliderbar:hover { background-color: #46547a; }
+scrollbarhorizontal sliderbar:active { background-color: #ff5a3c; }
+scrollbarhorizontal sliderarrowdec, scrollbarhorizontal sliderarrowinc { width: 0px; height: 0px; }
+scrollbarcorner { background-color: transparent; }
+
+/* --- Микшер (Audio Tools) ------------------------------------------------------------------------ */
+.mixer { display: block; margin: 14px; padding: 12px 16px; background-color: #0f131c; border-width: 1px; border-color: #232b3d; border-radius: 14px; }
+.mx-row { display: block; padding: 5px 4px; cursor: pointer; border-radius: 8px; }
+.mx-row:hover { background-color: #171e2f; }
+.mx-row.sel { background-color: #2a1a1c; }
+.mx-name { display: inline-block; width: 120px; color: #e9edf6; }
+.mx-meter { display: inline-block; width: 220px; height: 8px; background-color: #0a0d13; border-radius: 4px; border-width: 1px; border-color: #232b3d; }
+.mx-fill { display: block; height: 8px; background-color: #4ad991; border-radius: 4px; }
+.mx-val { display: inline-block; margin-left: 10px; color: #97a2b8; font-size: 12px; }
+.mx-tag { display: inline-block; margin-left: 8px; color: #ffb03a; font-size: 11px; }
+.mx-play { display: inline-block; margin-left: 10px; padding: 1px 10px; color: #1a0c06; background-color: #ff6a3c; border-radius: 8px; font-size: 12px; }
+.mx-play:hover { background-color: #ff7a4c; }

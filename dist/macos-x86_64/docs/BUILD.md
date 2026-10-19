@@ -1,5 +1,28 @@
 # Сборка и распространение игры
 
+## Сборка движка (Xmake)
+
+Каноническая сборка Russiano2D — Xmake; CMake остаётся только внутри
+сторонних пакетов и вспомогательных инструментов.
+
+```bash
+# macOS arm64 (аналогично: macosx/x86_64, linux/x86_64, mingw/x86_64)
+xmake f -p macosx -a arm64 -m release -o build-xmake/macos-arm64
+xmake build -y
+
+./build-xmake/macos-arm64/macosx/arm64/release/russiano2d --game game
+./build-xmake/macos-arm64/macosx/arm64/release/r2d-sdk version
+```
+
+Все четыре платформы и релизные пакеты собирает `build_and_push`; зависимости
+и кросс-тулчейны (Zig, mingw-w64) описаны в [RELEASING.md](RELEASING.md).
+
+> Примеры ниже с путями `./build/...` и командами `cmake ...` относятся к
+> старому CMake-дереву и вспомогательным инструментам (Tracy, payload,
+> сторонние пакеты). Для сборки самого движка используйте Xmake; актуальный
+> бинарник лежит в `build-xmake/<platform>/<os>/<arch>/release/`.
+
+
 Движок умеет собирать проект в **самостоятельный исполняемый файл**: папка с
 `main.js` и ассетами больше не нужна рядом с игрой. Сборка встроена в сам
 движок; SDK использует тот же builder. Если движок использует динамические

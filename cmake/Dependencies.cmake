@@ -4,6 +4,11 @@
 # Все версии запинены. Где возможно — сначала ищем системный пакет, иначе
 # тянем исходники через FetchContent и собираем вместе с проектом.
 #
+# ВАЖНО: GIT_TAG с raw commit SHA НЕЛЬЗЯ сочетать с GIT_SHALLOW TRUE. CMake
+# клонирует только вершину ветки (--depth 1), а затем делает checkout SHA; если
+# этого commit нет в мелком клоне, падает "fatal: unable to read tree" ещё на
+# configure. Для тегов/веток shallow допустим, для SHA — только полный клон.
+#
 # Итоговые CMake-таргеты, которые используются в src/CMakeLists.txt:
 #   SDL3::SDL3                  — платформа, окно, ввод, SDL_GPU
 #   SDL3_image::SDL3_image      — загрузка PNG
@@ -68,7 +73,7 @@ if(NOT SDL3_image_FOUND)
     FetchContent_Declare(SDL3_image
         GIT_REPOSITORY https://github.com/libsdl-org/SDL_image.git
         GIT_TAG        0891fc30428b518e7d018677bd6fa95c1a50f4c6  # release-3.4.8
-        GIT_SHALLOW    TRUE
+        GIT_SHALLOW    FALSE
         # По умолчанию FetchContent тянет ВСЕ подмодули SDL_image, включая
         # aom/dav1d/libjxl/libwebp/libtiff — это сотни мегабайт ради форматов,
         # которые мы всё равно отключили выше. Берём только нужное.
@@ -85,7 +90,7 @@ set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(quickjs
     GIT_REPOSITORY https://github.com/quickjs-ng/quickjs.git
     GIT_TAG        3c9afc9943323ee9c7dbd123c0cd991448f4b6c2  # v0.10.1
-    GIT_SHALLOW    TRUE)
+    GIT_SHALLOW    FALSE)
 FetchContent_MakeAvailable(quickjs)
 
 # ---------------------------------------------------------------------------
@@ -99,7 +104,7 @@ set(BOX2D_VALIDATE     ON  CACHE BOOL "" FORCE)
 FetchContent_Declare(box2d
     GIT_REPOSITORY https://github.com/erincatto/box2d.git
     GIT_TAG        8c661469c9507d3ad6fbd2fea3f1aa71669c2fe3  # v3.1.1
-    GIT_SHALLOW    TRUE)
+    GIT_SHALLOW    FALSE)
 FetchContent_MakeAvailable(box2d)
 
 # ---------------------------------------------------------------------------
@@ -136,7 +141,7 @@ if(R2D_ENABLE_AUDIO)
     FetchContent_Declare(SDL3_mixer
         GIT_REPOSITORY https://github.com/libsdl-org/SDL_mixer.git
         GIT_TAG        72a81869b45e249e8e67102db4e98dd2441f05a1  # release-3.2.4
-        GIT_SHALLOW    TRUE
+        GIT_SHALLOW    FALSE
         # Как и у SDL_image, по умолчанию тянутся ВСЕ подмодули — включая
         # тяжёлые кодеки, которые мы только что отключили.
         GIT_SUBMODULES "external/ogg;external/vorbis")
@@ -157,7 +162,12 @@ if(R2D_ENABLE_NET)
     FetchContent_Declare(SDL3_net
         GIT_REPOSITORY https://github.com/libsdl-org/SDL_net.git
         GIT_TAG        30dd38a36b487b60847a8bb9832e94b124802e2f
-        GIT_SHALLOW    TRUE)
+        # НЕ GIT_SHALLOW: CMake при shallow-clone сначала клонирует вершину
+        # ветки с --depth 1, а затем делает checkout пинового commit. Если commit
+        # не лежит в этой вершине, tree нет: "fatal: unable to read tree" и
+        # конфигурация падает (воспроизведено в GitHub Actions 2026-10-19).
+        # SDL_net маленький — полный клон дешевле сломанного CI.
+        GIT_SHALLOW    FALSE)
     FetchContent_MakeAvailable(SDL3_net)
 endif()
 
@@ -190,7 +200,7 @@ if(R2D_ENABLE_RMLUI)
     FetchContent_Declare(RmlUi
         GIT_REPOSITORY https://github.com/mikke89/RmlUi.git
         GIT_TAG        ba95ffe8bfb6370efb2cdcca927eaad4710c5413  # 6.3
-        GIT_SHALLOW    TRUE)
+        GIT_SHALLOW    FALSE)
 
     # RmlUi везёт собственный FindFreetype для Emscripten (шрифт берётся из
     # порта -sUSE_FREETYPE=1, системного FreeType в wasm нет), но каталог с
@@ -309,7 +319,7 @@ endif()
 FetchContent_Declare(visibility
     GIT_REPOSITORY https://github.com/trylock/visibility.git
     GIT_TAG        71eb5c00692713abd870113f3efc943322486d8e  # master
-    GIT_SHALLOW    TRUE
+    GIT_SHALLOW    FALSE
     SOURCE_SUBDIR  "cmake/нет-здесь-CMakeLists")
 FetchContent_MakeAvailable(visibility)
 
@@ -321,7 +331,7 @@ FetchContent_MakeAvailable(visibility)
 FetchContent_Declare(stb
     GIT_REPOSITORY https://github.com/nothings/stb.git
     GIT_TAG        2c980bb59875b0d32144a71867fbdebb2f77cd20  # master, stb_truetype 1.26
-    GIT_SHALLOW    TRUE
+    GIT_SHALLOW    FALSE
     SOURCE_SUBDIR  "cmake/нет-здесь-CMakeLists")
 FetchContent_MakeAvailable(stb)
 

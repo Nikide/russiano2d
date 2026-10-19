@@ -17,9 +17,13 @@
 
 #include <glslang/Public/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
+#if defined(R2D_GLSLANG_FLAT_INCLUDES)
+#include <glslang/SPIRV/GlslangToSpv.h>
+#include <spirv_cross/spirv_cross_c.h>
+#else
 #include <SPIRV/GlslangToSpv.h>
-
 #include <spirv_cross_c.h>
+#endif
 
 #ifndef R2D_ENABLE_LIVE_SHADERS
 

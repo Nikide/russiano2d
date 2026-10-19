@@ -1,0 +1,95 @@
+/*
+ * HUD новеллы: всё в углах экрана, игровой мир не перекрывает.
+ */
+
+body {
+    font-family: Noto Sans;
+    width: 100%;
+    height: 100%;
+    color: #dfe8f6;
+}
+
+#vn-hud {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 100%;
+    height: 100%;
+}
+
+/* --- Руси-метр: подпись и полоса ---------------------------------------- */
+
+#vn-meter {
+    position: absolute;
+    right: 24px;
+    top: 20px;
+    width: 220px;
+    text-align: right;
+}
+
+#vn-meter-label {
+    display: block;
+    font-size: 19px;
+    color: #ffd9e8;
+}
+
+#vn-meter-track {
+    display: block;
+    width: 200px;
+    height: 12px;
+    margin-top: 7px;
+    background-color: rgba(20, 28, 46, 220);
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: rgba(255, 179, 217, 60);
+}
+
+#vn-meter-fill {
+    display: block;
+    height: 12px;
+    width: 40%;
+    background-color: #ff8fc0;
+    border-radius: 6px;
+}
+
+/* --- Авто-режим ---------------------------------------------------------- */
+
+#vn-auto {
+    display: block;
+    position: absolute;
+    right: 24px;
+    top: 70px;
+    font-size: 17px;
+    color: #9fe8a0;
+    text-align: right;
+}
+
+#vn-auto.off {
+    display: none;
+}
+
+/* --- Табличка локации ---------------------------------------------------- */
+
+#vn-place {
+    display: block;
+    position: absolute;
+    left: 34px;
+    top: 26px;
+    font-size: 30px;
+    color: #ffe9f2;
+}
+
+#vn-place.off {
+    display: none;
+}
+
+/* --- Подсказка управления ------------------------------------------------ */
+
+#vn-hint {
+    display: block;
+    position: absolute;
+    left: 20px;
+    bottom: 4px;
+    font-size: 15px;
+    color: #7d8fa8;
+}

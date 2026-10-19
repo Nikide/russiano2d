@@ -1,0 +1,16 @@
+/* RmlUi Studio: расклад нижней панели RCSS (общая тема — theme.rcss, studio.rcss). */
+#rm-bottom { display: block; flex: 0 0 auto; background-color: #0f131c; border-top-width: 1px; border-color: #232b3d; }
+#rm-rcss-wrap { display: block; padding: 0px 14px 8px 14px; }
+#rm-sheets { display: inline-block; }
+.node-row { display: block; padding: 3px 8px; cursor: pointer; font-size: 13px; }
+.node-row:hover { background-color: #171e2f; }
+.node-row.sel { background-color: #2a1a1c; }
+.node-tag { color: #6cc7ff; }
+.node-id { color: #ffb03a; }
+.node-cls { color: #4ad991; }
+.node-txt { color: #6f7a92; margin-left: 8px; }
+
+/* DevTools: нижняя панель журнала ответов. */
+#dt-bottom { display: block; flex: 0 0 auto; background-color: #0f131c; border-top-width: 1px; border-color: #232b3d; }
+#dt-log-wrap { display: block; padding: 0px 14px 10px 14px; }
+#dt-log { max-height: 130px; }

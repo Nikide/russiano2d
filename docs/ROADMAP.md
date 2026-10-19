@@ -44,14 +44,14 @@
 
 | Пункт | Есть | Где |
 |---|---|---|
-| Сборка | да | `build/russiano2d` собирается `cmake --build build` |
+| Сборка | да | `build-xmake/<platform>/**/release/russiano2d` собирается Xmake |
 | Тесты | да | `python3 tools/run_tests.py` (79 агентских на дату фазы, сейчас 125), `tests/js/*_test.mjs` (79, сейчас 94) |
 | Стражи доков | да | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` |
 | Инвентаризация `$` | да | [TASKS.md](TASKS.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) |
 | Агентский протокол | да | [AGENT_API.md](AGENT_API.md), `src/agent.c` |
 | RmlUi | да | `src/gui.cpp`, низкоуровневый GUI (`engine.gui*`) |
 | Замеры | частично | `$.debug.profile()`, `tools/bench_highlevel.py`, `--stats` |
-| **CI прогоняет сборку/тесты** | **настроен** | [.github/workflows/ci.yml](../.github/workflows/ci.yml) — сборка + Unity-тесты (`ctest`); [release.yml](../.github/workflows/release.yml) — тег, Linux/Windows, упаковка, GitHub Release |
+| **CI прогоняет сборку/тесты** | **настроен** | [.github/workflows/ci.yml](../.github/workflows/ci.yml) — сборка + Unity-тесты (`ctest`); [build_and_push](../../build_and_push) — локальная сборка всех платформ, тег и релизы |
 
 ---
 

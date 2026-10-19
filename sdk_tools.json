@@ -185,11 +185,11 @@
     },
     {
       "id": "vn-narrative",
-      "name": "VN Narrative",
-      "description": "Диалоги, story/*.scene, RML/RCSS-темы и нативная валидация narrative (r2d-sdk story/dialog validate).",
+      "name": "Visual Novel Maker",
+      "description": "Визуальный редактор story/*.scene: команды, выборы, персонажи, предпросмотр и нативная проверка narrative.",
       "entry": "vn-narrative",
-      "category": "narrative",
-      "last_updated": "2026-10-17T21:30:00+03:00",
+      "category": "solutions",
+      "last_updated": "2026-10-19T23:30:00+03:00",
       "assets": [
         "*.scene",
         "*.story",
