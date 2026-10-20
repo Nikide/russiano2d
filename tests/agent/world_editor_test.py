@@ -400,7 +400,9 @@ def main():
         if os.path.isfile(recovery):
             os.remove(recovery)
 
-    print("\nFAILURES: %d" % len(failures))
+    # run_tests.py classifies any output line starting with "FAIL" as a failed
+    # assertion, including this historical summary when the count is zero.
+    print("\nASSERTION_FAILURES: %d" % len(failures))
     return 1 if failures else 0
 
 
