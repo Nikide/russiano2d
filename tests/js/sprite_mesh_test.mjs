@@ -63,4 +63,17 @@ test('ordinary Sprite frame switch submits the matching prebuilt mesh', () => {
     near(submitted.x, 50 + 10 * Math.cos(.35), 1e-5);
 });
 
+test('front camera preserves explicit zero yaw and pitch in project and draw', () => {
+    const vertices = new Float32Array([1,2,3,0,0,255,255,255]);
+    const viewport = { x: 0, y: 0, w: 100, h: 80 };
+    const camera = { yaw: 0, pitch: 0, zoom: 2 };
+    const expected = projectSpriteMesh(vertices, viewport, camera);
+    near(expected[0], 50 + 2 / 1.006, 1e-5);
+    near(expected[1], 40 - 4 / 1.006, 1e-5);
+    let projected;
+    globalThis.engine.submitMesh = v => { projected = v; return 1; };
+    installSpriteMesh({}).draw({ frames: [{ vertices }] }, 0, 7, viewport, camera);
+    near(projected[0], expected[0], 1e-5); near(projected[1], expected[1], 1e-5);
+});
+
 finish();

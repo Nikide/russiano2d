@@ -37,7 +37,7 @@ export function decodeSpriteMeshCache(bytes) {
 
 export function projectSpriteMesh(vertices, viewport, camera) {
     const v = viewport || {}, c = camera || {};
-    const yaw = Number(c.yaw) || 0.55, pitch = Number(c.pitch) || 0.3;
+    const yaw = Number.isFinite(c.yaw) ? c.yaw : 0.55, pitch = Number.isFinite(c.pitch) ? c.pitch : 0.3;
     const zoom = Math.max(0.01, Number(c.zoom) || 1), cx = (Number(v.x) || 0) + (Number(v.w) || 0) / 2;
     const cy = (Number(v.y) || 0) + (Number(v.h) || 0) / 2;
     const cyaw = Math.cos(yaw), syaw = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
@@ -102,7 +102,7 @@ export function drawNodeSpriteMesh(node, transform, tint, viewport) {
     const sx = transform.w / (frame.source_width * unitsPerPixel);
     const sy = transform.h / (frame.source_height * unitsPerPixel);
     const angle = Number(node.angle) || 0, ca = Math.cos(angle), sa = Math.sin(angle);
-    const yaw = Number(state.yaw) || .35, pitch = Number(state.pitch) || .2;
+    const yaw = Number.isFinite(state.yaw) ? state.yaw : .35, pitch = Number.isFinite(state.pitch) ? state.pitch : .2;
     const cy = Math.cos(yaw), ys = Math.sin(yaw), cp = Math.cos(pitch), ps = Math.sin(pitch);
     const depthScale = (Math.abs(sx) + Math.abs(sy)) * .5;
     const depthRatio = Number(state.options.depth) >= 0 && cache.depth > 0
@@ -126,7 +126,7 @@ export function drawNodeSpriteMesh(node, transform, tint, viewport) {
 
 function projectSpriteMeshInto(vertices, viewport, camera, out) {
     const v = viewport || {}, c = camera || {};
-    const yaw = Number(c.yaw) || 0.55, pitch = Number(c.pitch) || 0.3;
+    const yaw = Number.isFinite(c.yaw) ? c.yaw : 0.55, pitch = Number.isFinite(c.pitch) ? c.pitch : 0.3;
     const zoom = Math.max(0.01, Number(c.zoom) || 1), cx = (Number(v.x) || 0) + (Number(v.w) || 0) / 2;
     const cy = (Number(v.y) || 0) + (Number(v.h) || 0) / 2;
     const cyaw = Math.cos(yaw), syaw = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
