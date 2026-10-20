@@ -107,6 +107,7 @@ def test():
             check(a.eval('meshA.state.camera.yaw===0 && meshA.state.camera.pitch===0 && meshA.doc.layoutRect("sm-view").w>0'), 'front view and embedded viewport are usable')
             a.screenshot(str(Path(ROOT)/'build/editor-sprite-mesh-tabs.png'))
             run(a,E+'.openWith("new.atlas.json","sprite-mesh")')
+            settle(a, E+'.activeTab().path==="new.atlas.json" && !!'+A+' && !'+A+'.state.busy')
             check(run(a,A+'.save()') and json.loads((root/'new.atlas.json').read_text())['re2d']['spriteMesh']['enabled'], 'first Save + Bake enables SpriteMesh on an unconfigured atlas')
             # Native PNG remains an alternate studio, with clean default settings.
             run(a,E+'.openWith("sheet.png","sprite-mesh")')
