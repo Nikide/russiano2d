@@ -21,3 +21,11 @@
 .aw-meter-fill { height: 100%; background-color: #39ad7c; }
 .aw-keys { font-size: 18px; color: #98c8ff; margin: 8px 0px; }
 .aw-preview-text { padding: 24px; }
+/* Particles: рампы снизу, код использования слева */
+.aw-bottom.pt-bottom { max-height: 220px; }
+.pt-ramps { display: block; }
+.pt-ramps .st-bar { flex-wrap: wrap; }
+.pt-graph { display: block; position: relative; height: 150px; margin: 6px 10px 8px 10px; overflow: hidden; background-color: #0e1117; border: 1px #2a2f39; border-radius: 6px; }
+.pt-axis { position: absolute; color: #7b87a0; font-size: 10px; }
+input.st-in.pt-small { flex: 0 0 auto; width: 56px; }
+.pt-code { display: block; white-space: pre-wrap; font-family: Roboto Mono; font-size: 11px; color: #9fb4d0; padding: 6px; background-color: #14161b; border-radius: 4px; overflow: hidden; word-break: break-word; }

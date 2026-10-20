@@ -2,10 +2,26 @@
 import { studioDoc,esc,row,diag,uiScale,mousePx,inside,screenCamera } from './studio_kit.js';
 import { createAssetDocument } from './asset_document.js';
 export const button=(id,label,on)=>'<button class="st-btn'+(on?' on':'')+'" data-key="'+esc(id)+'">'+esc(label)+'</button>';
+// Поля формы: {key,label,number?,int?,bool?,json?,options?,optional?,default?,pair?:'range'|'vec',hint?}.
+// pair — два поля: 'range' — число или [от, до]; 'vec' — [x, y].
 export function form(fields,prefix='f') {
     return fields.map(f=>'<div class="st-field"><label>'+esc(f.label||f.key)+'</label>'+
-        (f.options?'<select id="'+prefix+'-'+esc(f.key)+'" class="st-in">'+f.options.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('')+'</select>':
+        (f.pair?'<input id="'+prefix+'-'+esc(f.key)+'-0" class="st-in" type="text"/><input id="'+prefix+'-'+esc(f.key)+'-1" class="st-in" type="text"/>':
+        f.options?'<select id="'+prefix+'-'+esc(f.key)+'" class="st-in">'+(f.optional?['']:[]).concat(f.options).map(v=>'<option value="'+esc(v)+'">'+esc(v===''?'—':v)+'</option>').join('')+'</select>':
         f.json?'<textarea id="'+prefix+'-'+esc(f.key)+'" class="st-area"></textarea>':'<input id="'+prefix+'-'+esc(f.key)+'" class="st-in" type="text"/>')+'</div>').join('');
+}
+const num=(f,t)=>{const v=Number(t);if(!Number.isFinite(v))throw new Error((f.label||f.key)+': нужно число');return v;};
+function pairOf(f,v) {
+    if(v===undefined||v===null)return ['',''];
+    if(Array.isArray(v))return [String(v[0]??''),String(v[1]??'')];
+    if(typeof v==='object')return [String(v.x??''),String(v.y??'')];
+    return f.pair==='vec'?['0',String(v)]:[String(v),''];
+}
+function readPair(f,a,b) {
+    if(a===''&&b===''){if(f.optional)return undefined;throw new Error((f.label||f.key)+': нужно значение');}
+    if(f.pair==='vec')return [a===''?0:num(f,a),b===''?0:num(f,b)];
+    if(b===''||a==='')return num(f,a===''?b:a);
+    const lo=num(f,a),hi=num(f,b);if(lo>hi)throw new Error((f.label||f.key)+': «от» больше «до»');return lo===hi?lo:[lo,hi];
 }
 export function createWorkspace(host,def) {
     const $=host.$,doc=studioDoc($,'asset'),file=createAssetDocument(host,def.kind);
@@ -24,14 +40,17 @@ export function createWorkspace(host,def) {
             for(const f of fields){
                 // Отсутствующее optional-поле показывается пустым и остаётся отсутствующим при Apply.
                 const v=target[f.key]!==undefined?target[f.key]:f.optional?undefined:f.default;
+                if(f.pair){const two=pairOf(f,v);doc.setValue(prefix+'-'+f.key+'-0',two[0]);doc.setValue(prefix+'-'+f.key+'-1',two[1]);continue;}
                 doc.setValue(prefix+'-'+f.key,v===undefined?'':f.json?JSON.stringify(v,null,2):String(v));
             }
         },
         read(fields,prefix='f'){
-            const patch={};for(const f of fields){const raw=String(doc.value(prefix+'-'+f.key)||'').trim();
+            const patch={};for(const f of fields){
+                if(f.pair){patch[f.key]=readPair(f,String(doc.value(prefix+'-'+f.key+'-0')||'').trim(),String(doc.value(prefix+'-'+f.key+'-1')||'').trim());continue;}
+                const raw=String(doc.value(prefix+'-'+f.key)||'').trim();
                 if(f.optional&&raw===''){patch[f.key]=undefined;continue;}
                 if(f.json)patch[f.key]=JSON.parse(raw);
-                else if(f.number){if(!raw||!Number.isFinite(Number(raw)))throw new Error((f.label||f.key)+': нужно число');patch[f.key]=Number(raw);}
+                else if(f.number){if(!raw||!Number.isFinite(Number(raw)))throw new Error((f.label||f.key)+': нужно число');if(f.int&&!Number.isInteger(Number(raw)))throw new Error((f.label||f.key)+': нужно целое');patch[f.key]=Number(raw);}
                 else if(f.bool){if(!['true','false'].includes(raw))throw new Error(f.key+': true/false');patch[f.key]=raw==='true';}
                 else patch[f.key]=raw;
             }return patch;
@@ -52,7 +71,7 @@ export function createWorkspace(host,def) {
         doc.html('aw-inspector',selected?form(fields):'<span class="st-note">Выберите объект или создайте новый.</span>');
         if(selected)w.fieldValues(fields,selected);
         const settings=def.settings||[];doc.html('aw-document',form(settings,'d'));w.fieldValues(settings,w.data,'d');
-        doc.style('aw-document-apply','display',settings.length?'block':'none');
+        doc.style('aw-document-apply','display',settings.length?'block':'none');doc.style('aw-document-title','display',settings.length?'block':'none');
         doc.text('aw-state',file.dirty()?'не сохранено':'сохранено');renderDiagnostics();
         if(def.content)doc.html('aw-content',def.content(w));
         if(def.selected)def.selected(w);
