@@ -377,31 +377,31 @@ export function createEditor($) {
         activate(s.history[at], false);
     }
 
-    function save(tab) {
-        tab = tab || activeTab();
-        if (tab && tab.inst) {
-            studios.save(tab).then((ok) => { setStatus(ok ? 'сохранено: ' + tab.path : 'не сохранено: ' + tab.path, ok ? 'ok' : 'err'); renderAll(); });
-            return true;
+    async function save(tab) {
+        tab=tab||activeTab();
+        if(!tab)return false;
+        if(tab.inst) {
+            const ok=await studios.save(tab);
+            setStatus(ok?'сохранено: '+tab.path:'не сохранено: '+tab.path,ok?'ok':'err');renderAll();return !!ok;
         }
-        if (!tab || !tab.model) return false;
-        const ok = $.fs.write(full(tab.path), tab.model.text());
-        if (!ok) { setStatus('не удалось записать ' + tab.path, 'err'); return false; }
-        tab.model.markSaved();
-        tab.confirmClose = false;
-        setStatus('сохранено: ' + tab.path, 'ok');
-        if (tab.lang === 'js') lintFile(tab);
-        if (tab.path === 'project.json') {
-            const json = $.fs.readJSON(full('project.json'), null);
-            if (json) Object.assign(s.project, { title: json.title || s.project.title, version: json.version || '', width: json.width, height: json.height, json });
+        if(!tab.model)return false;
+        if(!tab.model.dirty)return true;
+        const ok=$.fs.write(full(tab.path),tab.model.text());
+        if(!ok){setStatus('не удалось записать '+tab.path,'err');return false;}
+        tab.model.markSaved();tab.confirmClose=false;
+        if(tab.lang==='js')await lintFile(tab);
+        if(tab.path==='project.json') {
+            const json=$.fs.readJSON(full('project.json'),null);
+            if(json)Object.assign(s.project,{title:json.title||s.project.title,version:json.version||'',width:json.width,height:json.height,json});
         }
-        renderAll();
-        return true;
+        renderAll();return true;
     }
-
-    function saveAll() {
-        let n = 0;
-        for (const t of s.tabs) if (((t.model && t.model.dirty) || (t.inst && t.dirty)) && save(t)) n++;
-        setStatus(n ? 'сохранено файлов: ' + n : 'нечего сохранять', 'ok');
+    async function saveAll() {
+        let saved=0,failed=0;
+        for(const t of s.tabs.slice())if((t.model&&t.model.dirty)||(t.inst&&t.inst.dirty())) {
+            if(await save(t))saved++;else failed++;
+        }
+        setStatus('сохранено: '+saved+(failed?' · ошибок: '+failed:''),failed?'err':'ok');return failed===0;
     }
 
     // --- диагностика ----------------------------------------------------------
