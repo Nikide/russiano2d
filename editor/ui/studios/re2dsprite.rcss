@@ -1,0 +1,10 @@
+/* Re2DSprite: вьюпорт прозрачный — персонаж рисует рантайм под RmlUi. */
+.rs-wrap { display: flex; flex-direction: row; flex-wrap: wrap; }
+.rs-wrap .st-btn { margin-bottom: 3px; }
+.rs-group { display: block; margin-bottom: 4px; }
+.rs-transport { display: flex; flex-direction: row; align-items: center; flex: 0 0 auto; padding: 6px 10px; background-color: #1b1e24; border-top: 1px #2a2f39; }
+.rs-timeline { display: block; position: relative; flex: 1 1 0; height: 12px; margin: 0px 10px; background-color: #0e1117; border: 1px #2a2f39; border-radius: 3px; cursor: pointer; }
+.rs-playhead { display: block; position: absolute; left: 0px; top: 0px; bottom: 0px; width: 0%; background-color: #3b82f6; border-radius: 2px; }
+.rs-fact { display: flex; flex-direction: row; font-size: 12px; margin: 2px 0px; }
+.rs-fact label { flex: 0 0 auto; width: 92px; color: #8b93a3; }
+.rs-fact span { color: #c9ced8; white-space: nowrap; overflow: hidden; }

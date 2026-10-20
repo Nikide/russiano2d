@@ -51,7 +51,7 @@
 | Input (`.input.json`) | студия Editor `editor/studios/input.js`: тестер — плитка на действие, подсветка по настоящему `$.input.down(действие)` после `$.input.bind` файла (прежние бинды и deadzone возвращаются при уходе с вкладки и закрытии); клавиши-чипы выбранного действия, добавление по имени или «Назначить нажатием», конфликты общих клавиш подсвечены; переименование сохраняет порядок; мёртвая зона — настройка документа. Save — native validate черновика |
 | RmlUi (`.rml`, `.rcss`) | студия SDK в исходной разметке |
 | SpriteMesh (`.atlas.json`, PNG) | студия Editor `editor/studios/sprite_mesh.js`, отдельные документ, настройки и история на вкладку (`ui/studios/sprite_mesh.rml`); Shaded/Wireframe, ракурсы, лента кадров и теги анимаций. Apply — временный native bake; Save/Undo/Redo — Editor; Save + Bake — `r2d sprite-mesh-bake`, native диагностика — Problems |
-| Re2DSprite (`.character.json`) | студия Editor `editor/studios/re2dsprite.js`: живой персонаж `$.re2dSprite.from` во вьюпорте (протяжка — yaw/pitch, ракурсы, вертушка, anime/pixel), клипы, таймлайн с перемоткой, слои, эмоции, варианты, экипировка по сокетам, видимость частей, кости и сокеты; правка `style`/`projection`/`defaults.motion` → запись `character.json` и `.re2dReload()` |
+| Re2DSprite (`.character.json`) | студия Editor `editor/studios/re2dsprite.js`, документ и история на вкладку (`ui/studios/re2dsprite.rml`): живой персонаж `$.re2dSprite.from` во вьюпорте (протяжка — yaw/pitch, ракурсы, вертушка, anime/pixel), клипы, таймлайн с перемоткой, слои, эмоции, варианты, экипировка по сокетам, видимость частей, кости и сокеты — без правки файла. Правятся описание (style, projection, defaults.motion/expression) и параметры экипировки (socket, pose, offset, rotation, scale); «Сделать умолчанием» пишет текущий клип и копию селекторов эмоции. Несохранённое описание проверяет сам рантайм: превью строится из временного черновика рядом с файлом, отказ рантайма блокирует Save с диагностикой |
 | Hammer (`.re2dmap`) | студия Editor `editor/studios/hammer.js`, отдельные документ и сессия на вкладку, раскладка `editor/ui/studios/hammer.rml` (тулбар, палитра инструментов, TOP/3D/FRONT/SIDE, инспектор, дерево объектов, VisGroups); brushes и cells/walls/portals/stairs/slopes/lights — native `r2d world-edit`, общие Validate/Compile/Run Preview, 3D — настоящий runtime-кадр; диагностика — в Problems с переходом к объекту, dirty — на вкладке; material + tags грани откатываются одним шагом, preview помечается устаревшим после правок |
 
 **Открыть как.** Файл открывается основной студией своего типа (`.atlas.json` —
@@ -69,9 +69,9 @@ Sprite, `.re2dmap` — Hammer, `.rml` — RmlUi). Палитра команд (`
 
 ## 3. Чего пока нет (честно)
 
-* на старом мосте SDK (`editor/lib/studios.js`) остались две студии: RmlUi
-  (`.rml`/`.rcss`, разметка SDK, одна сессия) и Re2DSprite (одна сессия, без
-  Undo/Redo); все остальные — студии Editor с документом и историей на вкладку;
+* на старом мосте SDK (`editor/lib/studios.js`) осталась одна студия — RmlUi
+  (`.rml`/`.rcss`, разметка SDK, одна сессия); все остальные — студии Editor
+  с документом и историей на вкладку;
 * у студий данных террейны/анимации Tilemap и `effectParams` шины Audio пока
   правятся JSON-полями;
 * поиска по проекту (боковая «Search») нет — открывается Quick Open;
