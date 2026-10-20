@@ -12,6 +12,30 @@ Last updated: 2026-10-15 (Europe/Moscow).
 Текущие доказательства —
 [docs/SDK_VERIFICATION.md](docs/SDK_VERIFICATION.md).
 
+## 2026-10-20: SpriteMesh V1
+
+SpriteMesh доведён как pipeline обычного Sprite: `sprite-mesh-bake` читает PNG
+или существующий Atlas, печёт каждый кадр, учитывает соседние atlas bounds,
+frame slices/pivot и страницы multi-page atlas. Cache v3 хранит hashes исходных
+страниц/layout/settings, индекс страницы и геометрию каждого кадра; `--check`
+сообщает актуальность без rebuild.
+
+`sprite-mesh-studio` зарегистрирован как отдельная SDK Studio. Он открывает PNG
+и Atlas, показывает кадры/animation tags, проигрывает существующие durations,
+позволяет вращать/масштабировать preview, переключает текстуру/каркас, сохраняет
+параметры `re2d.spriteMesh` и запекает все кадры. Preview cache удаляется после
+загрузки в рабочую память.
+
+`$("player").spriteMesh(...)` подключает cache к существующему Sprite. Обычные
+`.frames()`, `.frame()` и `.animate()` обновляют индекс cache frame и texture;
+runtime не строит новую геометрию при переключении анимации. Позиция и угол
+проецируются в координаты существующего mesh renderer.
+
+Demo: `demos/sprite_mesh_demo` (32 frames, idle/walk/attack, включение SpriteMesh
+и вращение). Проверки: C генератор/cache, CLI Atlas/cache invalidation, JS cache
+decoder/проекция/frame switching, живая SDK Studio и runtime demo; UI capture
+сохраняется тестом в `build/sprite_mesh_studio.png`.
+
 ## 2026-10-19: SDK Extensions + Universal World Editor
 
 Сделано и проверено:

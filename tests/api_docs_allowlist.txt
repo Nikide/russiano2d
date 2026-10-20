@@ -23,6 +23,9 @@
 # --- долг: task-30 (devtools-ui) ---
 
 # --- engine.* (task-30/task-31) закрыт: все 10 имён описаны в справочнике -------
+# `engine.spriteInfo` — внутренний binding `src/script.c`; доступен только
+# high-level `$` adapter-у, чтобы получить texture/UV обычного Sprite.
+engine.spriteInfo  # internal: private Sprite texture/UV bridge for high-level $
 # `docs/internal/NATIVE.md`: таблица «Что ещё есть в engine» (profileEnabled,
 # isAwake, setGravityScale, netMode) и подраздел «Контакты, ошибки физики и
 # снаппинг вершин» (bodyGeneration, contactStay, setContactStay, physicsErrors,

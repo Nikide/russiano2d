@@ -129,3 +129,13 @@ const $ = createApi();          // свой экземпляр API (тесты, 
 # API ставится и БЕЗ движка (регрессия на «$ не определён»)
 build/_deps/quickjs-build/qjs tests/js/api_no_engine_test.mjs
 ```
+# SpriteMesh для обычного Sprite
+
+`$.fn.spriteMesh(config?)` подключает настройки и baked cache к выбранному
+Sprite, возвращает текущие настройки без аргумента и отключает меш при `false`.
+Кадр продолжает менять существующий `.frame()`/`.animate()` API; cache frame
+выбирается по `frame_index`, runtime геометрию не перестраивает.
+
+`$.spriteMesh.loadCache(path)` читает cache; `$.spriteMesh.draw(cache, frame,
+texture, viewport, camera)` рисует кадр в SDK preview; `$.spriteMesh.project(...)`
+вычисляет проекцию, а `$.spriteMesh.cacheInfo(cache)` возвращает счётчики и hashes.

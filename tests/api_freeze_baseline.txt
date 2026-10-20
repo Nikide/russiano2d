@@ -120,6 +120,7 @@ $.atlas.load
 $.atlas.manifest
 $.atlas.names
 $.atlas.parse
+$.atlas.spriteInfo
 $.atlas.unload
 $.atlas.verify
 $.audio
@@ -917,6 +918,7 @@ $.fn.some
 $.fn.sound
 $.fn.speed
 $.fn.sprite
+$.fn.spriteMesh
 $.fn.squash
 $.fn.start
 $.fn.state
@@ -1112,6 +1114,7 @@ $.gfx.smaa
 $.gfx.snap
 $.gfx.stats
 $.gfx.text
+$.gfx.texture
 $.gfx.textureSize
 $.gfx.userShaders
 $.gfx.white = 0
@@ -1383,6 +1386,7 @@ $.math.vecSub
 $.math.wrap
 $.mesh
 $.mesh.draw
+$.mesh.drawBaked
 $.mesh.flatSize
 $.mesh.fromSlice
 $.mesh.ik
@@ -2004,6 +2008,11 @@ $.sound.stop
 $.sound.stopAll
 $.sound.stopMusic
 $.sound.volume
+$.spriteMesh
+$.spriteMesh.cacheInfo
+$.spriteMesh.draw
+$.spriteMesh.loadCache
+$.spriteMesh.project
 $.startScene
 $.state
 $.state.attach
@@ -2670,6 +2679,7 @@ $.графика.smaa
 $.графика.snap
 $.графика.stats
 $.графика.text
+$.графика.texture
 $.графика.textureSize
 $.графика.userShaders
 $.графика.white = 0
@@ -3229,6 +3239,7 @@ engine.shapeCount
 engine.shapeEnabled
 engine.shapeOverlaps
 engine.spriteFilter
+engine.spriteInfo
 engine.submitLightTriangles
 engine.submitMesh
 engine.submitSprites

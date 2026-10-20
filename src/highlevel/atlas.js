@@ -21,6 +21,8 @@
 import { engine } from './native.js';
 import { ctx } from './core.js';
 
+const sprite_metadata = new Map();
+
 // ---------------------------------------------------------------------------
 // Чистая часть: разбор и классификация
 // ---------------------------------------------------------------------------
@@ -526,10 +528,14 @@ function buildSheet(name, spec, data, json_path) {
 
     const sprites = {};
     const sprite_page = {};
-    for (const frame of parsed.frames) {
+    for (let frame_index = 0; frame_index < parsed.frames.length; frame_index++) {
+        const frame = parsed.frames[frame_index];
         const page = frame.page >= 0 && frame.page < textures.length ? frame.page : 0;
         sprites[frame.name] = engine.createSprite(textures[page], frame.x, frame.y, frame.w, frame.h);
         sprite_page[frame.name] = page;
+        sprite_metadata.set(sprites[frame.name], { texture: textures[page], page, frame_index,
+            frame: Object.assign({}, frame), atlasPath: json_path || null, image: images[page] || null,
+            spriteMesh: data.re2d && data.re2d.spriteMesh ? Object.assign({}, data.re2d.spriteMesh) : null });
     }
 
     const sheet = {
@@ -537,6 +543,7 @@ function buildSheet(name, spec, data, json_path) {
         image: images[0] || null,
         images,
         texture: textures[0] || -1,
+        path: json_path || null,
         format: parsed.format,
         meta: parsed.meta,
         manifest: parsed.meta.import || null,
@@ -562,6 +569,13 @@ function buildSheet(name, spec, data, json_path) {
         frame(frame_name) {
             const sprite = sprites[String(frame_name)];
             return sprite === undefined ? -1 : sprite;
+        },
+
+        /** Metadata used by SpriteMesh and diagnostics; animation still uses
+         * the ordinary frame handle and index. */
+        spriteInfo(sprite_id) {
+            const info = sprite_metadata.get(Number(sprite_id));
+            return info ? Object.assign({}, info, { frame: Object.assign({}, info.frame) }) : null;
         },
 
         /** Имена кадров по порядку атласа. */
@@ -728,6 +742,11 @@ export function installAtlas($) {
             builds.set(key, { signature, data, sheet });
             loaded.set(key, sheet);
             return sheet;
+        },
+
+        spriteInfo(sprite_id) {
+            const info = sprite_metadata.get(Number(sprite_id));
+            return info ? Object.assign({}, info, { frame: Object.assign({}, info.frame) }) : null;
         },
 
         /** Загруженный атлас по имени (или null). */

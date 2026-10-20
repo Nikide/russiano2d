@@ -20,6 +20,7 @@ import { cameraTransform } from './camera.js';
 import { viewCams } from './viewports.js';
 import { kindRenderer, kindPass } from './kinds.js';
 import { report as diagReport } from './diag.js';
+import { drawNodeSpriteMesh } from './sprite_mesh.js';
 
 const MAX_SPRITES = 16384;
 const MAX_TRIS = 8192;
@@ -3893,6 +3894,7 @@ function drawWorldNodeInner(node, cam) {
         break;
     }
     default: {
+        if (node.sprite_mesh && drawNodeSpriteMesh(node, t, baseColor(node))) break;
         const sprite = node.sprite >= 0 ? node.sprite : engine.whiteSprite;
 
         // Тень: смещённая тёмная копия ПОД спрайтом.
@@ -4596,6 +4598,7 @@ export function installGfx($) {
         measureText(text, size) { return engine.measureText(String(text), size || 20); },
 
         /** Размер картинки в пикселях: [ширина, высота]. */
+        texture(path) { return engine.loadTexture(path); },
         textureSize(path) { return engine.textureSize(engine.loadTexture(path)); },
 
         // --- Батч для модулей подсистем --------------------------------------

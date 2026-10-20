@@ -20,11 +20,13 @@ typedef struct R2DSpriteMesh {
     uint32_t vertex_count;
     uint32_t opaque_pixels;
     uint32_t source_width, source_height;
+    uint32_t page;
 } R2DSpriteMesh;
 
 typedef struct R2DSpriteMeshFrameInput {
     R2DSpriteMeshRect rect;
     float pivot_x, pivot_y;
+    uint32_t page;
 } R2DSpriteMeshFrameInput;
 typedef struct R2DSpriteMeshCache {
     uint64_t source_hash, layout_hash, settings_hash;

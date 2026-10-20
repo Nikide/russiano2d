@@ -596,6 +596,17 @@ export function installMesh($) {
             return engine_.submitMesh(outTris, tri, texture);
         },
 
+        /** Submit an already baked screen-space triangle list (8 floats/vertex).
+         * Used by SpriteMesh preview/runtime cache consumers; it does not
+         * generate or modify geometry. */
+        drawBaked(vertices, texture) {
+            if (!(vertices instanceof Float32Array) || vertices.length % 24 !== 0) return 0;
+            const engine_ = engineOf();
+            return typeof engine_.submitMesh === 'function'
+                ? engine_.submitMesh(vertices, vertices.length / 8,
+                    Number.isFinite(Number(texture)) ? Number(texture) : -1) : 0;
+        },
+
         /** Размеры рабочих буферов: видно, что они переиспользуются. */
         scratchSize() { return scratch.length; },
         flatSize() { return flat.length; },

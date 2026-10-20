@@ -31,7 +31,7 @@ DS = "$.ui.doc('sdk/ui/data_studio.rml')"
 RMS = "$.ui.doc('sdk/ui/rmlui_studio.rml')"
 DTD = "$.ui.doc('sdk/ui/devtools.rml')"
 
-REQUIRED_TOOLS = ["launcher", "asset-browser", "r2d-sdk", "world-editor", "re2d-world-studio", "sprite-studio", "animation-studio", "tilemap-studio", "particle-studio",
+REQUIRED_TOOLS = ["launcher", "asset-browser", "r2d-sdk", "world-editor", "re2d-world-studio", "sprite-studio", "sprite-mesh-studio", "animation-studio", "tilemap-studio", "particle-studio",
                   "collision-tools", "parallax-tools", "font-tools", "audio-tools", "input-tools", "rmlui-studio", "devtools",
                   "automation", "code-check", "api-browser", "vn-narrative"]
 
@@ -136,6 +136,8 @@ def ops(tool):
 def main():
     shutil.rmtree(PROJ, ignore_errors=True)
     shutil.copytree(FIX, PROJ)
+    shutil.copytree(os.path.join(ROOT, "demos", "sprite_mesh_demo", "assets"),
+                    os.path.join(PROJ, "assets", "sprite-mesh-demo"), dirs_exist_ok=True)
 
     with Agent(game="sdk", seed=11) as a:
         a.step(20)
@@ -184,6 +186,51 @@ def main():
         a.step(4)
         s = snap(a)
         check(s["view"] == "assets" and "SDK_PICK_ASSET" in s["diagnostics"]["codes"], "sprite-studio без файла ведёт в Asset Browser с подсказкой")
+
+        # --- SpriteMesh Studio: статический Sprite открывается в dedicated 3D tool ---------------------------------------
+        sm_png = os.path.join(PROJ, "assets", "sprite-mesh-demo", "witch.png")
+        a.eval("$.sdkApp.openTool('sprite-mesh-studio', {assetAbs:" + json.dumps(sm_png) + "}).then(() => 1)")
+        check(wait_idle(a, 1200), "SpriteMesh static preview bake completes")
+        sm_doc = "$.ui.doc('sdk/ui/sprite_mesh_studio.rml')"
+        check(rect(a, sm_doc, "sm-view")["w"] > 0 and st(a, "spriteMesh")["asset"] == sm_png
+              and st(a, "spriteMesh")["cache"] is not None and st(a, "spriteMesh")["texture"] >= 0,
+              "SpriteMesh Studio opens a real static Sprite with an immediate baked preview")
+        click_el(a, sm_doc, "sm-save-bake")
+        wait_idle(a, 1200)
+        sm_state = st(a, "spriteMesh")
+        check(sm_state["cache"] is not None and not sm_state["dirty"],
+              "SpriteMesh Tool bake builds and loads the mesh cache")
+        check(os.path.isfile(sm_png + ".sprite-mesh.cache"), "SpriteMesh Tool writes a disk cache beside the source")
+        click_el(a, sm_doc, "sm-back")
+        a.step(4)
+
+        sm_atlas = os.path.join(PROJ, "assets", "sprite-mesh-demo", "witch.atlas.json")
+        a.eval("$.sdkApp.openTool('sprite-mesh-studio', {assetAbs:" + json.dumps(sm_atlas) + "}).then(() => 1)")
+        check(wait_idle(a, 1200), "SpriteMesh spritesheet preview bake completes")
+        sm_state = st(a, "spriteMesh")
+        check(sm_state["frames"] == 32 and sorted(sm_state["animations"]) == ["attack", "idle", "walk"],
+              "SpriteMesh Studio reads every spritesheet frame and all named animations")
+        click_el(a, sm_doc, "sm-anim-1")
+        check(st(a, "spriteMesh")["animation"] == "walk" and st(a, "spriteMesh")["selected"] == 8,
+              "animation list selects walk and its first atlas frame")
+        a.step(3)
+        shot = os.path.join(ROOT, "build", "sprite_mesh_studio.png")
+        a.screenshot(shot)
+        check(os.path.isfile(shot) and os.path.getsize(shot) > 1000,
+              "SpriteMesh Studio non-empty spritesheet authoring screenshot: %s" % shot)
+        click_el(a, sm_doc, "sm-play")
+        check(st(a, "spriteMesh")["playing"], "Play starts actual walk animation preview")
+        a.eval("$.ui.doc('sdk/ui/sprite_mesh_studio.rml').value('sm-depth','0.12'); 1")
+        click_el(a, sm_doc, "sm-apply")
+        wait_idle(a, 1200)
+        check(st(a, "spriteMesh")["cache"] is not None and st(a, "spriteMesh")["dirty"],
+              "live depth edit rebuilds an all-frame preview cache and marks the asset dirty")
+        click_el(a, sm_doc, "sm-save-bake")
+        wait_idle(a, 1200)
+        check(not st(a, "spriteMesh")["dirty"] and os.path.isfile(sm_atlas + ".sprite-mesh.cache"),
+              "Save and Bake writes the full spritesheet cache and clears dirty state")
+        click_el(a, sm_doc, "sm-back")
+        a.step(4)
 
         # --- Input Tools -------------------------------------------------------------------------------------------------------------
         p_in = os.path.join(PROJ, "controls.input.json")

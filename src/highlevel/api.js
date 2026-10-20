@@ -99,6 +99,7 @@ import { installRe2dViewmodel } from './re2d_viewmodel.js';
 import { installRotSprite, tickRotSprite } from './rotsprite.js';
 import { installReal2d, tickReal2d } from './real2d.js';
 import { installMesh } from './mesh.js';
+import { installSpriteMesh } from './sprite_mesh.js';
 import { installAlive } from './alive.js';
 import { installNet } from './net.js';
 import { installReplay } from './replay.js';
@@ -635,6 +636,7 @@ export function createApi() {
         installRe2d($);              // Re2D: проход вида от первого лица, $.re2d (docs/RE2D.md)
         installRe2dViewmodel($);     // экранный viewmodel оружия: $.re2dViewmodel, $.re2dFeel
         $.mesh = installMesh($);     // меш со скелетом: $.mesh
+        $.spriteMesh = installSpriteMesh($); // frame-cache и предпросмотр SpriteMesh
     }
     /**
      * Собрано ли нативное ядро с RE2D. `false` — сборка платформера
@@ -1136,10 +1138,38 @@ function installNodeMethods($) {
             } else if (value === null || value === undefined) {
                 delete node.attrs.src;
             }
+            const currentInfo = $.atlas && $.atlas.spriteInfo ? $.atlas.spriteInfo(node.sprite) : null;
+            if (currentInfo && currentInfo.spriteMesh && currentInfo.spriteMesh.enabled && !node.sprite_mesh) {
+                const opts = currentInfo.spriteMesh;
+                const cachePath = opts.cache || (currentInfo.atlasPath ? currentInfo.atlasPath + '.sprite-mesh.cache' : '');
+                if (!cachePath) throw new Error('$.spriteMesh: у Sprite asset не задан cache path');
+                const cache = $.spriteMesh.loadCache(cachePath);
+                const frameMap = node.frames && node.frames.length
+                    ? node.frames.map((id, i) => { const m = $.atlas.spriteInfo(id); return m ? m.frame_index : i; })
+                    : null;
+                const frameTextures = node.frames && node.frames.length
+                    ? node.frames.map((id) => { const m = $.atlas.spriteInfo(id); return m ? m.texture : currentInfo.texture; })
+                    : null;
+                node.sprite_mesh = { enabled: true, cache, texture: currentInfo.texture,
+                    source: currentInfo.atlasPath, cachePath, options: opts,
+                    frameMap, frameTextures, yaw: Number(opts.yaw) || .35, pitch: Number(opts.pitch) || .2 };
+                if (!frameMap) node.frame_index = currentInfo.frame_index;
+            }
         });
     });
     def('frames', function (spec) {
-        return this.eachNode((_, el) => applyFrames(el, spec));
+        return this.eachNode((_, el) => {
+            const node = el;
+            applyFrames(node, spec);
+            if (node.sprite_mesh && node.frames && node.frames.length && $.atlas && $.atlas.spriteInfo) {
+                node.sprite_mesh.frameMap = node.frames.map((id, i) => {
+                    const info = $.atlas.spriteInfo(id); return info ? info.frame_index : i;
+                });
+                node.sprite_mesh.frameTextures = node.frames.map((id) => {
+                    const info = $.atlas.spriteInfo(id); return info ? info.texture : node.sprite_mesh.texture;
+                });
+            }
+        });
     });
     def('region', function (x, y, w, h) {
         return this.eachNode((_, el) => {
@@ -1206,6 +1236,43 @@ function installNodeMethods($) {
             if (!Number.isFinite(i) || node.frames[i] === undefined) return;
             node.sprite = node.frames[i];
             node.frame_index = i;
+        });
+    });
+
+    /** Attach baked SpriteMesh data to an ordinary Sprite. Frame selection is
+     * still owned by .frame()/.animate()/$.anim.player(). */
+    def('spriteMesh', function (config) {
+        if (config === undefined) {
+            const node = this.nodes[0];
+            return node && node.sprite_mesh ? Object.assign({}, node.sprite_mesh.options) : null;
+        }
+        return this.eachNode((_, el) => {
+            const node = el;
+            if (config === false || (config && config.enabled === false)) { node.sprite_mesh = null; return; }
+            const atlasInfo = $.atlas && typeof $.atlas.spriteInfo === 'function'
+                ? $.atlas.spriteInfo(node.sprite) : null;
+            const opts = config === true
+                ? Object.assign({}, atlasInfo && atlasInfo.spriteMesh || {}, { enabled: true })
+                : Object.assign({}, config || {}, { enabled: true });
+            const source = opts.source || (atlasInfo && atlasInfo.atlasPath) || node.attrs.src || '';
+            const cachePath = opts.cache || (source ? source + '.sprite-mesh.cache' : '');
+            if (!cachePath) throw new Error('$.spriteMesh: нужен Sprite asset или cache path');
+            const cache = $.spriteMesh.loadCache(cachePath);
+            const info = engine && typeof engine.spriteInfo === 'function' ? engine.spriteInfo(node.sprite) : null;
+            const texture = opts.texture !== undefined ? Number(opts.texture)
+                : (atlasInfo ? atlasInfo.texture : (info ? info.texture : -1));
+            if (!(texture >= 0)) throw new Error('$.spriteMesh: у текущего Sprite не найдена texture');
+            if (node.frames && cache.frames.length < node.frames.length)
+                throw new Error('$.spriteMesh: cache содержит меньше кадров, чем Sprite');
+            const frameMap = node.frames && node.frames.length
+                ? node.frames.map((id, i) => { const m = $.atlas && $.atlas.spriteInfo ? $.atlas.spriteInfo(id) : null; return m ? m.frame_index : i; })
+                : null;
+            const frameTextures = node.frames && node.frames.length
+                ? node.frames.map((id) => { const m = $.atlas && $.atlas.spriteInfo ? $.atlas.spriteInfo(id) : null; return m ? m.texture : texture; })
+                : null;
+            node.sprite_mesh = { enabled: true, cache, texture, source, cachePath, options: opts, frameMap,
+                frameTextures,
+                yaw: Number(opts.yaw) || .35, pitch: Number(opts.pitch) || .2 };
         });
     });
 

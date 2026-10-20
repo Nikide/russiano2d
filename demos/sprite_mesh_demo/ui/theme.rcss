@@ -1,0 +1,5 @@
+body { margin: 0; font-family: "Noto Sans"; color: #eef4ff; }
+.sdk-hud { position: absolute; left: 20px; top: 20px; padding: 14px 18px; background: #101923e8; border: 1px solid #56708a; border-radius: 8px; }
+.title { font-size: 20px; font-weight: bold; color: #79d9ff; }
+#status { margin-top: 6px; font-size: 15px; }
+#help { margin-top: 4px; color: #b6c6d8; font-size: 12px; }

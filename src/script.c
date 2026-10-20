@@ -975,6 +975,28 @@ static JSValue r2d__js_create_sprite(JSContext *ctx, JSValueConst this_val, int 
                                                (float)sw, (float)sh));
 }
 
+/* Private high-level bridge: describe a sprite handle so $.spriteMesh can
+ * select the atlas texture without introducing a second asset registry. */
+static JSValue r2d__js_sprite_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    int id = r2d__arg_int(ctx, argc, argv, 0, -1);
+    if (!s || !s->renderer || !r2d_sprite_alive(s->renderer, id)) return JS_NULL;
+    const R2DSprite *sp = &s->renderer->sprites[id];
+    JSValue out = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx,out,"texture",JS_NewInt32(ctx,sp->texture));
+    JS_SetPropertyStr(ctx,out,"x",JS_NewInt32(ctx,sp->px));
+    JS_SetPropertyStr(ctx,out,"y",JS_NewInt32(ctx,sp->py));
+    JS_SetPropertyStr(ctx,out,"w",JS_NewInt32(ctx,sp->pw));
+    JS_SetPropertyStr(ctx,out,"h",JS_NewInt32(ctx,sp->ph));
+    JS_SetPropertyStr(ctx,out,"u0",JS_NewFloat64(ctx,sp->u0));
+    JS_SetPropertyStr(ctx,out,"v0",JS_NewFloat64(ctx,sp->v0));
+    JS_SetPropertyStr(ctx,out,"u1",JS_NewFloat64(ctx,sp->u1));
+    JS_SetPropertyStr(ctx,out,"v1",JS_NewFloat64(ctx,sp->v1));
+    return out;
+}
+
 static JSValue r2d__js_draw_sprite(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -6407,6 +6429,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
         return JS_EXCEPTION;
     }
     r2d__set_fn(ctx, engine, "createSprite", r2d__js_create_sprite, 5);
+    r2d__set_fn(ctx, engine, "spriteInfo", r2d__js_sprite_info, 1);
     r2d__set_fn(ctx, engine, "drawSprite", r2d__js_draw_sprite, 7);
     r2d__set_fn(ctx, engine, "drawRect", r2d__js_draw_rect, 5);
     r2d__set_fn(ctx, engine, "submitSprites", r2d__js_submit_sprites, 3);

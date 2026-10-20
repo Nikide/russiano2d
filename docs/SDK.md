@@ -118,6 +118,7 @@ Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `co
 | `api dump [--game dir] [--engine path]` | machine-readable снимок публичного `$` API из живого runtime |
 | `api check [--schema f]` | структурная проверка снимка + свежесть `api.schema.json` |
 | `api generate [--out-dir dir]` | записать `api.schema.json` и `russiano2d.d.ts` из runtime metadata |
+| `sprite-mesh-bake <sprite.png|sprite.atlas.json> [--out cache] [--depth N] [--alpha-threshold N] [--units-per-pixel N] [--pivot-x N --pivot-y N]` | построить cache геометрии для всех кадров спрайта/атласа; `--check` проверяет актуальность cache |
 | `lint [путь] [--schema f]` | API-aware линтер JS: `R2D001/002/004/014`, `--json` |
 | `docs generate` | generated `docs/api/API_REFERENCE.md` из runtime metadata |
 | `doctor [--project dir]` | health check: runtime/metadata/schema/typings/docs/project/lint |
@@ -125,7 +126,6 @@ Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `co
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
-| `sprite-mesh-bake <sprite.png|sprite.atlas.json> [--depth N --alpha-threshold N --units-per-pixel N --pivot-x N --pivot-y N --out cache]` | bake mesh-cache для каждого кадра атласа |
 | `world compile <f.re2dmap> [--renderer] [--pvs] [--region-size N] [--output f.re2dworld]` | Re2D World: brush/cell authoring → baked мир; stage report, region grid, coarse PVS; `--pvs` добавляет legacy portal-reachability report |
 | `world info <f.re2dmap>` | то же без записи: статистика/порталы/регионы/проверка карты |
 | `world validate <f.re2dmap>` | компиляция в память + диагностика без записи |
@@ -264,6 +264,24 @@ system и закрытой ассет-базы нет — источники, в
 `.frames().animate()` листает кадры кадровым шагом движка. Скорость
 (0.25×…4×), пауза, шаг. Студии делят **одну сессию на файл**: правки одной
 видны в другой, история общая.
+
+**SpriteMesh Studio** (`sdk/tools/sprite-mesh-studio.js`,
+`sdk/ui/sprite_mesh_studio.rml`) открывает PNG или существующий
+`*.atlas.json`, показывает кадры и теги анимации, воспроизводит длительности
+кадров из атласа, позволяет вращать/масштабировать 3D preview, переключать
+текстуру и каркас, менять глубину, alpha threshold, units/pixel и pivot.
+Изменение параметров временно перестраивает preview cache; «Сохранить и Bake»
+сохраняет настройки в `re2d.spriteMesh` атласа и записывает полный cache для
+всех его кадров. CLI и GUI вызывают один native backend. В игре обычный
+`.play('walk')`/`.frame(i)` выбирает соответствующий заранее собранный mesh;
+runtime не генерирует геометрию при смене кадра. Включение по умолчанию:
+`{"re2d":{"spriteMesh":{"enabled":true,"depth":0.08,"alphaThreshold":16,"unitsPerPixel":0.03125}}}`;
+на отдельном узле можно вызвать `$("player").spriteMesh({...})`, запросить
+настройки через `$("player").spriteMesh()` или выключить `false`.
+
+Проверки: `tests/sdk/sprite_mesh_test.c`,
+`tests/agent/sdk_sprite_mesh_test.py`, `tests/js/sprite_mesh_test.mjs` и
+открытие/сохранение Studio в `tests/agent/sdk_studios_test.py`.
 
 Чего нет (честно): события клипов — спрайтовая анимация рантайма их не
 поддерживает (события есть у `$.anim` и `$.anim.player`); `pingpong` рантайм-атлас

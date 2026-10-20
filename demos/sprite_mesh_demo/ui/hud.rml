@@ -1,0 +1,4 @@
+<rml>
+<head><link type="text/rcss" href="theme.rcss"/><title>SpriteMesh Demo</title></head>
+<body><div class="sdk-hud"><div class="title">SpriteMesh Demo</div><div id="status">Готово</div><div id="help">1 — стойка · 2 — шаг · 3 — атака · M — SpriteMesh · R — вращение</div></div></body>
+</rml>

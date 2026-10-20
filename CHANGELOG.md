@@ -1,3 +1,12 @@
+> SPRITEMESH V1 — SDK, cache, обычная Sprite-анимация (2026-10-20; без тега/релиза).
+> В `$` добавлен `spriteMesh(config?)`: Sprite использует заранее baked mesh
+> текущего обычного frame index; runtime только переключает кадр mesh. `r2d-sdk`
+> получил all-frame bake и dedicated SpriteMesh Studio для atlas/PNG, настроек,
+> playback и 3D preview. Freeze snapshot осознанно обновлён на новые публичные
+> методы `$.fn.spriteMesh`, `$.spriteMesh`, `$.mesh.drawBaked`, `$.gfx.texture`
+> и metadata `$.atlas.spriteInfo`; `engine.spriteInfo` — внутренний binding,
+> нужный фасаду `$` для обычного Sprite.
+
 > FINAL ENGINE PASS — follow-up (2026-10-20, без тега/релиза).
 > (1) **Tilemap**: редактор террейнов и анимации тайлов в SDK (RmlUi), обычный
 > JSON `terrains`/`autotile.mode='terrain'`/`animations`; валидация JS↔C

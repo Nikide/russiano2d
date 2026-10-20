@@ -290,6 +290,7 @@ declare interface R2DNode {
     sound(arg0: any): any;
     speed(arg0: any): any;
     sprite(arg0: any): any;
+    spriteMesh(arg0: any): any;
     squash(arg0: any): any;
     start(): any;
     state(): any;
@@ -467,6 +468,7 @@ interface R2D_atlas {
     manifest(arg0: any): any;
     names(): any;
     parse(arg0: any): any;
+    spriteInfo(arg0: any): any;
     unload(arg0: any, arg1: any): any;
     verify(arg0: any, arg1: any): any;
 }
@@ -1301,6 +1303,7 @@ interface R2D_fn {
     sound(arg0: any): any;
     speed(arg0: any): any;
     sprite(arg0: any): any;
+    spriteMesh(arg0: any): any;
     squash(arg0: any): any;
     start(): any;
     state(): any;
@@ -1453,6 +1456,7 @@ interface R2D_gfx {
     snap(arg0: any): any;
     stats(): any;
     text(arg0: any, arg1: any, arg2: any, arg3: any): any;
+    texture(arg0: any): any;
     textureSize(arg0: any): any;
     userShaders(): any;
     white: number;
@@ -1744,6 +1748,7 @@ interface R2D_math {
 
 interface R2D_mesh {
     draw(arg0: any, arg1: any, arg2: any, arg3: any): any;
+    drawBaked(arg0: any, arg1: any): any;
     flatSize(): any;
     fromSlice(arg0: any, arg1: any, arg2: any, arg3: any): any;
     ik(arg0: any, arg1: any, arg2: any, arg3: any): any;
@@ -2415,6 +2420,13 @@ interface R2D_sound {
     stopAll(arg0: any): any;
     stopMusic(arg0: any): any;
     volume(arg0: any): any;
+}
+
+interface R2D_spriteMesh {
+    cacheInfo(arg0: any): any;
+    draw(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any): any;
+    loadCache(arg0: any): any;
+    project(arg0: any, arg1: any, arg2: any): any;
 }
 
 interface R2D_state {
@@ -3115,6 +3127,7 @@ interface R2D_______________ {
     snap(arg0: any): any;
     stats(): any;
     text(arg0: any, arg1: any, arg2: any, arg3: any): any;
+    texture(arg0: any): any;
     textureSize(arg0: any): any;
     userShaders(): any;
     white: number;
@@ -3649,6 +3662,7 @@ declare interface R2DGlobal {
     sfx: R2D_sfx;
     signal: R2D_signal;
     sound: R2D_sound;
+    spriteMesh: R2D_spriteMesh;
     startScene: any;
     state: R2D_state;
     steps: R2D_steps;

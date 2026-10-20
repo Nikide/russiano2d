@@ -96,6 +96,7 @@ bool r2d_sprite_mesh_build_all(const uint8_t *rgba,int tw,int th,
         if(!r2d_sprite_mesh_build(rgba,tw,th,inputs[i].rect,&d,&frames[i])){
             for(uint32_t j=0;j<i;j++)r2d_sprite_mesh_destroy(&frames[j]);free(frames);return false;
         }
+        frames[i].page=inputs[i].page;
     }
     out->source_hash=source;out->layout_hash=layout;out->settings_hash=settings;
     out->depth=defaults->depth;out->units_per_pixel=defaults->units_per_pixel;out->alpha_threshold=defaults->alpha_threshold;
@@ -113,15 +114,15 @@ bool r2d_sprite_mesh_cache_encode(const R2DSpriteMeshCache*c,uint8_t**bytes,size
     size_t total=48;
     for(uint32_t i=0;i<c->frame_count;i++){
         size_t vb=(size_t)c->frames[i].vertex_count*8u*sizeof(float);
-        if(c->frames[i].vertex_count%3u||vb>SIZE_MAX-total-16u)return false;total+=16u+vb;
+        if(c->frames[i].vertex_count%3u||vb>SIZE_MAX-total-20u)return false;total+=20u+vb;
     }
     uint8_t*p=malloc(total);if(!p)return false;
-    memcpy(p,"R2DSMCH1",8);put32(p+8,2);put32(p+12,c->frame_count);
+    memcpy(p,"R2DSMCH1",8);put32(p+8,3);put32(p+12,c->frame_count);
     put64(p+16,c->source_hash);put64(p+24,c->layout_hash);put64(p+32,c->settings_hash);
     uint32_t bits;memcpy(&bits,&c->depth,4);put32(p+40,bits);memcpy(&bits,&c->units_per_pixel,4);put32(p+44,bits);
     size_t at=48;
     for(uint32_t i=0;i<c->frame_count;i++){
-        const R2DSpriteMesh*m=&c->frames[i];put32(p+at,m->vertex_count);put32(p+at+4,m->opaque_pixels);put32(p+at+8,m->source_width);put32(p+at+12,m->source_height);at+=16;
+        const R2DSpriteMesh*m=&c->frames[i];put32(p+at,m->vertex_count);put32(p+at+4,m->opaque_pixels);put32(p+at+8,m->source_width);put32(p+at+12,m->source_height);put32(p+at+16,m->page);at+=20;
         for(size_t j=0;j<(size_t)m->vertex_count*8u;j++){uint32_t bits;memcpy(&bits,&m->vertices[j],4);put32(p+at,bits);at+=4;}
     }
     *bytes=p;*size=total;return true;
@@ -130,15 +131,15 @@ bool r2d_sprite_mesh_cache_encode(const R2DSpriteMeshCache*c,uint8_t**bytes,size
 bool r2d_sprite_mesh_cache_decode(const uint8_t*p,size_t size,R2DSpriteMeshCache*out)
 {
     if(out)memset(out,0,sizeof *out);
-    if(!p||!out||size<48||memcmp(p,"R2DSMCH1",8)||get32(p+8)!=2)return false;
+    if(!p||!out||size<48||memcmp(p,"R2DSMCH1",8)||get32(p+8)!=3)return false;
     uint32_t n=get32(p+12);if(!n||n>65535u)return false;
     R2DSpriteMesh*frames=calloc(n,sizeof *frames);if(!frames)return false;size_t at=48;
     for(uint32_t i=0;i<n;i++){
-        if(size-at<16)goto bad;uint32_t vc=get32(p+at),opaque=get32(p+at+4),fw=get32(p+at+8),fh=get32(p+at+12);at+=16;
+        if(size-at<20)goto bad;uint32_t vc=get32(p+at),opaque=get32(p+at+4),fw=get32(p+at+8),fh=get32(p+at+12),page=get32(p+at+16);at+=20;
         if(vc%3u||size-at<(size_t)vc*8u*sizeof(float))goto bad;
         float*v=vc?malloc((size_t)vc*8u*sizeof(float)):NULL;if(vc&&!v)goto bad;
         for(size_t j=0;j<(size_t)vc*8u;j++){uint32_t bits=get32(p+at);memcpy(&v[j],&bits,4);at+=4;if(!isfinite(v[j])){free(v);goto bad;}}
-        if(!fw||!fh){free(v);goto bad;}frames[i]=(R2DSpriteMesh){.vertices=v,.vertex_count=vc,.opaque_pixels=opaque,.source_width=fw,.source_height=fh};
+        if(!fw||!fh){free(v);goto bad;}frames[i]=(R2DSpriteMesh){.vertices=v,.vertex_count=vc,.opaque_pixels=opaque,.source_width=fw,.source_height=fh,.page=page};
     }
     if(at!=size)goto bad;
     out->frame_count=n;out->frames=frames;out->source_hash=get64(p+16);out->layout_hash=get64(p+24);out->settings_hash=get64(p+32);uint32_t bits=get32(p+40);memcpy(&out->depth,&bits,4);bits=get32(p+44);memcpy(&out->units_per_pixel,&bits,4);out->alpha_threshold=0;if(!isfinite(out->depth)||out->depth<0||!isfinite(out->units_per_pixel)||out->units_per_pixel<=0)goto bad_out;return true;

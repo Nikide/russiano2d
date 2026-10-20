@@ -42,16 +42,26 @@ def main():
             {"name": "idle", "from": 0, "to": 0}, {"name": "walk", "from": 0, "to": 1}]},
             "frames": {"idle_0": {"frame": {"x": 0, "y": 0, "w": 1, "h": 1}},
                        "walk_0": {"frame": {"x": 1, "y": 0, "w": 1, "h": 1}}}}
+        doc["meta"]["slices"] = [{"name": "walk_0", "keys": [{"frame": 1, "bounds": {"x": 1, "y": 0, "w": 1, "h": 1}, "pivot": {"x": 1, "y": 0}}]}]
         open(atlas, "w", encoding="utf-8").write(json.dumps(doc))
         rc, first = bake(atlas, cache)
         assert rc == 0 and first["ok"], first
         assert first["frames"] == 2 and first["opaquePixels"] == 2
         assert first["vertices"] == 72 and first["triangles"] == 24, first
         raw = open(cache, "rb").read()
-        assert raw[:8] == b"R2DSMCH1" and struct.unpack_from("<I", raw, 8)[0] == 2
+        assert raw[:8] == b"R2DSMCH1" and struct.unpack_from("<I", raw, 8)[0] == 3
         assert struct.unpack_from("<I", raw, 12)[0] == 2
+        vc0 = struct.unpack_from("<I", raw, 48)[0]
+        f1 = 48 + 20 + vc0 * 32
+        assert abs(struct.unpack_from("<f", raw, f1 + 20)[0]) < 1e-6, "per-frame Sprite pivot was not applied"
+        checked = subprocess.run([SDK, "sprite-mesh-bake", atlas, "--check", "--out", cache],
+                                 cwd=ROOT, text=True, capture_output=True)
+        assert checked.returncode == 0 and json.loads(checked.stdout)["upToDate"] is True
         _, second = bake(atlas, cache, "--depth", "0.12")
         assert second["settingsHash"] != first["settingsHash"]
+        checked = subprocess.run([SDK, "sprite-mesh-bake", atlas, "--check", "--out", cache],
+                                 cwd=ROOT, text=True, capture_output=True)
+        assert checked.returncode == 0 and json.loads(checked.stdout)["upToDate"] is False
         doc["frames"]["walk_0"]["frame"]["x"] = 0
         open(atlas, "w", encoding="utf-8").write(json.dumps(doc))
         _, third = bake(atlas, cache, "--depth", "0.12")
@@ -65,7 +75,21 @@ def main():
         assert rc == 1 and failure["ok"] is False
         codes = {d["code"] for d in failure["diagnostics"]}
         assert "SDK_SPRITEMESH_FRAMES" in codes, failure
-    print("SDK SpriteMesh bake: 5 checks passed")
+        page1, page2 = os.path.join(tmp, "page1.png"), os.path.join(tmp, "page2.png")
+        png(page1, [(255, 255, 255, 255)]); png(page2, [(255, 255, 255, 255)])
+        multi = os.path.join(tmp, "multi.atlas.json")
+        multi_doc = {"meta": {"pages": [{"name": "body", "image": "page1.png"},
+                                          {"name": "props", "image": "page2.png"}]},
+                     "frames": {"body_0": {"frame": {"x": 0, "y": 0, "w": 1, "h": 1}, "page": "body"},
+                                "prop_0": {"frame": {"x": 0, "y": 0, "w": 1, "h": 1}, "page": "props"}}}
+        open(multi, "w", encoding="utf-8").write(json.dumps(multi_doc))
+        rc, multi_result = bake(multi, os.path.join(tmp, "multi.cache"))
+        assert rc == 0 and multi_result["pages"] == 2, multi_result
+        packed = open(os.path.join(tmp, "multi.cache"), "rb").read()
+        vc0 = struct.unpack_from("<I", packed, 48)[0]; f1 = 48 + 20 + vc0 * 32
+        assert struct.unpack_from("<I", packed, 64)[0] == 0
+        assert struct.unpack_from("<I", packed, f1 + 16)[0] == 1
+    print("SDK SpriteMesh bake: single/multi-page, frame pivot, isolation and cache invalidation PASS")
 
 
 if __name__ == "__main__":
