@@ -18,19 +18,27 @@ graph, собственный event bus, asset loader, physics/audio-абстр�
 
 ## Сборка и проверки
 
+**CMake больше не использовать**: не запускать конфигурацию, сборку или тестовые
+цели через CMake. Для release, dev и тестовых сборок использовать только
+**xmake** (`xmake.lua`, цель `r2d`). Старые инструкции с CMake в других
+документах не применять; при конфликте следовать этому правилу.
+
 ```bash
-cmake --build build -j 8
-cmake --build build --target r2d_check -j 8
-python3 tools/ci_verify.py --build-dir build
+xmake build -y -j 8 r2d
+# Указать путь к r2d текущей xmake-сборки перед проверками.
+export R2D_BINARY=build-xmake/macos-arm64/macosx/arm64/release/r2d
 python3 tests/doc_claims_test.py && python3 tests/doc_coverage_test.py && \
 python3 tests/api_docs_sync_test.py && python3 tests/api_freeze_test.py
 ```
 
-- Игра: `./build/r2d --game <dir> --scene <name>`.
-- Инструменты: `./build/r2d <command>` (`r2d commands`; единственный backend для CLI, Editor и агентов).
-- Editor: `./build/r2d` или `./build/r2d edit <dir>` (`editor/`); вызывает native
+- Игра: `"$R2D_BINARY" --game <dir> --scene <name>`.
+- Инструменты: `"$R2D_BINARY" <command>` (`r2d commands`; единственный backend для CLI, Editor и агентов).
+- Editor: `"$R2D_BINARY"` или `"$R2D_BINARY" edit <dir>` (`editor/`); вызывает native
   операции, а не реализует второй линтер/валидатор. `sdk/` — старое SDK-приложение, только референс.
-- Релизная сборка — xmake (`xmake.lua`, цель `r2d`), dev и тесты — CMake (`build/`).
+- Путь `R2D_BINARY` выше — для текущей macOS arm64 release-сборки; на другой
+  платформе использовать фактический путь xmake-сборки. Проверки, требующие
+  CMake-дерева (например, старый `ci_verify.py --build-dir build`), не запускать
+  как обход этого запрета; использовать проверки, совместимые с xmake.
 - Документация: `docs/` — human docs; generated API reference не править руками.
 - `dist/` — релизный пакет; не создавать параллельные бинарники и не менять его
   структуру без релизного инструмента.
