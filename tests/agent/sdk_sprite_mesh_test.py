@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""End-to-end test for r2d-sdk SpriteMesh bake and cache identity."""
+"""End-to-end test for r2d SpriteMesh bake and cache identity."""
+import sys
 import json
 import os
 import struct
@@ -8,7 +9,9 @@ import tempfile
 import zlib
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-SDK = os.path.join(ROOT, "build", "r2d-sdk")
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+from agent_client import resolve_binary
+SDK = str(resolve_binary())
 
 
 def png(path, pixels):

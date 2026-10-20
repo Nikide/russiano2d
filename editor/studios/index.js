@@ -7,8 +7,9 @@
 import * as atlas from './atlas.js';
 import * as hammer from './hammer.js';
 import * as narrative from './narrative.js';
+import * as spriteMesh from './sprite_mesh.js';
 
-const MODULES = [atlas, hammer, narrative];
+const MODULES = [atlas, hammer, narrative, spriteMesh];
 
 export const NATIVE = MODULES.map((m) => Object.assign({ native: true, module: m }, m.meta));
 

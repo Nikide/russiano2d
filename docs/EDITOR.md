@@ -44,7 +44,7 @@
 | Atlas (`.atlas.json`, PNG без атласа) | студия Editor `editor/studios/atlas.js`: режимы Sprite и Animation одной вкладки и одной истории. Sprite — выбор/рисование/перенос кадра мышью, пивот, сдвиг стрелками, сетка пикселей, зум к курсору, инспектор кадра; Animation — теги (диапазон, direction, loop, длительность), проигрывание путём игры (`$.atlas` → `.frames().animate()`), лента кадров, скорость, шаг. Нарезка — `r2d atlas-grid` во временный файл и одна правка с undo; проверка черновика — `r2d validate`; запись — канонический вывод `atlas_model.js`, нетронутый файл не переписывается |
 | Студии данных | Tilemap (`.tilemap.json`), Particles, Collision, Parallax (`.layers.json`), Fonts, Audio, Input — общий хост `sdk/lib/studio_host.js` в исходной разметке; один документ на всех, поэтому открыта одна вкладка этой группы |
 | RmlUi (`.rml`, `.rcss`), Re2D World (cells/walls карты) | студии SDK в исходной разметке; Re2D World — «Открыть как» для `.re2dmap` и кнопка Hammer для карт без brushes |
-| SpriteMesh (`.atlas.json`) | вкладка-студия: `sdk/tools/sprite-mesh-studio.js`, раскладка `editor/ui/sprite_mesh.rml` — 3D-вид меша (Shaded/Wireframe, ракурсы, вращение мышью), лента кадров с миниатюрами из атласа, теги анимаций и транспорт, Mesh Settings, Save + Bake (`r2d sprite-mesh-bake`), статус cache |
+| SpriteMesh (`.atlas.json`, PNG) | студия Editor `editor/studios/sprite_mesh.js`, отдельные документ, настройки и история на вкладку (`ui/studios/sprite_mesh.rml`); Shaded/Wireframe, ракурсы, лента кадров и теги анимаций. Apply — временный native bake; Save/Undo/Redo — Editor; Save + Bake — `r2d sprite-mesh-bake`, native диагностика — Problems |
 | Re2DSprite (`.character.json`) | студия Editor `editor/studios/re2dsprite.js`: живой персонаж `$.re2dSprite.from` во вьюпорте (протяжка — yaw/pitch, ракурсы, вертушка, anime/pixel), клипы, таймлайн с перемоткой, слои, эмоции, варианты, экипировка по сокетам, видимость частей, кости и сокеты; правка `style`/`projection`/`defaults.motion` → запись `character.json` и `.re2dReload()` |
 | Hammer (`.re2dmap`) | студия Editor `editor/studios/hammer.js`, отдельные документ и сессия на вкладку, раскладка `editor/ui/studios/hammer.rml` (тулбар, палитра инструментов, TOP/3D/FRONT/SIDE, инспектор, дерево объектов, VisGroups); правки — native `r2d world-edit`, Validate/Compile/Run Preview, 3D — настоящий runtime-кадр; диагностика — в Problems с переходом к объекту, dirty — на вкладке; material + tags грани откатываются одним шагом, preview помечается устаревшим после правок |
 
@@ -67,7 +67,7 @@ Sprite, `.re2dmap` — Hammer, `.rml` — RmlUi). Палитра команд (`
   студии встроены в своей разметке SDK (своя палитра, кнопка «К SDK» скрыта);
 * студии данных делят один документ: открыта одна вкладка этой группы;
   Sprite/Animation объединены в Atlas, где у каждой вкладки своя сессия;
-* у старых студий SDK остаётся одна сессия на тип; Hammer, Narrative и Atlas уже
+* у старых студий SDK остаётся одна сессия на тип; Hammer, Narrative, SpriteMesh и Atlas уже
   держат несколько файлов одновременно;
 * поиска по проекту (боковая «Search») нет — открывается Quick Open;
 * `project.json` v2 (индекс сцен/ролей) не введён;
@@ -133,8 +133,7 @@ RmlUi отдаёт `src="/abs/path.png"` файловому интерфейсу
 Визуальная проверка — снимок настоящего RmlUi из агентского прогона;
 ручной интерактивный прогон, HiDPI и другие ОС пока не подтверждены.
 
-Следующий перенос по согласованному порядку: SpriteMesh →
-Re2DSprite → студии данных → RmlUi/Re2D World. Старый мост удаляется после
+Следующий перенос по согласованному порядку: Re2DSprite → студии данных → RmlUi/Re2D World. Старый мост удаляется после
 переноса его оставшихся потребителей.
 
 
@@ -153,3 +152,31 @@ Xmake-сборка, 15 native story/dialog CLI-проверок, линт изм
 `r2d validate editor` и четыре стража документации прошли. Снимок вкладки:
 `build/editor-narrative-tabs.png`; это проверка отрисованного RmlUi, не ручного
 ввода с клавиатуры и не проверки других ОС.
+
+
+## 7. Перенос SpriteMesh (2026-10-20)
+
+`SpriteMesh` входит в native-реестр; `sprite-mesh-studio` — алиас `sprite-mesh`.
+Контроллер один: прежняя оболочка SDK использует тонкий адаптер. Ввод и
+анимация обновляются только у активной вкладки. Viewport переводится из
+пикселей RmlUi в логические координаты окна; колесо работает внутри viewport.
+
+Dirty обозначает правки настроек. Отсутствующий или устаревший производный
+cache сам по себе не делает документ несохранённым. Apply создаёт временный
+cache с отдельным именем на вкладку и удаляет его после чтения, в том числе
+при ошибке или закрытии. Undo/Redo помечают показанный preview устаревшим;
+пересобрать его можно командой палитры «SpriteMesh: Bake preview».
+
+Save сначала проверяет native bake на временном файле. Неизменённый atlas с уже включённым SpriteMesh
+сохраняет исходные байты; первое Save + Bake включает `re2d.spriteMesh`. Правки настроек записываются в `re2d.spriteMesh`;
+ошибка публикации cache откатывает источник, сохраняя dirty. Изменённый извне
+atlas не перезаписывается. PNG получает только baked cache: отдельного
+формата настроек нет, при повторном открытии используются defaults.
+
+Приёмка: `tests/agent/editor_sprite_mesh_test.py` — 36 проверок: независимые вкладки,
+историю, сохранность исходников и cache при ошибках, ручной/покадровый pivot,
+ракурс спереди, первое включение SpriteMesh, PNG и закрытие pending preview.
+Xmake-сборка, native bake/cache test, 6 qjs-тестов SpriteMesh, полный
+`sdk_studios_test.py`, lint, validate Editor и четыре стража документации прошли.
+Снимок настоящего RmlUi:
+`build/editor-sprite-mesh-tabs.png`. Другие ОС и ручной HiDPI-прогон не проверены.

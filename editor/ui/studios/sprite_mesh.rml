@@ -1,9 +1,9 @@
 <rml>
 <head>
-<!-- SpriteMesh во вкладке Editor. Логика — sdk/tools/sprite-mesh-studio.js;
+<!-- SpriteMesh во вкладке Editor. Логика — editor/studios/sprite_mesh.js;
      раскладка по макету Editor, id — те же, что в sdk/ui/sprite_mesh_studio.rml.
      Центр прозрачный: меш рисует $.spriteMesh.draw в проходе сцены. -->
-<link type="text/rcss" href="../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../sdk/ui/studio.rcss"/><link type="text/rcss" href="hammer.rcss"/><link type="text/rcss" href="sprite_mesh.rcss"/>
+<link type="text/rcss" href="../../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../../sdk/ui/studio.rcss"/><link type="text/rcss" href="../hammer.rcss"/><link type="text/rcss" href="../sprite_mesh.rcss"/><link type="text/rcss" href="kit.rcss"/>
 <title>SpriteMesh</title>
 </head>
 <body>
@@ -53,6 +53,7 @@
         <div class="hm-field"><label>Units/px</label><input id="sm-upp" class="field" type="text" value="0.03125"/></div>
         <div class="hm-field"><label>Pivot X</label><input id="sm-px" class="field" type="text" value="0"/></div>
         <div class="hm-field"><label>Pivot Y</label><input id="sm-py" class="field" type="text" value="0"/></div>
+        <button id="sm-pivot-auto" class="hm-btn hm-wide">Pivot каждого кадра</button>
         <button id="sm-apply" class="hm-btn hm-wide" title="Пересобрать предпросмотр с этими настройками (файл не меняется)">Применить к предпросмотру</button>
         <div class="hm-h">Текущий кадр</div>
         <div id="sm-stats" class="sm-stats">Mesh cache ещё не собран.</div>
@@ -61,7 +62,7 @@
       <div class="sm-footer">
         <button id="sm-save-bake" class="hm-btn hm-primary hm-wide" title="Записать настройки в атлас (re2d.spriteMesh) и запечь cache всех кадров">Save + Bake Mesh</button>
         <div class="sm-cache"><span id="sm-state" class="sm-state">—</span></div>
-        <span class="sm-note">ЛКМ — вращение · колесо — масштаб</span>
+        <span class="sm-note">ЛКМ — вращение · колесо — масштаб<br/>PNG: параметры сохраняются только в cache</span>
       </div>
     </div>
   </div>

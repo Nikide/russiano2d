@@ -265,8 +265,8 @@ system и закрытой ассет-базы нет — источники, в
 (0.25×…4×), пауза, шаг. Студии делят **одну сессию на файл**: правки одной
 видны в другой, история общая.
 
-**SpriteMesh Studio** (`sdk/tools/sprite-mesh-studio.js`,
-`sdk/ui/sprite_mesh_studio.rml`) открывает PNG или существующий
+**SpriteMesh Studio** (общий контроллер `editor/studios/sprite_mesh.js`;
+`sdk/tools/sprite-mesh-studio.js` — адаптер старой оболочки) открывает PNG или существующий
 `*.atlas.json`, показывает кадры и теги анимации, воспроизводит длительности
 кадров из атласа, позволяет вращать/масштабировать 3D preview, переключать
 текстуру и каркас, менять глубину, alpha threshold, units/pixel и pivot.
@@ -281,7 +281,10 @@ runtime не генерирует геометрию при смене кадр�
 
 Проверки: `tests/sdk/sprite_mesh_test.c`,
 `tests/agent/sdk_sprite_mesh_test.py`, `tests/js/sprite_mesh_test.mjs` и
-открытие/сохранение Studio в `tests/agent/sdk_studios_test.py`.
+открытие/сохранение Studio в `tests/agent/sdk_studios_test.py`,
+несколько вкладок и отказ записи cache — `tests/agent/editor_sprite_mesh_test.py`.
+В Editor настройки имеют Undo/Redo, а устаревший cache отделён от dirty
+документа. PNG сохраняет только cache; настройки между сессиями сохраняет atlas.
 
 Чего нет (честно): события клипов — спрайтовая анимация рантайма их не
 поддерживает (события есть у `$.anim` и `$.anim.player`); `pingpong` рантайм-атлас

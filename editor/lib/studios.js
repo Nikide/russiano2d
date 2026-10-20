@@ -18,25 +18,9 @@ const dataStudio = (id, title, re) => sdkStudio(id, title, (p) => re.test(p), DA
 import { nativeFor, nativeById, nativeAlso } from '../studios/index.js';
 
 // Старые id студий SDK, которые заменили студии Editor.
-const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative' };
+const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative', 'sprite-mesh-studio': 'sprite-mesh' };
 
 const STUDIOS = [
-    {
-        id: 'sprite-mesh-studio',
-        title: 'SpriteMesh',
-        // Не по умолчанию: .atlas.json открывает Sprite; SpriteMesh — «Открыть как».
-        match: () => false,
-        also: (p) => /\.(atlas\.json|png)$/i.test(p),
-        module: '../../sdk/tools/sprite-mesh-studio.js',
-        doc: 'ui/sprite_mesh.rml',
-        // dirty студии — «cache нужно перепечь», а не несохранённые правки файла.
-        trackDirty: false,
-        summary: (snap) => snap ? [
-            ['Кадров', String(snap.frames)],
-            ['Анимации', (snap.animations || []).join(', ') || '—'],
-            ['Cache', snap.dirty ? 'нужен bake' : 'актуален'],
-        ] : [],
-    },
     {
         id: 're2dsprite-studio',
         title: 'Re2DSprite',
@@ -89,7 +73,6 @@ export function createStudioHost($, editor) {
         $,
         doc: null,                 // Editor не прячет свой документ при открытии студии
         studios: {},
-        layouts: { spriteMesh: 'ui/sprite_mesh.rml', spriteMeshThumbs: true },
         get projectRoot() { return editor.projectRoot(); },
         recovery: null,
         extensions: null,
