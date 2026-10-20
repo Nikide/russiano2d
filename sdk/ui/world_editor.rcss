@@ -3,6 +3,8 @@
 .we-spacer { display: block; flex: 1 1 0; }
 .we-sep { display: inline-block; width: 10px; }
 .we-label { color: #97a2b8; font-size: 12px; margin-right: 4px; }
+.we-icon { display: inline-block; width: 16px; height: 16px; margin-right: 5px; font-family: "Material Icons"; font-size: 16px; line-height: 16px; vertical-align: middle; text-align: center; color: #94b9e9; }
+.we-tool-row .we-icon { width: 14px; height: 14px; margin-right: 3px; font-size: 14px; line-height: 14px; }
 .we-num { flex: 0 0 56px; width: 56px; min-width: 40px; }
 .we-kind { flex: 0 0 96px; width: 96px; }
 .we-menu { border-top-width: 1px; border-color: #232b3d; padding: 6px 14px; }

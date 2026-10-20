@@ -128,6 +128,12 @@ def main():
         a.step(3)
         state = snap(a)
         check(state["active"], "экран World Editor открыт из реестра")
+        icon_api = json.loads(a.eval("JSON.stringify({count:$.ui.iconCount(),save:$.ui.hasIcon('save'),move:$.ui.hasIcon('open_with')})"))
+        icon_box = size(a, "we-icon-save")
+        check(icon_api["count"] >= 2000 and icon_api["save"] and icon_api["move"],
+              "движок предоставляет встроенные Material Icons для редактора")
+        check(icon_box["w"] > 0 and icon_box["h"] > 0,
+              "иконка сохранения размещена в живом RmlUi-документе")
         a.eval("$.sdkApp.recovery.discard(" + json.dumps(BASE) + ");1")
         a.step(2)
 

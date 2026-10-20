@@ -768,6 +768,17 @@ export function createEditor(app) {
     function wire() {
         if (s.wired) return;
         s.wired = true;
+        const icons = {
+            back: 'arrow_back', new: 'add_box', open: 'folder_open', save: 'save',
+            undo: 'undo', redo: 'redo', duplicate: 'content_copy', delete: 'delete',
+            validate: 'check_circle', compile: 'build', run: 'play_arrow', 'build-run': 'rocket_launch',
+            'tool-select': 'select_all', 'tool-block': 'add_box', 'tool-move': 'open_with',
+            'tool-resize': 'aspect_ratio', 'tool-rotate': 'rotate_right', 'tool-vertex': 'control_point',
+            'tool-clip': 'content_cut', 'tool-face': 'texture', 'tool-entity': 'place', 'tool-path': 'route',
+        };
+        for (const [id, name] of Object.entries(icons)) {
+            if ($.ui.hasIcon(name)) doc.text('we-icon-' + id, $.ui.icon(name));
+        }
         const sections = [
             ['groups', 'we-toggle-groups', 'we-groups', 'Группы объектов'],
             ['face', 'we-toggle-face', 'we-face-settings', 'Материалы граней'],
