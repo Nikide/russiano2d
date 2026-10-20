@@ -9,7 +9,7 @@
 // ===========================================================================
 
 import {
-    find, clone, brushBox, brushZ, entityPos, pathNodes,
+    ELEMENT_KINDS, ELEMENT_DEFAULTS, find, clone, brushBox, brushZ, entityPos, pathNodes,
     parseRect, parsePolygon, tagsFromText, parseNumber,
 } from './model.js';
 
@@ -81,6 +81,7 @@ export function createCommands(ctx) {
 
     async function deleteSelection() {
         const sel = selection.snapshot();
+        if(ELEMENT_KINDS[sel.kind])return bulk('Удалить',sel.ids.map(id=>({op:'element.delete',args:{section:ELEMENT_KINDS[sel.kind],id}})));
         if (sel.kind === 'none') return fail('SDK_WORLD_EDIT_NO_SELECTION', 'Сначала выберите объект');
         if (sel.kind === 'brush' || sel.kind === 'face') {
             return single(null, 'brush.delete', { ids: selectedBrushIds() });
@@ -98,6 +99,14 @@ export function createCommands(ctx) {
     async function duplicateSelection() {
         const sel = selection.snapshot();
         const step = viewports.state.gridSize || 16;
+        if(ELEMENT_KINDS[sel.kind]) {
+            const section=ELEMENT_KINDS[sel.kind],tasks=[];
+            for(const id of sel.ids) {
+                const value=clone(find(map(),section,id));delete value.id;
+                tasks.push({op:'element.create',args:{section,value}});
+            }
+            return bulk('Дублировать',tasks);
+        }
         if (sel.kind === 'brush' || sel.kind === 'face') {
             return single('brush', 'brush.duplicate', { ids: selectedBrushIds(), dx: step, dy: step });
         }
@@ -137,6 +146,7 @@ export function createCommands(ctx) {
         const sel = selection.snapshot();
         const ax = Number(dx) || 0, ay = Number(dy) || 0, az = Number(dz) || 0;
         if (!ax && !ay && !az) return { ok: true, changed: false, ids: sel.ids.slice(), diagnostics: [] };
+        if(ELEMENT_KINDS[sel.kind])return bulk('Переместить',sel.ids.map(id=>({op:'element.move',args:{section:ELEMENT_KINDS[sel.kind],id,dx:ax,dy:ay,dz:az}})));
         if (sel.kind === 'brush') {
             return single(null, 'brush.move', { ids: sel.ids, dx: ax, dy: ay, dz: az });
         }
@@ -396,6 +406,18 @@ export function createCommands(ctx) {
         const sel = selection.snapshot();
         const id = sel.ids.length ? String(sel.ids[0]).split(':')[0] : null;
         const v = values || {};
+        if(ELEMENT_KINDS[kind]) {
+            const section=ELEMENT_KINDS[kind],value=clone(find(map(),section,id)||{});
+            try {
+                for(const key of Object.keys(v)) {
+                    if(typeof value[key]==='object')value[key]=JSON.parse(v[key]);
+                    else if(typeof value[key]==='number') {const n=Number(String(v[key]).trim());if(String(v[key]).trim()===''||!Number.isFinite(n))throw new Error(key+': нужно число');value[key]=n;}
+                    else if(typeof value[key]==='boolean') {if(!['true','false'].includes(String(v[key])))throw new Error(key+': true/false');value[key]=String(v[key])==='true';}
+                    else value[key]=String(v[key]);
+                }
+            } catch(e) {return fail('SDK_WORLD_EDIT_INSPECTOR',e.message);}
+            return single(kind,'element.replace',{section,id,value});
+        }
         if (kind === 'brush') {
             const brush = find(map(), 'brushes', id) || {};
             const patch = {};
@@ -575,8 +597,20 @@ export function createCommands(ctx) {
         return single(null, op, args);
     }
 
+    function addWorldElement(section,value) {
+        const kind=Object.keys(ELEMENT_KINDS).find(k=>ELEMENT_KINDS[k]===section);
+        if(!kind)return fail('SDK_WORLD_EDIT_ELEMENT','Неизвестный раздел '+section);
+        return single(kind,'element.create',{section,value:clone(value||ELEMENT_DEFAULTS[section])});
+    }
+    function setWorldElement(section,id,value) {
+        const kind=Object.keys(ELEMENT_KINDS).find(k=>ELEMENT_KINDS[k]===section);
+        return single(kind,'element.replace',{section,id,value});
+    }
     return {
         session, selection, viewports,
+        addWorldElement,setWorldElement,
+        splitWall:(id)=>single('wall','wall.split',{id:id||selection.first()}),
+        joinWalls:(id,other)=>single('wall','wall.join',{id:id||selection.first(),other}),
         createBrush, deleteSelection, duplicateSelection, moveSelection, resizeSelection, rotateSelection,
         vertexMove, clip, setFaceMaterial, setTags, setWorld, createEntity,
         createPath, addPathNode, movePathNode, deletePathNode, connectPath, setPathFields,

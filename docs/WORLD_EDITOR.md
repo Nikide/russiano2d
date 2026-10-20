@@ -43,9 +43,12 @@ r2d tool info world-editor             # из CLI
   текущий размер — в статус-баре.
 * Ортогональные вьюпорты: pan (средняя/правая кнопка или Space+drag), zoom
   (колесо), frame selection, maximize/restore 4-view.
-* Инструменты: Select (brush/face/vertex/entity/path, box/multi-select),
+* Инструменты: Select (brush/face/vertex/entity/path и cell/wall/portal/stair/slope/light, box/multi-select),
   Block/Brush (drag footprint + высота во Front/Side или числом), Move, Resize,
-  Rotate, Vertex, Clip, Face, Entity, Path.
+  Rotate, Vertex, Clip, Face, Entity, Path. Раздел «Re2D World» добавляет
+  cells/walls/portals/stairs/slopes/lights, split/join стен и полный JSON
+  свойств. Move/Delete и общая история работают с этими объектами;
+  Resize/Rotate/Vertex/Clip/Face остаются инструментами brushes.
 * 3D-вьюпорт: WASD fly, RMB look, выбор brush/face, настоящий runtime preview
   `$.re2dWorld` (CPU/GPU, свет, `world.debug.view`: final/depth/owner/light/
   normal/emissive/bsp/portals/region/pvs/occluder). Отдельного wireframe-режима
@@ -106,6 +109,9 @@ ed.ops.moveSelection(16, 0, 0);
 ed.ops.setGrid(16);
 ed.ops.setFaceMaterial('brush_1', 'floor', '#8f8b82');
 ed.ops.setTags('brush_1', ['stone']);
+ed.ops.addWorldElement('lights');
+ed.ops.splitWall('wall1');
+ed.ops.joinWalls('wall1', 'walls1');
 ed.ops.createEntity({ kind: 'example.spawn', x: 64, y: 64, h: 0 });
 ed.ops.createPath([{ x: 0, y: 0 }, { x: 128, y: 0 }]);
 ed.ops.ensureVisgroup('Lighting');
@@ -159,8 +165,9 @@ $.sdkApp.studios.world.capabilities();
 ## 6. Данные авторинга
 
 `.re2dmap` хранит `world` (bounds, bottom/top, boundary, цвета, tags,
-`regionSize`), `brushes`, `entities`, `paths`, `visgroups` и (для совместимости)
-`cells/walls/portals/stairs/slopes/lights`. Неизвестные корневые ключи и
+`regionSize`), `brushes`, `entities`, `paths`, `visgroups` и
+`cells/walls/portals/stairs/slopes/lights`. Hammer редактирует оба вида
+авторинга в одной сессии; `world` и `regionSize` у cell-карт могут отсутствовать. Неизвестные корневые ключи и
 неизвестные поля объектов сохраняются при правках.
 
 * Entity definitions — data-driven (generic bases: point/brush/volume/marker);
@@ -198,7 +205,9 @@ python3 tests/agent/sdk_studios_test.py      # реестр инструмент
 
 ## 9. Границы
 
-Ключ фасада — `$.sdkApp.studios.world`; инструменты SDK взаимоисключающие,
+В Editor фасад активной карты — `$.editorApp.activeTab().inst`;
+`re2d-world-studio` открывает ту же вкладку Hammer. Старый standalone SDK
+сохранён для совместимости. В нём ключ фасада — `$.sdkApp.studios.world`; инструменты SDK взаимоисключающие,
 поэтому открытый последним World Editor перекрывает фасад Re2D World Studio
 (оба используют одно имя студии; регрессии в тестах нет).
 

@@ -33,7 +33,7 @@
     <span id="we-tool-current" class="hm-pill">select</span>
     <span id="we-status" class="hm-pill ok">готов</span>
   </div>
-  <div id="we-map-hint" class="we-map-hint"><span id="we-map-hint-text"></span><button id="we-open-re2d-world" class="btn small">Открыть редактор Re2D World</button></div>
+  <div id="we-map-hint" class="we-map-hint"><span id="we-map-hint-text"></span></div>
 
   <div class="hm-main">
     <!-- Палитра инструментов -->
@@ -94,6 +94,18 @@
         <div id="we-selection" class="kv hm-title"></div>
         <div id="we-inspector" class="we-inspector"></div>
         <button id="we-apply" class="hm-btn hm-primary hm-wide">Применить</button>
+        <button id="we-toggle-elements" class="we-section-toggle">Re2D World +</button>
+        <div id="we-element-settings" class="we-extra">
+          <div class="hm-row"><button id="we-add-cells" class="hm-btn">Cell</button><button id="we-add-walls" class="hm-btn">Wall</button><button id="we-add-portals" class="hm-btn">Portal</button></div>
+          <div class="hm-row"><button id="we-add-stairs" class="hm-btn">Stairs</button><button id="we-add-slopes" class="hm-btn">Slope</button><button id="we-add-lights" class="hm-btn">Light</button></div>
+          <textarea id="we-element-json" class="area we-json"></textarea>
+          <button id="we-element-apply" class="hm-btn hm-wide">Применить полный JSON объекта</button>
+          <textarea id="we-material-spec" class="area we-json">{"name":"preview","surfaces":[0],"albedo":""}</textarea>
+          <button id="we-material-preview" class="hm-btn hm-wide">Материал PNG (только preview)</button>
+          <button id="we-wall-split" class="hm-btn hm-wide">Разделить выбранную стену</button>
+          <div class="hm-field"><label>Стена ID</label><input id="we-wall-other" class="field" type="text"/></div>
+          <button id="we-wall-join" class="hm-btn hm-wide">Объединить стены</button>
+        </div>
         <button id="we-toggle-face" class="we-section-toggle">Материалы граней +</button>
         <div id="we-face-settings" class="we-extra">
           <div class="hm-row"><button id="we-face-side" class="hm-btn">Стена</button><button id="we-face-floor" class="hm-btn">Пол</button><button id="we-face-ceiling" class="hm-btn">Потолок</button></div>

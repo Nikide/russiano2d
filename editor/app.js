@@ -268,7 +268,8 @@ export function createEditor($) {
         if (!s.project) return null;
         let tab = s.tabs.find((t) => t.path === relPath);
         if (tab && as) {
-            const want = as === 'code' ? 'code' : as;
+            const resolved = as === 'code' ? null : studioById(as);
+            const want = resolved ? resolved.id : as;
             const have = tab.kind === 'studio' ? tab.studio.id : tab.kind;
             if (want !== have) { closeTab(tab.id); if (s.tabs.includes(tab)) return tab; tab = null; }
         }

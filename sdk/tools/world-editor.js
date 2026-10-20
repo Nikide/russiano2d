@@ -14,6 +14,7 @@ export function createEditor(app) {
     let inst = null;
     const host = {
         $, document: null,
+        root: () => app.projectRoot || (app.state.project && app.state.project.abs) || $.fs.basePath(),
         backend: (...args) => app.backend(...args),
         run: (opts) => app.runProject(opts),
         stop: () => app.stopProject && app.stopProject(),
@@ -32,6 +33,7 @@ export function createEditor(app) {
             inst = create(host);
             await inst.open(args.assetAbs || args.asset || null);
             if (app.doc) app.doc.hide();
+            inst.doc.on('we-open-re2d-world','click',()=>app.openTool('re2d-world-studio',{assetAbs:inst.session.state.path}));
             inst.doc.on('we-new', 'click', () => {
                 inst.session.newMap(); inst.selection.clear(); inst.state.fitted = false; inst.render();
             });
@@ -48,6 +50,7 @@ export function createEditor(app) {
         },
         snapshot() {
             const snap = inst.snapshot();
+            snap.map=Object.fromEntries(['brushes','entities','paths','visgroups'].map(key=>[key,snap.map[key]]));
             delete snap.preview; // Existing SDK agent contract stays stable.
             return snap;
         },

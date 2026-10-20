@@ -8,7 +8,7 @@
 // ===========================================================================
 
 import { escapeHtml } from '../model.js';
-import { entityPos, pathNodes, displayItems } from './model.js';
+import { ELEMENT_KINDS, entityPos, pathNodes, displayItems } from './model.js';
 
 export const VIEW_DEFS = [
     { id: 'top', title: 'Top / XY', plane: 'xy' },
@@ -231,6 +231,22 @@ export function createViewports(gridSize) {
             'px;' + (extra || '') + '">' + (label ? escapeHtml(label) : '') + '</div>';
     }
 
+    // Обрезка линии по панели нужна только для показа authoring-координат.
+    function lineDiv(view, a, b, color, selected, key, label) {
+        const dx=b.x-a.x,dy=b.y-a.y;
+        let lo=0,hi=1;
+        for(const [p,q] of [[-dx,a.x],[dx,view.width-a.x],[-dy,a.y],[dy,view.height-a.y]]) {
+            if(p===0){if(q<0)return '';continue;}
+            const t=q/p;
+            if(p<0)lo=Math.max(lo,t);else hi=Math.min(hi,t);
+            if(lo>hi)return '';
+        }
+        const x=a.x+lo*dx,y=a.y+lo*dy,length=(hi-lo)*Math.hypot(dx,dy);
+        return '<div class="we-shape'+(selected?' we-sel':'')+'" data-key="'+escapeHtml(key)+'" style="left:'+x+'px;top:'+y+
+            'px;width:'+Math.max(2,length)+'px;height:3px;background-color:'+escapeHtml(color)+
+            ';transform-origin:0px 0px;transform:rotate('+Math.atan2(dy,dx)+'rad);">'+escapeHtml(label)+'</div>';
+    }
+
     function buildOverlay(view, ctx) {
         if (view.plane === '3d' || view.width < 2 || view.height < 2) return '';
         const map = ctx.map, selection = ctx.selection || { kind: 'none', ids: [] };
@@ -262,6 +278,18 @@ export function createViewports(gridSize) {
                     box.x, box.y, box.w, box.h,
                     'border-color:' + escapeHtml(color) + ';background-color:' + escapeHtml(color) + '33;',
                     'brush:' + item.id, item.id));
+            } else if(ELEMENT_KINDS[item.kind]) {
+                const box=projectBox(view,{...item.box,bottom:item.bottom,top:item.top});
+                if(!box)continue;
+                const selected=selection.kind===item.kind&&selection.ids.includes(item.id);
+                const color=item.data.color||(item.kind==='cell'?'#81b7e3':item.kind==='portal'?'#83dba4':item.kind==='light'?'#ffd06a':'#c19aff');
+                if(view.plane==='xy' && (item.kind==='wall'||item.kind==='portal') && Array.isArray(item.data.from)&&Array.isArray(item.data.to)) {
+                    const a=projectPoint(view,item.data.from[0],item.data.from[1],0),b=projectPoint(view,item.data.to[0],item.data.to[1],0);
+                    parts.push(lineDiv(view,a,b,color,selected,item.kind+':'+item.id,item.id));
+                    continue;
+                }
+                parts.push(rectDiv(view,'we-brush'+(selected?' we-sel':''),box.x,box.y,Math.max(3,box.w),Math.max(3,box.h),
+                    'border-color:'+escapeHtml(color)+';background-color:'+escapeHtml(color)+'22;',item.kind+':'+item.id,item.id));
             } else if (item.kind === 'entity') {
                 const p = entityPos(item.data);
                 const box = projectBox(view, { x: p.x - 6, y: p.y - 6, w: 12, h: 12, bottom: p.h, top: p.h + 4 });

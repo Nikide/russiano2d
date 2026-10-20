@@ -462,7 +462,7 @@ export function createSession(app, opts) {
     }
 
     function nextDebugView() {
-        const views = ['final', 'depth', 'owner', 'light-level', 'normal', 'emissive', 'bsp', 'portals', 'region', 'pvs', 'occluder'];
+        const views = ['final','cell-id','span-id','depth','owner','light-level','dynamic-light-count','normal','emissive','bsp','portals','shadow-mask','overdraw','region','active-region','pvs','vis-cluster','areaportal','occluder','distant-lod','sprite-lod','material-variation','ao-lite','vfx-budget'];
         const at = views.indexOf(state.debugView);
         state.debugView = views[(at + 1) % views.length];
         if (state.world) state.world.debug.view(state.debugView);

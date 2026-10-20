@@ -17,8 +17,18 @@ export const BRUSH_TOOLS = [
 ];
 
 export const GRID_SIZES = [1, 2, 4, 8, 16, 32, 64, 128, 256];
+export const ELEMENT_KINDS = { cell:'cells', wall:'walls', portal:'portals', stair:'stairs', slope:'slopes', light:'lights' };
+export const ELEMENT_DEFAULTS = {
+    cells:{rect:[0,0,128,128],spans:[{bottom:0,top:128,floorColor:'#687b91',ceilingColor:'#344858'}]},
+    walls:{from:[0,0],to:[128,0],bottom:0,top:128,color:'#8b9ab2'},
+    portals:{cellA:'',cellB:'',from:[0,0],to:[0,64],openings:[{bottom:0,top:96}]},
+    stairs:{rect:[128,0,128,64],axis:'x',dir:1,steps:8,base:0,rise:16,top:256},
+    slopes:{rect:[128,0,128,64],axis:'x',dir:1,segments:8,from:0,to:128,top:256},
+    lights:{x:64,y:64,h:60,radius:180,intensity:1,color:'#ffd6a0',shadow:true},
+};
 export const SECTIONS = ['brushes', 'entities', 'paths', 'visgroups'];
 export const KIND_SECTION = {
+    ...ELEMENT_KINDS,
     brush: 'brushes',
     entity: 'entities',
     path: 'paths',
@@ -55,12 +65,13 @@ export function defaultWorld() {
 /** Новый/открытый .re2dmap без проверок: только структура и умолчания. */
 export function createMap(source) {
     const map = clone(source || {});
+    const cellWorld=Object.values(ELEMENT_KINDS).some(section=>Array.isArray(map[section]));
     if (!map.version) map.version = 1;
     if (!map.name) map.name = 'Новая карта';
-    if (!Number.isFinite(Number(map.regionSize)) || Number(map.regionSize) <= 0) map.regionSize = 256;
-    if (!map.world || typeof map.world !== 'object' || Array.isArray(map.world)) {
+    if (!cellWorld && (!Number.isFinite(Number(map.regionSize)) || Number(map.regionSize) <= 0)) map.regionSize = 256;
+    if ((!map.world || typeof map.world !== 'object' || Array.isArray(map.world)) && !cellWorld) {
         map.world = defaultWorld();
-    } else {
+    } else if(map.world) {
         map.world = Object.assign(defaultWorld(), map.world);
     }
     for (const section of SECTIONS) {
@@ -200,24 +211,38 @@ export function displayItems(map) {
             box: pathBox(path), nodes: pathNodes(path), bottom: 0, top: 0, data: path,
         });
     }
+    for(const [kind,section] of Object.entries(ELEMENT_KINDS)) {
+        for(const value of list(map,section)) {
+            let box=brushBox(value);
+            if(!box && Array.isArray(value.from) && Array.isArray(value.to))
+                box={x:Math.min(value.from[0],value.to[0]),y:Math.min(value.from[1],value.to[1]),w:Math.abs(value.to[0]-value.from[0]),h:Math.abs(value.to[1]-value.from[1])};
+            if(kind==='light')box={x:Number(value.x)-6,y:Number(value.y)-6,w:12,h:12};
+            if(!box)continue;
+            // Thin walls/portals remain selectable; only the display bbox expands.
+            box={x:box.x-(box.w<2?1:0),y:box.y-(box.h<2?1:0),w:Math.max(2,box.w),h:Math.max(2,box.h)};
+            const spans=kind==='cell' ? value.spans : kind==='portal' ? value.openings : null;
+            const heights=Array.isArray(spans)&&spans.length ? spans : [{bottom:value.bottom??value.base??(kind==='slope'?Math.min(value.from,value.to):value.h)??0,top:value.top??value.h??0}];
+            for(const span of heights)out.push({kind,id:String(value.id),label:String(value.id),box,
+                bottom:Number(span.bottom)||0,top:Number(span.top)||0,data:value});
+        }
+    }
     return out;
 }
 
 /** Bbox всей карты: конверт мира плюс объекты (для focus/fit). */
 export function mapBounds(map) {
-    const world = (map && map.world) || defaultWorld();
-    let minX = Number(world.x) || 0, minY = Number(world.y) || 0;
-    let maxX = minX + (Number(world.w) || 0), maxY = minY + (Number(world.h) || 0);
-    let minZ = Number(world.bottom) || 0, maxZ = Number(world.top) || 0;
-    for (const item of displayItems(map)) {
-        if (item.box) {
-            if (item.box.x < minX) minX = item.box.x;
-            if (item.box.y < minY) minY = item.box.y;
-            if (item.box.x + item.box.w > maxX) maxX = item.box.x + item.box.w;
-            if (item.box.y + item.box.h > maxY) maxY = item.box.y + item.box.h;
+    const items=displayItems(map);
+    const world=map&&map.world;
+    if(world)items.push({box:{x:Number(world.x)||0,y:Number(world.y)||0,w:Number(world.w)||0,h:Number(world.h)||0},bottom:Number(world.bottom)||0,top:Number(world.top)||0});
+    if(!items.length){const w=defaultWorld();return {...w};}
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,minZ=Infinity,maxZ=-Infinity;
+    for(const item of items) {
+        if(item.box) {
+            minX=Math.min(minX,item.box.x);minY=Math.min(minY,item.box.y);
+            maxX=Math.max(maxX,item.box.x+item.box.w);maxY=Math.max(maxY,item.box.y+item.box.h);
         }
-        if (Number.isFinite(item.bottom) && item.bottom < minZ) minZ = item.bottom;
-        if (Number.isFinite(item.top) && item.top > maxZ) maxZ = item.top;
+        if(Number.isFinite(item.bottom))minZ=Math.min(minZ,item.bottom);
+        if(Number.isFinite(item.top))maxZ=Math.max(maxZ,item.top);
     }
     return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY), bottom: minZ, top: maxZ };
 }
@@ -284,6 +309,12 @@ export function parsePolygon(text) {
  * из выбранного объекта. Никаких правил геометрии здесь нет.
  */
 export function inspectorSchema(kind, map, selection) {
+    if(ELEMENT_KINDS[kind]) {
+        const id=selection&&selection.ids&&selection.ids[0];
+        const value=find(map,ELEMENT_KINDS[kind],id)||{};
+        return Object.keys(value).map(key=>({key,label:key,type:typeof value[key]==='object'?'json':'text',
+            value:typeof value[key]==='object'?JSON.stringify(value[key],null,2):String(value[key])}));
+    }
     const firstId = selection && selection.ids && selection.ids.length ? selection.ids[0] : null;
     if (kind === 'world') {
         const w = (map && map.world) || defaultWorld();

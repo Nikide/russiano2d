@@ -43,15 +43,15 @@
 | VN Maker (`.scene`, `.story`) | студия Editor `editor/studios/narrative.js`, отдельные документ и история на вкладку (`ui/studios/narrative.rml`); Script/Source/Preview/Inspector, метки/сцены/персонажи/ассеты/темы/i18n. Save/Undo/Redo — Editor; Play — несохранённый буфер через `$.story`/`$.dialog` без автосохранения, Esc/конец/закрытие — назад; Validate Story — native проверка временного черновика в Problems. Подробности: [VN_MAKER.md](VN_MAKER.md) |
 | Atlas (`.atlas.json`, PNG без атласа) | студия Editor `editor/studios/atlas.js`: режимы Sprite и Animation одной вкладки и одной истории. Sprite — выбор/рисование/перенос кадра мышью, пивот, сдвиг стрелками, сетка пикселей, зум к курсору, инспектор кадра; Animation — теги (диапазон, direction, loop, длительность), проигрывание путём игры (`$.atlas` → `.frames().animate()`), лента кадров, скорость, шаг. Нарезка — `r2d atlas-grid` во временный файл и одна правка с undo; проверка черновика — `r2d validate`; запись — канонический вывод `atlas_model.js`, нетронутый файл не переписывается |
 | Студии данных | Tilemap (`.tilemap.json`), Particles, Collision, Parallax (`.layers.json`), Fonts, Audio, Input — общий хост `sdk/lib/studio_host.js` в исходной разметке; один документ на всех, поэтому открыта одна вкладка этой группы |
-| RmlUi (`.rml`, `.rcss`), Re2D World (cells/walls карты) | студии SDK в исходной разметке; Re2D World — «Открыть как» для `.re2dmap` и кнопка Hammer для карт без brushes |
+| RmlUi (`.rml`, `.rcss`) | студия SDK в исходной разметке |
 | SpriteMesh (`.atlas.json`, PNG) | студия Editor `editor/studios/sprite_mesh.js`, отдельные документ, настройки и история на вкладку (`ui/studios/sprite_mesh.rml`); Shaded/Wireframe, ракурсы, лента кадров и теги анимаций. Apply — временный native bake; Save/Undo/Redo — Editor; Save + Bake — `r2d sprite-mesh-bake`, native диагностика — Problems |
 | Re2DSprite (`.character.json`) | студия Editor `editor/studios/re2dsprite.js`: живой персонаж `$.re2dSprite.from` во вьюпорте (протяжка — yaw/pitch, ракурсы, вертушка, anime/pixel), клипы, таймлайн с перемоткой, слои, эмоции, варианты, экипировка по сокетам, видимость частей, кости и сокеты; правка `style`/`projection`/`defaults.motion` → запись `character.json` и `.re2dReload()` |
-| Hammer (`.re2dmap`) | студия Editor `editor/studios/hammer.js`, отдельные документ и сессия на вкладку, раскладка `editor/ui/studios/hammer.rml` (тулбар, палитра инструментов, TOP/3D/FRONT/SIDE, инспектор, дерево объектов, VisGroups); правки — native `r2d world-edit`, Validate/Compile/Run Preview, 3D — настоящий runtime-кадр; диагностика — в Problems с переходом к объекту, dirty — на вкладке; material + tags грани откатываются одним шагом, preview помечается устаревшим после правок |
+| Hammer (`.re2dmap`) | студия Editor `editor/studios/hammer.js`, отдельные документ и сессия на вкладку, раскладка `editor/ui/studios/hammer.rml` (тулбар, палитра инструментов, TOP/3D/FRONT/SIDE, инспектор, дерево объектов, VisGroups); brushes и cells/walls/portals/stairs/slopes/lights — native `r2d world-edit`, общие Validate/Compile/Run Preview, 3D — настоящий runtime-кадр; диагностика — в Problems с переходом к объекту, dirty — на вкладке; material + tags грани откатываются одним шагом, preview помечается устаревшим после правок |
 
 **Открыть как.** Файл открывается основной студией своего типа (`.atlas.json` —
 Sprite, `.re2dmap` — Hammer, `.rml` — RmlUi). Палитра команд (`>`) для
 активной вкладки предлагает «Открыть как: текст» и другие подходящие студии
-(Animation, SpriteMesh, Re2D World); студии сами переходят друг к другу тем же
+(Animation, SpriteMesh); студии сами переходят друг к другу тем же
 путём (`app.openTool` → `openWith`).
 
 Горячие клавиши: `Cmd/Ctrl+P` — файл, `Cmd/Ctrl+Shift+P` — команды
@@ -134,7 +134,7 @@ RmlUi отдаёт `src="/abs/path.png"` файловому интерфейсу
 ручной интерактивный прогон, HiDPI и другие ОС пока не подтверждены.
 
 Re2DSprite уже встроен в Editor (`editor/studios/re2dsprite.js`).
-Следующие студии для переноса: студии данных → RmlUi/Re2D World.
+Следующие студии для переноса: студии данных → RmlUi. Re2D World объединён с Hammer.
 Re2DSprite пока использует одну сессию и SDK-контракт `open(app, args)`;
 перевод на `create(host)` с отдельным экземпляром на вкладку — отдельная
 доработка существующей студии. Старый мост удаляется после переноса
@@ -184,3 +184,35 @@ Xmake-сборка, native bake/cache test, 6 qjs-тестов SpriteMesh, по�
 `sdk_studios_test.py`, lint, validate Editor и четыре стража документации прошли.
 Снимок настоящего RmlUi:
 `build/editor-sprite-mesh-tabs.png`. Другие ОС и ручной HiDPI-прогон не проверены.
+
+
+## 8. Re2D World внутри Hammer (2026-10-20)
+
+Карты с cells/walls открываются в обычной вкладке Hammer. Старое имя
+`re2d-world-studio` — алиас Hammer; повторное открытие через алиас сохраняет
+вкладку, её историю и preview. Отдельная студия World в Editor удалена из
+реестра. Старый standalone-инструмент SDK оставлен для совместимости.
+
+Дерево, Select/Move/Delete/Duplicate, инспектор и TOP/FRONT/SIDE работают с
+cells, walls, portals, stairs, slopes и lights. Вертикальные spans клетки
+показываются отдельно, под одним id. Поля rect/spans/openings редактируются
+в инспекторе; раздел «Re2D World» добавляет объекты, редактирует полный JSON
+выбранного объекта (включая произвольные поля), разделяет/объединяет стены.
+Join требует одинаковых свойств стен, чтобы не потерять материал и теги.
+
+Все правки проходят существующий native `world-edit` и одну историю карты:
+например, Undo отменяет brush, следующий Undo — предшествующую правку cell.
+Save/Validate/Compile, диагностика Problems и runtime preview общие. PNG
+albedo/normal применяется кнопкой «Материал PNG (только preview)»; этот
+эксперимент не записывает назначение материала в авторский файл. Debug/CPU/GPU
+и свет используют тот же `$.re2dWorld`. Для клетки начальная камера находится
+в первом span. Карты не преобразуются в brushes; cell-картам без `world` и
+`regionSize` редактор не добавляет конверт и не меняет native defaults.
+
+Проверка объединения: `tests/agent/editor_hammer_world_test.py` — 43 проверки
+живого Editor; `tests/js/sdk_world_editor_elements_test.mjs` — 4 проверки
+модели/выделения/видов; `tests/sdk/world_edit_test.c` — 15 native-тестов
+с ASan/UBSan. Исходный `editor_hammer_test.py` — 43 проверки без ошибок.
+`world_editor_test.py` и `sdk_world_studio_test.py` подтверждают совместимость
+старого SDK; xmake-сборка, lint/validate Editor и четыре стража документации прошли. Снимок:
+`build/editor-hammer-world.png`. Ручной прогон на других ОС не выполнен.

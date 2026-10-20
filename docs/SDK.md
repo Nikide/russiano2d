@@ -391,6 +391,11 @@ ImGui удалён; весь UI и runtime диагностика — RmlUi.
 
 ## 9. Re2D World Studio
 
+В текущем Editor эти инструменты встроены в Hammer: одна вкладка `.re2dmap`,
+общая история, native `world-edit`, Save/Validate/Compile и runtime preview.
+Старый id `re2d-world-studio` открывает Hammer. Подробнее: [WORLD_EDITOR.md](WORLD_EDITOR.md).
+Ниже описан совместимый standalone-экран старой оболочки SDK.
+
 `sdk/tools/re2d-world-studio.js` + `sdk/ui/world_studio.rml` (+ `world_studio.rcss`,
 `standalone: true`) — RmlUi-редактор исходника `.re2dmap` / `.re2dmap.json` из
 реестра (`id: re2d-world-studio`, `category: re2d`, assets `*.re2dmap`,

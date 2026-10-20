@@ -6,7 +6,7 @@
 // используется деревом объектов, вьюпортами, инспектором, агентом и тестом.
 // ===========================================================================
 
-import { KIND_SECTION, find, displayItems } from './model.js';
+import { KIND_SECTION, ELEMENT_KINDS, find, displayItems } from './model.js';
 
 export function createSelection(mapRef) {
     const state = { kind: 'none', ids: [], face: 'side' };
@@ -135,6 +135,7 @@ export function createSelection(mapRef) {
     /** Рамка выделения: возвращает {kind, ids} ближайшего непустого типа. */
     function boxSelect(project, rect) {
         const byKind = { brush: [], entity: [], path: [] };
+        for(const kind of Object.keys(ELEMENT_KINDS))byKind[kind]=[];
         for (const item of displayItems(mapRef())) {
             if (!byKind[item.kind] || !item.box) continue;
             const box = project(item.box);
@@ -143,7 +144,7 @@ export function createSelection(mapRef) {
                 box.y + box.h < rect.y || box.y > rect.y + rect.h);
             if (hit) byKind[item.kind].push(item.id);
         }
-        for (const kind of ['brush', 'entity', 'path']) {
+        for (const kind of ['brush', 'entity', 'path', ...Object.keys(ELEMENT_KINDS)]) {
             if (byKind[kind].length) return { kind: kind, ids: byKind[kind] };
         }
         return { kind: 'none', ids: [] };

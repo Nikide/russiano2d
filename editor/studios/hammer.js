@@ -139,10 +139,14 @@ export function create(host) {
         html.push('<h4>Мир</h4>');
         const world = map.world || {};
         html.push('<div class="row' + (sel.kind === 'none' && s.tab === 'world' ? ' sel' : '') + '" data-key="world">' +
-            '<span class="row-name">World</span><span class="row-dir">' + esc(String(world.w || 0) + 'x' + String(world.h || 0)) + '</span></div>');
+            '<span class="row-name">World</span><span class="row-dir">' + esc(map.world ? String(world.w || 0) + 'x' + String(world.h || 0) : 'конверт не задан') + '</span></div>');
         html.push('<h4>Brushes (' + (map.brushes || []).length + ')</h4>');
         for (const brush of (map.brushes || [])) {
             row('brush', brush.id, brush.id, (brush.tool || 'solid') + (brush.visgroup ? ' / ' + brush.visgroup : ''));
+        }
+        for(const [kind,section] of Object.entries(M.ELEMENT_KINDS)) {
+            html.push('<h4>'+section+' ('+(map[section]||[]).length+')</h4>');
+            for(const item of map[section]||[])row(kind,item.id,item.id,section);
         }
         html.push('<h4>Entities (' + (map.entities || []).length + ')</h4>');
         for (const entity of (map.entities || [])) row('entity', entity.id, entity.id, entity.kind || '');
@@ -166,11 +170,11 @@ export function create(host) {
             if (field.type === 'select') {
                 const options = (field.options || []).map((option) =>
                     '<option value="' + esc(option) + '">' + esc(option) + '</option>').join('');
-                control = '<select id="' + id + '" class="field">' + options + '</select>';
+                control = '<select id="' + esc(id) + '" class="field">' + options + '</select>';
             } else if (field.type === 'json') {
-                control = '<textarea id="' + id + '" class="area we-json">' + esc(field.value) + '</textarea>';
+                control = '<textarea id="' + esc(id) + '" class="area we-json">' + esc(field.value) + '</textarea>';
             } else {
-                control = '<input id="' + id + '" class="field" type="text" value="' + esc(field.value) + '"/>';
+                control = '<input id="' + esc(id) + '" class="field" type="text" value="' + esc(field.value) + '"/>';
             }
             parts.push('<div class="field-row"><label class="we-label">' + esc(field.label) + '</label>' + control + '</div>');
             values.push({ id: id, value: field.value === undefined || field.value === null ? '' : String(field.value) });
@@ -178,6 +182,8 @@ export function create(host) {
         const sel = selection.snapshot();
         doc.text('we-selection', esc(sel.kind === 'none' ? ('инспектор: ' + kind) : (sel.kind + ' · ' + sel.ids.join(', '))));
         doc.html('we-inspector', parts.join(''));
+        const elementSection=M.ELEMENT_KINDS[kind];
+        doc.setValue('we-element-json',elementSection?JSON.stringify(M.find(session.state.map,elementSection,sel.ids[0])||{},null,2):'');
         for (const entry of values) {
             try { doc.setValue(entry.id, entry.value); } catch (e) { /* поле могло не создаться */ }
         }
@@ -260,7 +266,7 @@ export function create(host) {
         const hasCellWorld = (map.cells || []).length || (map.walls || []).length || (map.portals || []).length;
         doc.style('we-map-hint', 'display', hasCellWorld ? 'flex' : 'none');
         if (hasCellWorld) doc.text('we-map-hint-text',
-            'В этой карте геометрия задана cells/walls. Правьте её в Re2D World Studio; World Editor работает с brushes, entities и paths.');
+            'Re2D World: cells, стены и порталы редактируются здесь; высоты и spans — в инспекторе.');
         doc.text('we-file', esc(session.state.path || 'карта не открыта'));
         doc.setValue('we-path', session.state.path || '');
         doc.text('we-dirty', session.state.history && session.state.history.dirty() ? 'изменено' : '');
@@ -295,7 +301,10 @@ export function create(host) {
             const bounds = M.mapBounds(session.state.map);
             view.x = bounds.x + bounds.w / 2;
             view.y = bounds.y + bounds.h / 2;
-            view.eye = Math.max(bounds.top || 0, (bounds.bottom || 0) + 64) + 96;
+            const cell=(session.state.map.cells||[])[0],span=cell&&cell.spans&&cell.spans[0];
+            if(!(session.state.map.brushes||[]).length && span) {
+                view.eye=(Number(span.bottom)+Number(span.top))/2;view.pitch=0;
+            } else view.eye = Math.max(bounds.top || 0, (bounds.bottom || 0) + 64) + 96;
             previewNeedsFit = false;
         }
         try {
@@ -324,7 +333,8 @@ export function create(host) {
     function navigateDiagnostic(diagnostic) {
         const loc = diagnostic && diagnostic.location;
         if (!loc) return false;
-        const kinds = { brushes: 'brush', entities: 'entity', paths: 'path', visgroups: 'visgroup' };
+        const kinds = { brushes:'brush',entities:'entity',paths:'path',visgroups:'visgroup' };
+        for(const [kind,section] of Object.entries(M.ELEMENT_KINDS))kinds[section]=kind;
         const kind = kinds[loc.section];
         const items = kind ? (session.state.map[loc.section] || []) : [];
         const value = loc.id ? items.find((item) => String(item.id) === String(loc.id)) :
@@ -793,6 +803,7 @@ export function create(host) {
             ['face', 'we-toggle-face', 'we-face-settings', 'Материалы граней'],
             ['clip', 'we-toggle-clip', 'we-clip-settings', 'Разрезать кисть'],
             ['path', 'we-toggle-path', 'we-path-settings', 'Управление путями'],
+            ['elements','we-toggle-elements','we-element-settings','Re2D World'],
             ['build', 'we-toggle-build', 'we-build-settings', 'Журнал сборки'],
         ];
         const expanded = {};
@@ -813,10 +824,12 @@ export function create(host) {
             const path = String(doc.value('we-path') || '').trim();
             if (path) host.openWith(path, 'hammer');
         });
-        doc.on('we-open-re2d-world', 'click', () => {
-            const path = session.state.path;
-            if (path) host.openWith(path, 're2d-world-studio');
-        });
+        for(const section of Object.values(M.ELEMENT_KINDS))
+            doc.on('we-add-'+section,'click',()=>commands.addWorldElement(section).then(r=>{setStatus(r.ok?'Создан '+section:'Создание отклонено',!r.ok);render();}));
+        doc.on('we-element-apply','click',()=>{try{const sel=selection.snapshot(),section=M.ELEMENT_KINDS[sel.kind];if(!section)throw new Error('Выберите объект Re2D World');commands.setWorldElement(section,sel.ids[0],JSON.parse(doc.value('we-element-json'))).then(()=>render());}catch(e){note('error','SDK_WORLD_EDIT_INSPECTOR',e.message);render();}});
+        doc.on('we-material-preview','click',()=>{try{previewMaterial(JSON.parse(doc.value('we-material-spec')));}catch(e){note('error','SDK_WORLD_MATERIAL',e.message);}render();});
+        doc.on('we-wall-split','click',()=>commands.splitWall().then(()=>render()));
+        doc.on('we-wall-join','click',()=>commands.joinWalls(null,String(doc.value('we-wall-other')||'').trim()).then(()=>render()));
         doc.on('we-duplicate', 'click', () => commands.duplicateSelection().then((r) => { setStatus(r.ok ? 'дублировано' : 'дублирование отклонено', !r.ok); render(); }));
         doc.on('we-delete', 'click', () => commands.deleteSelection().then((r) => { setStatus(r.ok ? 'удалено' : 'удаление отклонено', !r.ok); render(); }));
         doc.on('we-validate', 'click', () => commands.validate().then((r) => { setStatus(r.ok ? 'проверка: ошибок нет' : 'проверка: есть ошибки', !r.ok); render(); }));
@@ -1004,6 +1017,7 @@ export function create(host) {
                 entities: (session.state.map.entities || []).length,
                 paths: (session.state.map.paths || []).length,
                 visgroups: (session.state.map.visgroups || []).length,
+                ...Object.fromEntries(Object.values(M.ELEMENT_KINDS).map(section=>[section,(session.state.map[section]||[]).length])),
             },
             preview: { state: !session.state.world ? 'нет компиляции' : previewStale() ? 'устарел' : 'актуален', file: session.state.previewOut },
             extensions: ext.ids(),
@@ -1011,7 +1025,26 @@ export function create(host) {
         };
     }
 
+    function previewMaterial(options) {
+        const world=session.state.world;
+        if(!world)throw new Error('Сначала скомпилируйте preview');
+        if(!options||!options.name||!Array.isArray(options.surfaces)||!options.albedo)
+            throw new Error('Нужны name, surfaces и PNG albedo');
+        for(const id of options.surfaces)if(!world.surface(id))throw new Error('Поверхность '+id+' отсутствует');
+        const resolved=Object.assign({},options);
+        for(const key of ['albedo','normal'])if(resolved[key]&&!/^(\/|[A-Za-z]:)/.test(resolved[key]))
+            resolved[key]=host.root()+'/'+resolved[key];
+        world.material(options.name,resolved);
+        for(const id of options.surfaces)world.surface(id).material(options.name);
+        return world.info();
+    }
+
     const ops = {
+        previewMaterial,
+        addWorldElement:(...args)=>commands.addWorldElement(...args),
+        setWorldElement:(...args)=>commands.setWorldElement(...args),
+        splitWall:(...args)=>commands.splitWall(...args),
+        joinWalls:(...args)=>commands.joinWalls(...args),
         createBrush: (...args) => commands.createBrush(...args),
         deleteSelection: () => commands.deleteSelection(),
         duplicateSelection: () => commands.duplicateSelection(),
@@ -1098,6 +1131,10 @@ export function create(host) {
     // Capability discovery для агента (§26): доступные операции, их аргументы,
     // entity definitions, расширения и build-возможности — без чтения исходников.
     const OP_SCHEMA = {
+        previewMaterial:{name:'string',surfaces:'index[]',albedo:'png path',normal:'png path?'},
+        addWorldElement:{section:'cells|walls|portals|stairs|slopes|lights',value:'object?'},
+        setWorldElement:{section:'string',id:'string',value:'object'},
+        splitWall:{id:'wall id?'},joinWalls:{id:'wall id?',other:'wall id'},
         createBrush: { rect: '[x,y,w,h] | polygon: [[x,y],...]', bottom: 'number', top: 'number', tool: 'solid|nodraw|clip|...' },
         deleteSelection: {}, duplicateSelection: { dx: 'number?', dy: 'number?' },
         moveSelection: { dx: 'number', dy: 'number', dz: 'number?' },
@@ -1163,6 +1200,7 @@ export function create(host) {
         { label: 'Hammer: сохранить, собрать и запустить', run: compileAndRun },
         { label: 'Hammer: все четыре вида', run: () => { viewports.restore(); renderMax(); } },
         { label: 'Hammer: к выделению', run: focusSelection },
+        ...Object.entries(M.ELEMENT_KINDS).map(([kind,section])=>({label:'Hammer: добавить '+kind,run:()=>commands.addWorldElement(section)})),
     ];
 
     return api;
