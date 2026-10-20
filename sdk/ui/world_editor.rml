@@ -1,13 +1,13 @@
 <rml>
 <head>
 <link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/><link type="text/rcss" href="world_editor.rcss"/>
-<title>World Editor</title>
+<title>Редактор мира</title>
 </head>
 <body>
 <div class="studio we-root">
   <div class="bar top">
     <button id="we-back" class="btn small">К SDK</button>
-    <span class="title">World Editor</span>
+    <span class="title">Редактор мира</span>
     <input id="we-path" class="field we-path" type="text" value=""/>
     <span id="we-file" class="sub"></span>
     <span id="we-dirty" class="dirty"></span>
@@ -25,43 +25,43 @@
     <button id="we-validate" class="btn small">Проверить</button>
     <button id="we-compile" class="btn small">Компилировать</button>
     <button id="we-run" class="btn small">Запустить</button>
-    <button id="we-build-run" class="btn primary small">Build and Run (F5)</button>
+    <button id="we-build-run" class="btn primary small">Собрать и запустить (F5)</button>
     <span class="we-sep"></span>
     <button id="we-grid-dec" class="btn small">[</button>
     <span id="we-grid-value" class="pill">Сетка 16</span>
     <button id="we-grid-inc" class="btn small">]</button>
     <button id="we-grid-toggle" class="btn small">Сетка</button>
     <span class="we-sep"></span>
-    <button id="we-focus-selection" class="btn small">Focus</button>
-    <button id="we-restore" class="btn small">4 вида</button>
+    <button id="we-focus-selection" class="btn small">К выделению</button>
+    <button id="we-restore" class="btn small">Все виды</button>
     <button id="we-select-world" class="btn small">Мир</button>
     <span class="we-spacer"></span>
     <span id="we-tool-current" class="pill">select</span>
     <span id="we-status" class="pill ok">готов</span>
   </div>
-  <div id="we-map-hint" class="we-map-hint"><span id="we-map-hint-text"></span><button id="we-open-re2d-world" class="btn small">Открыть Re2D World Studio</button></div>
+  <div id="we-map-hint" class="we-map-hint"><span id="we-map-hint-text"></span><button id="we-open-re2d-world" class="btn small">Открыть редактор Re2D World</button></div>
 
   <div class="bar we-toolbar">
     <div class="field-row we-tool-row">
-      <button id="we-tool-select" class="btn small on">Select</button>
-      <button id="we-tool-block" class="btn small">Block</button>
-      <button id="we-tool-move" class="btn small">Move</button>
-      <button id="we-tool-resize" class="btn small">Resize</button>
-      <button id="we-tool-rotate" class="btn small">Rotate</button>
-      <button id="we-tool-vertex" class="btn small">Vertex</button>
-      <button id="we-tool-clip" class="btn small">Clip</button>
-      <button id="we-tool-face" class="btn small">Face</button>
-      <button id="we-tool-entity" class="btn small">Entity</button>
-      <button id="we-tool-path" class="btn small">Path</button>
+      <button id="we-tool-select" class="btn small on">Выбор</button>
+      <button id="we-tool-block" class="btn small">Кисть</button>
+      <button id="we-tool-move" class="btn small">Перемещение</button>
+      <button id="we-tool-resize" class="btn small">Размер</button>
+      <button id="we-tool-rotate" class="btn small">Поворот</button>
+      <button id="we-tool-vertex" class="btn small">Вершины</button>
+      <button id="we-tool-clip" class="btn small">Разрез</button>
+      <button id="we-tool-face" class="btn small">Грань</button>
+      <button id="we-tool-entity" class="btn small">Объект</button>
+      <button id="we-tool-path" class="btn small">Путь</button>
       <div id="we-ext-toolbar" class="we-ext"></div>
     </div>
     <div class="field-row we-tool-row">
       <label class="we-label">Низ</label><input id="we-bottom" class="field we-num" type="text" value="0"/>
       <label class="we-label">Высота</label><input id="we-height" class="field we-num" type="text" value="128"/>
       <label class="we-label">Класс</label><select id="we-entity-class" class="field we-kind"></select>
-      <label class="we-label">Kind</label><input id="we-entity-kind" class="field we-kind" type="text" value="light"/>
+      <label class="we-label">Тип</label><input id="we-entity-kind" class="field we-kind" type="text" value="light"/>
       <label class="we-label">h</label><input id="we-entity-h" class="field we-num" type="text" value="0"/>
-      <button id="we-entity-create" class="btn small">Entity</button>
+      <button id="we-entity-create" class="btn small">Создать объект</button>
     </div>
   </div>
 
@@ -70,15 +70,15 @@
       <h4>ОБЪЕКТЫ</h4>
       <input id="we-filter" class="field" type="text" value=""/>
       <div id="we-tree" class="list grow"></div>
-      <h4>VISGROUPS</h4>
-      <input id="we-visgroup-name" class="field" type="text" value="group"/>
+      <button id="we-toggle-groups" class="btn small we-section-toggle">Группы объектов +</button>
+      <div id="we-groups" class="we-extra"><input id="we-visgroup-name" class="field" type="text" value="group"/>
       <button id="we-visgroup-create" class="btn small">Создать группу</button>
-      <div class="field-row"><button id="we-visgroup-hide" class="btn small">Скрыть/показать</button><button id="we-visgroup-lock" class="btn small">Lock</button></div>
+      <div class="field-row"><button id="we-visgroup-hide" class="btn small">Скрыть / показать</button><button id="we-visgroup-lock" class="btn small">Закрепить</button></div></div>
       <h4>РАЗМЕР</h4>
       <div class="field-row"><button id="we-resize-plus" class="btn small">+</button><button id="we-resize-minus" class="btn small">-</button></div>
       <h4>ВРАЩЕНИЕ</h4>
       <div class="field-row"><button id="we-rotate-90" class="btn small">90</button><button id="we-rotate--90" class="btn small">-90</button></div>
-      <h4>EXTENSIONS</h4>
+      <h4>ДОПОЛНЕНИЯ</h4>
       <div id="we-ext-menu" class="we-ext"></div>
       <div id="we-ext-panels" class="we-ext"></div>
     </div>
@@ -87,21 +87,21 @@
       <div class="we-viewgrid" id="we-viewgrid">
         <div class="we-vrow" id="we-row-a">
           <div class="we-pane" id="we-pane-top">
-            <div class="bar we-pane-bar"><span class="we-pane-title">Top / XY</span><button id="we-pane-max-top" class="btn small">Max</button></div>
+            <div class="bar we-pane-bar"><span class="we-pane-title">Сверху · XY</span><button id="we-pane-max-top" class="btn small">Развернуть</button></div>
             <div id="we-vp-top" class="we-vp"><div id="we-overlay-top" class="we-overlay"></div></div>
           </div>
           <div class="we-pane" id="we-pane-3d">
-            <div class="bar we-pane-bar"><span class="we-pane-title">3D</span><span id="we-3d-state" class="sub">скомпилируйте карту</span><button id="we-3d-debug" class="btn small">final</button><button id="we-3d-backend" class="btn small">CPU</button><button id="we-3d-light" class="btn small">Свет</button><button id="we-pane-max-3d" class="btn small">Max</button></div>
+            <div class="bar we-pane-bar"><span class="we-pane-title">3D-предпросмотр</span><span id="we-3d-state" class="sub">соберите карту</span><button id="we-3d-debug" class="btn small">Вид</button><button id="we-3d-backend" class="btn small">Рендер</button><button id="we-3d-light" class="btn small">Свет</button><button id="we-pane-max-3d" class="btn small">Развернуть</button></div>
             <div id="we-vp-3d" class="we-vp we-vp3d"></div>
           </div>
         </div>
         <div class="we-vrow" id="we-row-b">
           <div class="we-pane" id="we-pane-front">
-            <div class="bar we-pane-bar"><span class="we-pane-title">Front / XZ</span><button id="we-pane-max-front" class="btn small">Max</button></div>
+            <div class="bar we-pane-bar"><span class="we-pane-title">Спереди · XZ</span><button id="we-pane-max-front" class="btn small">Развернуть</button></div>
             <div id="we-vp-front" class="we-vp"><div id="we-overlay-front" class="we-overlay"></div></div>
           </div>
           <div class="we-pane" id="we-pane-side">
-            <div class="bar we-pane-bar"><span class="we-pane-title">Side / YZ</span><button id="we-pane-max-side" class="btn small">Max</button></div>
+            <div class="bar we-pane-bar"><span class="we-pane-title">Сбоку · YZ</span><button id="we-pane-max-side" class="btn small">Развернуть</button></div>
             <div id="we-vp-side" class="we-vp"><div id="we-overlay-side" class="we-overlay"></div></div>
           </div>
         </div>
@@ -113,24 +113,32 @@
       <div id="we-selection" class="kv"></div>
       <div id="we-inspector" class="we-inspector"></div>
       <button id="we-apply" class="btn primary small">Применить</button>
-      <h4>FACE</h4>
-      <div class="field-row"><button id="we-face-side" class="btn small">side</button><button id="we-face-floor" class="btn small">floor</button><button id="we-face-ceiling" class="btn small">ceiling</button></div>
+      <button id="we-toggle-face" class="btn small we-section-toggle">Материалы граней +</button>
+      <div id="we-face-settings" class="we-extra">
+      <div class="field-row"><button id="we-face-side" class="btn small">Стена</button><button id="we-face-floor" class="btn small">Пол</button><button id="we-face-ceiling" class="btn small">Потолок</button></div>
       <div class="field-row"><label class="we-label">Материал</label><input id="we-face-material" class="field" type="text" value=""/></div>
       <div class="field-row"><label class="we-label">Теги</label><input id="we-face-tags" class="field" type="text" value=""/></div>
       <button id="we-face-apply" class="btn small">Применить грань</button>
-      <h4>CLIP</h4>
-      <div class="field-row"><label class="we-label">Ось</label><input id="we-clip-axis" class="field we-num" type="text" value="x"/><label class="we-label">Coord</label><input id="we-clip-coord" class="field we-num" type="text" value="0"/></div>
-      <div class="field-row"><button id="we-clip-front" class="btn small">front</button><button id="we-clip-back" class="btn small">back</button><button id="we-clip-both" class="btn small">both</button></div>
-      <h4>PATH</h4>
+      </div>
+      <button id="we-toggle-clip" class="btn small we-section-toggle">Разрезать кисть +</button>
+      <div id="we-clip-settings" class="we-extra">
+      <div class="field-row"><label class="we-label">Ось</label><input id="we-clip-axis" class="field we-num" type="text" value="x"/><label class="we-label">Координата</label><input id="we-clip-coord" class="field we-num" type="text" value="0"/></div>
+      <div class="field-row"><button id="we-clip-front" class="btn small">Переднюю часть</button><button id="we-clip-back" class="btn small">Заднюю часть</button><button id="we-clip-both" class="btn small">Обе части</button></div>
+      </div>
+      <button id="we-toggle-path" class="btn small we-section-toggle">Управление путями +</button>
+      <div id="we-path-settings" class="we-extra">
       <button id="we-path-create" class="btn small">Новый путь</button>
       <div class="field-row"><label class="we-label">X / Y</label><input id="we-path-x" class="field we-num" type="text" value="0"/><input id="we-path-y" class="field we-num" type="text" value="0"/></div>
       <div class="field-row"><button id="we-path-add" class="btn small">Добавить узел</button><button id="we-path-node-delete" class="btn small">Удалить узел</button></div>
       <div class="field-row"><label class="we-label">Индекс</label><input id="we-path-node-index" class="field we-num" type="text" value="0"/></div>
-      <div class="field-row"><label class="we-label">Connect</label><input id="we-path-connect-a" class="field we-num" type="text" value="0"/><input id="we-path-connect-b" class="field we-num" type="text" value="1"/></div>
+      <div class="field-row"><label class="we-label">Соединить</label><input id="we-path-connect-a" class="field we-num" type="text" value="0"/><input id="we-path-connect-b" class="field we-num" type="text" value="1"/></div>
       <button id="we-path-connect" class="btn small">Соединить</button>
-      <button id="we-path-loop" class="btn small">Loop</button>
-      <h4>ЖУРНАЛ СБОРКИ</h4>
+      <button id="we-path-loop" class="btn small">Замкнуть путь</button>
+      </div>
+      <button id="we-toggle-build" class="btn small we-section-toggle">Журнал сборки +</button>
+      <div id="we-build-settings" class="we-extra">
       <div id="we-build-output" class="log we-build"></div>
+      </div>
     </div>
   </div>
 

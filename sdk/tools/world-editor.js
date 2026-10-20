@@ -184,7 +184,12 @@ export function createEditor(app) {
         for (const tool of TOOLS) {
             doc.cls(TOOL_IDS[tool], 'on', s.tool === tool);
         }
-        doc.text('we-tool-current', s.tool);
+        const toolNames = {
+            select: 'Выбор', block: 'Кисть', move: 'Перемещение', resize: 'Размер',
+            rotate: 'Поворот', vertex: 'Вершины', clip: 'Разрез', face: 'Грань',
+            entity: 'Объект', path: 'Путь',
+        };
+        doc.text('we-tool-current', toolNames[s.tool] || s.tool);
         doc.text('we-grid-value', 'Сетка ' + viewports.state.gridSize);
         doc.cls('we-grid-toggle', 'on', viewports.state.grid);
         const classes = ext.entityDefinitions();
@@ -763,6 +768,22 @@ export function createEditor(app) {
     function wire() {
         if (s.wired) return;
         s.wired = true;
+        const sections = [
+            ['groups', 'we-toggle-groups', 'we-groups', 'Группы объектов'],
+            ['face', 'we-toggle-face', 'we-face-settings', 'Материалы граней'],
+            ['clip', 'we-toggle-clip', 'we-clip-settings', 'Разрезать кисть'],
+            ['path', 'we-toggle-path', 'we-path-settings', 'Управление путями'],
+            ['build', 'we-toggle-build', 'we-build-settings', 'Журнал сборки'],
+        ];
+        const expanded = {};
+        for (const entry of sections) {
+            const [key, button, panel, label] = entry;
+            doc.on(button, 'click', () => {
+                expanded[key] = !expanded[key];
+                doc.cls(panel, 'open', expanded[key]);
+                doc.text(button, label + (expanded[key] ? ' −' : ' +'));
+            });
+        }
         doc.on('we-back', 'click', close);
         doc.on('we-save', 'click', () => commands.save().then((r) => { setStatus(r.ok ? 'сохранено' : 'не сохранено', !r.ok); render(); }));
         doc.on('we-undo', 'click', () => { const label = session.state.history.undo(); selection.prune(); setStatus(label ? 'отменено: ' + label : 'нечего отменять', false); render(); });

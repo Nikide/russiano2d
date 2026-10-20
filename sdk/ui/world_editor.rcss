@@ -11,6 +11,10 @@
 .we-map-hint .btn { margin-left: 12px; }
 .we-toolbar { border-top-width: 1px; border-color: #232b3d; padding: 6px 14px; }
 .we-toolbar .btn { margin-bottom: 2px; }
+.we-extra { display: none; }
+.we-extra.open { display: block; }
+.we-section-toggle { display: block; width: 100%; text-align: left; margin: 6px 0px 3px; padding: 7px 9px; color: #c9d7eb; background-color: #121d2b; border-width: 1px; border-color: #283a52; }
+.we-section-toggle:hover { background-color: #19283a; border-color: #42658c; }
 .we-main { flex: 1 1 0; min-height: 0px; }
 .we-left { flex: 0 0 250px; min-width: 250px; }
 .we-right { flex: 0 0 320px; min-width: 320px; }
