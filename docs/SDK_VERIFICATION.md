@@ -10,17 +10,21 @@
 - `cmake --build build --target r2d-sdk r2d_sdk_core_test --parallel 4` — успех;
   `r2d-sdk version` отвечает `1.3.1`, в соответствии с `CMakeLists.txt`.
 - `build/sdk/native/r2d_sdk_core_test` — **9/9 групп, 0 сбоев**.
-- SDK agent-интеграционные тесты — **13/13 ok, 656 проверок**: `sdk_automation_test`,
+- SDK agent-интеграционные тесты — **13/13 ok, 660 проверок**: `sdk_automation_test`,
   `sdk_classic2d_test`, `sdk_cli_test`, `sdk_data_parity_test`,
   `sdk_extensions_test`, `sdk_package_test`, `sdk_recovery_test`,
   `sdk_runtime_ui_test`, `sdk_shell_test`, `sdk_splash_test`, `sdk_studios_test`,
   `sdk_tools_panels_test`, `sdk_world_studio_test`.
-- `./build/r2d-sdk lint sdk/app.js --json` — без диагностик.
+- `./build/r2d-sdk lint` для всех изменённых SDK JS-файлов — без диагностик;
+  `tests/js/sdk_app_test.mjs` — 14/14 проверок, включая показ/скрытие
+  диагностической панели.
 - `./build/r2d-sdk validate sdk --json` — ошибок нет; одно предупреждение
   `SDK_TILEMAP_NO_SRC` в шаблоне `sdk/templates/tilemap-room/level.tilemap.json`.
 - Пользовательский путь GUI: `sdk_shell_test` проверяет поиск по расширению,
   фильтрацию/сброс списка, открытие проекта, ассеты, справку, запуск и сборку.
-  `sdk_package_test` проверяет распакованный пакет и игру без checkout.
+  Также проверяет скрытие пустых результатов, короткие имена недавних проектов
+  и сворачивание/раскрытие нижней панели диагностики. `sdk_package_test`
+  проверяет распакованный пакет и игру без checkout.
 - Дополнительные end-to-end проверки: `world_editor_test` (69 проверок) и
   `vn_narrative_validation_test` (15 проверок). Итого **15/15 сценариев, 740
   проверок** в этих прогонах. Code Check проверен кликами по Doctor/Lint/Validate,
@@ -40,7 +44,10 @@
 - Classic 2D (Sprite/Animation Studio, атласы): `sdk_classic2d_test.py`.
 - Студии данных (Tilemap, Particle, Collision, Parallax, Font, Audio, Input,
   RmlUi Studio) и паритет JS ↔ C проверок: `sdk_studios_test.py`,
-  `sdk_data_parity_test.py`.
+  `sdk_data_parity_test.py`. Проверены создание и сохранение файлов, изменение
+  моделей мышью и командами редактора, undo/redo, preview и нативная проверка.
+  Пустые нижние панели диагностики скрыты во всех студиях; сообщения появляются
+  при ошибках.
 - Упаковка SDK, распаковка, CLI/GUI и сборка проекта без checkout:
   `sdk_package_test.py`.
 - Batch (`validate`) и нативный клиент агентского протокола (19 команд):
