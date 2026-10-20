@@ -54,8 +54,10 @@ function create(app) {
     function lint() { s.tab = 'lint'; return run(['lint', s.project], 'SDK Lint'); }
     function validate() { s.tab = 'validate'; return run(['validate', s.project], 'SDK Validate'); }
 
-    function openOpts() {
+    function openOpts(args) {
         s.active = true;
+        if (args && args.project) s.project = String(args.project);
+        else if (app.state && app.state.project && app.state.project.abs) s.project = app.state.project.abs;
         if (app.doc) app.doc.hide();
         doc.show();
         doc.setValue('cc-project', s.project);

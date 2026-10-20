@@ -304,7 +304,13 @@ export function createApp($, options) {
         }
         if (INTERNAL_ENTRIES[tool.entry]) {
             const view = INTERNAL_ENTRIES[tool.entry];
-            if (view === 'diag') return { id: tool.id, entry: tool.entry };
+            if (view === 'diag') {
+                showView('tools');
+                addDiagnostic('info', 'SDK_BACKEND_SHARED',
+                    'r2d-sdk — общий нативный backend. Откройте Code Check или нужную студию: их проверки и операции используют этот backend.');
+                setStatus('r2d-sdk подключён к интерфейсам SDK', '');
+                return { id: tool.id, entry: tool.entry };
+            }
             showView(view);
             return { id: tool.id, entry: tool.entry };
         }

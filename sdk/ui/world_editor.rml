@@ -39,6 +39,7 @@
     <span id="we-tool-current" class="pill">select</span>
     <span id="we-status" class="pill ok">готов</span>
   </div>
+  <div id="we-map-hint" class="we-map-hint"><span id="we-map-hint-text"></span><button id="we-open-re2d-world" class="btn small">Открыть Re2D World Studio</button></div>
 
   <div class="bar we-toolbar">
     <div class="field-row we-tool-row">

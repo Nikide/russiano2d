@@ -248,6 +248,11 @@ export function createEditor(app) {
     }
 
     function renderTop() {
+        const map = session.state.map || {};
+        const hasCellWorld = (map.cells || []).length || (map.walls || []).length || (map.portals || []).length;
+        doc.style('we-map-hint', 'display', hasCellWorld ? 'flex' : 'none');
+        if (hasCellWorld) doc.text('we-map-hint-text',
+            'В этой карте геометрия задана cells/walls. Правьте её в Re2D World Studio; World Editor работает с brushes, entities и paths.');
         doc.text('we-file', esc(session.state.path || 'карта не открыта'));
         doc.setValue('we-path', session.state.path || '');
         doc.text('we-dirty', session.state.history && session.state.history.dirty() ? 'изменено' : '');
@@ -767,6 +772,10 @@ export function createEditor(app) {
             const path = String(doc.value('we-path') || '').trim();
             if (!path) { note('warning', 'SDK_WORLD_READ', 'Укажите путь .re2dmap'); render(); return; }
             openPath(path);
+        });
+        doc.on('we-open-re2d-world', 'click', () => {
+            const path = session.state.path;
+            if (path) app.openTool('re2d-world-studio', { assetAbs: path });
         });
         doc.on('we-duplicate', 'click', () => commands.duplicateSelection().then((r) => { setStatus(r.ok ? 'дублировано' : 'дублирование отклонено', !r.ok); render(); }));
         doc.on('we-delete', 'click', () => commands.deleteSelection().then((r) => { setStatus(r.ok ? 'удалено' : 'удаление отклонено', !r.ok); render(); }));
