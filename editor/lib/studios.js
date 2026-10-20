@@ -16,11 +16,9 @@ function sdkStudio(id, title, match, doc, back, extra) {
 import { nativeFor, nativeById, nativeAlso } from '../studios/index.js';
 
 // Старые id студий SDK, которые заменили студии Editor.
-const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 're2d-world-studio': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative', 'sprite-mesh-studio': 'sprite-mesh', 'tilemap-studio': 'tilemap', 'particle-studio': 'particles', 'collision-tools': 'collision', 'parallax-tools': 'parallax', 'font-tools': 'fonts', 'audio-tools': 'audio', 'input-tools': 'input', 're2dsprite-studio': 're2dsprite' };
+const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 're2d-world-studio': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative', 'sprite-mesh-studio': 'sprite-mesh', 'tilemap-studio': 'tilemap', 'particle-studio': 'particles', 'collision-tools': 'collision', 'parallax-tools': 'parallax', 'font-tools': 'fonts', 'audio-tools': 'audio', 'input-tools': 'input', 're2dsprite-studio': 're2dsprite', 'rmlui-studio': 'rmlui' };
 
 const STUDIOS = [
-    sdkStudio('rmlui-studio', 'RmlUi', (p) => /\.(rml|rcss)$/i.test(p), 'sdk/ui/rmlui_studio.rml', 'rm-back',
-        { ownKeys: ['s', 'z', 'y'] }),
 ];
 
 // Студии Editor (editor/studios) впереди старых модулей SDK.

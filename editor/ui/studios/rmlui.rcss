@@ -1,0 +1,9 @@
+/* RmlUi: вьюпорт прозрачный — поверх него встаёт настоящий документ-черновик. */
+.rm-view { border: 1px #2a2f39; }
+.rm-src-bar { display: flex; flex-direction: row; align-items: center; flex: 0 0 auto; padding: 4px 10px; background-color: #1b1e24; border-top: 1px #2a2f39; }
+textarea.rm-src { flex: 0 0 auto; height: 150px; margin: 0px; border-radius: 0px; font-family: Roboto Mono; }
+textarea.rm-rcss { height: 180px; font-family: Roboto Mono; }
+.rm-node .rm-tag { color: #7dd3fc; }
+.rm-node .rm-id { color: #fbbf24; margin-left: 4px; }
+.rm-node .rm-cls { color: #a78bfa; margin-left: 4px; }
+.rm-node .rm-txt { color: #8b93a3; margin-left: 6px; }
