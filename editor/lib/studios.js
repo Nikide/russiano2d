@@ -18,7 +18,7 @@ const dataStudio = (id, title, re) => sdkStudio(id, title, (p) => re.test(p), DA
 import { nativeFor, nativeById, nativeAlso } from '../studios/index.js';
 
 // Старые id студий SDK, которые заменили студии Editor.
-const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 're2d-world-studio': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative', 'sprite-mesh-studio': 'sprite-mesh', 'tilemap-studio': 'tilemap', 'particle-studio': 'particles', 'collision-tools': 'collision', 'parallax-tools': 'parallax' };
+const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 're2d-world-studio': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative', 'sprite-mesh-studio': 'sprite-mesh', 'tilemap-studio': 'tilemap', 'particle-studio': 'particles', 'collision-tools': 'collision', 'parallax-tools': 'parallax', 'font-tools': 'fonts' };
 
 const STUDIOS = [
     {
@@ -34,7 +34,6 @@ const STUDIOS = [
             ['Экипировка', snap.equipped.join(', ') || 'нет'],
         ] : [],
     },
-    dataStudio('font-tools', 'Fonts', /\.fonts\.json$/i),
     dataStudio('audio-tools', 'Audio', /\.audio\.json$/i),
     dataStudio('input-tools', 'Input', /\.input\.json$/i),
     sdkStudio('rmlui-studio', 'RmlUi', (p) => /\.(rml|rcss)$/i.test(p), 'sdk/ui/rmlui_studio.rml', 'rm-back',

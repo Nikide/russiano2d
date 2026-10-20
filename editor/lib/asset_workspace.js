@@ -84,7 +84,7 @@ export function createWorkspace(host,def) {
     function action(key){try{if(def.action)def.action(w,key);}catch(e){w.fail('EDITOR_ASSET_ACTION',e.message);}}
     doc.on('aw-list','click',(_id,_ev,key)=>{if(key!==null&&key!=='')w.select(Number(key));});
     for(const id of ['aw-tools','aw-actions','aw-library','aw-bottom','aw-content'])doc.on(id,'click',(_id,_ev,key)=>{if(key!==null&&key!=='')action(key);});
-    doc.on('aw-apply','click',()=>{try{const fields=def.fields(w),patch=w.read(fields);w.edit('Свойства',()=>w.patch(def.target(w),patch));}catch(e){w.fail('EDITOR_ASSET_FIELD',e.message);}});
+    doc.on('aw-apply','click',()=>{try{const fields=def.fields(w),patch=w.read(fields);w.edit('Свойства',data=>def.apply?def.apply(w,data,patch):w.patch(def.target(w),patch));}catch(e){w.fail('EDITOR_ASSET_FIELD',e.message);}});
     doc.on('aw-document-apply','click',()=>{try{const patch=w.read(def.settings||[],'d');w.edit('Настройки',data=>w.patch(data,patch));}catch(e){w.fail('EDITOR_ASSET_FIELD',e.message);}});
     doc.on('aw-validate','click',validate);
     doc.on('aw-source-toggle','click',()=>{sourceMode=!sourceMode;doc.cls('aw-source-panel','st-hidden',!sourceMode);if(sourceMode)doc.setValue('aw-source',JSON.stringify(w.data,null,2));});

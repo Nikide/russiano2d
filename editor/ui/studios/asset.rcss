@@ -37,3 +37,10 @@ input.st-in.pt-small { flex: 0 0 auto; width: 56px; }
 input.st-in.px-n { flex: 0 0 auto; width: 36px; margin-left: 4px; }
 .px-img { height: 28px; }
 .px-img img { width: 24px; height: 24px; margin-right: 6px; vertical-align: middle; }
+/* Fonts: подписи образца и факты стиля */
+.aw-bottom.ft-bottom-host { max-height: 120px; }
+.ft-bottom { display: block; padding: 6px 10px; }
+.ft-facts { display: block; font-size: 12px; color: #c9ced8; margin-top: 4px; }
+.ft-facts .st-label { margin-left: 12px; }
+.ft-tag { position: absolute; left: 24px; font-size: 11px; color: #6b7280; }
+.ft-tag.on { color: #ff9d88; }
