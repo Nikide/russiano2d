@@ -129,40 +129,114 @@ export function createEditor($) {
 
     // --- Project Manager ------------------------------------------------------
 
+    // Иконка шаблона: по id, иначе общая.
+    const TEMPLATE_ICONS = { blank: 'description', platformer: 'directions_run', 'tilemap-room': 'grid_on', 'ui-menu': 'web' };
+
+    // Короткий путь для показа: от каталога запуска или с «~».
+    function shortPath(abs) {
+        const base = String($.fs.basePath() || '').replace(/\/+$/, '');
+        if (base && abs.startsWith(base + '/')) return abs.slice(base.length + 1);
+        const home = /^(\/Users\/[^/]+|\/home\/[^/]+)/.exec(abs);
+        return home ? '~' + abs.slice(home[1].length) : abs;
+    }
+    const parentOf = (abs) => abs.replace(/\/[^/]*$/, '') || '/';
+
+    // Имя папки из названия проекта: пробелы → «-», без служебных символов.
+    function slugOf(name) {
+        return String(name || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^0-9a-zа-яё_\-]/gi, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    }
+
+    function recentInfo(r) {
+        const json = $.fs.readJSON(r.abs + '/project.json', null);
+        let title = (json && json.title) || r.title || baseName(r.abs);
+        if (/\{\{.*\}\}/.test(title)) title = baseName(r.abs);   // шаблон, открытый как проект
+        return { abs: r.abs, title, missing: !json, v2: !!(json && json.format === 2) };
+    }
+
     function showPM(error) {
         doc.cls('pm', 'hidden', false);
         doc.cls('app', 'hidden', true);
+        doc.html('pm-logo', icon('rocket_launch'));
         doc.text('pm-error', esc(error || ''));
-        doc.html('pm-recent', s.recent.length ? s.recent.map((r) =>
-            '<div class="pm-row" data-key="' + esc(r.abs) + '"><span class="pm-title">' + esc(r.title || baseName(r.abs)) +
-            '</span><span class="pm-path">' + esc(r.abs) + '</span></div>').join('')
-            : '<span class="empty">Недавних проектов нет. Укажите путь слева.</span>');
+        doc.text('pm-new-error', '');
+        renderRecent();
+        if (!s.pmNew) {
+            // Папка по умолчанию — рядом с последним живым проектом (не во временном каталоге).
+            const alive = s.recent.find((r) => !/^\/(private\/)?tmp\//.test(r.abs) && $.fs.exists(r.abs + '/project.json'));
+            s.pmNew = { template: 'blank' };
+            doc.setValue('pm-new-dir', alive ? parentOf(alive.abs) : String($.fs.basePath() || '').replace(/\/+$/, ''));
+        }
         renderTemplates();
+        renderDest();
         if (!s.templates.length) loadTemplates();
+    }
+
+    function renderRecent() {
+        const list = s.recent.map(recentInfo);
+        list.sort((x, y) => (x.missing ? 1 : 0) - (y.missing ? 1 : 0));
+        doc.text('pm-recent-count', list.length ? String(list.length) : '');
+        doc.cls('pm-recent-count', 'hidden', !list.length);
+        doc.html('pm-recent', list.length ? list.map((r, i) =>
+            '<div class="pm-row' + (r.missing ? ' missing' : '') + '" data-key="' + (r.missing ? '' : 'open:' + esc(r.abs)) + '">' +
+            '<span class="pm-ico">' + icon(r.missing ? 'folder_off' : 'folder') + '</span>' +
+            '<div class="pm-info"><span class="pm-title">' + esc(r.title) + '</span><span class="pm-path">' + esc(shortPath(r.abs)) + '</span></div>' +
+            (r.missing ? '<span class="pm-badge warn">папка не найдена</span>' : r.v2 ? '<span class="pm-badge">v2</span>' : '') +
+            '<span class="pm-x" id="pm-rm-' + i + '" data-key="rm:' + esc(r.abs) + '">' + icon('close') + '</span></div>').join('')
+            : '<span class="empty">Здесь появятся проекты, которые вы открывали. Создайте новый справа или откройте папку ниже.</span>');
     }
 
     async function loadTemplates() {
         const res = await tool(['templates']);
         s.templates = res.json && Array.isArray(res.json.templates) ? res.json.templates : [];
+        if (s.pmNew && !s.templates.some((t) => t.id === s.pmNew.template) && s.templates.length) s.pmNew.template = s.templates[0].id;
         renderTemplates();
     }
     function renderTemplates() {
+        const sel = s.pmNew && s.pmNew.template;
         doc.html('pm-templates', s.templates.length ? s.templates.map((t) =>
-            '<div class="pm-row" data-key="' + esc(t.id) + '"><span class="pm-title">' + esc(t.name || t.id) +
-            '</span><span class="pm-path">' + esc(t.description || '') + '</span></div>').join('')
+            '<div class="pm-tpl' + (t.id === sel ? ' selected' : '') + '" data-key="' + esc(t.id) + '">' +
+            '<span class="pm-ico">' + icon(TEMPLATE_ICONS[t.id] || 'folder_special') + '</span>' +
+            '<div class="pm-info"><span class="pm-tpl-name">' + esc(t.name || t.id) + '</span>' +
+            '<span class="pm-tpl-desc">' + esc(t.description || '') + '</span></div></div>').join('')
             : '<span class="empty">Шаблоны загружаются…</span>');
     }
 
-    async function createFromTemplate(id) {
-        const dest = absPath(doc.value('pm-new-path'));
-        if (!dest) { doc.text('pm-error', 'Укажите каталог нового проекта слева.'); return; }
-        const res = await tool(['new', id, dest]);
+    // Итоговый путь нового проекта: <где создать>/<папка из названия>.
+    function newProjectDest() {
+        const dir = absPath(doc.value('pm-new-dir'));
+        const slug = slugOf(doc.value('pm-new-name'));
+        return { dir, slug, dest: dir && slug ? dir + '/' + slug : '' };
+    }
+    function renderDest() {
+        const d = newProjectDest();
+        let text = '', bad = true;
+        if (!d.slug) text = 'Введите название проекта.';
+        else if (!d.dir) text = 'Укажите папку, в которой создать проект.';
+        else if ($.fs.exists(d.dest)) text = 'Папка ' + shortPath(d.dest) + ' уже существует — выберите другое название.';
+        else { text = 'Будет создана папка: ' + shortPath(d.dest); bad = false; }
+        doc.text('pm-dest', esc(text));
+        doc.cls('pm-dest', 'bad', bad);
+        return !bad;
+    }
+
+    async function createProject() {
+        doc.text('pm-new-error', '');
+        if (!renderDest()) return;
+        const { dest } = newProjectDest();
+        const name = String(doc.value('pm-new-name') || '').trim();
+        const res = await tool(['new', s.pmNew.template, dest, '--name', name]);
         if (!res.ok) {
             const d = res.json && res.json.diagnostics && res.json.diagnostics[0];
-            doc.text('pm-error', esc(d ? d.code + ': ' + d.message : (res.error || 'не удалось создать проект')));
+            doc.text('pm-new-error', esc(d ? d.code + ': ' + d.message : (res.error || 'не удалось создать проект')));
             return;
         }
         await openProject(dest);
+    }
+
+    function forgetRecent(abs) {
+        s.recent = s.recent.filter((r) => r.abs !== abs);
+        saveState();
+        renderRecent();
     }
 
     // --- проект и дерево --------------------------------------------------------
@@ -863,8 +937,15 @@ export function createEditor($) {
         doc.text('find-close', icon('close'));
 
         doc.on('pm-open', 'click', () => openProject(doc.value('pm-path')));
-        doc.on('pm-recent', 'click', (id, ev, key) => { if (key) openProject(key); });
-        doc.on('pm-templates', 'click', (id, ev, key) => { if (key) createFromTemplate(key); });
+        doc.on('pm-recent', 'click', (id, ev, key) => {
+            if (!key) return;
+            if (key.startsWith('rm:')) forgetRecent(key.slice(3));
+            else if (key.startsWith('open:')) openProject(key.slice(5));
+        });
+        doc.on('pm-templates', 'click', (id, ev, key) => { if (key && s.pmNew) { s.pmNew.template = key; renderTemplates(); } });
+        doc.on('pm-new-name', 'change', () => renderDest());
+        doc.on('pm-new-dir', 'change', () => renderDest());
+        doc.on('pm-create', 'click', () => createProject());
 
         doc.on('tb-search', 'click', () => openPalette('files'));
         doc.on('tb-run', 'click', () => run());
@@ -1029,7 +1110,7 @@ export function createEditor($) {
     doc.show();
     return {
         state: s, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
-        manifest, migrateProject,
+        manifest, migrateProject, showPM, createProject,
         openPalette, closePalette, activeTab, closeTab, code, studios,
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
     };

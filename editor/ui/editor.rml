@@ -6,23 +6,34 @@
 <body>
 <!-- Project Manager: без открытого проекта -->
 <div id="pm">
-    <div id="pm-left">
-        <h1>Russiano2D</h1>
-        <span class="muted">Editor · один бинарник r2d</span>
-        <div class="pm-h">ОТКРЫТЬ ПРОЕКТ</div>
-        <div class="form"><input id="pm-path" type="text" class="field" value=""/></div>
-        <div class="form"><span class="grow"></span><button id="pm-open" class="btn primary">Открыть</button></div>
-        <span class="muted" style="font-size: 12px;">Папка с project.json. Абсолютный путь или относительно каталога запуска.</span>
-        <div id="pm-error" class="pm-err"></div>
-        <div class="pm-h">НОВЫЙ ПРОЕКТ</div>
-        <div class="form"><input id="pm-new-path" type="text" class="field" value=""/></div>
-        <span class="muted" style="font-size: 12px;">Каталог нового проекта; шаблон — справа.</span>
+    <div id="pm-top">
+        <div id="pm-logo"></div>
+        <div class="pm-brand">
+            <span class="pm-name">Russiano2D Editor</span>
+            <span class="pm-tag">Откройте проект или начните новый</span>
+        </div>
     </div>
-    <div id="pm-main">
-        <div class="pm-h">НЕДАВНИЕ</div>
-        <div id="pm-recent"></div>
-        <div class="pm-h">ШАБЛОНЫ</div>
-        <div id="pm-templates"></div>
+    <div id="pm-body">
+        <div id="pm-col-open">
+            <div class="pm-sec-head"><span class="pm-sec-title">Недавние проекты</span><span id="pm-recent-count" class="pm-count"></span></div>
+            <div id="pm-recent"></div>
+            <div class="pm-sec-head"><span class="pm-sec-title">Открыть папку</span></div>
+            <div class="pm-openbar"><input id="pm-path" type="text" class="field" value=""/><button id="pm-open" class="btn primary">Открыть</button></div>
+            <span class="pm-hint">Папка, в которой лежит project.json. Путь абсолютный или от каталога запуска.</span>
+            <div id="pm-error" class="pm-err"></div>
+        </div>
+        <div id="pm-col-new">
+            <span class="pm-sec-title">Новый проект</span>
+            <span class="pm-step">1 · Шаблон</span>
+            <div id="pm-templates"></div>
+            <span class="pm-step">2 · Название</span>
+            <input id="pm-new-name" type="text" class="field" value="Моя игра"/>
+            <span class="pm-step">3 · Где создать</span>
+            <input id="pm-new-dir" type="text" class="field" value=""/>
+            <div id="pm-dest" class="pm-dest"></div>
+            <button id="pm-create" class="btn primary pm-create">Создать проект</button>
+            <div id="pm-new-error" class="pm-err"></div>
+        </div>
     </div>
 </div>
 
