@@ -1,10 +1,8 @@
 <rml>
 <head>
-<!-- Hammer во вкладке Editor. Логика — sdk/tools/world-editor.js без изменений
-     поведения; здесь только раскладка по макету Editor. Все id — те же, что в
-     sdk/ui/world_editor.rml: их читает и пишет world-editor.js. -->
-<link type="text/rcss" href="../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../sdk/ui/studio.rcss"/><link type="text/rcss" href="../../sdk/ui/world_editor.rcss"/><link type="text/rcss" href="hammer.rcss"/>
-<title>Hammer</title>
+<!-- Hammer Studio: one document per tab, common Editor lifecycle. -->
+<link type="text/rcss" href="../../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../../sdk/ui/studio.rcss"/><link type="text/rcss" href="../../../sdk/ui/world_editor.rcss"/><link type="text/rcss" href="../hammer.rcss"/>
+<link type="text/rcss" href="kit.rcss"/><title>Hammer</title>
 </head>
 <body>
 <div class="studio we-root hm-root">
@@ -16,7 +14,7 @@
     <button id="we-redo" class="hm-btn" title="Повторить (Cmd/Ctrl+Y)"><span class="we-icon" id="we-icon-redo"></span>Redo</button>
     <span class="hm-sep"></span>
     <button id="we-validate" class="hm-btn" title="Проверить карту, без записи"><span class="we-icon" id="we-icon-validate"></span>Validate</button>
-    <button id="we-compile" class="hm-btn" title="Собрать .re2dworld"><span class="we-icon" id="we-icon-compile"></span>Compile</button>
+    <button id="we-compile" class="hm-btn" title="Собрать runtime-карту"><span class="we-icon" id="we-icon-compile"></span>Compile</button>
     <button id="we-run" class="hm-btn" title="Запустить игру"><span class="we-icon" id="we-icon-run"></span>Run</button>
     <button id="we-build-run" class="hm-btn hm-primary" title="Сохранить, проверить, собрать и запустить (F5)"><span class="we-icon" id="we-icon-build-run"></span>Run Preview</button>
     <span class="hm-sep"></span>
@@ -141,7 +139,7 @@
   </div>
 
   <!-- Файл карты: путь и открыть/создать (редко нужно — файл открыт вкладкой) -->
-  <div class="hm-file">
+  <div class="hm-file hm-hidden">
     <span class="hm-label">Файл</span>
     <input id="we-path" class="field hm-path" type="text" value=""/>
     <button id="we-open" class="hm-btn"><span class="we-icon" id="we-icon-open"></span>Открыть</button>

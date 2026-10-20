@@ -20,9 +20,9 @@ volumes, markers, materials, surface tags, visgroups, world properties и
 ## 1. Запуск
 
 ```bash
-./build/russiano2d --game sdk          # SDK GUI → инструмент world-editor
-./run_sdk.sh                           # то же через скрипт
-r2d-sdk tool info world-editor         # из CLI
+./build-xmake/macos-arm64/macosx/arm64/release/r2d edit <проект>
+# Откройте .re2dmap в дереве проекта → Hammer Studio
+r2d tool info world-editor             # из CLI
 ```
 
 Инструмент зарегистрирован в `sdk_tools.json` (`id: world-editor`, assets
@@ -56,12 +56,12 @@ r2d-sdk tool info world-editor         # из CLI
 
 ## 3. Native backend операций
 
-Каждая правка — один вызов `r2d-sdk world-edit`. GUI, CLI и агент используют
+Каждая правка — один вызов `r2d world-edit`. GUI, CLI и агент используют
 одну реализацию; геометрия (выпуклость, holes, clip, vertex) проверяется
 нативным `sdk_brush_*`.
 
 ```text
-r2d-sdk world-edit <file.re2dmap> --op <op> [--args JSON] [--out <file>]
+r2d world-edit <file.re2dmap> --op <op> [--args JSON] [--out <file>]
 ```
 
 `--out` пишет канонический `.re2dmap`; без `--out` результат карты
@@ -94,7 +94,7 @@ r2d-sdk world-edit <file.re2dmap> --op <op> [--args JSON] [--out <file>]
 ## 4. Публичный фасад
 
 ```js
-const ed = $.sdkApp.studios.world;
+const ed = $.editorApp.activeTab().inst; // активная вкладка Hammer
 ed.ops.createBrush({ rect: [0,0,128,128], bottom: 0, top: 128 });
 ed.ops.moveSelection(16, 0, 0);
 ed.ops.setGrid(16);
@@ -108,6 +108,10 @@ ed.ops.compile(true);
 ed.ops.buildAndRun();
 ed.ops.save();
 ```
+
+Hammer в Editor использует `editor/studios/hammer.js`, отдельный документ и
+сессию на вкладку. `sdk/tools/world-editor.js` сохраняет старый фасад
+`$.sdkApp.studios.world` через адаптер к тому же контроллеру.
 
 Каждая кнопка/menu/toolbar-действие вызывает ровно эти операции; агент вызывает
 их же через `$.sdkApp.studios.world.ops`. Расширения используют документированное

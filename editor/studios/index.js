@@ -5,8 +5,9 @@
 // ===========================================================================
 
 import * as atlas from './atlas.js';
+import * as hammer from './hammer.js';
 
-const MODULES = [atlas];
+const MODULES = [atlas, hammer];
 
 export const NATIVE = MODULES.map((m) => Object.assign({ native: true, module: m }, m.meta));
 

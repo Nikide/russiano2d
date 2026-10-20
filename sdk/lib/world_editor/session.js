@@ -1,7 +1,7 @@
 // ===========================================================================
 // World Editor: сессия файла и нативный backend.
 //
-// Единственный путь правок — r2d-sdk world-edit (та же команда у GUI, CLI и
+// Единственный путь правок — r2d world-edit (та же команда у GUI, CLI и
 // агента): пишем текущую модель во временный вход, получаем канонический файл
 // через --out и перечитываем его. Геометрия, convexity, clip, vertex и CSG
 // живут только в native; JS не валидирует .re2dmap.
@@ -70,9 +70,12 @@ function backendDiagnostic(res, code) {
     };
 }
 
+let sessionCounter = 0;
+
 export function createSession(app, opts) {
     const $ = app.$;
     const options = opts || {};
+    const sessionId = ++sessionCounter;
     const state = {
         path: null,
         map: null,
@@ -100,7 +103,7 @@ export function createSession(app, opts) {
 
     function tempPath(tag, ext) {
         state.seq++;
-        return joinPath(base(), 'build/.we-' + tag + '-' + state.seq + (ext || '.re2dmap'));
+        return joinPath(base(), 'build/.we-' + sessionId + '-' + tag + '-' + state.seq + (ext || '.re2dmap'));
     }
 
     function logLine(text) {
@@ -109,7 +112,10 @@ export function createSession(app, opts) {
     }
 
     function setDiagnostics(list) {
-        state.diagnostics = list || [];
+        state.diagnostics = (list || []).map((d) => {
+            if (!d.asset || !String(d.asset).includes('/.we-')) return d;
+            return Object.assign({}, d, { asset: state.path });
+        });
         return state.diagnostics;
     }
 
@@ -330,7 +336,7 @@ export function createSession(app, opts) {
                 logLine('сохранено: ' + state.path);
                 return { ok: true, path: state.path, diagnostics: diags };
             }
-            if (nativeUnavailable(json)) {
+            if (!options.strict && nativeUnavailable(json)) {
                 // Честный fallback на время, пока native world-edit недоступен:
                 // пишем ту же модель и показываем структурное предупреждение.
                 if (!$.fs.write(state.path, serialize(state.map))) {
@@ -387,15 +393,19 @@ export function createSession(app, opts) {
     }
 
     function buildPreview(worldJson) {
-        disposePreview();
+        if (disposed) return false;
+        let nextWorld = null;
         try {
-            state.world = $.re2dWorld.fromJSON(JSON.stringify(worldJson)).backend(state.gpu ? 'gpu' : 'cpu');
-            state.world.debug.view(state.debugView);
-            if (!state.lighting) state.world.lighting({ enabled: false, dynamic: false, shadows: false });
-            state.node = $('<sprite>', { id: 'we-3d-preview' }).appendTo($.world);
+            nextWorld = $.re2dWorld.fromJSON(JSON.stringify(worldJson)).backend(state.gpu ? 'gpu' : 'cpu');
+            nextWorld.debug.view(state.debugView);
+            if (!state.lighting) nextWorld.lighting({ enabled: false, dynamic: false, shadows: false });
+            // Keep the last valid runtime until the replacement has loaded.
+            disposePreview();
+            state.world = nextWorld;
+            state.node = $('<sprite>', { id: 'we-3d-preview-' + sessionId }).appendTo($.world);
             return true;
         } catch (e) {
-            state.world = null;
+            if (nextWorld && nextWorld !== state.world) nextWorld.dispose();
             state.diagnostics = state.diagnostics.concat([{
                 code: 'SDK_WORLD_PREVIEW', severity: 'error', asset: state.path, location: null,
                 message: 'runtime отклонил компиляцию: ' + (e && e.message ? e.message : e), details: null,
@@ -442,8 +452,6 @@ export function createSession(app, opts) {
                 }
                 if (preview) state.previewOut = out;
                 state.debugView = state.debugView || 'final';
-            } else {
-                disposePreview();
             }
             const ok = !!json && json.ok === true && !hasErrors(diags) && preview;
             logLine((write === false ? 'info' : 'compile') + ': ' + (ok ? 'ok' : 'ошибки') + (preview ? ', preview готов' : ''));
@@ -504,9 +512,23 @@ export function createSession(app, opts) {
         disposePreview();
     }
 
+    // A pending save must not overwrite newer edits. All I/O operations share
+    // the transaction lock already used by apply(), independently per session.
+    function exclusive(fn) {
+        return async (...args) => {
+            if (state.busy || disposed) return { ok: false, diagnostics: [{
+                code: 'SDK_WORLD_EDIT_BUSY', severity: 'warning', asset: state.path, location: null,
+                message: 'операция уже выполняется или вкладка закрыта', details: null,
+            }] };
+            state.busy = true;
+            try { return await fn(...args); } finally { state.busy = false; }
+        };
+    }
+
     return {
         state, base, open, newMap, apply, beginBulk, rollbackBulk, commitBulk,
-        save, validate, compile, buildAndRun, snapshot,
+        save: exclusive(save), validate: exclusive(validate), compile: exclusive(compile),
+        buildAndRun: exclusive(buildAndRun), snapshot,
         setDiagnostics, hasErrors, nativeUnavailable,
         nextDebugView, toggleBackend, toggleLighting, disposePreview, dispose,
         sectionForOp,

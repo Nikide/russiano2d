@@ -46,7 +46,7 @@
 | RmlUi (`.rml`, `.rcss`), Re2D World (cells/walls карты) | студии SDK в исходной разметке; Re2D World — «Открыть как» для `.re2dmap` и кнопка Hammer для карт без brushes |
 | SpriteMesh (`.atlas.json`) | вкладка-студия: `sdk/tools/sprite-mesh-studio.js`, раскладка `editor/ui/sprite_mesh.rml` — 3D-вид меша (Shaded/Wireframe, ракурсы, вращение мышью), лента кадров с миниатюрами из атласа, теги анимаций и транспорт, Mesh Settings, Save + Bake (`r2d sprite-mesh-bake`), статус cache |
 | Re2DSprite (`.character.json`) | студия Editor `editor/studios/re2dsprite.js`: живой персонаж `$.re2dSprite.from` во вьюпорте (протяжка — yaw/pitch, ракурсы, вертушка, anime/pixel), клипы, таймлайн с перемоткой, слои, эмоции, варианты, экипировка по сокетам, видимость частей, кости и сокеты; правка `style`/`projection`/`defaults.motion` → запись `character.json` и `.re2dReload()` |
-| Hammer (`.re2dmap`) | вкладка-студия: `sdk/tools/world-editor.js` без переписывания, раскладка `editor/ui/hammer.rml` по макету (тулбар, палитра инструментов, TOP/3D/FRONT/SIDE, инспектор, дерево объектов, VisGroups); правки — native `r2d world-edit`, Validate/Compile/Run Preview, 3D — настоящий runtime-кадр; диагностика — в Problems, dirty — на вкладке |
+| Hammer (`.re2dmap`) | студия Editor `editor/studios/hammer.js`, отдельные документ и сессия на вкладку, раскладка `editor/ui/studios/hammer.rml` (тулбар, палитра инструментов, TOP/3D/FRONT/SIDE, инспектор, дерево объектов, VisGroups); правки — native `r2d world-edit`, Validate/Compile/Run Preview, 3D — настоящий runtime-кадр; диагностика — в Problems с переходом к объекту, dirty — на вкладке; material + tags грани откатываются одним шагом, preview помечается устаревшим после правок |
 
 **Открыть как.** Файл открывается основной студией своего типа (`.atlas.json` —
 Sprite, `.re2dmap` — Hammer, `.rml` — RmlUi). Палитра команд (`>`) для
@@ -65,11 +65,10 @@ Sprite, `.re2dmap` — Hammer, `.rml` — RmlUi). Палитра команд (`
 
 * макеты Editor есть у Hammer, VN Maker, SpriteMesh и Re2DSprite; остальные
   студии встроены в своей разметке SDK (своя палитра, кнопка «К SDK» скрыта);
-* студии данных делят один документ: открыта одна вкладка этой группы, как и
-  у Sprite/Animation (одна сессия атласа) — файл их типа показывает тип и имя
-  студии;
-* студия одного типа открыта в одной вкладке: вторая карта `.re2dmap`
-  заменяет первую (одна сессия World Editor, как было в SDK);
+* студии данных делят один документ: открыта одна вкладка этой группы;
+  Sprite/Animation объединены в Atlas, где у каждой вкладки своя сессия;
+* у старых студий SDK остаётся одна сессия на тип; Hammer и Atlas уже
+  держат несколько файлов одновременно;
 * поиска по проекту (боковая «Search») нет — открывается Quick Open;
 * `project.json` v2 (индекс сцен/ролей) не введён;
 * линт несохранённого буфера не делается: Problems отражают файл на диске;
@@ -97,7 +96,11 @@ Editor сам размещает документ, зовёт `update(dt)` то�
 
 `editor/main.js` → `createEditor($)` (`editor/app.js`). Чистые модули без
 движка: `lib/code_model.js` (буфер, каретка, правки, undo), `lib/highlight.js`
-(токенизатор), `lib/fuzzy.js` (нечёткий поиск). Новое в `$` ради Editor:
+(токенизатор), `lib/fuzzy.js` (нечёткий поиск).
+
+Hammer использует общие `sdk/lib/world_editor/{session,commands,selection,viewport,model,extension_host}.js`; геометрия остаётся в native `r2d world-edit`. Старый `sdk/tools/world-editor.js` — только адаптер к тому же контроллеру. Временные файлы и runtime-узлы preview имеют отдельные имена на сессию. Save/Validate/Compile блокируют параллельные правки своей карты. Ошибка компиляции сохраняет последний корректный файл и runtime preview. Камера preview сохраняет перемещение между кадрами; ввод и позиция sprite учитывают масштаб окна.
+
+Новое в `$` ради Editor:
 `$.input.clipboard()/setClipboard()`, псевдонимы `cmd`/`rcmd` по платформе,
 `doc.focus(id, on?)` (`engine.ui.focus`), `doc.place(rect)` и `doc.front()`
 (`engine.ui.place/front`) — встраивание документа студии в центральную область.
@@ -114,3 +117,22 @@ RmlUi отдаёт `src="/abs/path.png"` файловому интерфейсу
 клавиши не срабатывают из других вкладок; на её вкладке Editor не
 перехватывает клавиши, которые студия обрабатывает сама (Cmd/Ctrl+S, Z, Y, F5). Агенту доступна та же поверхность:
 `eval("$.editorApp.openFile('main.js')")`.
+
+
+## 5. Проверка переноса Hammer (2026-10-20)
+
+Сборка: `xmake f -y -p macosx -a arm64 -m release -o build-xmake/macos-arm64`,
+`xmake build -y -j 8 r2d`. Бинарник проверок задаётся через `R2D_BINARY`.
+`tests/agent/editor_hammer_test.py` — 43 проверки: две карты, параллельные native
+операции, общий Undo/Redo, фокус поля, Face, настоящее создание brush мышью,
+сохранение, ошибки/Problems, compile/freshness, сохранность последнего output
+после ошибки, запуск проекта и освобождение preview при закрытии.
+`tests/agent/world_editor_test.py` — 71 проверка совместимости старого SDK.
+Линт изменённых скриптов, `r2d validate editor` и четыре стража документации
+прошли без ошибок.
+Визуальная проверка — снимок настоящего RmlUi из агентского прогона;
+ручной интерактивный прогон, HiDPI и другие ОС пока не подтверждены.
+
+Следующий перенос по согласованному порядку: VN Maker → SpriteMesh →
+Re2DSprite → студии данных → RmlUi/Re2D World. Старый мост удаляется после
+переноса его оставшихся потребителей.

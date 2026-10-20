@@ -32,7 +32,7 @@ export function createEditor($) {
     const icon = (name) => $.ui.icon(name) || '';
     const studios = createStudioHost($, {
         log: (t) => log(t), setStatus: (t, k) => setStatus(t, k),
-        run: (opts) => run(opts), closeStudioTab: () => { const t = activeTab(); if (t && t.kind === 'studio') closeTab(t.id, true); },
+        run: (opts) => run(opts), stop: () => stop(), closeStudioTab: () => { const t = activeTab(); if (t && t.kind === 'studio') closeTab(t.id, true); },
         projectRoot: () => (s.project ? s.project.abs : ''),
         fullPreview: (tab) => enterFullPreview(tab),
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
@@ -294,6 +294,7 @@ export function createEditor($) {
                 tab.loading = true;
                 studios.open(tab).then(() => {
                     tab.loading = false;
+                    if (tab.problemTarget && tab.inst && tab.inst.navigateDiagnostic) { tab.inst.navigateDiagnostic(tab.problemTarget); tab.problemTarget = null; }
                     if (s.active === tab.id) { studios.setActive(tab, true); tab.placed = null; }
                     renderAll();
                 }).catch((e) => {
@@ -441,6 +442,7 @@ export function createEditor($) {
             for (const d of studios.diagnostics(t)) {
                 const n = normalizeDiag(d);
                 if (!n.file || n.file.startsWith('/')) n.file = t.path;   // вне проекта или без файла — к вкладке
+                n.source = d;
                 out.push(n);
             }
         }
@@ -508,8 +510,8 @@ export function createEditor($) {
         { id: 'close', label: 'Файл: закрыть вкладку', keys: 'Cmd/Ctrl+W', run: () => s.active && closeTab(s.active) },
         { id: 'find', label: 'Правка: найти в файле', keys: 'Cmd/Ctrl+F', run: () => openFind() },
         { id: 'gotoLine', label: 'Правка: перейти к строке…', keys: 'Cmd/Ctrl+G', run: () => openPalette('line') },
-        { id: 'undo', label: 'Правка: отменить', keys: 'Cmd/Ctrl+Z', run: () => { const t = activeTab(); if (t && t.model && t.model.undo()) changed(); } },
-        { id: 'redo', label: 'Правка: повторить', keys: 'Cmd/Ctrl+Shift+Z', run: () => { const t = activeTab(); if (t && t.model && t.model.redo()) changed(); } },
+        { id: 'undo', label: 'Правка: отменить', keys: 'Cmd/Ctrl+Z', run: () => { const t = activeTab(); if (t && t.inst) studios.undo(t); else if (t && t.model && t.model.undo()) changed(); } },
+        { id: 'redo', label: 'Правка: повторить', keys: 'Cmd/Ctrl+Shift+Z', run: () => { const t = activeTab(); if (t && t.inst) studios.redo(t); else if (t && t.model && t.model.redo()) changed(); } },
         { id: 'run', label: 'Запуск: запустить игру', keys: 'F5', run: () => run() },
         { id: 'stop', label: 'Запуск: остановить', keys: 'Shift+F5', run: () => stop() },
         { id: 'validate', label: 'Проект: проверить (r2d validate)', keys: '', run: () => validateProject() },
@@ -859,7 +861,13 @@ export function createEditor($) {
         doc.on('bottom-body', 'click', (id, ev, key) => {
             if (s.bottom !== 'problems' || key === null || key === undefined || !s.problemList) return;
             const d = s.problemList[parseInt(key, 10)];
-            if (d && d.file && s.entries.some((e) => e.path === d.file)) openFile(d.file, d.line || 1, d.col || 1);
+            if (d && d.file && s.entries.some((e) => e.path === d.file)) {
+                const tab = openFile(d.file, d.line || 1, d.col || 1);
+                if (tab && d.source) {
+                    if (tab.inst && tab.inst.navigateDiagnostic) tab.inst.navigateDiagnostic(d.source);
+                    else tab.problemTarget = d.source;
+                }
+            }
         });
         doc.on('palette-list', 'click', (id, ev, key) => { if (key !== null && key !== undefined) acceptPalette(parseInt(key, 10)); });
 

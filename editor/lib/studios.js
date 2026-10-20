@@ -18,24 +18,9 @@ const dataStudio = (id, title, re) => sdkStudio(id, title, (p) => re.test(p), DA
 import { nativeFor, nativeById, nativeAlso } from '../studios/index.js';
 
 // Старые id студий SDK, которые заменили студии Editor.
-const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas' };
+const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer' };
 
 const STUDIOS = [
-    {
-        id: 'world-editor',
-        title: 'Hammer',
-        match: (p) => /\.re2dmap(\.json)?$/i.test(p),
-        module: '../../sdk/tools/world-editor.js',
-        doc: 'ui/hammer.rml',              // раскладка Editor, id те же, что у SDK
-        // Клавиши, которые студия обрабатывает сама (Editor их на её вкладке не трогает).
-        ownKeys: ['s', 'z', 'y', 'f5'],
-        summary: (snap) => snap ? [
-            ['Состояние', snap.dirty ? 'изменён, не сохранён' : 'сохранён'],
-            ['Инструмент', snap.tool || '—'],
-            ['Выделение', snap.selection && snap.selection.ids.length ? snap.selection.kind + ': ' + snap.selection.ids.join(', ') : 'нет'],
-            ['Карта', snap.map ? 'brushes ' + snap.map.brushes + ' · entities ' + snap.map.entities + ' · paths ' + snap.map.paths + ' · visgroups ' + snap.map.visgroups : '—'],
-        ] : [],
-    },
     {
         id: 'vn-maker',
         title: 'Narrative',
@@ -127,7 +112,7 @@ export function createStudioHost($, editor) {
         $,
         doc: null,                 // Editor не прячет свой документ при открытии студии
         studios: {},
-        layouts: { world: 'ui/hammer.rml', vn: 'ui/vn_maker.rml', vnPreview: true, spriteMesh: 'ui/sprite_mesh.rml', spriteMeshThumbs: true },
+        layouts: { vn: 'ui/vn_maker.rml', vnPreview: true, spriteMesh: 'ui/sprite_mesh.rml', spriteMeshThumbs: true },
         get projectRoot() { return editor.projectRoot(); },
         recovery: null,
         extensions: null,
@@ -174,6 +159,7 @@ export function createStudioHost($, editor) {
                 return { ok: res.ok, json: res.json, output: res.output };
             },
             run: (opts) => editor.run(opts),
+            stop: () => editor.stop(),
             status: (text, kind) => editor.setStatus(text, kind || ''),
             log: (text) => editor.log(text),
             changed: () => editor.changed(tab),

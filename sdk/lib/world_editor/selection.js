@@ -19,9 +19,13 @@ export function createSelection(mapRef) {
     }
 
     function exists(kind, id) {
+        if (kind === 'face') {
+            const at = String(id).lastIndexOf(':');
+            return at > 0 && ['side', 'floor', 'ceiling'].includes(String(id).slice(at + 1)) &&
+                !!find(mapRef(), 'brushes', String(id).slice(0, at));
+        }
         const section = KIND_SECTION[kind];
         if (!section) return false;
-        if (kind === 'face') return false;
         return !!find(mapRef(), section, id);
     }
 
@@ -96,7 +100,7 @@ export function createSelection(mapRef) {
 
     /** Убрать id, которых больше нет в модели (после undo/delete). */
     function prune() {
-        if (state.kind === 'none' || state.kind === 'face') return snapshot();
+        if (state.kind === 'none') return snapshot();
         return set(state.kind, state.ids);
     }
 

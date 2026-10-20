@@ -99,3 +99,8 @@ body { font-family: Open Sans; font-size: 13px; color: #d7dce6; background-color
 .hm-bar #we-status { flex: 0 1 auto; max-width: 280px; overflow: hidden; }
 .hm-bar .we-spacer { flex: 1 1 0; min-width: 8px; }
 .hm-bar .hm-btn .we-icon { vertical-align: middle; }
+
+/* Narrow editor hosts keep every tool reachable; tab identity owns the path. */
+.hm-bar { flex-wrap: wrap; }
+.hm-root .hm-file.hm-hidden { display: none; }
+.hm-bar .hm-btn, .hm-bar .hm-pill { margin-bottom: 2px; }
