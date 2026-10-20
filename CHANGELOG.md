@@ -1,3 +1,9 @@
+> EDITOR API — синхронизация артефактов (2026-10-20; без тега/релиза).
+> Xmake сообщает текущую версию 1.3.2. Штатным `r2d api generate` обновлены
+> schema/typings/reference и freeze snapshot на уже добавленные при переносе
+> Editor `$.input.clipboard`, `$.input.setClipboard`, `$.ui.markup`,
+> `$.ui.typing` и русские алиасы. Это добавления; прежние имена сохранены.
+
 > SPRITEMESH V1 — SDK, cache, обычная Sprite-анимация (2026-10-20; без тега/релиза).
 > В `$` добавлен `spriteMesh(config?)`: Sprite использует заранее baked mesh
 > текущего обычного frame index; runtime только переключает кадр mesh. `r2d-sdk`

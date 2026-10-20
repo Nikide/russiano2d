@@ -1202,6 +1202,7 @@ $.input.axisActions
 $.input.bind
 $.input.bindings
 $.input.cancelWaits
+$.input.clipboard
 $.input.conflicts
 $.input.consume
 $.input.consumed
@@ -1251,6 +1252,7 @@ $.input.resetHeld
 $.input.rumble
 $.input.rumbleSupported
 $.input.saveBindings
+$.input.setClipboard
 $.input.shiftDown
 $.input.stopRumble
 $.input.stuck
@@ -2281,6 +2283,7 @@ $.ui.listItems
 $.ui.listRange
 $.ui.listScroll
 $.ui.listScrollBy
+$.ui.markup
 $.ui.modalContext
 $.ui.modalOpen
 $.ui.persist
@@ -2301,6 +2304,7 @@ $.ui.themeOf
 $.ui.tr
 $.ui.trList
 $.ui.transient
+$.ui.typing
 $.ui.unbind
 $.update
 $.vec
@@ -2514,6 +2518,7 @@ $.ввод.axisActions
 $.ввод.bind
 $.ввод.bindings
 $.ввод.cancelWaits
+$.ввод.clipboard
 $.ввод.conflicts
 $.ввод.consume
 $.ввод.consumed
@@ -2563,6 +2568,7 @@ $.ввод.resetHeld
 $.ввод.rumble
 $.ввод.rumbleSupported
 $.ввод.saveBindings
+$.ввод.setClipboard
 $.ввод.shiftDown
 $.ввод.stopRumble
 $.ввод.stuck
@@ -2763,6 +2769,7 @@ $.интерфейс.listItems
 $.интерфейс.listRange
 $.интерфейс.listScroll
 $.интерфейс.listScrollBy
+$.интерфейс.markup
 $.интерфейс.modalContext
 $.интерфейс.modalOpen
 $.интерфейс.persist
@@ -2783,6 +2790,7 @@ $.интерфейс.themeOf
 $.интерфейс.tr
 $.интерфейс.trList
 $.интерфейс.transient
+$.интерфейс.typing
 $.интерфейс.unbind
 $.камера
 $.камера._state

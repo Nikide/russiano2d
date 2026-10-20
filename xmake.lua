@@ -6,7 +6,7 @@
 -- build/generated (позже заменяются xmake-правилами).
 -- ===========================================================================
 set_project("russiano2d")
-set_version("1.2.13")
+set_version("1.3.2")
 set_license("MIT")
 add_rules("mode.release")
 includes("xmake/packages/libsdl3.lua")
@@ -361,7 +361,7 @@ target("r2d")
                     "third_party/visibility",
                     "third_party/rmlui_backends",
                     "build-xmake/generated", "build-xmake/generated/shaders")
-    add_defines("R2D_VERSION_STRING=\"1.2.13\"",
+    add_defines("R2D_VERSION_STRING=\"1.3.2\"",
                 "R2D_ENABLE_HOTRELOAD=1",
                 "R2D_ENABLE_RE2D=1",
                 "R2D_ENABLE_AUDIO=1",
@@ -373,7 +373,7 @@ target("r2d")
                 "RMLUI_SDL_VERSION_MAJOR=3",
                 "RMLUI_STATIC_LIB",
                 "R2D_HAVE_SDK=1",
-                "R2D_SDK_VERSION=\"1.2.13\"")
+                "R2D_SDK_VERSION=\"1.3.2\"")
     add_packages("libsdl3", "libsdl3_image", "libsdl3_mixer", "sdl3_net-r2d", "quickjs-ng", "box2d", "rmlui",
                  "freetype", "zstd", "stb", "tinyexr-r2d")
     if is_plat("macosx") then

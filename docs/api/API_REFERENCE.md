@@ -2,11 +2,11 @@
 
 <!-- GENERATED FILE - DO NOT EDIT MANUALLY
      Source: Russiano2D $ API Registry
-     Generator: r2d-sdk -->
+     Generator: r2d -->
 
-Engine version: "1.3.1"
+Engine version: "1.3.2"
 
-Entries: 4113
+Entries: 4121
 
 ## $
 
@@ -1642,6 +1642,7 @@ Entries: 4113
 | `bind` | function | `(arg0: any, arg1: any) -> any` |
 | `bindings` | function | `() -> any` |
 | `cancelWaits` | function | `(arg0: any) -> any` |
+| `clipboard` | function | `() -> any` |
 | `conflicts` | function | `(arg0: any, arg1: any) -> any` |
 | `consume` | function | `(arg0: any) -> any` |
 | `consumed` | function | `() -> any` |
@@ -1691,6 +1692,7 @@ Entries: 4113
 | `rumble` | function | `(arg0: any) -> any` |
 | `rumbleSupported` | function | `() -> any` |
 | `saveBindings` | function | `() -> any` |
+| `setClipboard` | function | `(arg0: any) -> any` |
 | `shiftDown` | function | `() -> any` |
 | `stopRumble` | function | `() -> any` |
 | `stuck` | function | `() -> any` |
@@ -3331,6 +3333,7 @@ Entries: 4113
 | `listRange` | function | `(arg0: any) -> any` |
 | `listScroll` | function | `(arg0: any, arg1: any) -> any` |
 | `listScrollBy` | function | `(arg0: any, arg1: any) -> any` |
+| `markup` | function | `(arg0: any, arg1: any) -> any` |
 | `modalContext` | function | `() -> any` |
 | `modalOpen` | function | `() -> any` |
 | `persist` | function | `() -> any` |
@@ -3351,6 +3354,7 @@ Entries: 4113
 | `tr` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `trList` | function | `() -> any` |
 | `transient` | function | `() -> any` |
+| `typing` | function | `() -> any` |
 | `unbind` | function | `(arg0: any) -> any` |
 
 ## $.vfx
@@ -3598,6 +3602,7 @@ Entries: 4113
 | `bind` | function | `(arg0: any, arg1: any) -> any` |
 | `bindings` | function | `() -> any` |
 | `cancelWaits` | function | `(arg0: any) -> any` |
+| `clipboard` | function | `() -> any` |
 | `conflicts` | function | `(arg0: any, arg1: any) -> any` |
 | `consume` | function | `(arg0: any) -> any` |
 | `consumed` | function | `() -> any` |
@@ -3647,6 +3652,7 @@ Entries: 4113
 | `rumble` | function | `(arg0: any) -> any` |
 | `rumbleSupported` | function | `() -> any` |
 | `saveBindings` | function | `() -> any` |
+| `setClipboard` | function | `(arg0: any) -> any` |
 | `shiftDown` | function | `() -> any` |
 | `stopRumble` | function | `() -> any` |
 | `stuck` | function | `() -> any` |
@@ -3916,6 +3922,7 @@ Entries: 4113
 | `listRange` | function | `(arg0: any) -> any` |
 | `listScroll` | function | `(arg0: any, arg1: any) -> any` |
 | `listScrollBy` | function | `(arg0: any, arg1: any) -> any` |
+| `markup` | function | `(arg0: any, arg1: any) -> any` |
 | `modalContext` | function | `() -> any` |
 | `modalOpen` | function | `() -> any` |
 | `persist` | function | `() -> any` |
@@ -3936,6 +3943,7 @@ Entries: 4113
 | `tr` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `trList` | function | `() -> any` |
 | `transient` | function | `() -> any` |
+| `typing` | function | `() -> any` |
 | `unbind` | function | `(arg0: any) -> any` |
 
 ## $.камера

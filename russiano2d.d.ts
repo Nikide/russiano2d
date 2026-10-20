@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT MANUALLY
 // Source: Russiano2D $ API Registry
-// Generator: r2d-sdk
-// Run: r2d-sdk api generate
+// Generator: r2d
+// Run: r2d api generate
 
 declare interface R2DNode {
     [key: string]: any;
@@ -1553,6 +1553,7 @@ interface R2D_input {
     bind(arg0: any, arg1: any): any;
     bindings(): any;
     cancelWaits(arg0: any): any;
+    clipboard(): any;
     conflicts(arg0: any, arg1: any): any;
     consume(arg0: any): any;
     consumed(): any;
@@ -1602,6 +1603,7 @@ interface R2D_input {
     rumble(arg0: any): any;
     rumbleSupported(): any;
     saveBindings(): any;
+    setClipboard(arg0: any): any;
     shiftDown(): any;
     stopRumble(): any;
     stuck(): any;
@@ -2715,6 +2717,7 @@ interface R2D_ui {
     listRange(arg0: any): any;
     listScroll(arg0: any, arg1: any): any;
     listScrollBy(arg0: any, arg1: any): any;
+    markup(arg0: any, arg1: any): any;
     modalContext(): any;
     modalOpen(): any;
     persist(): any;
@@ -2735,6 +2738,7 @@ interface R2D_ui {
     tr(arg0: any, arg1: any, arg2: any): any;
     trList(): any;
     transient(): any;
+    typing(): any;
     unbind(arg0: any): any;
 }
 
@@ -2958,6 +2962,7 @@ interface R2D_________ {
     bind(arg0: any, arg1: any): any;
     bindings(): any;
     cancelWaits(arg0: any): any;
+    clipboard(): any;
     conflicts(arg0: any, arg1: any): any;
     consume(arg0: any): any;
     consumed(): any;
@@ -3007,6 +3012,7 @@ interface R2D_________ {
     rumble(arg0: any): any;
     rumbleSupported(): any;
     saveBindings(): any;
+    setClipboard(arg0: any): any;
     shiftDown(): any;
     stopRumble(): any;
     stuck(): any;
@@ -3215,6 +3221,7 @@ interface R2D___________________ {
     listRange(arg0: any): any;
     listScroll(arg0: any, arg1: any): any;
     listScrollBy(arg0: any, arg1: any): any;
+    markup(arg0: any, arg1: any): any;
     modalContext(): any;
     modalOpen(): any;
     persist(): any;
@@ -3235,6 +3242,7 @@ interface R2D___________________ {
     tr(arg0: any, arg1: any, arg2: any): any;
     trList(): any;
     transient(): any;
+    typing(): any;
     unbind(arg0: any): any;
 }
 
