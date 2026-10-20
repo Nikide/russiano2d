@@ -227,10 +227,26 @@ export function createStudioHost($, editor) {
     function show(tab, on) { if (tab && tab.api) { const d = tab.inst ? tab.inst.doc : docOf(tab.studio); if (on) d.show(); else d.hide(); } }
     // Студии Editor: кадр, сохранение и история ведёт Editor.
     function update(tab, dt) { if (tab && tab.inst && tab.inst.update) tab.inst.update(dt); }
-    async function save(tab) { return tab && tab.inst && tab.inst.save ? tab.inst.save() : false; }
+    // Студия Editor отвечает bool. Старый модуль SDK пишет файл и возвращает
+    // разное (bool или {ok} проверки после записи): сохранён ли — по снимку.
+    async function save(tab) {
+        if (!tab) return false;
+        if (tab.inst) return tab.inst.save ? !!(await tab.inst.save()) : false;
+        if (!tab.api || !tab.api.save) return false;
+        const r = await tab.api.save();
+        const snap = snapshot(tab);
+        if (snap && typeof snap.dirty === 'boolean') return !snap.dirty;
+        return r === true || !!(r && r.ok);
+    }
+    function dirty(tab) {
+        if (!tab) return false;
+        if (tab.inst) return !!(tab.inst.dirty && tab.inst.dirty());
+        const snap = snapshot(tab);
+        return !!(snap && snap.dirty);
+    }
     function undo(tab) { return tab && tab.inst && tab.inst.undo ? tab.inst.undo() : false; }
     function redo(tab) { return tab && tab.inst && tab.inst.redo ? tab.inst.redo() : false; }
     function commands(tab) { return tab && tab.inst && tab.inst.commands ? tab.inst.commands() : []; }
 
-    return { open, setActive, place, close, snapshot, diagnostics, front, summary, show, update, save, undo, redo, commands, studioFor, studioById, studiosFor };
+    return { open, setActive, place, close, snapshot, diagnostics, front, summary, show, update, save, dirty, undo, redo, commands, studioFor, studioById, studiosFor };
 }

@@ -289,6 +289,12 @@ export function createEditor($) {
                 // Одна сессия на студию (и на группу студий с общим документом).
                 // Студии Editor — экземпляр на вкладку; старые модули SDK — один на студию/группу.
                 const old = studio.native ? null : s.tabs.find((t) => t.kind === 'studio' && !t.studio.native && (t.studio.id === studio.id || (studio.group && t.studio.group === studio.group)));
+                if (old && studios.dirty(old)) {
+                    // Старая студия SDK держит одну сессию: не выбрасываем чужие правки молча.
+                    setStatus('«' + old.path + '» в ' + studio.title + ' не сохранён: сохраните или закройте его вкладку', 'err');
+                    activate(old.id, true);
+                    return old;
+                }
                 if (old) closeTab(old.id, true);
                 tab.studio = studio;
                 tab.abs = full(relPath);
@@ -380,8 +386,10 @@ export function createEditor($) {
     async function save(tab) {
         tab=tab||activeTab();
         if(!tab)return false;
-        if(tab.inst) {
+        if(tab.kind==='studio') {
+            if(!tab.api){setStatus('студия ещё не открыта: '+tab.path,'err');return false;}
             const ok=await studios.save(tab);
+            if(ok)tab.confirmClose=false;
             setStatus(ok?'сохранено: '+tab.path:'не сохранено: '+tab.path,ok?'ok':'err');renderAll();return !!ok;
         }
         if(!tab.model)return false;
@@ -398,7 +406,7 @@ export function createEditor($) {
     }
     async function saveAll() {
         let saved=0,failed=0;
-        for(const t of s.tabs.slice())if((t.model&&t.model.dirty)||(t.inst&&t.inst.dirty())) {
+        for(const t of s.tabs.slice())if((t.model&&t.model.dirty)||(t.kind==='studio'&&studios.dirty(t))) {
             if(await save(t))saved++;else failed++;
         }
         setStatus('сохранено: '+saved+(failed?' · ошибок: '+failed:''),failed?'err':'ok');return failed===0;
@@ -489,7 +497,7 @@ export function createEditor($) {
 
     async function buildPackage() {
         if (!s.project) return;
-        saveAll();
+        if (!(await saveAll())) { setStatus('сборка остановлена: не все файлы сохранены', 'err'); return; }
         const name = (s.project.title || 'game').replace(/[^\wЀ-ӿ.-]+/g, '_');
         const out = s.project.abs + '/dist/' + name;
         setStatus('сборка: validate → build…', '');
