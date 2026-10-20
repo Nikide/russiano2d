@@ -655,10 +655,14 @@ RmlUi-тулзой SDK, bake, `$` API, проверками и demo. Работ�
 прозрачными, поэтому соседние кадры атласа геометрически изолированы.
 Покрыты тестами один пиксель, пустой кадр, threshold, горизонтальные и
 вертикальные соседи, цельный блок, frame isolation, depth/pivot и ошибочные
-границы. Проверка `r2d_sprite_mesh_test` проходит (5/5).
+границы. Второй этап добавил `build_all` для набора кадров, versioned
+little-endian cache payload и проверку валидности по source/layout/settings
+hashes + frame count. Декодер отклоняет усечённые, неверсионные,
+нетреугольные и non-finite vertex payloads. Тест проверяет несколько кадров,
+round-trip и условия invalidation; `r2d_sprite_mesh_test` проходит (6/6).
 
-Не завершено: cache serialization/invalidation, full atlas frame bake, runtime
-selection без rebuild, `$` property API/schema, SpriteMesh Tool/preview/playback,
+Не завершено: связка SDK с full-atlas bake/cache, runtime selection без rebuild,
+`$` property API/schema, SpriteMesh Tool/preview/playback,
 save workflow, integration test и sample. Текущая работа требует продолжения;
 не маркировать SpriteMesh V1 как готовый до закрытия всех пунктов.
 

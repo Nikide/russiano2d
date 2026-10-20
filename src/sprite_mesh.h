@@ -21,6 +21,16 @@ typedef struct R2DSpriteMesh {
     uint32_t opaque_pixels;
 } R2DSpriteMesh;
 
+typedef struct R2DSpriteMeshFrameInput {
+    R2DSpriteMeshRect rect;
+    float pivot_x, pivot_y;
+} R2DSpriteMeshFrameInput;
+typedef struct R2DSpriteMeshCache {
+    uint64_t source_hash, layout_hash, settings_hash;
+    uint32_t frame_count;
+    R2DSpriteMesh *frames;
+} R2DSpriteMeshCache;
+
 /* Returns false on invalid bounds, overflow, or allocation failure. Frame
  * bounds are applied to every neighbor query so atlas-adjacent frames cannot
  * suppress one another's side walls. The output must be freed with destroy. */
@@ -29,5 +39,23 @@ bool r2d_sprite_mesh_build(const uint8_t *rgba, int texture_width,
                            const R2DSpriteMeshDesc *desc,
                            R2DSpriteMesh *out);
 void r2d_sprite_mesh_destroy(R2DSpriteMesh *mesh);
+bool r2d_sprite_mesh_build_all(const uint8_t *rgba, int texture_width,
+                               int texture_height,
+                               const R2DSpriteMeshFrameInput *frames,
+                               uint32_t frame_count,
+                               const R2DSpriteMeshDesc *defaults,
+                               uint64_t source_hash, uint64_t layout_hash,
+                               uint64_t settings_hash,
+                               R2DSpriteMeshCache *out);
+void r2d_sprite_mesh_cache_destroy(R2DSpriteMeshCache *cache);
+bool r2d_sprite_mesh_cache_valid(const R2DSpriteMeshCache *cache,
+                                 uint64_t source_hash, uint64_t layout_hash,
+                                 uint64_t settings_hash, uint32_t frame_count);
+/* Portable little-endian cache payload (magic + version + identity + frames).
+ * Caller frees encoded bytes with free(); decoded cache with cache_destroy. */
+bool r2d_sprite_mesh_cache_encode(const R2DSpriteMeshCache *cache,
+                                  uint8_t **bytes, size_t *size);
+bool r2d_sprite_mesh_cache_decode(const uint8_t *bytes, size_t size,
+                                  R2DSpriteMeshCache *out);
 
 #endif
