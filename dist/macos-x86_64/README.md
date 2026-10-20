@@ -1,4 +1,4 @@
-# Russiano2D 1.3.1 — macOS Intel
+# Russiano2D 1.3.2 — macOS Intel
 
 Готовый движок и всё, что нужно, чтобы начать на нём первый проект.
 

@@ -1,0 +1,10 @@
+<rml><head><link type="text/rcss" href="theme.rcss"/><style>
+body { width:100%; height:100%; font-family: Open Sans; font-size:14px; color:#e9edf6; }
+#recovery { position:absolute; left:15%; top:20%; width:65%; padding:24px; background-color:#192b3d; border:1px #fb793b; }
+#recovery-path, #recovery-warning { display:block; margin:14px 0; }
+</style></head><body><div id="recovery"><h2>Восстановить несохранённые правки?</h2>
+<div id="recovery-path"></div><div id="recovery-warning"></div>
+<button id="recovery-restore" class="btn primary">Восстановить</button>
+<button id="recovery-discard" class="btn">Удалить recovery</button>
+<button id="recovery-later" class="btn">Позже</button>
+</div></body></rml>

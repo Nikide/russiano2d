@@ -1,3 +1,12 @@
+> SPRITEMESH V1 — SDK, cache, обычная Sprite-анимация (2026-10-20; без тега/релиза).
+> В `$` добавлен `spriteMesh(config?)`: Sprite использует заранее baked mesh
+> текущего обычного frame index; runtime только переключает кадр mesh. `r2d-sdk`
+> получил all-frame bake и dedicated SpriteMesh Studio для atlas/PNG, настроек,
+> playback и 3D preview. Freeze snapshot осознанно обновлён на новые публичные
+> методы `$.fn.spriteMesh`, `$.spriteMesh`, `$.mesh.drawBaked`, `$.gfx.texture`
+> и metadata `$.atlas.spriteInfo`; `engine.spriteInfo` — внутренний binding,
+> нужный фасаду `$` для обычного Sprite.
+
 > FINAL ENGINE PASS — follow-up (2026-10-20, без тега/релиза).
 > (1) **Tilemap**: редактор террейнов и анимации тайлов в SDK (RmlUi), обычный
 > JSON `terrains`/`autotile.mode='terrain'`/`animations`; валидация JS↔C
@@ -333,6 +342,23 @@
 > listeners continue to work.
 
 
+## 1.3.1 — 2026-10-20
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+4 коммита в релизе.
+
+### Сборка и версии
+
+- release_build: Zig requirement only for opt-in Linux; docs match (`198cd37a4`)
+- Release: exclude linux-x86_64 from local build_and_push by default (Zig cross hangs); Linux builds on target OS, R2D_BUILD_LINUX=1 opts in (`34a39a5bc`)
+
+### Прочее
+
+- Revert accidental version bump: FINAL ENGINE PASS must not change version (`916332ceb`)
+- FINAL ENGINE PASS follow-up: tilemap terrain/anim, RmlUi font faces, C-replay checkpoints, atlas grace, test/docs reality (`e69021f9c`)
+
+<!-- release-notes:end -->
 ## 1.3.0 — 2026-10-19
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

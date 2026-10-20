@@ -19,7 +19,7 @@
         <button id="an-validate" class="btn">Проверить</button>
         <button id="an-preview" class="btn">Проверить в игре</button>
         <button id="an-interrupt" class="btn">Прервать</button>
-        <button id="an-to-sprite" class="btn">Sprite Studio</button>
+        <button id="an-to-sprite" class="btn">Открыть редактор спрайтов</button>
     </div>
 
     <div class="body-row">

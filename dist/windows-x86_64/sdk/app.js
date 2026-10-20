@@ -32,9 +32,9 @@ const MAX_LOG_CHARS = 12000;
 
 const DOCS = [
     { path: 'docs/SDK.md', title: 'SDK: архитектура и инструменты' },
-    { path: 'Следующая цель SDK AGENT.md', title: 'Спецификация SDK (AGENTS)' },
     { path: 'docs/SDK_VERIFICATION.md', title: 'Проверки SDK и ограничения' },
-    { path: 'SDK_HANDOFF.md', title: 'Handoff между сессиями' },
+    { path: 'docs/SDK_AGENT_TOOLING.md', title: 'Создание игр с SDK и агентом' },
+    { path: 'docs/SDK_IMPLEMENTATION_GAPS.md', title: 'Возможности и ограничения SDK' },
     { path: 'docs/AGENT_API.md', title: 'Агентский протокол движка' },
     { path: 'docs/HIGH_LEVEL_API.md', title: 'Справочник API $' },
 ];
@@ -53,7 +53,9 @@ export function createApp($, options) {
         registry: { loaded: false, path: '', ok: false, tools: [], diagnostics: [] },
         assets: { loaded: false, entries: [], count: 0, truncated: false },
         filter: '',
+        toolFilter: '',
         typeFilter: '',
+        diagnosticsCollapsed: true,
         selected: null,
         diagnostics: [],
         diagnosticsSource: '',
@@ -85,12 +87,14 @@ export function createApp($, options) {
     function setDiagnostics(source, list) {
         state.diagnostics = Array.isArray(list) ? list : [];
         state.diagnosticsSource = source;
+        state.diagnosticsCollapsed = state.diagnostics.length === 0;
         renderDiagnostics();
     }
 
     function addDiagnostic(severity, code, message, extra) {
         const d = Object.assign({ code, severity, asset: null, location: null, message, details: null }, extra || {});
         state.diagnostics.push(d);
+        state.diagnosticsCollapsed = false;
         renderDiagnostics();
         return d;
     }
@@ -300,7 +304,13 @@ export function createApp($, options) {
         }
         if (INTERNAL_ENTRIES[tool.entry]) {
             const view = INTERNAL_ENTRIES[tool.entry];
-            if (view === 'diag') return { id: tool.id, entry: tool.entry };
+            if (view === 'diag') {
+                showView('tools');
+                addDiagnostic('info', 'SDK_BACKEND_SHARED',
+                    'r2d-sdk — общий нативный backend. Откройте Code Check или нужную студию: их проверки и операции используют этот backend.');
+                setStatus('r2d-sdk подключён к интерфейсам SDK', '');
+                return { id: tool.id, entry: tool.entry };
+            }
             showView(view);
             return { id: tool.id, entry: tool.entry };
         }
@@ -533,7 +543,9 @@ export function createApp($, options) {
         if (!doc) return;
         doc.html('project-info', views.projectPanel(state.project));
         doc.html('recent-list', views.pathRows(state.recent, 'Недавних проектов нет.'));
-        doc.html('found-list', views.pathRows(state.found, 'Нажмите «Найти проекты».'));
+        doc.html('found-list', views.pathRows(state.found, state.foundRoot
+            ? 'В этой папке проекты не найдены.' : 'Нажмите «Найти проекты».'));
+        doc.cls('found-section', 'hidden', !state.foundRoot);
         doc.text('project-badge', escapeHtml(state.project ? state.project.title || state.project.dir : 'проект не открыт'));
         if (state.project) doc.setValue('project-path', state.project.dir);
     }
@@ -549,9 +561,27 @@ export function createApp($, options) {
 
     function renderTools() {
         if (!doc) return;
+        const query = state.toolFilter.trim().toLocaleLowerCase();
+        const tools = query ? state.registry.tools.filter((tool) =>
+            [tool.name, tool.description, tool.category, tool.id, tool.entry]
+                .concat(tool.assets || [])
+                .join(' ')
+                .toLocaleLowerCase()
+                .includes(query)) : state.registry.tools;
+        doc.text('tool-count', state.registry.loaded
+            ? (query ? 'найдено ' : 'инструментов ') + tools.length + ' из ' + state.registry.tools.length
+            : 'список не загружен');
         doc.html('tool-list', state.registry.loaded
-            ? views.toolCards(state.registry.tools, diagsByTool())
+            ? views.toolCards(tools, diagsByTool())
             : '<p class="empty">Реестр ещё не прочитан.</p>');
+    }
+
+    function setToolFilter(query) {
+        state.toolFilter = String(query || '');
+        renderTools();
+        return state.registry.tools.filter((tool) => [tool.name, tool.description, tool.category, tool.id, tool.entry]
+            .concat(tool.assets || []).join(' ').toLocaleLowerCase()
+            .includes(state.toolFilter.trim().toLocaleLowerCase())).length;
     }
 
     function renderTemplates() {
@@ -573,6 +603,8 @@ export function createApp($, options) {
         doc.html('diag-list', views.diagRows(state.diagnostics));
         doc.text('diag-counts', 'ошибок ' + sum.errors + ' · предупреждений ' + sum.warnings +
             (state.diagnosticsSource ? ' · ' + escapeHtml(state.diagnosticsSource) : ''));
+        doc.cls('diag-list', 'hidden', state.diagnosticsCollapsed);
+        doc.text('btn-diag-toggle', state.diagnosticsCollapsed ? 'Показать' : 'Свернуть');
     }
 
     function renderRun() {
@@ -621,6 +653,9 @@ export function createApp($, options) {
         doc.on('btn-asset-validate', 'click', () => validateAsset());
 
         doc.on('tool-list', 'click', (id, ev, key) => { if (key) openTool(key); });
+        doc.on('tool-filter', 'change', () => setToolFilter(doc.value('tool-filter')));
+        doc.on('btn-tool-filter', 'click', () => setToolFilter(doc.value('tool-filter')));
+        doc.on('btn-tool-filter-clear', 'click', () => { doc.setValue('tool-filter', ''); setToolFilter(''); });
         doc.on('btn-tools-reload', 'click', () => loadRegistry());
 
         doc.on('template-list', 'click', (id, ev, key) => { if (key) selectTemplate(key); });
@@ -635,6 +670,10 @@ export function createApp($, options) {
         doc.on('btn-build', 'click', () => buildProject(doc.value('build-out')));
 
         doc.on('doc-list', 'click', (id, ev, key) => { if (key) showDoc(key); });
+        doc.on('btn-diag-toggle', 'click', () => {
+            state.diagnosticsCollapsed = !state.diagnosticsCollapsed;
+            renderDiagnostics();
+        });
         doc.on('btn-diag-clear', 'click', () => setDiagnostics('', []));
     }
 
@@ -686,7 +725,7 @@ export function createApp($, options) {
         runProject, stopProject, buildProject, debugProject, packageProject, showDoc, showView, snapshot,
         loadTemplates, selectTemplate, createFromTemplate, loadEngines,
         setStatus, setDiagnostics, addDiagnostic, backend,
-        visibleAssets,
+        visibleAssets, setToolFilter,
         atlasModel,                       // чистая модель атласа: агент правит данные теми же функциями, что студия
         studios: {},
         atlasSessions: new Map(),

@@ -4,9 +4,9 @@
      Source: Russiano2D $ API Registry
      Generator: r2d-sdk -->
 
-Engine version: "1.3.0"
+Engine version: "1.3.1"
 
-Entries: 4101
+Entries: 4113
 
 ## $
 
@@ -113,6 +113,7 @@ Entries: 4101
 | `sfx` | object | — |
 | `signal` | object | — |
 | `sound` | object | — |
+| `spriteMesh` | object | — |
 | `startScene` | null | — |
 | `state` | object | — |
 | `steps` | object | — |
@@ -367,6 +368,7 @@ Entries: 4101
 | `manifest` | function | `(arg0: any) -> any` |
 | `names` | function | `() -> any` |
 | `parse` | function | `(arg0: any) -> any` |
+| `spriteInfo` | function | `(arg0: any) -> any` |
 | `unload` | function | `(arg0: any, arg1: any) -> any` |
 | `verify` | function | `(arg0: any, arg1: any) -> any` |
 
@@ -1282,6 +1284,7 @@ Entries: 4101
 | `sound` | function | `(arg0: any) -> any` |
 | `speed` | function | `(arg0: any) -> any` |
 | `sprite` | function | `(arg0: any) -> any` |
+| `spriteMesh` | function | `(arg0: any) -> any` |
 | `squash` | function | `(arg0: any) -> any` |
 | `start` | function | `() -> any` |
 | `state` | function | `() -> any` |
@@ -1485,6 +1488,7 @@ Entries: 4101
 | `snap` | function | `(arg0: any) -> any` |
 | `stats` | function | `() -> any` |
 | `text` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
+| `texture` | function | `(arg0: any) -> any` |
 | `textureSize` | function | `(arg0: any) -> any` |
 | `userShaders` | function | `() -> any` |
 | `white` | number | `0` |
@@ -1847,6 +1851,7 @@ Entries: 4101
 | Name | Kind | Signature / value |
 |---|---|---|
 | `draw` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
+| `drawBaked` | function | `(arg0: any, arg1: any) -> any` |
 | `flatSize` | function | `() -> any` |
 | `fromSlice` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
 | `ik` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
@@ -2812,6 +2817,7 @@ Entries: 4101
 | `sound` | function | `(arg0: any) -> any` |
 | `speed` | function | `(arg0: any) -> any` |
 | `sprite` | function | `(arg0: any) -> any` |
+| `spriteMesh` | function | `(arg0: any) -> any` |
 | `squash` | function | `(arg0: any) -> any` |
 | `start` | function | `() -> any` |
 | `state` | function | `() -> any` |
@@ -3010,6 +3016,15 @@ Entries: 4101
 | `play` | function | `(arg0: any, arg1: any) -> any` |
 | `remove` | function | `(arg0: any) -> any` |
 | `reset` | function | `(arg0: any) -> any` |
+
+## $.spriteMesh
+
+| Name | Kind | Signature / value |
+|---|---|---|
+| `cacheInfo` | function | `(arg0: any) -> any` |
+| `draw` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
+| `loadCache` | function | `(arg0: any) -> any` |
+| `project` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 
 ## $.state
 
@@ -3747,6 +3762,7 @@ Entries: 4101
 | `snap` | function | `(arg0: any) -> any` |
 | `stats` | function | `() -> any` |
 | `text` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
+| `texture` | function | `(arg0: any) -> any` |
 | `textureSize` | function | `(arg0: any) -> any` |
 | `userShaders` | function | `() -> any` |
 | `white` | number | `0` |
@@ -4489,6 +4505,7 @@ Entries: 4101
 | `shapeEnabled` | function | `(arg0: any, arg1: any) -> any` |
 | `shapeOverlaps` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
 | `spriteFilter` | function | `() -> any` |
+| `spriteInfo` | function | `(arg0: any) -> any` |
 | `startScene` | null | — |
 | `submitLightTriangles` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `submitMesh` | function | `(arg0: any, arg1: any, arg2: any) -> any` |

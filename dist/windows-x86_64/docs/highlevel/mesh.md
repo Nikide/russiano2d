@@ -203,3 +203,8 @@ python3 tests/agent/highlevel_mesh_rig_test.py
 
 Юнит-тест проверяет и то, что деформация **пишет ровно в переданный буфер** —
 это и есть обещание «без аллокаций в кадре».
+# SpriteMesh cache preview
+
+`$.mesh.drawBaked(vertices, texture)` передаёт уже запечённый список треугольников
+в существующий mesh renderer. Он не строит геометрию и не меняет cache; обычный
+SpriteMesh runtime сам выбирает baked mesh по текущему кадру спрайта.

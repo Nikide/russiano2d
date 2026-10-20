@@ -1,0 +1,14 @@
+<rml>
+<head>
+    <link type="text/rcss" href="menu.rcss"/>
+    <title>Меню</title>
+</head>
+<body>
+<div id="menu">
+    <h1>{{name}}</h1>
+    <button id="btn-play" class="btn">Играть</button>
+    <button id="btn-quit" class="btn">Выход</button>
+    <p id="status"></p>
+</div>
+</body>
+</rml>

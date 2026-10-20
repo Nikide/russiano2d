@@ -435,7 +435,9 @@ function frame(h) {
             else if (e.tool === 'rect') e.rectDrag = { x0: cell.x, y0: cell.y, x1: cell.x, y1: cell.y };
             else e.stroke = new Map();
         }
-        if (p.down && e.stroke && cell.ok) {
+        // Короткий клик может дать pressed+released между тиками и не иметь
+        // отдельного кадра down. Обрабатываем pressed как первый кадр мазка.
+        if ((p.down || p.pressed) && e.stroke && cell.ok) {
             const id = e.tool === 'erase' ? 0 : e.brush;
             const key = cell.x + ',' + cell.y;
             if (!e.stroke.has(key) && l.data[cell.y][cell.x] !== id) {

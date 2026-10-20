@@ -1,0 +1,19 @@
+{
+ "particles": [
+  {
+   "count": 8,
+   "life": 5.0,
+   "size": 50,
+   "endSize": 90,
+   "color": "#c8d0dc",
+   "alpha": 0.08,
+   "endAlpha": 0,
+   "blend": "translucent",
+   "mode": "billboard",
+   "vx": 6,
+   "vy": 2,
+   "vh": 0,
+   "drag": 0
+  }
+ ]
+}

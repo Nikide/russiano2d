@@ -22,6 +22,7 @@ function create(app) {
         const diags = (s.report && s.report.diagnostics) || [];
         doc.html('cc-diag', diags.map(d => '<div class="diag diag-err">' +
             escapeHtml(String(d.code || '')) + ' ' + escapeHtml(String(d.message || '')) + '</div>').join(''));
+        doc.cls('cc-diag', 'diag-empty', diags.length === 0);
     }
 
     async function run(args, label) {
@@ -53,8 +54,10 @@ function create(app) {
     function lint() { s.tab = 'lint'; return run(['lint', s.project], 'SDK Lint'); }
     function validate() { s.tab = 'validate'; return run(['validate', s.project], 'SDK Validate'); }
 
-    function openOpts() {
+    function openOpts(args) {
         s.active = true;
+        if (args && args.project) s.project = String(args.project);
+        else if (app.state && app.state.project && app.state.project.abs) s.project = app.state.project.abs;
         if (app.doc) app.doc.hide();
         doc.show();
         doc.setValue('cc-project', s.project);

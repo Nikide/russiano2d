@@ -74,6 +74,7 @@ body {
 }
 .view { display: block; }
 .view.hidden { display: none; }
+.hidden { display: none; }
 
 /* --- Нижняя панель диагностики -------------------------------------------------------- */
 #diag { display: block; flex: 0 0 auto; background-color: #0a0d13; border-top-width: 1px; border-color: #232b3d; }
@@ -81,6 +82,7 @@ body {
 #diag-title { color: #ffb03a; font-size: 12px; letter-spacing: 2px; margin-right: 14px; }
 #diag-counts { flex: 1 1 0; color: #97a2b8; font-size: 12px; }
 #diag-list { display: block; height: 92px; overflow-y: auto; padding: 4px 18px; }
+#diag-list.hidden { display: none; }
 
 /* --- Hero-блок первого экрана -------------------------------------------------------- */
 .hero { display: block; margin-bottom: 18px; }

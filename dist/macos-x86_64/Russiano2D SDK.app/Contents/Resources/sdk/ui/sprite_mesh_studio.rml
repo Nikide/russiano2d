@@ -1,0 +1,22 @@
+<rml>
+<head><link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/><link type="text/rcss" href="sprite_mesh.rcss"/><title>SpriteMesh</title></head>
+<body>
+<div class="studio">
+  <div class="bar top"><button id="sm-back" class="btn small">К SDK</button><span class="title">SpriteMesh</span><span id="sm-file" class="sub">файл не открыт</span><span id="sm-state" class="dirty">—</span></div>
+  <div class="bar"><button id="sm-play" class="btn">Пуск</button><button id="sm-pause" class="btn">Пауза</button><button id="sm-restart" class="btn">Сначала</button><button id="sm-prev" class="btn">Предыдущий кадр</button><button id="sm-next" class="btn">Следующий кадр</button><select id="sm-animation" class="field"></select><select id="sm-preview-mode" class="field"><option value="textured">Текстура</option><option value="wireframe">Каркас</option></select></div>
+  <div class="bar"><button id="sm-front" class="btn">Спереди</button><button id="sm-angle" class="btn">Под углом</button><button id="sm-back-view" class="btn">Сзади</button><button id="sm-reset-camera" class="btn">Сбросить камеру</button><button id="sm-save-bake" class="btn primary">Сохранить и запечь</button></div>
+  <div class="body-row">
+    <div class="side left"><h4>Анимации</h4><div id="sm-animations" class="list"></div><h4>Кадры</h4><div id="sm-frames" class="list grow"></div></div>
+    <div class="center"><div id="sm-view" class="viewport"></div><div id="sm-hud" class="hud-text">—</div></div>
+    <div class="side right"><h4>Параметры меша</h4>
+      <div class="field-row"><label>Глубина</label><input id="sm-depth" class="field" type="text" value="0.08"/></div>
+      <div class="field-row"><label>Порог альфа</label><input id="sm-threshold" class="field" type="text" value="16"/></div>
+      <div class="field-row"><label>Единиц на пиксель</label><input id="sm-upp" class="field" type="text" value="0.03125"/></div>
+      <div class="field-row"><label>Pivot X / Y</label><div class="pair"><input id="sm-px" class="field" type="text" value="0"/><input id="sm-py" class="field" type="text" value="0"/></div></div>
+      <div class="field-row"><button id="sm-apply" class="btn">Применить настройки</button></div>
+      <h4>Текущий кадр</h4><div id="sm-stats" class="hint">Mesh cache ещё не собран.</div><div id="sm-errors" class="diag-strip"></div>
+      <div class="hint">ЛКМ — вращение камеры · колесо — масштаб. Анимация использует длительность кадров из атласа.</div>
+    </div>
+  </div>
+</div>
+</body></rml>
