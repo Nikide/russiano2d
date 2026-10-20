@@ -14,8 +14,19 @@ xmake build -y
 ./build-xmake/macos-arm64/macosx/arm64/release/r2d-sdk version
 ```
 
-Все четыре платформы и релизные пакеты собирает `build_and_push`; зависимости
-и кросс-тулчейны (Zig, mingw-w64) описаны в [RELEASING.md](RELEASING.md).
+Релизные пакеты для macOS arm64/x86_64 и Windows x86_64 собирает
+`build_and_push`; зависимости и кросс-тулчейны (Zig, mingw-w64) описаны в
+[RELEASING.md](RELEASING.md). **Linux x86_64 в локальный релиз временно не
+входит**: локальная Zig-кросс-сборка зависает, поэтому на Linux движок
+собирается на целевой ОС (пример ниже). Вернуть платформу:
+`R2D_BUILD_LINUX=1`.
+
+```bash
+# Linux x86_64 — на самой Linux-машине
+xmake f -p linux -a x86_64 -m release -o build-linux
+xmake build -y
+./build-linux/linux/x86_64/release/russiano2d --game game
+```
 
 > Примеры ниже с путями `./build/...` и командами `cmake ...` относятся к
 > старому CMake-дереву и вспомогательным инструментам (Tracy, payload,

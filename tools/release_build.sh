@@ -3,8 +3,9 @@
 # Локальная сборка релизных пакетов через Xmake.
 #
 # Единственный builder релиза: build_and_push вызывает этот скрипт до создания
-# тега. Контейнеры и GitHub-раннеры здесь не участвуют. Кросс-компиляция
-# Linux/Windows — Zig toolchain (xmake: set_toolchains("zigcc")).
+# тега. Контейнеры и GitHub-раннеры здесь не участвуют. Windows — mingw-w64.
+# Linux x86_64 — только opt-in R2D_BUILD_LINUX=1: локальная Zig-кросс-сборка
+# на машине релиза виснет, Linux-пользователи собирают движок на своей ОС.
 #
 # Выход: dist/<platform>/{russiano2d,r2d-sdk,russiano2d-sdk}[.exe]
 # Финальные архивы собирает tools/release.py (--package-only) в dist/.
@@ -106,9 +107,20 @@ fi
 # Порядок как в релизном плане; каждый таргет обязан собраться.
 build_target macos-arm64   "-p macosx -a arm64"
 build_target macos-x86_64  "-p macosx -a x86_64"
-build_target linux-x86_64  "-p linux -a x86_64 --toolchain=zigcc"
+# Linux x86_64 исключён из локального релиза: Zig-кросс на этой машине
+# зависает. Linux-пользователи собирают движок на своей ОС; вернуть в релиз —
+# R2D_BUILD_LINUX=1.
+if [ "${R2D_BUILD_LINUX:-0}" = "1" ]; then
+    build_target linux-x86_64 "-p linux -a x86_64 --toolchain=zigcc"
+else
+    echo "  --  linux-x86_64 пропущен (R2D_BUILD_LINUX=1 чтобы включить)"
+fi
 # Windows: Homebrew mingw-w64 (GCC) — Zig cc не умеет windres/windows.h для RC.
 build_target windows-x86_64 "-p mingw -a x86_64"
 
 echo
-echo "release_build: все четыре платформы собраны"
+if [ "${R2D_BUILD_LINUX:-0}" = "1" ]; then
+    echo "release_build: собраны все четыре платформы"
+else
+    echo "release_build: собраны macOS arm64/x86_64 + Windows x86_64 (Linux — сборка на целевой ОС)"
+fi
