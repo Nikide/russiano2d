@@ -53,13 +53,17 @@ def main() -> int:
             executable.chmod(0o755)
 
     source_root = args.source_root.resolve()
-    for relative in ("sdk", "sdk_tools.json", "docs", "api.schema.json",
-                     "russiano2d.d.ts"):
+    for relative in ("sdk", "sdk_tools.json", "docs", "assets",
+                     "api.schema.json", "russiano2d.d.ts"):
         source = source_root / relative
         if source.exists():
             copy_tree(source, resources / relative)
     if not (resources / "sdk" / "project.json").is_file():
         raise SystemExit("SDK project was not copied into the app bundle")
+    (resources / "r2d-sdk").symlink_to("../MacOS/r2d-sdk")
+    build_resources = resources / "build"
+    build_resources.mkdir()
+    (build_resources / "r2d-sdk").symlink_to("../../MacOS/r2d-sdk")
 
     version = release.read_version()
     info = {

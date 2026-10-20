@@ -112,6 +112,8 @@ def main():
                          "Russiano2D SDK.app/Contents/MacOS/russiano2d-sdk",
                          "Russiano2D SDK.app/Contents/MacOS/russiano2d",
                          "Russiano2D SDK.app/Contents/MacOS/r2d-sdk",
+                         "Russiano2D SDK.app/Contents/Resources/r2d-sdk",
+                         "Russiano2D SDK.app/Contents/Resources/build/r2d-sdk",
                          "Russiano2D SDK.app/Contents/Resources/sdk/project.json"):
             check(required in flat, "Finder SDK app содержит %s" % required)
 
