@@ -75,6 +75,18 @@ def main():
         check(a.eval(f"({DOC}.layoutRect('view-tools') || {{}}).h || 0") == 0,
               "скрытый экран инструментов не занимает места (layoutRect.h = 0)")
         check(a.eval(f"{DOC}.rect('view-projects').h") > 100, "активный экран проектов имеет геометрию")
+        check(a.eval(f"{DOC}.rect('diag-list')") is None,
+              "пустая панель диагностики свёрнута и не занимает рабочее место")
+        a.eval(f"{DOC}.click('btn-diag-toggle')")
+        a.step(2)
+        check(a.eval(f"({DOC}.rect('diag-list') || {{}}).h || 0") > 0,
+              "нижняя панель диагностики раскрывается кнопкой")
+        a.eval(f"{DOC}.click('btn-diag-toggle')")
+        a.step(2)
+        check(a.eval(f"{DOC}.rect('diag-list')") is None,
+              "нижняя панель диагностики сворачивается кнопкой")
+        check(a.eval(f"({DOC}.layoutRect('found-section') || {{}}).h || 0") == 0,
+              "результаты поиска проектов скрыты до выполнения поиска")
 
         # Снимок агента: оболочка видна через стандартную команду state.
         st = a.state()
@@ -151,14 +163,16 @@ def main():
         check(snap(a)["view"] == "tools", "переключение на экран инструментов")
         a.step(2)
         check(a.eval(f"{DOC}.rect('view-tools').h") > 100, "экран инструментов виден (занимает место)")
-        check(a.eval("$.sdkApp.setToolFilter('.atlas.json')") == 1,
-              "поиск инструментов учитывает типы файлов")
+        a.eval(f"{DOC}.setValue('tool-filter', '.atlas.json'); {DOC}.click('btn-tool-filter')")
+        check(a.eval("$.sdkApp.state.registry.tools.filter(t => (t.assets || []).some(p => p.endsWith('.atlas.json'))).length") == 1
+              and 'найдено 1 из' in a.eval(f"{DOC}.content('tool-count')"),
+              "кнопка поиска фильтрует каталог по типу файла")
         filtered = a.eval(f"{DOC}.content('tool-list')")
         check('tool-sprite-studio' in filtered and 'tool-particle-studio' not in filtered,
               "результат поиска показывает только подходящий инструмент")
         check('найдено 1 из' in a.eval(f"{DOC}.content('tool-count')"),
               "счётчик поиска показывает число результатов")
-        a.eval("$.sdkApp.setToolFilter('')")
+        a.eval(f"{DOC}.click('btn-tool-filter-clear')")
         check(a.eval(f"{DOC}.content('tool-list')").count('class=\"card') >= len(ids),
               "сброс поиска возвращает полный каталог")
         a.eval("$.sdkApp.openTool('asset-browser'); 1")

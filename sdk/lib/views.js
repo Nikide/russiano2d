@@ -151,8 +151,10 @@ export function pathRows(list, emptyText) {
     for (const item of list) {
         const dir = typeof item === 'string' ? item : item.path;
         const title = typeof item === 'string' ? '' : item.title;
-        html += '<div class="row" data-key="' + escapeHtml(dir) + '"><span class="row-name">' + escapeHtml(dir) + '</span>' +
-            (title ? '<span class="row-dir">' + escapeHtml(title) + '</span>' : '') + '</div>';
+        const normalized = String(dir || '').replace(/\\/g, '/').replace(/\/+$/, '');
+        const name = title || normalized.split('/').pop() || normalized;
+        html += '<div class="row" data-key="' + escapeHtml(dir) + '"><span class="row-name">' + escapeHtml(name) + '</span>' +
+            (normalized ? '<span class="row-dir">' + escapeHtml(normalized) + '</span>' : '') + '</div>';
     }
     return html;
 }

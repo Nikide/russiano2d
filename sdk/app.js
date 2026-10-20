@@ -55,6 +55,7 @@ export function createApp($, options) {
         filter: '',
         toolFilter: '',
         typeFilter: '',
+        diagnosticsCollapsed: true,
         selected: null,
         diagnostics: [],
         diagnosticsSource: '',
@@ -86,12 +87,14 @@ export function createApp($, options) {
     function setDiagnostics(source, list) {
         state.diagnostics = Array.isArray(list) ? list : [];
         state.diagnosticsSource = source;
+        state.diagnosticsCollapsed = state.diagnostics.length === 0;
         renderDiagnostics();
     }
 
     function addDiagnostic(severity, code, message, extra) {
         const d = Object.assign({ code, severity, asset: null, location: null, message, details: null }, extra || {});
         state.diagnostics.push(d);
+        state.diagnosticsCollapsed = false;
         renderDiagnostics();
         return d;
     }
@@ -534,7 +537,9 @@ export function createApp($, options) {
         if (!doc) return;
         doc.html('project-info', views.projectPanel(state.project));
         doc.html('recent-list', views.pathRows(state.recent, 'Недавних проектов нет.'));
-        doc.html('found-list', views.pathRows(state.found, 'Нажмите «Найти проекты».'));
+        doc.html('found-list', views.pathRows(state.found, state.foundRoot
+            ? 'В этой папке проекты не найдены.' : 'Нажмите «Найти проекты».'));
+        doc.cls('found-section', 'hidden', !state.foundRoot);
         doc.text('project-badge', escapeHtml(state.project ? state.project.title || state.project.dir : 'проект не открыт'));
         if (state.project) doc.setValue('project-path', state.project.dir);
     }
@@ -592,6 +597,8 @@ export function createApp($, options) {
         doc.html('diag-list', views.diagRows(state.diagnostics));
         doc.text('diag-counts', 'ошибок ' + sum.errors + ' · предупреждений ' + sum.warnings +
             (state.diagnosticsSource ? ' · ' + escapeHtml(state.diagnosticsSource) : ''));
+        doc.cls('diag-list', 'hidden', state.diagnosticsCollapsed);
+        doc.text('btn-diag-toggle', state.diagnosticsCollapsed ? 'Показать' : 'Свернуть');
     }
 
     function renderRun() {
@@ -640,6 +647,7 @@ export function createApp($, options) {
         doc.on('btn-asset-validate', 'click', () => validateAsset());
 
         doc.on('tool-list', 'click', (id, ev, key) => { if (key) openTool(key); });
+        doc.on('tool-filter', 'change', () => setToolFilter(doc.value('tool-filter')));
         doc.on('btn-tool-filter', 'click', () => setToolFilter(doc.value('tool-filter')));
         doc.on('btn-tool-filter-clear', 'click', () => { doc.setValue('tool-filter', ''); setToolFilter(''); });
         doc.on('btn-tools-reload', 'click', () => loadRegistry());
@@ -656,6 +664,10 @@ export function createApp($, options) {
         doc.on('btn-build', 'click', () => buildProject(doc.value('build-out')));
 
         doc.on('doc-list', 'click', (id, ev, key) => { if (key) showDoc(key); });
+        doc.on('btn-diag-toggle', 'click', () => {
+            state.diagnosticsCollapsed = !state.diagnosticsCollapsed;
+            renderDiagnostics();
+        });
         doc.on('btn-diag-clear', 'click', () => setDiagnostics('', []));
     }
 
