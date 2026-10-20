@@ -120,9 +120,17 @@ def main():
     junk = sorted(n for n in flat if any(part in n for part in FORBIDDEN_PARTS))
     check(not junk, "в пакете нет мусора ОС/сборки" + (" (%s)" % ", ".join(junk[:5]) if junk else ""))
 
-    # Архив не должен быть «сплющен»: бинарники лежат в корне, а не в подпапке.
-    check(not any(n.count("/") > 0 and PurePosixPath(n).name in binaries and "/" in n
-                  for n in flat),
+    # Архив не должен быть «сплющен»: standalone-бинарники лежат в корне,
+    # а не в подпапке. macOS .app — отдельный обязательный дубликат runtime
+    # внутри bundle, поэтому его вложенные executable здесь допустимы.
+    nested_binaries = [
+        n for n in flat
+        if PurePosixPath(n).name in binaries
+        and "/" in n
+        and not ((args.platform or "").startswith("macos")
+                 and n.startswith("Russiano2D SDK.app/"))
+    ]
+    check(not nested_binaries,
           "бинарники лежат в корне архива, а не во вложенном каталоге")
 
     if not args.archive.endswith(".zip"):
