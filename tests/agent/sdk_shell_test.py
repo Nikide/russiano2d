@@ -151,12 +151,25 @@ def main():
         check(snap(a)["view"] == "tools", "переключение на экран инструментов")
         a.step(2)
         check(a.eval(f"{DOC}.rect('view-tools').h") > 100, "экран инструментов виден (занимает место)")
+        check(a.eval("$.sdkApp.setToolFilter('.atlas.json')") == 1,
+              "поиск инструментов учитывает типы файлов")
+        filtered = a.eval(f"{DOC}.content('tool-list')")
+        check('tool-sprite-studio' in filtered and 'tool-particle-studio' not in filtered,
+              "результат поиска показывает только подходящий инструмент")
+        check('найдено 1 из' in a.eval(f"{DOC}.content('tool-count')"),
+              "счётчик поиска показывает число результатов")
+        a.eval("$.sdkApp.setToolFilter('')")
+        check(a.eval(f"{DOC}.content('tool-list')").count('class=\"card') >= len(ids),
+              "сброс поиска возвращает полный каталог")
         a.eval("$.sdkApp.openTool('asset-browser'); 1")
         check(snap(a)["view"] == "assets", "инструмент asset-browser открывает экран ассетов")
         a.eval("$.sdkApp.openTool('нет-такого'); 1")
         check("SDK_TOOL_NOT_FOUND" in snap(a)["diagnostics"]["codes"], "неизвестный инструмент — диагностика")
         a.eval(f"{DOC}.click('nav-docs')")
         check(snap(a)["view"] == "docs", "клик по навигации переключает экран")
+        doc_list = a.eval(f"{DOC}.content('doc-list')")
+        check('SDK_AGENT_TOOLING.md' in doc_list and 'Следующая цель SDK AGENT.md' not in doc_list,
+              "справка оболочки содержит только актуальные пользовательские документы")
 
         # --- Документация ----------------------------------------------------------------------------------------
         n = a.eval("$.sdkApp.showDoc('SDK_HANDOFF.md')")

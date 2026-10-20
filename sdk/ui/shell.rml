@@ -72,9 +72,15 @@
             <!-- Инструменты -->
             <div id="view-tools" class="view hidden">
                 <h2>Инструменты</h2>
-                <span class="lead">Каталог читается из sdk_tools.json — списка инструментов в коде нет.</span>
+                <span class="lead">Выберите инструмент. Поиск учитывает название, описание, категорию и типы файлов.</span>
+                <div class="form-row">
+                    <input id="tool-filter" type="text" value="" class="field"/>
+                    <button id="btn-tool-filter" class="btn">Найти</button>
+                    <button id="btn-tool-filter-clear" class="btn">Сбросить</button>
+                    <span id="tool-count" class="pill">инструменты</span>
+                </div>
                 <div id="tool-list" class="cards"></div>
-                <div class="form-row"><button id="btn-tools-reload" class="btn">Перечитать реестр</button></div>
+                <div class="form-row"><button id="btn-tools-reload" class="btn">Обновить список инструментов</button></div>
             </div>
 
             <!-- Шаблоны -->

@@ -32,9 +32,9 @@ const MAX_LOG_CHARS = 12000;
 
 const DOCS = [
     { path: 'docs/SDK.md', title: 'SDK: архитектура и инструменты' },
-    { path: 'Следующая цель SDK AGENT.md', title: 'Спецификация SDK (AGENTS)' },
     { path: 'docs/SDK_VERIFICATION.md', title: 'Проверки SDK и ограничения' },
-    { path: 'SDK_HANDOFF.md', title: 'Handoff между сессиями' },
+    { path: 'docs/SDK_AGENT_TOOLING.md', title: 'Создание игр с SDK и агентом' },
+    { path: 'docs/SDK_IMPLEMENTATION_GAPS.md', title: 'Возможности и ограничения SDK' },
     { path: 'docs/AGENT_API.md', title: 'Агентский протокол движка' },
     { path: 'docs/HIGH_LEVEL_API.md', title: 'Справочник API $' },
 ];
@@ -53,6 +53,7 @@ export function createApp($, options) {
         registry: { loaded: false, path: '', ok: false, tools: [], diagnostics: [] },
         assets: { loaded: false, entries: [], count: 0, truncated: false },
         filter: '',
+        toolFilter: '',
         typeFilter: '',
         selected: null,
         diagnostics: [],
@@ -549,9 +550,27 @@ export function createApp($, options) {
 
     function renderTools() {
         if (!doc) return;
+        const query = state.toolFilter.trim().toLocaleLowerCase();
+        const tools = query ? state.registry.tools.filter((tool) =>
+            [tool.name, tool.description, tool.category, tool.id, tool.entry]
+                .concat(tool.assets || [])
+                .join(' ')
+                .toLocaleLowerCase()
+                .includes(query)) : state.registry.tools;
+        doc.text('tool-count', state.registry.loaded
+            ? (query ? 'найдено ' : 'инструментов ') + tools.length + ' из ' + state.registry.tools.length
+            : 'список не загружен');
         doc.html('tool-list', state.registry.loaded
-            ? views.toolCards(state.registry.tools, diagsByTool())
+            ? views.toolCards(tools, diagsByTool())
             : '<p class="empty">Реестр ещё не прочитан.</p>');
+    }
+
+    function setToolFilter(query) {
+        state.toolFilter = String(query || '');
+        renderTools();
+        return state.registry.tools.filter((tool) => [tool.name, tool.description, tool.category, tool.id, tool.entry]
+            .concat(tool.assets || []).join(' ').toLocaleLowerCase()
+            .includes(state.toolFilter.trim().toLocaleLowerCase())).length;
     }
 
     function renderTemplates() {
@@ -621,6 +640,8 @@ export function createApp($, options) {
         doc.on('btn-asset-validate', 'click', () => validateAsset());
 
         doc.on('tool-list', 'click', (id, ev, key) => { if (key) openTool(key); });
+        doc.on('btn-tool-filter', 'click', () => setToolFilter(doc.value('tool-filter')));
+        doc.on('btn-tool-filter-clear', 'click', () => { doc.setValue('tool-filter', ''); setToolFilter(''); });
         doc.on('btn-tools-reload', 'click', () => loadRegistry());
 
         doc.on('template-list', 'click', (id, ev, key) => { if (key) selectTemplate(key); });
@@ -686,7 +707,7 @@ export function createApp($, options) {
         runProject, stopProject, buildProject, debugProject, packageProject, showDoc, showView, snapshot,
         loadTemplates, selectTemplate, createFromTemplate, loadEngines,
         setStatus, setDiagnostics, addDiagnostic, backend,
-        visibleAssets,
+        visibleAssets, setToolFilter,
         atlasModel,                       // чистая модель атласа: агент правит данные теми же функциями, что студия
         studios: {},
         atlasSessions: new Map(),
