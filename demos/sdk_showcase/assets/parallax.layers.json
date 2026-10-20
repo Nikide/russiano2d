@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "layers": [
+    {
+      "name": "distant-canopy",
+      "order": -30,
+      "parallax": 0.18,
+      "sprites": [
+        {
+          "src": "assets/mountains.png",
+          "x": 640,
+          "y": 250,
+          "w": 1280,
+          "h": 440
+        }
+      ]
+    },
+    {
+      "name": "near-fronds",
+      "order": -20,
+      "parallax": 0.55,
+      "sprites": [
+        {
+          "src": "assets/mountains.png",
+          "x": 300,
+          "y": 490,
+          "w": 600,
+          "h": 220
+        },
+        {
+          "src": "assets/mountains.png",
+          "x": 1000,
+          "y": 490,
+          "w": 600,
+          "h": 220
+        }
+      ]
+    }
+  ]
+}

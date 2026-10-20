@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fonts": [
+    {
+      "name": "OpenSans",
+      "path": "assets/fonts/OpenSans-Regular.ttf"
+    }
+  ],
+  "styles": {
+    "default": {
+      "size": 18,
+      "color": "#deeff2",
+      "align": "left"
+    },
+    "title": {
+      "size": 36,
+      "color": "#83efd2",
+      "align": "left"
+    },
+    "hud": {
+      "base": "default",
+      "size": 16,
+      "color": "#f7c979"
+    }
+  }
+}

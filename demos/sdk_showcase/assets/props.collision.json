@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "shapes": [
+    {
+      "name": "west_bulkhead",
+      "tag": "wall",
+      "shape": "box",
+      "x": 192,
+      "y": 384,
+      "w": 64,
+      "h": 768
+    },
+    {
+      "name": "east_bulkhead",
+      "tag": "wall",
+      "shape": "box",
+      "x": 1088,
+      "y": 384,
+      "w": 64,
+      "h": 768
+    },
+    {
+      "name": "scanner_trigger",
+      "tag": "trigger",
+      "shape": "circle",
+      "x": 832,
+      "y": 320,
+      "radius": 54
+    },
+    {
+      "name": "garden_zone",
+      "tag": "area",
+      "shape": "box",
+      "x": 640,
+      "y": 384,
+      "w": 1024,
+      "h": 512
+    }
+  ]
+}

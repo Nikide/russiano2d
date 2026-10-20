@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "buses": {
+    "ambience": {
+      "volume": 0.32,
+      "effect": "lowpass"
+    },
+    "sfx": {
+      "volume": 0.8
+    },
+    "ui": {
+      "parent": "sfx",
+      "volume": 0.65
+    }
+  },
+  "sounds": {
+    "scan": {
+      "path": "sensor-ping.ogg",
+      "bus": "ui",
+      "volume": 0.8
+    },
+    "ambience": {
+      "path": "sensor-ping.ogg",
+      "bus": "ambience",
+      "volume": 0.12,
+      "loop": true
+    }
+  },
+  "zones": [
+    {
+      "name": "Atrium",
+      "rect": [160, 120, 960, 520],
+      "height": 5,
+      "material": "tile",
+      "wet": 0.12
+    }
+  ]
+}

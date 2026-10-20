@@ -1,0 +1,6 @@
+body { width:100%; height:100%; font-family:"Open Sans"; color:#e8f5f2; }
+#dialog { position:absolute; left:8%; bottom:24px; width:84%; padding:22px; background-color:rgba(5,18,27,238); border-width:1px; border-color:#83efd2; border-radius:12px; }
+#dialog-text { display:block; font-size:22px; line-height:1.35; color:#e8f5f2; }
+#dialog-choices { display:block; margin-top:14px; }
+.choice { display:block; width:100%; margin-top:6px; padding:8px; color:#e8f5f2; background-color:#173440; font-size:18px; }
+.choice:hover { background-color:#28605d; }

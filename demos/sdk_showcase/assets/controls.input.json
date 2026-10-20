@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "deadzone": 0.18,
+  "actions": {
+    "left": [
+      "a",
+      "left"
+    ],
+    "right": [
+      "d",
+      "right"
+    ],
+    "up": [
+      "w",
+      "up"
+    ],
+    "down": [
+      "s",
+      "down"
+    ],
+    "scan": [
+      "space",
+      "mouse.left"
+    ],
+    "replay_intro": [
+      "i"
+    ],
+    "pause": [
+      "escape"
+    ]
+  }
+}

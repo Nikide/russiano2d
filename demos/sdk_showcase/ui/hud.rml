@@ -1,0 +1,13 @@
+<rml>
+<head><link type="text/rcss" href="game.rcss"/><title>Orbital Garden</title></head>
+<body>
+  <div id="hud">
+    <div class="brand">ORBITAL GARDEN <span>SDK FIELD TEST</span></div>
+    <div id="coords">640 / 384</div>
+    <div id="status">Оранжерея · сигнал нестабилен</div>
+    <button id="scan">СКАНИРОВАТЬ · SPACE</button>
+    <button id="replay">ЖУРНАЛ · I</button>
+    <div class="hint">WASD — движение · откройте другие сцены: `--scene workshop` / `--scene re2d`</div>
+  </div>
+</body>
+</rml>

@@ -1,0 +1,15 @@
+{
+  "speakers": {
+    "botanist": {
+      "name": "Лея",
+      "expressions": [
+        "calm",
+        "smile"
+      ],
+      "portraits": {
+        "calm": "assets/botanist.png",
+        "smile": "assets/botanist.png"
+      }
+    }
+  }
+}

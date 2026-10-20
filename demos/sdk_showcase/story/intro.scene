@@ -1,0 +1,14 @@
+:start
+~ Станция снова ловит сигнал из оранжереи.
+- Начать обход -> patrol
+- Проверить терминал -> terminal
+:patrol
+set route = 1
+~ Идём по световому коридору.
+goto finish
+:terminal
+set route = 2
+~ Терминал сохранил показания растений.
+goto finish
+:finish
+end

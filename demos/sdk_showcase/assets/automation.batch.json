@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "op": "validate",
+      "source": "../project.json"
+    },
+    {
+      "op": "validate",
+      "source": "../level.tilemap.json"
+    },
+    {
+      "op": "validate",
+      "source": "../assets/botanist.atlas.json"
+    },
+    {
+      "op": "validate",
+      "source": "../maps/orbital_garden.re2dmap"
+    }
+  ]
+}

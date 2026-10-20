@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "source": "assets/botanist.png",
+      "deps": [],
+      "outputs": ["assets/botanist.atlas.json"],
+      "baker": "atlas-grid",
+      "version": 1,
+      "options": { "cell": "1024x1536", "prefix": "botanist", "tags": "idle:0-0" }
+    }
+  ]
+}

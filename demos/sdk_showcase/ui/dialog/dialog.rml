@@ -1,0 +1,16 @@
+<rml>
+<head><link type="text/rcss" href="dialog.rcss"/><title>Orbital Garden · запись</title></head>
+<body>
+  <div id="dialog" data-dialog-role="root">
+    <div id="dialog-text" data-dialog-role="text"></div>
+    <div id="dialog-choices" data-dialog-role="choices">
+      <button class="choice" data-dialog-role="choice"></button>
+      <button class="choice" data-dialog-role="choice"></button>
+      <button class="choice" data-dialog-role="choice"></button>
+      <button class="choice" data-dialog-role="choice"></button>
+      <button class="choice" data-dialog-role="choice"></button>
+      <button class="choice" data-dialog-role="choice"></button>
+    </div>
+  </div>
+</body>
+</rml>
