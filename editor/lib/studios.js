@@ -18,7 +18,7 @@ const dataStudio = (id, title, re) => sdkStudio(id, title, (p) => re.test(p), DA
 import { nativeFor, nativeById, nativeAlso } from '../studios/index.js';
 
 // Старые id студий SDK, которые заменили студии Editor.
-const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 're2d-world-studio': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative', 'sprite-mesh-studio': 'sprite-mesh' };
+const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 're2d-world-studio': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative', 'sprite-mesh-studio': 'sprite-mesh', 'tilemap-studio': 'tilemap' };
 
 const STUDIOS = [
     {
@@ -34,7 +34,6 @@ const STUDIOS = [
             ['Экипировка', snap.equipped.join(', ') || 'нет'],
         ] : [],
     },
-    dataStudio('tilemap-studio', 'Tilemap', /\.tilemap\.json$/i),
     dataStudio('particle-studio', 'Particles', /\.particles\.json$/i),
     dataStudio('collision-tools', 'Collision', /\.collision\.json$/i),
     dataStudio('parallax-tools', 'Parallax', /\.layers\.json$/i),

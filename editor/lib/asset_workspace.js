@@ -21,7 +21,11 @@ export function createWorkspace(host,def) {
         rebuild(){needsPreview=true;},
         render,
         fieldValues(fields,target,prefix='f'){
-            for(const f of fields)doc.setValue(prefix+'-'+f.key,f.json?JSON.stringify(target[f.key]??f.default??[],null,2):String(target[f.key]??f.default??''));
+            for(const f of fields){
+                // Отсутствующее optional-поле показывается пустым и остаётся отсутствующим при Apply.
+                const v=target[f.key]!==undefined?target[f.key]:f.optional?undefined:f.default;
+                doc.setValue(prefix+'-'+f.key,v===undefined?'':f.json?JSON.stringify(v,null,2):String(v));
+            }
         },
         read(fields,prefix='f'){
             const patch={};for(const f of fields){const raw=String(doc.value(prefix+'-'+f.key)||'').trim();
