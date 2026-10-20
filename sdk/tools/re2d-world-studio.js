@@ -20,6 +20,17 @@ const debugViews = [
     'region', 'active-region', 'pvs', 'vis-cluster', 'areaportal', 'occluder',
     'distant-lod', 'sprite-lod', 'material-variation', 'ao-lite', 'vfx-budget',
 ];
+const debugViewLabels = {
+    final: 'Итоговый вид', 'cell-id': 'ID области', 'span-id': 'ID пролёта',
+    depth: 'Глубина', owner: 'Источник', 'light-level': 'Уровень света',
+    'dynamic-light-count': 'Динамические источники', normal: 'Нормали',
+    emissive: 'Свечение', bsp: 'BSP', portals: 'Порталы', 'shadow-mask': 'Маска теней',
+    overdraw: 'Перерисовка', region: 'Регион', 'active-region': 'Активный регион',
+    pvs: 'Видимость PVS', 'vis-cluster': 'Кластер видимости', areaportal: 'Портал области',
+    occluder: 'Окклюдеры', 'distant-lod': 'Дальний LOD', 'sprite-lod': 'LOD спрайтов',
+    'material-variation': 'Варианты материалов', 'ao-lite': 'Упрощённое AO',
+    'vfx-budget': 'Бюджет эффектов',
+};
 
 const DEFAULT_COLORS = { floor: '#687b91', ceiling: '#344858', wall: '#8b9ab2' };
 
@@ -315,7 +326,7 @@ export function createStudio(app) {
     doc.on('ws-debug', 'click', () => {
         s.debug = (s.debug + 1) % debugViews.length;
         if (s.world) s.world.debug.view(debugViews[s.debug]);
-        doc.text('ws-debug', 'Вид: ' + debugViews[s.debug]);
+        doc.text('ws-debug', 'Вид: ' + (debugViewLabels[debugViews[s.debug]] || debugViews[s.debug]));
     });
     doc.on('ws-backend', 'click', () => {
         s.gpu = !s.gpu;

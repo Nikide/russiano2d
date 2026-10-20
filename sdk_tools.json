@@ -3,7 +3,7 @@
   "tools": [
     {
       "id": "launcher",
-      "name": "SDK Launcher",
+      "name": "Стартовая панель SDK",
       "description": "Проекты, инструменты, сборка и запуск игры. Единая точка входа SDK.",
       "last_updated": "2026-10-09T12:00:00+03:00",
       "entry": "launcher",
@@ -11,7 +11,7 @@
     },
     {
       "id": "asset-browser",
-      "name": "Asset Browser",
+      "name": "Файлы проекта",
       "description": "Реальная файловая структура проекта: типы ассетов и открытие в нужном инструменте.",
       "last_updated": "2026-10-09T12:00:00+03:00",
       "entry": "asset-browser",
@@ -19,7 +19,7 @@
     },
     {
       "id": "r2d-sdk",
-      "name": "r2d-sdk (нативный бэкенд)",
+      "name": "Нативные команды r2d-sdk",
       "description": "CLI: реестр, ассеты, валидация, запуск и сборка. Один C-код для GUI, CLI и агента.",
       "last_updated": "2026-10-10T07:40:00+03:00",
       "entry": "diagnostics",
@@ -28,7 +28,7 @@
     },
     {
       "id": "re2d-world-studio",
-      "name": "Re2D World Studio",
+      "name": "Редактор мира Re2D",
       "description": "Re2D World: план XY и высотный разрез .re2dmap, cell/wall/portal/stair/slope/light, свойства JSON, split/join, undo/redo. Проверка и компиляция — native r2d-sdk world compile|info, предпросмотр — настоящий $.re2dWorld (CPU/GPU, debug views, PNG-материалы).",
       "last_updated": "2026-10-19T17:40:00+03:00",
       "entry": "re2d-world-studio",
@@ -40,7 +40,7 @@
     },
     {
       "id": "sprite-studio",
-      "name": "Sprite Studio",
+      "name": "Редактор спрайтов",
       "description": "Кадры, пивоты, длительности и метаданные атласа спрайтов (*.atlas.json, формат читает $.atlas). Нарезка картинки сеткой.",
       "last_updated": "2026-10-08T20:00:00+03:00",
       "entry": "sprite-studio",
@@ -52,7 +52,7 @@
     },
     {
       "id": "animation-studio",
-      "name": "Animation Studio",
+      "name": "Редактор анимаций",
       "description": "Анимации спрайтов как теги атласа: диапазон кадров, направление, цикл, длительность. Просмотр настоящим рантаймом.",
       "last_updated": "2026-10-08T20:00:00+03:00",
       "entry": "animation-studio",
@@ -60,7 +60,7 @@
     },
     {
       "id": "tilemap-studio",
-      "name": "Tilemap Studio",
+      "name": "Редактор тайлкарт",
       "description": "Тайлкарты: слои, рисование, заливка, непроходимые тайлы, автотайл. Файл — параметры тега <tilemap>; предпросмотр — настоящий $.tilemap.",
       "entry": "tilemap-studio",
       "category": "classic-2d",
@@ -71,7 +71,7 @@
     },
     {
       "id": "particle-studio",
-      "name": "Particle Studio",
+      "name": "Редактор частиц",
       "description": "Параметры эмиттера $.particles: скорость, разброс, рампы цвета и размера. Предпросмотр — настоящий узел <particles>.",
       "entry": "particle-studio",
       "category": "classic-2d",
@@ -82,7 +82,7 @@
     },
     {
       "id": "collision-tools",
-      "name": "Collision / Physics Tools",
+      "name": "Коллизии и физика",
       "description": "Прямоугольники, круги, капсулы, полигоны, сенсоры, односторонние платформы и слои. Тела создаёт настоящий Box2D движка.",
       "entry": "collision-tools",
       "category": "classic-2d",
@@ -93,7 +93,7 @@
     },
     {
       "id": "parallax-tools",
-      "name": "Parallax Tools",
+      "name": "Параллакс",
       "description": "Слои $.layers: порядок, коэффициент параллакса, затемнение. Предпросмотр двигает камеру настоящего рантайма.",
       "entry": "parallax-tools",
       "category": "classic-2d",
@@ -104,7 +104,7 @@
     },
     {
       "id": "font-tools",
-      "name": "Font / Text Tools",
+      "name": "Шрифты и текст",
       "description": "Шрифты и текстовые стили $.font: размер, цвет, выравнивание, наследование. Предпросмотр рисует настоящий текст движка.",
       "entry": "font-tools",
       "category": "classic-2d",
@@ -115,7 +115,7 @@
     },
     {
       "id": "audio-tools",
-      "name": "Audio Tools",
+      "name": "Звук",
       "description": "Шины, звуки и зоны акустики $.audio. Прослушивание — настоящим звуковым слоем движка.",
       "entry": "audio-tools",
       "category": "classic-2d",
@@ -126,7 +126,7 @@
     },
     {
       "id": "input-tools",
-      "name": "Input Tools",
+      "name": "Управление",
       "description": "Действия и раскладка $.input. Клавишу можно назначить нажатием; тестер показывает нажатые действия настоящего рантайма.",
       "entry": "input-tools",
       "category": "classic-2d",
@@ -137,7 +137,7 @@
     },
     {
       "id": "rmlui-studio",
-      "name": "RmlUi Studio",
+      "name": "Редактор интерфейса RmlUi",
       "description": "Редактор .rml и .rcss: дерево элементов, свойства, живой предпросмотр настоящим RmlUi. Файлы остаются обычными.",
       "entry": "rmlui-studio",
       "category": "classic-2d",
@@ -149,7 +149,7 @@
     },
     {
       "id": "devtools",
-      "name": "DevTools",
+      "name": "Отладчик игры",
       "description": "Инспектор запущенной игры по агентскому протоколу движка: состояние, запросы по селекторам, профиль. Только чтение.",
       "entry": "devtools",
       "category": "devtools",
@@ -157,7 +157,7 @@
     },
     {
       "id": "automation",
-      "name": "Automation / Batch",
+      "name": "Пакетные операции",
       "description": "Пакетное запекание и проверка ассетов, машинные отчёты и сессии исходного агентского протокола движка.",
       "last_updated": "2026-10-08T21:40:00+03:00",
       "entry": "automation",
@@ -169,7 +169,7 @@
     },
     {
       "id": "code-check",
-      "name": "Code Check",
+      "name": "Проверка кода",
       "description": "Doctor/lint/validate проекта через native r2d-sdk; тот же backend, что CLI.",
       "last_updated": "2026-10-17T16:30:00+03:00",
       "entry": "code-check",
@@ -177,7 +177,7 @@
     },
     {
       "id": "api-browser",
-      "name": "API Browser",
+      "name": "Справочник API",
       "description": "Сгенерированная schema/API reference Russiano2D $ API.",
       "last_updated": "2026-10-17T16:30:00+03:00",
       "entry": "api-browser",
@@ -185,7 +185,7 @@
     },
     {
       "id": "vn-narrative",
-      "name": "Visual Novel Maker",
+      "name": "Редактор визуальной новеллы",
       "description": "Визуальный редактор story/*.scene: команды, выборы, персонажи, предпросмотр и нативная проверка narrative.",
       "entry": "vn-narrative",
       "category": "solutions",
@@ -199,7 +199,7 @@
     },
     {
       "id": "world-editor",
-      "name": "World Editor",
+      "name": "Hammer — редактор мира",
       "description": "Универсальный Hammer-like Re2D World Editor: 4 вьюпорта (Top/Front/Side/3D), brush/face/vertex/entity/path/visgroup, clip, инспектор по схемам, undo/redo, native world-edit, проверка/компиляция world info|compile, настоящий runtime preview и Build and Run.",
       "last_updated": "2026-10-19T19:00:00+03:00",
       "entry": "world-editor",
