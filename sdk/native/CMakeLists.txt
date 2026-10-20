@@ -20,6 +20,7 @@ set(R2D_SDK_SOURCES
     sdk_json.c
     sdk_image.c
     sdk_atlas.c
+    "${CMAKE_SOURCE_DIR}/src/sprite_mesh.c"
     sdk_world.c
     sdk_world_edit.c
     sdk_brush.c
@@ -74,6 +75,17 @@ if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_compile_options(r2d_sdk_core_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(r2d_sdk_core_test PRIVATE -fsanitize=address,undefined)
 endif()
+
+# Pixel-extrusion SpriteMesh primitive is shared by runtime and SDK baker.
+add_executable(r2d_sprite_mesh_test "${CMAKE_SOURCE_DIR}/tests/sdk/sprite_mesh_test.c"
+    "${CMAKE_SOURCE_DIR}/src/sprite_mesh.c")
+target_include_directories(r2d_sprite_mesh_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_sprite_mesh_test PRIVATE r2d_unity)
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_sprite_mesh_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_sprite_mesh_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_sprite_mesh_test COMMAND r2d_sprite_mesh_test)
 
 # Full SDK world compile pipeline: brush authoring fixture + backward compatibility.
 add_executable(r2d_sdk_world_compile_test "${CMAKE_SOURCE_DIR}/tests/sdk/world_compile_test.c")

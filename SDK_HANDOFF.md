@@ -640,3 +640,25 @@ Enhanced SDK `animation-import` to accept `--stack`; absent argument chooses the
 Agent runtime check confirms voice source playback/HRTF, caption text/visibility, imported pose, automatic talking→arguing→walkCircle cycle and controls at body yaw-58°/head yaw-32° facing player. Actual rendered frame `build/re2d_npc_conversation_final.png` was inspected after the RmlUi child-display fix: the HUD branding and monologue are legible without hiding the rest of the HUD. The importer/helper and SDK rebuild completed successfully; FBX source clips remain copied under demo `source/`, and the temporary per-clip import reports were removed after combining them into `npc.animations.json`. No broad test suite was run for this focused feature; validation was a direct Agent runtime playback and rendered-frame inspection. Restarted the visible demo from the current tree at T (PID71202); startup log confirms window title `Руссиано2Д · RE2D` and1920×1080 logical size (1920×1018 drawable). Captured and inspected initial frame `build/dust2_npc_visible.png`; `git diff --check` passed.
 
 2026-10-10 final HUD tweak: at user request removed the NPC monologue subtitle/notification overlay while retaining the proximity voice, animation cycling and look behavior. Replaced the HUD heading and native window title with the exact text `Руссиано2Д - РЕ2Д ТЕСТ 0.2`; removed the now-unused overlay markup, style and JS updates. Updated the demo README. Relaunch the visible demo from the current tree and capture a final frame; do not remove spatial audio.
+# Сессия 2026-10-20: SpriteMesh V1 — в работе
+
+Зафиксирован scope владельца: V1 включает полноценный Sprite/SpriteSheet/Atlas
+pipeline с meshes для каждого кадра, анимацией обычного Sprite, кэшем, отдельной
+RmlUi-тулзой SDK, bake, `$` API, проверками и demo. Работы по статическому PNG
+недостаточно. Существующие `$.atlas`, `$.anim`/`$.anim.player`, `.frame()` и
+`engine.submitMesh` — точки интеграции; новых scene/renderer/animation systems
+не добавлять.
+
+Начат первый этап: общий `src/sprite_mesh.c` генерирует per-pixel extrusion
+для отдельного atlas frame и выдаёт triangle list в формате существующего
+`engine.submitMesh`. Соседние пиксели за прямоугольником кадра считаются
+прозрачными, поэтому соседние кадры атласа геометрически изолированы.
+Покрыты тестами один пиксель, пустой кадр, threshold, горизонтальные и
+вертикальные соседи, цельный блок, frame isolation, depth/pivot и ошибочные
+границы. Проверка `r2d_sprite_mesh_test` проходит (5/5).
+
+Не завершено: cache serialization/invalidation, full atlas frame bake, runtime
+selection без rebuild, `$` property API/schema, SpriteMesh Tool/preview/playback,
+save workflow, integration test и sample. Текущая работа требует продолжения;
+не маркировать SpriteMesh V1 как готовый до закрытия всех пунктов.
+

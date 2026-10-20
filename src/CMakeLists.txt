@@ -32,6 +32,7 @@ set(R2D_SOURCES
     light.h    light.cpp
     app.h      app.c
     render.h   render.c
+    sprite_mesh.h sprite_mesh.c
     r2d_slot_pool.h r2d_slot_pool.c
     profile.h  profile.c
     physics.h  physics.c
