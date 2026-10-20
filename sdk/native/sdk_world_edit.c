@@ -2516,6 +2516,214 @@ static bool op_visgroup_state(EditCtx *c)
     return true;
 }
 
+// Low-level authoring sections share Hammer's transaction/file protocol.
+// Cross-object/topology validation remains in world info/compile, allowing
+// incomplete portals and drafts to be edited before the map is valid.
+static bool element_error(EditCtx *c, const char *section, const char *id, const char *message)
+{
+    edit_diag(c->rep, SDK_ERROR, "SDK_WORLD_EDIT_ELEMENT", c->file, section,
+              -1, id, NULL, "%s", message);
+    return false;
+}
+
+static const char *element_section(EditCtx *c)
+{
+    const char *section = r2d_json_str(r2d_json_get(c->args, "section"), "");
+    const char *allowed[] = {"cells", "walls", "portals", "stairs", "slopes", "lights"};
+    for (unsigned i = 0; i < sizeof allowed / sizeof allowed[0]; i++)
+        if (!strcmp(section, allowed[i])) return section;
+    element_error(c, NULL, NULL, "section: cells|walls|portals|stairs|slopes|lights");
+    return NULL;
+}
+
+static bool op_element_create(EditCtx *c)
+{
+    const char *section = element_section(c);
+    if (!section) return false;
+    R2dJson *arr = array_ensure(c, section);
+    const R2dJson *value = r2d_json_get(c->args, "value");
+    const char *id = r2d_json_str(r2d_json_get(value, "id"), NULL);
+    char generated[EDIT_MAX_ID];
+    if (!arr) return false;
+    if (!value || value->type != R2D_JSON_OBJ)
+        return element_error(c, section, NULL, "value должен быть объектом");
+    if (!id) { next_free_id(arr, section, generated, sizeof generated); id = generated; }
+    if (!id[0] || strlen(id) >= EDIT_MAX_ID || find_id_index(arr, id) >= 0)
+        return element_error(c, section, id, "id должен быть уникальной непустой строкой до 63 символов");
+    R2dJson *copy = j_clone(value);
+    if (!copy) return false;
+    if (!j_obj_set_str(copy, "id", id)) { r2d_json_free(copy); return false; }
+    if (!j_arr_push(arr, copy)) return false;
+    c->changed = true; result_id(c, id); return true;
+}
+
+static bool op_element_replace(EditCtx *c)
+{
+    const char *section = element_section(c);
+    if (!section) return false;
+    R2dJson *arr = array_get(c->root, section);
+    const char *id = r2d_json_str(r2d_json_get(c->args, "id"), NULL);
+    const int index = require_index(c, arr, section, id);
+    if (index < 0) return false;
+    const R2dJson *value = r2d_json_get(c->args, "value");
+    const char *next_id = r2d_json_str(r2d_json_get(value, "id"), NULL);
+    const int duplicate = find_id_index(arr, next_id);
+    if (!value || value->type != R2D_JSON_OBJ || !next_id || !next_id[0] ||
+        strlen(next_id) >= EDIT_MAX_ID || (duplicate >= 0 && duplicate != index))
+        return element_error(c, section, id, "value: нужен объект с уникальным непустым id до 63 символов");
+    R2dJson *copy = j_clone(value);
+    if (!copy) return false;
+    r2d_json_free(arr->items[index]); arr->items[index] = copy;
+    c->changed = true; result_id(c, next_id); return true;
+}
+
+static bool op_element_delete(EditCtx *c)
+{
+    const char *section = element_section(c);
+    if (!section) return false;
+    R2dJson *arr = array_get(c->root, section);
+    const char *id = r2d_json_str(r2d_json_get(c->args, "id"), NULL);
+    const int index = require_index(c, arr, section, id);
+    if (index < 0) return false;
+    j_arr_remove(arr, index); c->changed = true; result_id(c, id); return true;
+}
+
+static bool shift_number(R2dJson *v, double delta)
+{
+    if (!v || v->type != R2D_JSON_NUM || !isfinite(v->number + delta) ||
+        fabs(v->number + delta) > EDIT_LIMIT) return false;
+    v->number += delta; return true;
+}
+
+static bool shift_pair(R2dJson *v, double dx, double dy)
+{
+    return v && v->type == R2D_JSON_ARR && v->count >= 2 &&
+        shift_number(v->items[0], dx) && shift_number(v->items[1], dy);
+}
+
+static bool op_element_move(EditCtx *c)
+{
+    const char *section = element_section(c);
+    if (!section) return false;
+    const char *id = r2d_json_str(r2d_json_get(c->args, "id"), NULL);
+    R2dJson *arr = array_get(c->root, section);
+    const int index = require_index(c, arr, section, id);
+    if (index < 0) return false;
+    float dx = 0, dy = 0, dz = 0;
+    if (arg_number(c->args, "dx", &dx) == EDIT_ARG_BAD ||
+        arg_number(c->args, "dy", &dy) == EDIT_ARG_BAD ||
+        arg_number(c->args, "dz", &dz) == EDIT_ARG_BAD)
+        return element_error(c, section, id, "dx/dy/dz должны быть конечными числами в пределах карты");
+    R2dJson *obj = arr->items[index];
+    R2dJson *rect = (R2dJson *)r2d_json_get(obj, "rect");
+    R2dJson *from = (R2dJson *)r2d_json_get(obj, "from");
+    R2dJson *to = (R2dJson *)r2d_json_get(obj, "to");
+    bool ok;
+    if (!strcmp(section, "lights"))
+        ok = shift_number((R2dJson *)r2d_json_get(obj,"x"),dx) && shift_number((R2dJson *)r2d_json_get(obj,"y"),dy);
+    else if (rect) ok = shift_pair(rect, dx, dy);
+    else ok = shift_pair(from,dx,dy) && shift_pair(to,dx,dy);
+    if (!ok) return element_error(c, section, id, "Неверные координаты rect/from/to/x/y для переноса");
+    if (dz) {
+        const char *height_keys[] = {"bottom", "top", "h", "base"};
+        for (unsigned i=0;i<sizeof height_keys/sizeof height_keys[0];i++) {
+            R2dJson *v=(R2dJson *)r2d_json_get(obj,height_keys[i]);
+            if(v && !shift_number(v,dz))return element_error(c,section,id,"Неверная высота");
+        }
+        if(!strcmp(section,"slopes") && (!shift_number(from,dz)||!shift_number(to,dz)))
+            return element_error(c,section,id,"Неверная высота уклона");
+        const char *lists[]={"spans","openings"};
+        for(unsigned k=0;k<2;k++) {
+            R2dJson *list=array_get(obj,lists[k]);
+            if(list)for(int j=0;j<list->count;j++) {
+                R2dJson *span=list->items[j];
+                if(!shift_number((R2dJson *)r2d_json_get(span,"bottom"),dz)||
+                   !shift_number((R2dJson *)r2d_json_get(span,"top"),dz))
+                    return element_error(c,section,id,"Неверные высоты span/opening");
+            }
+        }
+    }
+    c->changed=dx||dy||dz;result_id(c,id);return true;
+}
+
+static bool json_equal(const R2dJson *a, const R2dJson *b)
+{
+    if(!a || !b)return a==b;
+    if(a->type!=b->type)return false;
+    if(a->type==R2D_JSON_NUM)return a->number==b->number;
+    if(a->type==R2D_JSON_STR)return !strcmp(a->string,b->string);
+    if(a->type==R2D_JSON_BOOL)return a->boolean==b->boolean;
+    if(a->count!=b->count)return false;
+    for(int i=0;i<a->count;i++)
+        if(!json_equal(a->items[i],a->type==R2D_JSON_OBJ?r2d_json_get(b,a->keys[i]):b->items[i]))return false;
+    return true;
+}
+
+static bool wall_points(const R2dJson *wall, double p[4])
+{
+    const R2dJson *from=r2d_json_get(wall,"from"),*to=r2d_json_get(wall,"to");
+    if(!from||!to||from->type!=R2D_JSON_ARR||to->type!=R2D_JSON_ARR||from->count!=2||to->count!=2)return false;
+    for(int i=0;i<4;i++) {
+        const R2dJson *v=i<2?from->items[i]:to->items[i-2];
+        if(v->type!=R2D_JSON_NUM||!isfinite(v->number)||fabs(v->number)>EDIT_LIMIT)return false;
+        p[i]=v->number;
+    }
+    return p[0]!=p[2]||p[1]!=p[3];
+}
+
+static bool set_point(R2dJson *obj,const char *key,double x,double y)
+{
+    R2dJson *p=j_arr();
+    if(!p)return false;
+    if(!j_arr_push(p,j_num(x))||!j_arr_push(p,j_num(y))){r2d_json_free(p);return false;}
+    return j_obj_set(obj,key,p);
+}
+
+static bool op_wall_split(EditCtx *c)
+{
+    R2dJson *arr=array_get(c->root,"walls");
+    const char *id=r2d_json_str(r2d_json_get(c->args,"id"),NULL);
+    int i=require_index(c,arr,"walls",id);if(i<0)return false;
+    R2dJson *wall=arr->items[i];double p[4];
+    if(!wall_points(wall,p))return element_error(c,"walls",id,"Стена должна иметь разные конечные точки from/to");
+    char next[EDIT_MAX_ID];next_free_id(arr,"walls",next,sizeof next);
+    R2dJson *copy=j_clone(wall);if(!copy)return false;
+    if(!j_obj_set_str(copy,"id",next)||!set_point(copy,"from",(p[0]+p[2])/2,(p[1]+p[3])/2)) {r2d_json_free(copy);return false;}
+    if(!j_arr_push(arr,copy)||!set_point(wall,"to",(p[0]+p[2])/2,(p[1]+p[3])/2))return false;
+    char *ids[]={(char *)id,next};c->changed=true;result_ids(c,"ids",ids,2);return true;
+}
+
+static bool op_wall_join(EditCtx *c)
+{
+    R2dJson *arr=array_get(c->root,"walls");
+    const char *id=r2d_json_str(r2d_json_get(c->args,"id"),NULL),*other=r2d_json_str(r2d_json_get(c->args,"other"),NULL);
+    int i=require_index(c,arr,"walls",id),j=require_index(c,arr,"walls",other);
+    if(i<0||j<0)return false;
+    if(i==j)return element_error(c,"walls",id,"Нужны две разные стены");
+    R2dJson *a=arr->items[i],*b=arr->items[j];double p[4],q[4],x0,y0,x1,y1;
+    if(!wall_points(a,p)||!wall_points(b,q))return element_error(c,"walls",id,"Неверные from/to стен");
+    for(int pass=0;pass<2;pass++) {
+        const R2dJson *src=pass?b:a,*dst=pass?a:b;
+        for(int k=0;k<src->count;k++) {
+            const char *key=src->keys[k];
+            if(!strcmp(key,"id")||!strcmp(key,"from")||!strcmp(key,"to"))continue;
+            if(!json_equal(src->items[k],r2d_json_get(dst,key)))
+                return element_error(c,"walls",id,"Свойства объединяемых стен должны совпадать");
+        }
+    }
+    if(p[2]==q[0]&&p[3]==q[1]){x0=p[0];y0=p[1];x1=q[2];y1=q[3];}
+    else if(p[0]==q[2]&&p[1]==q[3]){x0=q[0];y0=q[1];x1=p[2];y1=p[3];}
+    else if(p[0]==q[0]&&p[1]==q[1]){x0=q[2];y0=q[3];x1=p[2];y1=p[3];}
+    else if(p[2]==q[2]&&p[3]==q[3]){x0=p[0];y0=p[1];x1=q[0];y1=q[1];}
+    else return element_error(c,"walls",id,"У стен должен быть общий конец");
+    const double ax=p[2]-p[0],ay=p[3]-p[1],bx=q[2]-q[0],by=q[3]-q[1];
+    if(fabs(ax*by-ay*bx)>EDIT_EPS|| (x0==x1&&y0==y1))return element_error(c,"walls",id,"Нужны коллинеарные стены без перекрытия");
+    // Shared endpoint must be between the two outer endpoints.
+    if(hypot(x1-x0,y1-y0)+EDIT_EPS<hypot(ax,ay)+hypot(bx,by))return element_error(c,"walls",id,"Стены перекрываются");
+    if(!set_point(a,"from",x0,y0)||!set_point(a,"to",x1,y1))return false;
+    j_arr_remove(arr,j);c->changed=true;result_id(c,id);return true;
+}
+
 // ---------------------------------------------------------------------------
 // Диспетчер операций
 // ---------------------------------------------------------------------------
@@ -2553,6 +2761,12 @@ static const struct {
     {"path.delete", op_path_delete},
     {"visgroup.ensure", op_visgroup_ensure},
     {"visgroup.state", op_visgroup_state},
+    {"element.create", op_element_create},
+    {"element.replace", op_element_replace},
+    {"element.delete", op_element_delete},
+    {"element.move", op_element_move},
+    {"wall.split", op_wall_split},
+    {"wall.join", op_wall_join},
     {"noop", op_noop},
 };
 

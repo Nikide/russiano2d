@@ -83,6 +83,12 @@ r2d world-edit <file.re2dmap> --op <op> [--args JSON] [--out <file>]
 | `brush.clip` | `id`, `axis` x/y, `coordinate`, `keep` front/back/both | `ids` |
 | `face.set` | `id`, `face` side/floor/ceiling, `material`, `tags` | `id`, `face` |
 | `world.set` | поля world-конверта | — |
+| `element.create` | `section`, `value` (id опционален) | `id` |
+| `element.replace` | `section`, `id`, `value` (полный объект с id) | `id` |
+| `element.delete` | `section`, `id` | `id` |
+| `element.move` | `section`, `id`, `dx/dy/dz` | `id` |
+| `wall.split` | `id` (середина стены) | `ids` |
+| `wall.join` | `id`, `other` (общий конец, коллинеарность, одинаковые свойства) | `id` |
 | `entity.create/set/delete` | generic данные; неизвестные поля сохраняются | `id` |
 | `path.create/path.set/path.node.*` | `nodes`, `loop`, `oneWay`, `fields` (metadata) | `id`, `index` |
 | `visgroup.ensure/state` | `name`, `visible`, `locked` | `id` |
@@ -200,3 +206,11 @@ python3 tests/agent/sdk_studios_test.py      # реестр инструмент
 Полигональный mesh, sculpting, rigging и DCC-gizmo не добавляются. Материалы
 поверхностей — существующий compiler contract (tool policy), а не новая
 система. Runtime API не меняется: на выходе тот же `.re2dworld`.
+
+`element.*` редактирует существующие authoring-разделы `cells`, `walls`,
+`portals`, `stairs`, `slopes`, `lights` через тот же транзакционный backend.
+Replace принимает полный объект и допускает незавершённый черновик;
+топологию, spans и ссылки проверяет `world info/compile`. Move переносит
+XY-координаты и абсолютные высоты, сохраняя материалы и неизвестные поля.
+Split/Join выполняются в native; Join отклоняет различающиеся свойства стен,
+чтобы не терять материалы, теги и пользовательские поля.

@@ -505,6 +505,69 @@ static void test_usage_errors(void)
                                       "{\"ids\":[\"missing\"]}", map));
 }
 
+static void test_element_crud_and_transactions(void)
+{
+    char map[1200]; make_map("elements.re2dmap",map,sizeof map);
+    TEST_ASSERT_EQUAL_INT(0,run_edit(map,"element.create","{\"section\":\"cells\",\"value\":{\"id\":\"room\",\"rect\":[0,0,128,128],\"custom\":7,\"spans\":[{\"bottom\":0,\"top\":128}]}}",map));
+    TEST_ASSERT_EQUAL_INT(0,run_edit(map,"element.move","{\"section\":\"cells\",\"id\":\"room\",\"dx\":16,\"dy\":32,\"dz\":8}",map));
+    R2dJson *root=load_map(map);const R2dJson *cell=find_obj(r2d_json_get(root,"cells"),"room");
+    TEST_ASSERT_EQUAL_FLOAT(16,array_number(r2d_json_get(cell,"rect"),0,-1));
+    TEST_ASSERT_EQUAL_FLOAT(8,field_number(r2d_json_at(r2d_json_get(cell,"spans"),0),"bottom",-1));
+    TEST_ASSERT_EQUAL_FLOAT(7,field_number(cell,"custom",-1));
+    TEST_ASSERT_NOT_NULL(find_obj(r2d_json_get(root,"brushes"),"box.a"));r2d_json_free(root);
+    char *before=sdk_read_file(map,NULL);
+    TEST_ASSERT_EQUAL_INT(1,run_edit(map,"element.create","{\"section\":\"cells\",\"value\":{\"id\":\"room\"}}",map));
+    TEST_ASSERT_EQUAL_INT(1,run_edit(map,"element.replace","{\"section\":\"cells\",\"id\":\"room\",\"value\":{}}",map));
+    TEST_ASSERT_EQUAL_INT(1,run_edit(map,"element.delete","{\"section\":\"brushes\",\"id\":\"box.a\"}",map));
+    char *after=sdk_read_file(map,NULL);TEST_ASSERT_EQUAL_STRING(before,after);free(before);free(after);
+    TEST_ASSERT_EQUAL_INT(0,run_edit(map,"element.replace","{\"section\":\"cells\",\"id\":\"room\",\"value\":{\"id\":\"renamed\",\"custom\":9}}",map));
+    TEST_ASSERT_EQUAL_INT(0,run_edit(map,"element.delete","{\"section\":\"cells\",\"id\":\"renamed\"}",map));
+    root=load_map(map);TEST_ASSERT_EQUAL_INT(0,r2d_json_get(root,"cells")->count);r2d_json_free(root);
+}
+
+static void test_element_sections_and_height_move(void)
+{
+    char map[1200];make_map("element-heights.re2dmap",map,sizeof map);
+    const char *sections[]={"walls","portals","stairs","slopes","lights"};
+    const char *values[]={
+        "{\"id\":\"v\",\"from\":[0,0],\"to\":[64,0],\"bottom\":0,\"top\":128}",
+        "{\"id\":\"v\",\"from\":[0,0],\"to\":[0,64],\"openings\":[{\"bottom\":0,\"top\":96}]}",
+        "{\"id\":\"v\",\"rect\":[0,0,64,64],\"base\":0,\"rise\":8,\"top\":128}",
+        "{\"id\":\"v\",\"rect\":[0,0,64,64],\"from\":0,\"to\":64,\"top\":128}",
+        "{\"id\":\"v\",\"x\":0,\"y\":0,\"h\":32,\"radius\":64}"};
+    for(int i=0;i<5;i++) {
+        char args[512];snprintf(args,sizeof args,"{\"section\":\"%s\",\"value\":%s}",sections[i],values[i]);
+        TEST_ASSERT_EQUAL_INT(0,run_edit(map,"element.create",args,map));
+        snprintf(args,sizeof args,"{\"section\":\"%s\",\"id\":\"v\",\"dx\":16,\"dy\":32,\"dz\":8}",sections[i]);
+        TEST_ASSERT_EQUAL_INT(0,run_edit(map,"element.move",args,map));
+    }
+    R2dJson *root=load_map(map);
+    TEST_ASSERT_EQUAL_FLOAT(40,field_number(find_obj(r2d_json_get(root,"lights"),"v"),"h",-1));
+    TEST_ASSERT_EQUAL_FLOAT(72,field_number(find_obj(r2d_json_get(root,"slopes"),"v"),"to",-1));
+    TEST_ASSERT_EQUAL_FLOAT(8,field_number(find_obj(r2d_json_get(root,"stairs"),"v"),"base",-1));
+    const R2dJson *portal=find_obj(r2d_json_get(root,"portals"),"v");
+    TEST_ASSERT_EQUAL_FLOAT(104,field_number(r2d_json_at(r2d_json_get(portal,"openings"),0),"top",-1));
+    r2d_json_free(root);
+}
+
+static void test_wall_split_join_preserves_metadata(void)
+{
+    char map[1200];make_map("wall-split.re2dmap",map,sizeof map);
+    TEST_ASSERT_EQUAL_INT(0,run_edit(map,"element.create","{\"section\":\"walls\",\"value\":{\"id\":\"wall\",\"from\":[0,0],\"to\":[128,0],\"bottom\":0,\"top\":128,\"tags\":[\"stone\"],\"material\":{\"albedo\":\"a.png\"}}}",map));
+    TEST_ASSERT_EQUAL_INT(0,run_edit(map,"wall.split","{\"id\":\"wall\"}",map));
+    R2dJson *root=load_map(map);const R2dJson *walls=r2d_json_get(root,"walls");
+    TEST_ASSERT_EQUAL_INT(2,walls->count);
+    TEST_ASSERT_EQUAL_FLOAT(64,array_number(r2d_json_get(walls->items[0],"to"),0,-1));
+    TEST_ASSERT_NOT_NULL(r2d_json_get(walls->items[1],"material"));r2d_json_free(root);
+    TEST_ASSERT_EQUAL_INT(0,run_edit(map,"wall.join","{\"id\":\"wall\",\"other\":\"walls1\"}",map));
+    root=load_map(map);walls=r2d_json_get(root,"walls");TEST_ASSERT_EQUAL_INT(1,walls->count);
+    TEST_ASSERT_EQUAL_FLOAT(128,array_number(r2d_json_get(walls->items[0],"to"),0,-1));r2d_json_free(root);
+    TEST_ASSERT_EQUAL_INT(0,run_edit(map,"element.create","{\"section\":\"walls\",\"value\":{\"id\":\"different\",\"from\":[128,0],\"to\":[256,0],\"bottom\":0,\"top\":128,\"tags\":[\"metal\"]}}",map));
+    char *before=sdk_read_file(map,NULL);
+    TEST_ASSERT_EQUAL_INT(1,run_edit(map,"wall.join","{\"id\":\"wall\",\"other\":\"different\"}",map));
+    char *after=sdk_read_file(map,NULL);TEST_ASSERT_EQUAL_STRING(before,after);free(before);free(after);
+}
+
 int main(void)
 {
     const char *tmp = SDL_getenv("TMPDIR");
@@ -526,6 +589,9 @@ int main(void)
     RUN_TEST(test_visgroup_ensure_state);
     RUN_TEST(test_canonical_write_and_reload_round_trip);
     RUN_TEST(test_usage_errors);
+    RUN_TEST(test_element_crud_and_transactions);
+    RUN_TEST(test_element_sections_and_height_move);
+    RUN_TEST(test_wall_split_join_preserves_metadata);
     const int rc = UNITY_END();
     return rc;
 }
