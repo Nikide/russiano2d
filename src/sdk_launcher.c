@@ -11,6 +11,7 @@
 // ===========================================================================
 #include <SDL3/SDL.h>
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -157,6 +158,18 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; ++i) args[n++] = argv[i];
     args[n] = NULL;
 
+#ifdef __APPLE__
+    // In the Finder .app, keep the runtime in this process so macOS assigns
+    // its window to the app bundle (instead of a detached child process).
+    execv(engine, (char *const *)args);
+    {
+        char msg[1024];
+        snprintf(msg, sizeof msg, "Не удалось запустить движок: %s", strerror(errno));
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Russiano2D SDK", msg, NULL);
+    }
+    free(args);
+    return 1;
+#else
     SDL_Process *process = SDL_CreateProcess(args, false);
     free(args);
     if (!process) {
@@ -170,4 +183,5 @@ int main(int argc, char **argv)
     SDL_WaitProcess(process, true, &exit_code);
     SDL_DestroyProcess(process);
     return exit_code;
+#endif
 }
