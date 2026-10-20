@@ -29,7 +29,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import release  # noqa: E402
 
-PLATFORMS = ("macos-arm64", "macos-x86_64", "linux-x86_64", "windows-x86_64")
+# Linux x86_64 временно вне локального релиза (Zig-кросс зависает); платформа
+# собирается на целевой ОС. Вернуть в публикацию: R2D_BUILD_LINUX=1.
+PLATFORMS = ["macos-arm64", "macos-x86_64", "windows-x86_64"]
+if os.environ.get("R2D_BUILD_LINUX") == "1":
+    PLATFORMS.append("linux-x86_64")
 GITHUB_REPO = "Nikide/russiano2d"
 API_ACCEPT = "application/vnd.gitverse.object+json;version=1"
 
