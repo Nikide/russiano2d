@@ -85,7 +85,8 @@ $ API (runtime) → api dump → api.schema.json / russiano2d.d.ts / API referen
 
 `r2d-sdk validate [каталог]` проверяет проект перед запуском/build:
 
-* `project.json` (`R2D200`), наличие `main.js`;
+* `project.json` (`R2D200`), наличие `main.js`; формат 2 — `entry`, индекс
+  сцен и роли файлов (`R2D201`–`R2D206`, см. [FORMATS.md](FORMATS.md));
 * ссылки на ассеты в JS/RML/RCSS/JSON (`R2D100`);
 * известные ассеты через те же валидаторы, что CLI (`atlas/tilemap/audio/
   input/rmlui/re2dmap/...`);

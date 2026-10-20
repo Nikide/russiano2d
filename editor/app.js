@@ -167,6 +167,29 @@ export function createEditor($) {
 
     // --- проект и дерево --------------------------------------------------------
 
+    // Индекс project.json v2 (docs/FORMATS.md): точка входа, сцены, роли файлов.
+    // Для v1 — значения по умолчанию; Editor не угадывает сцены по коду.
+    function manifest() {
+        const j = (s.project && s.project.json) || {};
+        const v2 = j.format === 2;
+        const sc = v2 && j.scenes && typeof j.scenes === 'object' ? j.scenes : {};
+        return {
+            v2,
+            entry: v2 && typeof j.entry === 'string' && j.entry ? j.entry : 'main.js',
+            start: typeof sc.start === 'string' ? sc.start : null,
+            scenes: Array.isArray(sc.list) ? sc.list.filter((x) => typeof x === 'string' && x) : [],
+            roles: v2 && j.roles && typeof j.roles === 'object' ? j.roles : {},
+        };
+    }
+
+    // Роль из манифеста: id студии → студия, script/data → текст.
+    function roleStudio(path) {
+        const role = manifest().roles[path];
+        if (typeof role !== 'string') return undefined;
+        if (role === 'script' || role === 'data') return 'code';
+        return studioById(role) ? role : undefined;
+    }
+
     async function openProject(input) {
         const abs = absPath(input);
         const json = $.fs.readJSON(abs + '/project.json', null);
@@ -181,7 +204,8 @@ export function createEditor($) {
         doc.text('st-project', esc(s.project.title));
         $.window.title(s.project.title + ' — Russiano2D Editor');
         await refreshTree();
-        const entry = $.fs.exists(abs + '/main.js') ? 'main.js' : null;
+        const entryName = manifest().entry;
+        const entry = $.fs.exists(abs + '/' + entryName) ? entryName : null;
         if (entry) openFile(entry);
         renderAll();
         setStatus('проект открыт: ' + abs, 'ok');
@@ -256,6 +280,8 @@ export function createEditor($) {
     // --- вкладки --------------------------------------------------------------
 
     function kindOf(path) {
+        const role = roleStudio(path);
+        if (role) return role === 'code' ? 'code' : 'studio';
         if (studioFor(path)) return 'studio';
         const x = ext(path);
         if (IMAGE_EXT.includes(x)) return 'image';
@@ -274,6 +300,7 @@ export function createEditor($) {
             if (want !== have) { closeTab(tab.id); if (s.tabs.includes(tab)) return tab; tab = null; }
         }
         if (!tab) {
+            if (!as) as = roleStudio(relPath);
             const asStudio = as && as !== 'code' ? studioById(as) : null;
             const kind = as === 'code' ? 'code' : asStudio ? 'studio' : kindOf(relPath);
             tab = { id: relPath, path: relPath, kind, scrollTop: 0 };
@@ -434,6 +461,24 @@ export function createEditor($) {
         setStatus(errors ? 'проверка: ошибок ' + errors : 'проверка: ошибок нет', errors ? 'err' : 'ok');
     }
 
+    // project.json v1 → v2 через native `r2d migrate-project --write`, затем
+    // перечитать манифест и проверить проект.
+    async function migrateProject() {
+        if (!s.project) return;
+        const open = s.tabs.find((t) => t.path === 'project.json');
+        if (open && open.model && open.model.dirty) { setStatus('сначала сохраните project.json', 'err'); return; }
+        const res = await tool(['migrate-project', s.project.abs, '--write']);
+        const j = res.json || {};
+        if (!j.ok) { setStatus('migrate-project: ' + (((j.diagnostics || [])[0] || {}).message || res.error || 'ошибка'), 'err'); return; }
+        if (!j.changed) { setStatus('project.json уже v2', 'ok'); return; }
+        const json = $.fs.readJSON(full('project.json'), null);
+        if (json) s.project.json = json;
+        if (open && open.model) { closeTab(open.id); openFile('project.json'); }
+        setStatus('project.json переведён на v2: проверьте scenes.start', 'ok');
+        await validateProject();
+        renderAll();
+    }
+
     function allProblems() {
         const out = s.projectDiags.slice();
         for (const list of s.diags.values()) out.push(...list);
@@ -514,6 +559,7 @@ export function createEditor($) {
         { id: 'run', label: 'Запуск: запустить игру', keys: 'F5', run: () => run() },
         { id: 'stop', label: 'Запуск: остановить', keys: 'Shift+F5', run: () => stop() },
         { id: 'validate', label: 'Проект: проверить (r2d validate)', keys: '', run: () => validateProject() },
+        { id: 'migrate-project', label: 'Проект: перевести project.json на v2', keys: '', run: () => migrateProject() },
         { id: 'build', label: 'Проект: собрать игру (validate → build)', keys: 'Cmd/Ctrl+Shift+B', run: () => buildPackage() },
         { id: 'refresh', label: 'Проект: обновить дерево файлов', keys: '', run: () => refreshTree() },
         { id: 'projects', label: 'Проект: открыть другой (Project Manager)', keys: '', run: () => { closeAllTabs(true); s.project = null; showPM(); } },
@@ -686,9 +732,18 @@ export function createEditor($) {
             const p = s.project;
             html += inspectorField('Название', p.title) + inspectorField('Версия', p.version || '—') +
                 inspectorField('Окно', (p.width || 1280) + ' × ' + (p.height || 720)) +
-                inspectorField('Точка входа', 'main.js', 'open:main.js') +
-                inspectorField('Манифест', 'project.json', 'open:project.json') +
+                inspectorField('Точка входа', manifest().entry, 'open:' + manifest().entry) +
+                inspectorField('Манифест', 'project.json' + (manifest().v2 ? ' (v2)' : ''), 'open:project.json') +
                 inspectorField('Файлов', String(s.entries.length));
+            const m = manifest();
+            html += '</div><div class="insp-sec"><span class="insp-label">Сцены</span>';
+            if (m.scenes.length) {
+                for (const name of m.scenes)
+                    html += '<div class="tree-row" data-key="scene:' + esc(name) + '" style="padding-left: 4px;"><span class="tree-ico studio">' + icon('play_arrow') + '</span>' + esc(name) + (name === m.start ? '<span class="muted"> · старт</span>' : '') + '</div>';
+                html += '<span class="insp-note">Клик — запустить игру с этой сценой (--scene).</span>';
+            } else {
+                html += '<span class="insp-note">' + (m.v2 ? 'scenes.list пуст.' : 'Индекса сцен нет (project.json v1). Команда «Проект: перевести project.json на v2» построит его.') + '</span>';
+            }
         } else if (t.model) {
             const m = t.model, c = m.caret, list = s.diags.get(t.path) || [];
             html += inspectorField('Файл', t.path) + inspectorField('Язык', t.lang) +
@@ -852,6 +907,7 @@ export function createEditor($) {
         doc.on('insp-body', 'click', (id, ev, key) => {
             if (!key) return;
             if (key.startsWith('open:')) { openFile(key.slice(5)); focusCode(); }
+            else if (key.startsWith('scene:')) run({ scene: key.slice(6) });
             else if (key.startsWith('line:')) { const t = activeTab(); if (t && t.model) { t.model.goto(parseInt(key.slice(5), 10), 1); code.ensureCaretVisible(); focusCode(); } }
         });
 
@@ -973,6 +1029,7 @@ export function createEditor($) {
     doc.show();
     return {
         state: s, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
+        manifest, migrateProject,
         openPalette, closePalette, activeTab, closeTab, code, studios,
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
     };

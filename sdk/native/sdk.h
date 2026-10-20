@@ -362,6 +362,9 @@ int sdk_cmd_assets(const SdkArgs *a);
 int sdk_cmd_project(const SdkArgs *a);
 int sdk_cmd_projects(const SdkArgs *a);
 int sdk_cmd_validate(const SdkArgs *a);
+int sdk_cmd_migrate_project(const SdkArgs *a);
+// Имена сцен из $.scene.add('…') во всех .js проекта (с повторами, в порядке обхода).
+int sdk_project_scenes(const char *dir, char (*names)[128], int cap);
 int sdk_cmd_api(const SdkArgs *a);
 int sdk_cmd_lint(const SdkArgs *a);
 int sdk_cmd_doctor(const SdkArgs *a);

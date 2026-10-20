@@ -11,6 +11,12 @@
 //     "version": "1.0.0"
 //   }
 //
+// Формат 2 ("format": 2) добавляет индекс проекта (docs/FORMATS.md):
+//   "entry":  "main.js"                       — точка входа (по умолчанию main.js)
+//   "scenes": { "start": "menu", "list": [...] } — сцена при запуске без --scene
+//   "roles":  { "путь": "роль" }               — для редактора и validate
+// Без поля format файл считается версией 1 и читается как раньше.
+//
 // Все поля необязательны: чего нет — берётся из значений по умолчанию.
 // Файл читается и из папки проекта, и из груза собранной игры, поэтому имя
 // окна попадает в собранный бинарник само, без пересборки движка.
@@ -42,6 +48,10 @@ typedef struct R2dProject {
     // `$.sdk` к нативному бэкенду r2d-sdk (src/sdk_host.h). Обычным играм он
     // не нужен и по умолчанию выключен.
     bool tool_host;
+
+    int  format;            // 1 (нет поля) или 2
+    char entry[512];        // v2 "entry", пусто — main.js
+    char start_scene[128];  // v2 "scenes.start", пусто — нет
 } R2dProject;
 
 // Значения по умолчанию (пустой манифест).
@@ -53,6 +63,9 @@ void r2d_project_defaults(R2dProject *project);
 // входа в грузе (нужен, чтобы выбрать правильный project.json, если их
 // несколько). Возвращает true, если файл найден.
 bool r2d_project_load(R2dProject *project, const char *game_dir, const char *payload_entry);
+
+// Только диск: <dir>/project.json (для `build`, где груза нет).
+bool r2d_project_load_dir(R2dProject *project, const char *dir);
 
 #ifdef __cplusplus
 }

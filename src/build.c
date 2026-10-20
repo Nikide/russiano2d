@@ -15,6 +15,7 @@
 // docs/BUILD.md.
 // ===========================================================================
 
+#include "project.h"
 #include "crypto.h"
 #include "module_path.h"
 #include "payload.h"
@@ -855,6 +856,11 @@ int r2d_build_main(int argc, char **argv)
     // Точка входа: явная, иначе main.js в корне проекта, иначе единственный
     // main.js на уровень ниже (частый случай: корень репозитория + каталог игры).
     char entry_buf[512];
+    R2dProject manifest;
+    r2d_project_defaults(&manifest);
+    if (!entry && r2d_project_load_dir(&manifest, project) && manifest.entry[0]) {
+        entry = manifest.entry;   // project.json v2 "entry" вместо поиска main.js
+    }
     if (entry) {
         SDL_snprintf(entry_buf, sizeof entry_buf, "%s", entry);
     } else {

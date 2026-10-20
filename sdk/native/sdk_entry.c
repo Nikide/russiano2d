@@ -30,6 +30,7 @@ static const Command k_commands[] = {
     { "project",  sdk_cmd_project,  "сведения о проекте (project.json, main.js)" },
     { "projects", sdk_cmd_projects, "найти проекты под каталогом" },
     { "validate", sdk_cmd_validate, "проверить ассет, структурная диагностика" },
+    { "migrate-project", sdk_cmd_migrate_project, "project.json v1 → v2 (entry, scenes из $.scene.add); --write сохраняет" },
     { "api",      sdk_cmd_api,      "machine-readable $ API: dump/check/generate" },
     { "lint",     sdk_cmd_lint,     "API-aware линтер JS: $ API, коды R2D001…" },
     { "docs",     cmd_docs_generate, "generated $ API reference (docs generate)" },

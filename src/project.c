@@ -18,6 +18,7 @@ void r2d_project_defaults(R2dProject *project)
     SDL_zero(*project);
     project->width = 1280;
     project->height = 720;
+    project->format = 1;
 }
 
 // Ищет project.json в грузе: сначала рядом с точкой входа, потом любой.
@@ -100,6 +101,15 @@ static void apply_json(R2dProject *project, R2dJson *root, const char *source)
     const R2dJson *tool_host = r2d_json_get(root, "toolHost");
     if (tool_host && tool_host->type == R2D_JSON_BOOL) project->tool_host = tool_host->boolean;
 
+    const R2dJson *format = r2d_json_get(root, "format");
+    if (format && format->type == R2D_JSON_NUM && format->number == 2.0) project->format = 2;
+    if (project->format >= 2) {
+        read_string(root, "entry", project->entry, sizeof project->entry);
+        const R2dJson *scenes = r2d_json_get(root, "scenes");
+        if (scenes && scenes->type == R2D_JSON_OBJ)
+            read_string(scenes, "start", project->start_scene, sizeof project->start_scene);
+    }
+
     const int width  = read_int(root, "width", 0);
     const int height = read_int(root, "height", 0);
     if (width > 0) project->width = width;
@@ -148,6 +158,12 @@ bool r2d_project_load(R2dProject *project, const char *game_dir, const char *pay
     }
 
     // 2. Обычный проект: project.json рядом с точкой входа.
+    return r2d_project_load_dir(project, game_dir);
+}
+
+bool r2d_project_load_dir(R2dProject *project, const char *game_dir)
+{
+    if (!project) return false;
     if (game_dir && game_dir[0]) {
         char path[4096];
         SDL_snprintf(path, sizeof path, "%s/project.json", game_dir);

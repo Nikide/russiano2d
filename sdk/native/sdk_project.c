@@ -109,9 +109,22 @@ void sdk_project_validate(const char *dir, const char *schema_path, SdkReport *r
         return;
     }
     sdk_validate_file(project, "project", rep);
+    // project.json v2 сам проверяет свою точку входа (R2D202).
+    bool v2 = false;
+    {
+        size_t size = 0;
+        char *text = sdk_read_file(project, &size);
+        if (text) {
+            char err[128];
+            R2dJson *root = r2d_json_parse(text, err, sizeof err);
+            v2 = root && r2d_json_num(r2d_json_get(root, "format"), 1) == 2;
+            r2d_json_free(root);
+            free(text);
+        }
+    }
     char main_js[2048];
     snprintf(main_js, sizeof main_js, "%s/main.js", dir);
-    if (!sdk_file_exists(main_js)) {
+    if (!v2 && !sdk_file_exists(main_js)) {
         sdk_diag(rep, SDK_ERROR, "R2D100", dir, NULL, NULL,
                  "нет main.js — проект не запустится");
     }
@@ -132,4 +145,83 @@ void sdk_project_validate(const char *dir, const char *schema_path, SdkReport *r
     }
     PV pv = { dir, rep, 0 };
     SDL_EnumerateDirectory(dir, project_cb, &pv);
+}
+
+// ---------------------------------------------------------------------------
+// migrate-project [каталог] [--write]: project.json v1 → v2. Без --write только
+// печатает результат. Индекс сцен берётся из $.scene.add(...) в скриптах;
+// scenes.start не угадывается — его выбирает автор.
+// ---------------------------------------------------------------------------
+int sdk_cmd_migrate_project(const SdkArgs *a)
+{
+    const char *dir = sdk_arg_positional(a, 0);
+    if (!dir) dir = ".";
+    const bool write = sdk_arg_flag(a, "--write");
+    SdkReport rep;
+    sdk_report_init(&rep);
+
+    char path[2048];
+    snprintf(path, sizeof path, "%s/project.json", dir);
+    R2dSb text;
+    r2d_sb_init(&text);
+    bool changed = false;
+
+    R2dJson *root = NULL;
+    if (!sdk_file_exists(path)) {
+        sdk_diag(&rep, SDK_ERROR, "R2D200", path, NULL, NULL, "project.json не найден в «%s»", dir);
+    } else if ((root = sdk_load_json(path, &rep)) != NULL && root->type != R2D_JSON_OBJ) {
+        sdk_diag(&rep, SDK_ERROR, "SDK_PROJECT_ROOT", path, NULL, NULL, "project.json должен быть объектом");
+    } else if (root && r2d_json_num(r2d_json_get(root, "format"), 1) == 2) {
+        // Уже v2: ничего не делаем.
+    } else if (root) {
+        char names[256][128];
+        int n = sdk_project_scenes(dir, names, 256);
+        r2d_sb_puts(&text, "{\n  \"format\": 2");
+        for (int i = 0; i < root->count; ++i) {
+            const char *k = root->keys[i];
+            if (!strcmp(k, "format") || !strcmp(k, "entry") || !strcmp(k, "scenes") || !strcmp(k, "roles")) continue;
+            r2d_sb_puts(&text, ",\n  ");
+            r2d_sb_put_json_string(&text, k);
+            r2d_sb_puts(&text, ": ");
+            sdk_json_put_compact(&text, root->items[i]);
+        }
+        r2d_sb_puts(&text, ",\n  \"entry\": \"main.js\",\n  \"scenes\": { \"list\": [");
+        int written = 0;
+        for (int i = 0; i < n; ++i) {
+            bool dup = false;
+            for (int j = 0; j < i && !dup; ++j) dup = !strcmp(names[i], names[j]);
+            if (dup) continue;
+            r2d_sb_puts(&text, written++ ? ", " : "");
+            r2d_sb_put_json_string(&text, names[i]);
+        }
+        r2d_sb_puts(&text, "] }\n}\n");
+        changed = true;
+        char main_js[2048];
+        snprintf(main_js, sizeof main_js, "%s/main.js", dir);
+        if (!sdk_file_exists(main_js))
+            sdk_diag(&rep, SDK_WARNING, "R2D202", path, "{\"field\":\"entry\"}", NULL,
+                     "main.js нет — поправьте entry после миграции");
+        if (write && !sdk_write_file(path, text.data, text.len))
+            sdk_diag(&rep, SDK_ERROR, "SDK_IO", path, NULL, NULL, "не удалось записать project.json");
+    }
+    r2d_json_free(root);
+
+    R2dSb out;
+    r2d_sb_init(&out);
+    r2d_sb_printf(&out, "{\"ok\":%s,\"changed\":%s,\"written\":%s,",
+                  rep.errors == 0 ? "true" : "false", changed ? "true" : "false",
+                  changed && write && rep.errors == 0 ? "true" : "false");
+    sdk_put_kv_str(&out, "project", path);
+    r2d_sb_putc(&out, ',');
+    sdk_put_kv_str(&out, "manifest", changed ? text.data : NULL);
+    r2d_sb_putc(&out, ',');
+    sdk_report_put(&rep, &out);
+    r2d_sb_putc(&out, '}');
+    puts(out.data);
+    fflush(stdout);
+    const int rc = rep.errors == 0 ? 0 : 1;
+    r2d_sb_free(&out);
+    r2d_sb_free(&text);
+    sdk_report_free(&rep);
+    return rc;
 }

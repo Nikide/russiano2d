@@ -38,7 +38,7 @@
 | Problems | `r2d lint` при открытии и сохранении `.js`, `r2d validate` проекта; щелчок открывает файл на строке |
 | Run/Stop | `r2d --game <проект>` (несохранённое сохраняется), вывод — в Output |
 | Build | validate → `r2d build <проект> --out <проект>/dist/<имя>`; ошибки validate останавливают сборку |
-| Inspector | проект (`project.json`), файл (язык, строки, состояние, проблемы) и навигация по тексту: `$.scene.add(…)`, `id: …` |
+| Inspector | проект (`project.json`; для v2 — точка входа и сцены, клик по сцене запускает игру с `--scene`), файл (язык, строки, состояние, проблемы) и навигация по тексту: `$.scene.add(…)`, `id: …` |
 | Изображения | просмотр PNG/JPG с размером |
 | VN Maker (`.scene`, `.story`) | студия Editor `editor/studios/narrative.js`, отдельные документ и история на вкладку (`ui/studios/narrative.rml`); Script/Source/Preview/Inspector, метки/сцены/персонажи/ассеты/темы/i18n. Save/Undo/Redo — Editor; Play — несохранённый буфер через `$.story`/`$.dialog` без автосохранения, Esc/конец/закрытие — назад; Validate Story — native проверка временного черновика в Problems. Подробности: [VN_MAKER.md](VN_MAKER.md) |
 | Atlas (`.atlas.json`, PNG без атласа) | студия Editor `editor/studios/atlas.js`: режимы Sprite и Animation одной вкладки и одной истории. Sprite — выбор/рисование/перенос кадра мышью, пивот, сдвиг стрелками, сетка пикселей, зум к курсору, инспектор кадра; Animation — теги (диапазон, direction, loop, длительность), проигрывание путём игры (`$.atlas` → `.frames().animate()`), лента кадров, скорость, шаг. Нарезка — `r2d atlas-grid` во временный файл и одна правка с undo; проверка черновика — `r2d validate`; запись — канонический вывод `atlas_model.js`, нетронутый файл не переписывается |
@@ -76,7 +76,6 @@ Sprite, `.re2dmap` — Hammer, `.rml` — RmlUi). Палитра команд (`
 * у студий данных террейны/анимации Tilemap и `effectParams` шины Audio пока
   правятся JSON-полями;
 * поиска по проекту (боковая «Search») нет — открывается Quick Open;
-* `project.json` v2 (индекс сцен/ролей) не введён;
 * линт несохранённого буфера не делается: Problems отражают файл на диске;
 * IME-композиция в коде не показывается (ввод — завершённый текст).
 
@@ -216,3 +215,12 @@ albedo/normal применяется кнопкой «Материал PNG (то
 `world_editor_test.py` и `sdk_world_studio_test.py` подтверждают совместимость
 старого SDK; xmake-сборка, lint/validate Editor и четыре стража документации прошли. Снимок:
 `build/editor-hammer-world.png`. Ручной прогон на других ОС не выполнен.
+
+## project.json v2 в Editor
+
+Editor читает индекс `project.json` v2 ([FORMATS.md](FORMATS.md)): при открытии
+проекта открывается `entry`, Inspector показывает `scenes.list` (клик — запуск
+с `--scene`), `roles` выбирает студию или текстовый редактор для файла. Команда
+палитры «Проект: перевести project.json на v2» вызывает native
+`r2d migrate-project --write` и затем `validate`. Приёмка:
+`tests/agent/editor_project_v2_test.py` (9 проверок).

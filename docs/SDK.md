@@ -114,7 +114,8 @@ Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `co
 | `assets <каталог> [--registry f]` | ассеты по реальной файловой структуре: путь, тип, размер, mtime, инструмент |
 | `project <каталог>` | `project.json` и `main.js`: название, версия, размер окна |
 | `projects <каталог>` | проекты (каталоги с `project.json`) под каталогом |
-| `validate [каталог] [--project dir] [--type t]` | проект (project.json/main.js/asset refs/lint) или отдельный ассет |
+| `validate [каталог] [--project dir] [--type t]` | проект (project.json v1/v2 `R2D200–206`/entry/asset refs/lint) или отдельный ассет |
+| `migrate-project [каталог] [--write]` | `project.json` v1 → v2: `entry`, `scenes.list` из `$.scene.add` ([FORMATS.md](FORMATS.md)) |
 | `api dump [--game dir] [--engine path]` | machine-readable снимок публичного `$` API из живого runtime |
 | `api check [--schema f]` | структурная проверка снимка + свежесть `api.schema.json` |
 | `api generate [--out-dir dir]` | записать `api.schema.json` и `russiano2d.d.ts` из runtime metadata |

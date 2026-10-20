@@ -962,20 +962,22 @@ int main(int argc, char **argv)
     // точка входа берётся из него, а не из --game.
     const bool has_payload = r2d_payload_attach_self();
 
-    // Точка входа выбранной игры: <--game>/main.js
-    char entry_relative[1024];
-    if (has_payload && r2d_payload_entry()[0]) {
-        SDL_snprintf(entry_relative, sizeof entry_relative, "%s", r2d_payload_entry());
-    } else {
-        SDL_snprintf(entry_relative, sizeof entry_relative, "%s/main.js", opt_game);
-    }
-
-    R2DApp app;
     // Имя окна и размер: флаги командной строки старше манифеста проекта,
     // манифест — старше значений по умолчанию. Манифест ищется и в папке
     // проекта, и внутри собранной игры.
     R2dProject project;
     r2d_project_load(&project, opt_game, r2d_payload_entry());
+
+    // Точка входа выбранной игры: <--game>/<entry манифеста v2 | main.js>
+    char entry_relative[1024];
+    if (has_payload && r2d_payload_entry()[0]) {
+        SDL_snprintf(entry_relative, sizeof entry_relative, "%s", r2d_payload_entry());
+    } else {
+        SDL_snprintf(entry_relative, sizeof entry_relative, "%s/%s", opt_game,
+                     project.entry[0] ? project.entry : "main.js");
+    }
+
+    R2DApp app;
     // Мост инструментов SDK включается только манифестом проекта (src/sdk_host.h).
     r2d_sdk_host_enable(project.tool_host);
 
@@ -1002,7 +1004,8 @@ int main(int argc, char **argv)
     // здесь, и только потом в base_path (там встроенные шрифты движка).
     r2d_app_set_game_path(&app, opt_game);
 
-    app.start_scene = opt_scene;   // читается скриптовым слоем как engine.startScene
+    // --scene старше манифеста v2 ("scenes.start"); читается как engine.startScene.
+    app.start_scene = opt_scene ? opt_scene : (project.start_scene[0] ? project.start_scene : NULL);
     app.fixed_dt = (float)opt_fixed_dt;
     app.take_screenshot = (opt_screenshot != NULL);
     app.screenshot_path = opt_screenshot;

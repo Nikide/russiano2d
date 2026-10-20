@@ -315,6 +315,57 @@ def main():
         check(ok is False and any(isinstance(c, str) and "AUDIO_FILE_MISSING" in c for c in codes),
               "отсутствующий звуковой файл выявляется валидатором (%s)" % codes)
 
+        # --- project.json v2: entry, scenes, roles (R2D201..R2D206) ---------
+        v2 = os.path.join(tmp, "v2")
+        os.makedirs(os.path.join(v2, "src"), exist_ok=True)
+        with open(os.path.join(v2, "src", "game.js"), "w", encoding="utf-8") as f:
+            f.write("$.scene.add('menu', () => {});\n$.scene.add(\"level1\", () => {});\n")
+        with open(os.path.join(v2, "hud.rml"), "w", encoding="utf-8") as f:
+            f.write("<rml><head></head><body></body></rml>\n")
+        good_v2 = {"format": 2, "title": "v2", "entry": "src/game.js",
+                   "scenes": {"start": "menu", "list": ["menu", "level1"]},
+                   "roles": {"hud.rml": "rmlui"}}
+        write_fixture(v2, "project.json", good_v2)
+        ok, codes, raw = validate(os.path.join(v2, "project.json"), "project")
+        check(ok is True and not codes, "project.json v2 без замечаний (%s)" % (codes or "чисто"))
+
+        def v2_case(patch, want, label):
+            data = json.loads(json.dumps(good_v2)); data.update(patch)
+            write_fixture(v2, "project.json", data)
+            ok_c, codes_c, raw_c = validate(os.path.join(v2, "project.json"), "project")
+            check(want in codes_c, "%s → %s (%s)" % (label, want, codes_c or raw_c[:80]))
+
+        v2_case({"format": 3}, "R2D201", "неизвестный format")
+        v2_case({"entry": "нет.js"}, "R2D202", "точка входа не найдена")
+        v2_case({"entry": "../x.js"}, "R2D202", "entry вне проекта")
+        v2_case({"scenes": {"start": "boss", "list": ["menu", "level1"]}}, "R2D203", "start не в list")
+        v2_case({"scenes": {"list": ["menu", "menu", "level1"]}}, "R2D203", "сцена дважды")
+        v2_case({"scenes": {"list": ["menu", "level1", "ghost"]}}, "R2D204", "сцена без $.scene.add")
+        v2_case({"scenes": {"list": ["menu"]}}, "R2D204", "$.scene.add без индекса")
+        v2_case({"roles": {"нет.rml": "rmlui"}}, "R2D205", "роль для несуществующего файла")
+        v2_case({"roles": {"hud.rml": "банан"}}, "R2D206", "неизвестная роль")
+        data = dict(good_v2); del data["format"]
+        write_fixture(v2, "project.json", data)
+        ok, codes, raw = validate(os.path.join(v2, "project.json"), "project")
+        check("R2D201" in codes, "поля v2 без format=2 — предупреждение R2D201 (%s)" % codes)
+
+        # migrate-project: v1 → v2, сцены из кода, --write.
+        write_fixture(v2, "project.json", {"title": "v1", "width": 320, "toolHost": False})
+        with open(os.path.join(v2, "main.js"), "w", encoding="utf-8") as f:
+            f.write("$.ready(() => {});\n")
+        mig = json.loads(subprocess.run([SDK, "migrate-project", v2], capture_output=True,
+                                        text=True, timeout=30).stdout or "{}")
+        man = json.loads(mig.get("manifest") or "{}")
+        check(mig.get("written") is False and man.get("format") == 2 and man.get("width") == 320
+              and man.get("toolHost") is False
+              and sorted(man.get("scenes", {}).get("list", [])) == ["level1", "menu"],
+              "migrate-project строит v2 без записи (%s)" % man)
+        subprocess.run([SDK, "migrate-project", v2, "--write"], capture_output=True, timeout=30)
+        with open(os.path.join(v2, "project.json"), encoding="utf-8") as f:
+            check(json.load(f).get("format") == 2, "migrate-project --write записывает v2")
+        ok, codes, raw = validate(os.path.join(v2, "project.json"), "project")
+        check(ok is True and not codes, "мигрированный проект проходит validate (%s)" % (codes or "чисто"))
+
     print("\nВсе проверки пройдены" if not FAILURES else f"\nПРОВАЛЕНО: {len(FAILURES)}")
     for line in FAILURES:
         print("  - " + line)
