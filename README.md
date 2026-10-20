@@ -38,7 +38,12 @@ xmake build -y
 
 ./build-xmake/macos-arm64/macosx/arm64/release/russiano2d --game game
 ./build-xmake/macos-arm64/macosx/arm64/release/russiano2d --game sdk   # SDK
+open "build-xmake/macos-arm64/macosx/arm64/release/Russiano2D SDK.app" # Finder app
 ```
+
+Xmake собирает CLI-бинарники и Finder-приложение `Russiano2D SDK.app` с
+вложенными SDK-ресурсами и нативным backend. Целевую сборку приложения можно
+запустить отдельно: `xmake build -y russiano2d-sdk-app`.
 
 В репозитории `game/` — платформер (рабочий пример). В **релизных пакетах**
 игра по умолчанию — демо визуальной новеллы «Руси-тян: Бака!» (`game_vn/`).

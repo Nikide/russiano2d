@@ -68,8 +68,8 @@ Release version [1.2.14]:
 
 ```text
 dist/
-    macos-arm64/      {russiano2d, r2d-sdk, russiano2d-sdk}
-    macos-x86_64/
+    macos-arm64/      {russiano2d, r2d-sdk, russiano2d-sdk, Russiano2D SDK.app}
+    macos-x86_64/     {russiano2d, r2d-sdk, russiano2d-sdk, Russiano2D SDK.app}
     windows-x86_64/   {*.exe}
     russiano2d-vX.Y.Z-macos-arm64.tar.gz
     russiano2d-vX.Y.Z-macos-x86_64.tar.gz
@@ -82,6 +82,9 @@ Linux x86_64 из локального релиза временно исклю�
 `xmake f -p linux -a x86_64 -m release -o build-linux && xmake build -y`.
 
 Имена архивов сохраняют существующий контракт `release.archive_name()`.
+macOS-архив также содержит `Russiano2D SDK.app`: Finder-запускатель включает
+runtime, native backend и копию SDK-ресурсов. CLI-бинарники остаются в корне
+пакета для запуска игр и автоматизации.
 
 В пакетах игра по умолчанию — демо VN `game_vn/` (внутри пакета это `game/`); платформер из корневого `game/` в релиз не попадает.
 

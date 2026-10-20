@@ -395,7 +395,7 @@ target("r2d-sdk")
               "src/re2d_world_visibility.c", "src/re2d_world_hint.c", "src/re2d_world_bake.c",
               "src/re2d_world_semantic.c", "src/re2d_world_metadata.c", "src/re2d_world_polygon.c",
               "src/re2d_world_light.c", "src/re2d_world_material.c", "src/re2d_world_render_features.c",
-              "src/re2d_math.c", "src/bsp.c", "src/json.c")
+              "src/re2d_math.c", "src/sprite_mesh.c", "src/bsp.c", "src/json.c")
     add_includedirs("sdk/native", "src")
     add_defines("R2D_SDK_VERSION=\"1.2.13\"")
     add_cflags("-include stdio.h -include ctype.h -include string.h -include stdlib.h")
@@ -403,3 +403,21 @@ target("r2d-sdk")
     if is_plat("mingw", "windows") then
         add_syslinks("ws2_32", "iphlpapi")
     end
+
+if is_plat("macosx") then
+    target("russiano2d-sdk-app")
+        set_kind("phony")
+        add_deps("russiano2d", "russiano2d-sdk", "r2d-sdk")
+        after_build(function (target)
+            local outdir = target:dep("russiano2d"):targetdir()
+            local app = path.join(outdir, "Russiano2D SDK.app")
+            os.execv("python3", {
+                path.join(os.projectdir(), "tools/package_macos_sdk_app.py"),
+                "--app", app,
+                "--engine", target:dep("russiano2d"):targetfile(),
+                "--launcher", target:dep("russiano2d-sdk"):targetfile(),
+                "--backend", target:dep("r2d-sdk"):targetfile(),
+                "--source-root", os.projectdir()
+            })
+        end)
+end

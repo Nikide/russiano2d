@@ -23,6 +23,13 @@ for name in ['russiano2d', 'r2d-sdk']:
     if not target.exists():
         source=next(build.rglob(name+suffix))
         shutil.copy2(source,target)
+if a.platform.startswith('macos'):
+    app=next(build.rglob('Russiano2D SDK.app'))
+    destination=build/'Russiano2D SDK.app'
+    if app.resolve() != destination.resolve():
+        if destination.exists():
+            shutil.rmtree(destination)
+        shutil.copytree(app,destination)
 for dll in list(build.rglob('*.dll')):
     if dll.parent != build:
         shutil.copy2(dll,build/dll.name)

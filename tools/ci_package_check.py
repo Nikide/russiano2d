@@ -107,6 +107,13 @@ def main():
         check(binary in flat, "исполняемый файл %s в корне" % binary)
     for required in REQUIRED:
         check(required in flat, "обязательный файл %s" % required)
+    if (args.platform or "").startswith("macos"):
+        for required in ("Russiano2D SDK.app/Contents/Info.plist",
+                         "Russiano2D SDK.app/Contents/MacOS/russiano2d-sdk",
+                         "Russiano2D SDK.app/Contents/MacOS/russiano2d",
+                         "Russiano2D SDK.app/Contents/MacOS/r2d-sdk",
+                         "Russiano2D SDK.app/Contents/Resources/sdk/project.json"):
+            check(required in flat, "Finder SDK app содержит %s" % required)
 
     junk = sorted(n for n in flat if any(part in n for part in FORBIDDEN_PARTS))
     check(not junk, "в пакете нет мусора ОС/сборки" + (" (%s)" % ", ".join(junk[:5]) if junk else ""))

@@ -385,6 +385,9 @@ def collect_runtime_files(
     launcher = os.path.join(os.path.dirname(binary), 'russiano2d-sdk' + suffix)
     if os.path.exists(launcher):
         files.append((launcher, 'russiano2d-sdk' + suffix))
+    macos_app = os.path.join(os.path.dirname(binary), 'Russiano2D SDK.app')
+    if os.path.isdir(macos_app):
+        files.append((macos_app, 'Russiano2D SDK.app'))
     for name in package_root_entries():
         files.append((name, name))
     for name in DOC_FILES:
@@ -756,6 +759,10 @@ def package_platform(
     sdk_binary = os.path.join(ROOT, os.path.dirname(binary), 'r2d-sdk' + suffix)
     if not os.path.isfile(sdk_binary):
         raise SystemExit('ошибка: SDK backend не найден: %s; соберите r2d-sdk' % sdk_binary)
+    if PLATFORMS[platform_name][0] == 'macos':
+        app_bundle = os.path.join(ROOT, os.path.dirname(binary), 'Russiano2D SDK.app')
+        if not os.path.isdir(app_bundle):
+            raise SystemExit('ошибка: macOS app не найден: %s; соберите russiano2d-sdk-app' % app_bundle)
     if not runner.dry_run:
         executables = [os.path.join(ROOT, binary), sdk_binary]
         for executable in executables:
@@ -778,6 +785,10 @@ def package_platform(
         source_lib = os.path.join(os.path.dirname(binary_abs), 'lib')
         if os.path.isdir(source_lib):
             shutil.copytree(source_lib, os.path.join(staged, 'lib'), dirs_exist_ok=True)
+        source_app = os.path.join(os.path.dirname(binary_abs), 'Russiano2D SDK.app')
+        if os.path.isdir(source_app):
+            shutil.copytree(source_app, os.path.join(staged, 'Russiano2D SDK.app'),
+                            dirs_exist_ok=True)
         binary = os.path.join(staged, os.path.basename(binary))
 
     if os.path.isdir(target) and os.listdir(target) and not force:

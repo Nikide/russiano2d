@@ -7,7 +7,8 @@
 # Linux x86_64 — только opt-in R2D_BUILD_LINUX=1: локальная Zig-кросс-сборка
 # на машине релиза виснет, Linux-пользователи собирают движок на своей ОС.
 #
-# Выход: dist/<platform>/{russiano2d,r2d-sdk,russiano2d-sdk}[.exe]
+# Выход: dist/<platform>/{russiano2d,r2d-sdk,russiano2d-sdk}[.exe] и
+# macOS app bundle Russiano2D SDK.app.
 # Финальные архивы собирает tools/release.py (--package-only) в dist/.
 #
 # Пока xmake.lua отсутствует (миграция не завершена), скрипт честно падает с
@@ -98,7 +99,17 @@ build_target() {
         cp -f "$src" "dist/$platform/${name}${suffix}"
         found=$((found + 1))
     done
-    echo "  ok  $platform: $found бинарника -> dist/$platform"
+    if [[ "$platform" == macos-* ]]; then
+        local app
+        app="$(find "$builddir" -type d -name 'Russiano2D SDK.app' -prune -print -quit)"
+        if [ -z "$app" ]; then
+            fail "не найден Russiano2D SDK.app после сборки $platform"
+        fi
+        rm -rf "dist/$platform/Russiano2D SDK.app"
+        cp -R "$app" "dist/$platform/Russiano2D SDK.app"
+        found=$((found + 1))
+    fi
+    echo "  ok  $platform: $found артефакта -> dist/$platform"
 }
 
 if [ "$DRY_RUN" = "1" ]; then

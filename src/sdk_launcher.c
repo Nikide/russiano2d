@@ -69,8 +69,20 @@ int main(int argc, char **argv)
     // 1. sdk/ рядом с лаунчером (пакет), 2. вверх по дереву (build/ репозитория),
     // 3. sdk/ в текущем каталоге / вверх от него.
     char sdk_dir[4096] = {0};
+    // Стандартный macOS app bundle: SDK-проект лежит в
+    // <app>/Contents/Resources/sdk, а runtime — рядом с launcher в MacOS/.
+    char contents_dir[4096];
+    dirname_of(exe_dir, contents_dir, sizeof contents_dir);
+    char bundled_sdk[4096];
+    snprintf(bundled_sdk, sizeof bundled_sdk, "%s/Resources/sdk", contents_dir);
+    char bundled_project[4096];
+    snprintf(bundled_project, sizeof bundled_project, "%s/project.json", bundled_sdk);
+    if (is_file(bundled_project)) {
+        snprintf(sdk_dir, sizeof sdk_dir, "%s", bundled_sdk);
+    }
+
     const char *starts[2] = { exe_dir, cwd };
-    for (int si = 0; si < 2; ++si) {
+    for (int si = 0; si < 2 && !sdk_dir[0]; ++si) {
         const char *start = starts[si];
         if (!start || !*start) continue;
         char cur[4096];
@@ -101,6 +113,12 @@ int main(int argc, char **argv)
     const char *exe_name = "russiano2d";
 #endif
     snprintf(engine, sizeof engine, "%s/%s", exe_dir, exe_name);
+    if (!is_file(engine)) {
+        // SDL_GetBasePath() on macOS app bundles points to Resources rather
+        // than MacOS on some launch paths. Resolve the sibling runtime from
+        // the standard Contents/MacOS directory in that case.
+        snprintf(engine, sizeof engine, "%s/MacOS/%s", contents_dir, exe_name);
+    }
     if (!is_file(engine)) {
         char parent[4096];
         dirname_of(exe_dir, parent, sizeof parent);
