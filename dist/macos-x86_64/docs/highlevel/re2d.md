@@ -256,7 +256,8 @@ budget (soft cap, over-budget виден в диагностике).
 
 ```js
 world.streamConfig({ residentBytes: 6 * 1024 * 1024, residentItems: 4,
-                     uploadBytes: 0, uploadItems: 0, promoteItems: 4 });
+                     uploadBytes: 0, uploadItems: 0, promoteItems: 4,
+                     warnGrace: 30 });   // кадров до R2D_ATLAS_NOT_RESIDENT; 0 — предупреждать сразу
 world.atlasPin('assets/peds/ped_0.png', true);   // явный pin по пути (или по id)
 world.atlasPin(0, false);
 
@@ -302,7 +303,11 @@ world.takeStreamWarnings();   // copy and clear the ring
   `$.debug.reportError('re2d.stream', …, {code:'R2D_ATLAS_NOT_RESIDENT'})`, один
   раз на атлас до восстановления residency. Сообщение содержит path, bytes,
   cell/grid, node id, state и reason; `$.debug.errors()` поэтому называет
-  конкретный атлас и узел.
+  конкретный атлас и узел. Первые **30 upload-тактов** после появления атласа в
+  кадре предупреждение подавляется: асинхронная загрузка ещё идёт, и это норма,
+  а не потерянный спрайт. Если атлас остаётся видимым и нерезидентным дольше,
+  запись появляется (и по-прежнему один раз на эпизод). Порог настраивается
+  `streamConfig({ warnGrace: N })` (0 — предупреждать сразу; по умолчанию 30).
 * Пока атлас не резидентен, его изображение не рисуется (GPU residency gate),
   и его contact/ground shadow тоже подавляется — тени без спрайта нет.
   Счётчики: `visibleAtlasBlocked`, `groundShadowsSuppressed`, а также

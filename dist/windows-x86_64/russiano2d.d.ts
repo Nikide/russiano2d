@@ -23,6 +23,7 @@ declare interface R2DNode {
     angleTo(): any;
     angularVelocity(arg0: any): any;
     animate(arg0: any): any;
+    animations(arg0: any): any;
     append(arg0: any, arg1: any): any;
     appendTo(arg0: any, arg1: any): any;
     applyForce(arg0: any, arg1: any): any;
@@ -118,7 +119,7 @@ declare interface R2DNode {
     html(arg0: any): any;
     hurtbox(arg0: any, arg1: any): any;
     inputValue(arg0: any): any;
-    inside(): any;
+    inside(arg0: any): any;
     intensity(arg0: any): any;
     interaction(arg0: any, arg1: any): any;
     invulnerable(arg0: any): any;
@@ -310,6 +311,7 @@ declare interface R2DNode {
     textStyle(arg0: any): any;
     theme(arg0: any): any;
     tileAnimation(): any;
+    tileAnimations(): any;
     tileAt(): any;
     tileLayer(arg0: any): any;
     tileOccluders(arg0: any): any;
@@ -796,6 +798,7 @@ interface R2D_cutscene {
 interface R2D_debug {
     _render(): any;
     anatomy(arg0: any): any;
+    budget(arg0: any): any;
     classify(arg0: any): any;
     clearErrors(): any;
     contacts(arg0: any): any;
@@ -818,6 +821,8 @@ interface R2D_debug {
     render(): any;
     report(): any;
     reportError(arg0: any, arg1: any, arg2: any): any;
+    resources(arg0: any): any;
+    resourcesResetPeaks(): any;
     stats(): any;
     textures(): any;
     toggle(): any;
@@ -843,8 +848,10 @@ interface R2D_devtools {
     consoleRun(arg0: any): any;
     copyJs(): any;
     copyNodeId(): any;
+    copyOverride(): any;
     copyReport(arg0: any): any;
     copySelector(): any;
+    editFields(arg0: any): any;
     events(): any;
     eventsClear(): any;
     eventsFilter(arg0: any): any;
@@ -865,6 +872,7 @@ interface R2D_devtools {
     narrative(): any;
     open(): any;
     openRuntime(): any;
+    overrideText(arg0: any): any;
     panel(): any;
     pause(arg0: any): any;
     perf(): any;
@@ -879,6 +887,7 @@ interface R2D_devtools {
     refreshRuntime(arg0: any): any;
     render(): any;
     report(): any;
+    resources(arg0: any): any;
     runtimeOpen(): any;
     runtimePanel(): any;
     search(arg0: any): any;
@@ -888,6 +897,8 @@ interface R2D_devtools {
     select(arg0: any): any;
     selectBy(arg0: any): any;
     selector(): any;
+    set(arg0: any, arg1: any, arg2: any): any;
+    setMany(arg0: any, arg1: any): any;
     step(): any;
     steps(arg0: any): any;
     tab(arg0: any): any;
@@ -900,6 +911,7 @@ interface R2D_devtools {
     timeStep(): any;
     toggle(): any;
     tree(): any;
+    undo(): any;
     vfx(): any;
     vfxExport(): any;
     vfxPlay(): any;
@@ -909,6 +921,10 @@ interface R2D_devtools {
     watchReset(): any;
     watchThreshold(arg0: any, arg1: any): any;
     watches(): any;
+}
+
+interface R2D_diag {
+    bundle(arg0: any): any;
 }
 
 interface R2D_dialog {
@@ -1018,6 +1034,7 @@ interface R2D_fn {
     angleTo(): any;
     angularVelocity(arg0: any): any;
     animate(arg0: any): any;
+    animations(arg0: any): any;
     append(arg0: any, arg1: any): any;
     appendTo(arg0: any, arg1: any): any;
     applyForce(arg0: any, arg1: any): any;
@@ -1113,7 +1130,7 @@ interface R2D_fn {
     html(arg0: any): any;
     hurtbox(arg0: any, arg1: any): any;
     inputValue(arg0: any): any;
-    inside(): any;
+    inside(arg0: any): any;
     intensity(arg0: any): any;
     interaction(arg0: any, arg1: any): any;
     invulnerable(arg0: any): any;
@@ -1305,6 +1322,7 @@ interface R2D_fn {
     textStyle(arg0: any): any;
     theme(arg0: any): any;
     tileAnimation(): any;
+    tileAnimations(): any;
     tileAt(): any;
     tileLayer(arg0: any): any;
     tileOccluders(arg0: any): any;
@@ -1340,11 +1358,12 @@ interface R2D_font {
     default(): any;
     defaults(): any;
     define(arg0: any, arg1: any): any;
+    faces(): any;
     families(): any;
     get(arg0: any): any;
     has(arg0: any): any;
     list(): any;
-    load(arg0: any, arg1: any): any;
+    load(arg0: any, arg1: any, arg2: any): any;
     measure(arg0: any, arg1: any): any;
     of(arg0: any): any;
     remove(arg0: any): any;
@@ -1361,6 +1380,7 @@ interface R2D_fs {
     readText(arg0: any): any;
     remove(arg0: any): any;
     write(arg0: any, arg1: any): any;
+    writeAtomic(arg0: any, arg1: any): any;
     writeJSON(arg0: any, arg1: any): any;
 }
 
@@ -1669,11 +1689,14 @@ interface R2D_layers {
 }
 
 interface R2D_loading {
-    cancel(): any;
+    cancel(arg0: any): any;
     hide(): any;
+    job(): any;
     label(arg0: any): any;
     progress(arg0: any, arg1: any): any;
+    rml(arg0: any, arg1: any): any;
     run(arg0: any, arg1: any): any;
+    scene(arg0: any, arg1: any): any;
     show(arg0: any): any;
     title(arg0: any): any;
     value(): any;
@@ -2094,7 +2117,9 @@ interface R2D_replay {
     _push(arg0: any, arg1: any, arg2: any): any;
     actions(arg0: any, arg1: any): any;
     at(arg0: any): any;
+    checkpoint(arg0: any, arg1: any): any;
     checkpointAt(arg0: any): any;
+    checkpointNamed(arg0: any): any;
     checkpoints(arg0: any): any;
     checkpointsList(): any;
     clear(): any;
@@ -2109,6 +2134,7 @@ interface R2D_replay {
     length(): any;
     load(arg0: any): any;
     mode(): any;
+    namedCheckpoints(): any;
     play(arg0: any): any;
     position(): any;
     record(arg0: any, arg1: any): any;
@@ -2121,6 +2147,7 @@ interface R2D_replay {
     toText(): any;
     unknownActions(): any;
     verify(arg0: any): any;
+    verifyCheckpoint(arg0: any): any;
     verifyState(arg0: any): any;
 }
 
@@ -2221,6 +2248,7 @@ interface R2D_save {
     room(): any;
     run(): any;
     save(arg0: any, arg1: any): any;
+    schema(arg0: any): any;
     set(arg0: any, arg1: any): any;
     setNodeState(arg0: any, arg1: any): any;
     slot(arg0: any): any;
@@ -2254,6 +2282,7 @@ interface R2D_scene {
     discard(arg0: any): any;
     has(arg0: any): any;
     inScope(arg0: any, arg1: any, arg2: any): any;
+    job(arg0: any, arg1: any): any;
     load(arg0: any, arg1: any): any;
     loadAsync(arg0: any, arg1: any): any;
     loading(arg0: any): any;
@@ -2424,11 +2453,16 @@ interface R2D_store {
     get(arg0: any, arg1: any): any;
     has(arg0: any): any;
     keys(): any;
+    lastFailure(): any;
     load(arg0: any): any;
+    loadResult(arg0: any): any;
     remove(arg0: any): any;
     save(arg0: any): any;
+    saveResult(arg0: any): any;
+    schema(arg0: any): any;
     set(arg0: any, arg1: any): any;
     setAll(arg0: any): any;
+    stats(): any;
     stopAutoSave(): any;
 }
 
@@ -2605,14 +2639,18 @@ interface R2D_timeline {
 }
 
 interface R2D_trace {
+    categories(): any;
     clear(): any;
     dropped(): any;
+    export(arg0: any): any;
+    filter(arg0: any): any;
     hit(arg0: any): any;
     hits(): any;
     limit: number;
     list(): any;
     note(arg0: any, arg1: any, arg2: any): any;
     on(arg0: any): any;
+    read(arg0: any): any;
 }
 
 interface R2D_triggers {
@@ -3320,6 +3358,7 @@ interface R2D___________________ {
 interface R2D_______________ {
     _render(): any;
     anatomy(arg0: any): any;
+    budget(arg0: any): any;
     classify(arg0: any): any;
     clearErrors(): any;
     contacts(arg0: any): any;
@@ -3342,6 +3381,8 @@ interface R2D_______________ {
     render(): any;
     report(): any;
     reportError(arg0: any, arg1: any, arg2: any): any;
+    resources(arg0: any): any;
+    resourcesResetPeaks(): any;
     stats(): any;
     textures(): any;
     toggle(): any;
@@ -3433,11 +3474,16 @@ interface R2D_____________________ {
     get(arg0: any, arg1: any): any;
     has(arg0: any): any;
     keys(): any;
+    lastFailure(): any;
     load(arg0: any): any;
+    loadResult(arg0: any): any;
     remove(arg0: any): any;
     save(arg0: any): any;
+    saveResult(arg0: any): any;
+    schema(arg0: any): any;
     set(arg0: any, arg1: any): any;
     setAll(arg0: any): any;
+    stats(): any;
     stopAutoSave(): any;
 }
 
@@ -3460,6 +3506,7 @@ interface R2D___________ {
     discard(arg0: any): any;
     has(arg0: any): any;
     inScope(arg0: any, arg1: any, arg2: any): any;
+    job(arg0: any, arg1: any): any;
     load(arg0: any, arg1: any): any;
     loadAsync(arg0: any, arg1: any): any;
     loading(arg0: any): any;
@@ -3529,6 +3576,7 @@ declare interface R2DGlobal {
     cutscene: R2D_cutscene;
     debug: R2D_debug;
     devtools: R2D_devtools;
+    diag: R2D_diag;
     dialog: R2D_dialog;
     easing(arg0: any): any;
     emit(arg0: any, arg1: any): any;

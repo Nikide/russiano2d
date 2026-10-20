@@ -66,6 +66,35 @@ $.collision.define('walls', $.collision.freeBit());   // сам подберёт
 $.collision.define('player', 0x4, { all: true });     // и сразу маска «со всеми»
 ```
 
+### 1.1. События сенсоров
+
+Сенсор (`.sensor(true)`, `sensor: true` у зоны/области) не толкает тела, но
+Box2D всё равно присылает `begin`/`end`. Поверх обычных `collide`/`separate`
+эти фазы дают отдельные имена — их и стоит слушать для триггеров:
+
+| Фаза | Событие | Обе стороны? |
+|---|---|---|
+| `begin` сенсорного контакта | `sensor:enter` | да, по одному разу каждой |
+| `end` сенсорного контакта | `sensor:leave` | да, по одному разу каждой |
+
+```js
+$('#detect').sensor(true)
+    .on('sensor:enter', (e) => $.log('вошёл ' + (e.data.other && e.data.other.get(0).id)))
+    .on('sensor:leave', (e) => $.log('вышел'));
+```
+
+Payload — тот же, что у `collide`/`separate` (см.
+[physics.md](physics.md) § «События контакта и сенсоров»): `self`/`other`,
+`selfArea`/`selfShape`/`selfOwner` и общие `areaA`/`roleA`/`ownerA`,
+`source`/`target` (`nid`), `sensor: true`. У сенсора обычно нет нормали и
+точки контакта: `x/y/nx/ny === null`, `hasPoint/hasNormal === false` — это
+честный «нет данных», а не нулевой вектор.
+
+Сенсоры **не останавливают лучи и свипы** (`engine.raycast` /
+`$.world.raycast`, `$.world.castShape`): зона — не препятствие. Поэтому
+`.visibleFrom()` (§ операторы запросов в [core.md](core.md)) сквозь сенсоры
+видит, и отдельной опции «считать сенсоры стенами» нет.
+
 ## 2. Выражения масок
 
 `maskBy(выражение)` понимает имена и операторы:

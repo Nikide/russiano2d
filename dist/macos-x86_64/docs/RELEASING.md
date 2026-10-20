@@ -10,8 +10,8 @@ Apple Silicon Mac командой `build_and_push`. GitHub Actions больше
 build_and_push (интерактивно)
       |
       v
-Xmake: macOS arm64 / macOS x86_64 / Linux x86_64 / Windows x86_64
-      |        (Linux/Windows — Zig cross, без Docker)
+Xmake: macOS arm64 / macOS x86_64 / Windows x86_64
+      |        (Linux x86_64 — вне локального релиза: сборка на целевой ОС)
       v
 dist/<platform>/ + dist/*.tar.gz|*.zip + SHA256SUMS.txt
       |
@@ -57,25 +57,29 @@ Release version [1.2.14]:
 ## Инструменты
 
 * Xmake — канонический build system проекта.
-* Zig — кросс-компиляция Linux x86_64 и Windows x86_64 (`--toolchain=zigcc`).
+* Zig — opt-in кросс-компиляция Linux x86_64 (`R2D_BUILD_LINUX=1`);
+  локальная Zig-сборка Linux временно не входит в релиз (зависает на машине
+  релиза — Linux собирается на целевой ОС).
 * CMake — только внутри сторонних пакетов/переходного периода; второй
   релизной сборки Russiano2D из CMake нет.
 * Docker не используется.
 
-`tools/release_build.sh` собирает четыре платформы в `dist/<platform>/`:
+`tools/release_build.sh` собирает три платформы в `dist/<platform>/`:
 
 ```text
 dist/
     macos-arm64/      {russiano2d, r2d-sdk, russiano2d-sdk}
     macos-x86_64/
-    linux-x86_64/
     windows-x86_64/   {*.exe}
     russiano2d-vX.Y.Z-macos-arm64.tar.gz
     russiano2d-vX.Y.Z-macos-x86_64.tar.gz
-    russiano2d-vX.Y.Z-linux-x86_64.tar.gz
     russiano2d-vX.Y.Z-windows-x86_64.zip
     SHA256SUMS.txt
 ```
+
+Linux x86_64 из локального релиза временно исключён (`R2D_BUILD_LINUX=1`
+возвращает его в `release_build`). На Linux движок собирается штатно:
+`xmake f -p linux -a x86_64 -m release -o build-linux && xmake build -y`.
 
 Имена архивов сохраняют существующий контракт `release.archive_name()`.
 
@@ -85,12 +89,13 @@ dist/
 
 `build_and_push` не создаёт тег, пока не выполнены ВСЕ шаги:
 
-1. собраны все четыре платформы (провал любой — стоп, тег не создаётся);
+1. собраны все платформы релиза: macOS arm64/x86_64 и Windows x86_64
+   (провал любой — стоп, тег не создаётся); Linux — сборка на целевой ОС;
 2. `tools/release.py --package-only` собрал архивы в `dist/`;
 3. `tools/ci_package_check.py` проверил каждый архив: открывается, `VERSION`,
    бинарники, `sdk/`, лицензии, отсутствие `.DS_Store`/`__pycache__`/сборочного
    мусора;
-4. `SHA256SUMS.txt` сгенерирован по четырём архивам;
+4. `SHA256SUMS.txt` сгенерирован по трём архивам;
 5. Unity tests прошли (`tools/release_tests.sh`: `xmake test`; в переходный
    период — нативный macOS CTest-набор CMake, тот же Unity).
 
@@ -176,8 +181,17 @@ JS/иконок/сплэша/шейдеров через `tools/xmake_generate.s
 проходит `ci_package_check`. Zig для Windows не подходит: его `cc` не умеет
 RC/`windows.h`.
 
-**Linux x86_64 собирается локально**: Zig cc, статический X11-стек
-(libtool принудительно static), изолированный от Homebrew CMake-поиск,
-`SDL_X11_SHARED`. Пакет `dist/russiano2d-v1.2.13-linux-x86_64.tar.gz`
-проходит `ci_package_check`; ELF имеет только libc/libm/pthread/dl и не
-содержит `/opt/homebrew` путей. Unity-тесты: 179/179 на нативной macOS-сборке.
+**Linux x86_64 — сборка на целевой ОС (временное решение 2026-10-20).**
+Локальная Zig-кросс-сборка на машине релиза зависает, поэтому платформа
+исключена из `build_and_push` по умолчанию. Linux-пользователь собирает
+движок сам:
+
+```bash
+xmake f -p linux -a x86_64 -m release -o build-linux
+xmake build -y
+./build-linux/linux/x86_64/release/russiano2d --game game
+```
+
+Вернуть платформу в локальный релиз: `R2D_BUILD_LINUX=1 build_and_push`
+(и `R2D_BUILD_LINUX=1 tools/release_build.sh`). Linux-специфичный код и CI
+валидация сохраняются; это ограничение именно локального релизного пайплайна.

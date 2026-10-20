@@ -56,6 +56,9 @@ $.replay.play();                   // если apply не передать, во
 | `checkpoints({ every, max?, snapshot? })` | политика проверки state hash |
 | `verifyState(tick)` / `divergence()` | проверка на tick и первое расхождение |
 | `checkpointsList()` / `checkpointAt(tick)` | записанные проверки: хэши / целиком |
+| `checkpoint(name, { frame, hash? })` | именованный checkpoint: `'after_boss'` на кадре; `hash` — ожидаемый для CI | сам `$.replay` |
+| `namedCheckpoints()` / `checkpointNamed(name)` | список именованных проверок / одна целиком | массив / объект |
+| `verifyCheckpoint(name)` | сравнить ТЕКУЩЕЕ состояние с именованным checkpoint | `{ ok, checkpoint, tick, fields, … }` |
 | `stateProvider(fn)` | свой снимок состояния `() => ({ labels, values })` |
 | `identity({ version, build })` | паспорт сборки для заголовка |
 | `unknownActions()` | сколько действий не прошло по списку |
@@ -103,6 +106,10 @@ $.replay.play();                   // если apply не передать, во
 | `$.replay.divergence()` | первое расхождение state hash | объект с tick/полями/версиями или `null` |
 | `$.replay.checkpointsList()` | записанные проверки | массив `{ tick, hash }` |
 | `$.replay.checkpointAt(tick)` | проверка на tick целиком | объект или `null` |
+| `$.replay.checkpoint(name, opts?)` | именованный checkpoint: `{ frame, hash? }`; при записи снимается на кадре, при проигрывании проверяется автоматически | сам `$.replay` |
+| `$.replay.namedCheckpoints()` | имена и хэши записанных именованных проверок | `[{ name, tick, hash }]` |
+| `$.replay.checkpointNamed(name)` | именованный checkpoint целиком: метки и значения | объект или `null` |
+| `$.replay.verifyCheckpoint(name)` | сверить текущее состояние с именованным checkpoint; при расхождении — кадр, имя, `expected/actual` и diff полей | результат проверки |
 | `$.replay.unknownActions()` | сколько действий не прошло по списку разрешённых | целое |
 | `$.replay.onEnd` | ваш обработчик конца воспроизведения (поле, не метод) | — |
 | `$.replay._push(value, frame, tick)` | **внутреннее**: запись кадра ядром в обход проверки режима; публичный `record` принимает сборщик ввода, поэтому хук зовёт `_push`. Используется `src/highlevel/replay.js` и `tests/js/replay_test.mjs` | `bool` |
@@ -119,7 +126,7 @@ $.replay.play();                   // если apply не передать, во
 | `seed`, `streams` | зерно запуска и **полный снимок RNG** (`$.random.state()`): начального зерна для продолжения середины сессии мало |
 | `dt`, `frame` | fixed step и кадр начала записи |
 | `input.mapping`, `input.actions` | версия раскладки ввода и список разрешённых actions |
-| `checkpoints` | `{ every, count, truncated }` — сколько проверок состояния сделано |
+| `checkpoints` | `{ every, count, truncated, named }` — сколько проверок состояния сделано (включая именованные) |
 
 Поля игры (`start({ level: 'bunker' })`) сохраняются как есть: заголовок —
 паспорт прогона, и игра вправе положить туда свои метки.
@@ -173,6 +180,35 @@ const div = $.replay.divergence();
   версии: schema записи, версия replay, ID движка/сборки и вид RNG.
 * `checkpointAt(tick)` отдаёт записанный checkpoint с метками и значениями —
   для отладки и тестов; `checkpointsList()` — только `{ tick, hash }`.
+
+### 2.2.1. Именованные checkpoints (`after_boss`)
+
+Политика `every` отвечает на вопрос «на каждом N-м кадре состояние то же?».
+Баг-репорту и регресс-тесту нужна точка с именем:
+
+```js
+$.replay.record(sampler, apply);
+$.replay.checkpoint('after_boss', { frame: 4200 });
+// ...босс побеждён...
+$.replay.stop();
+
+const text = $.replay.toText();      // именованные проверки лежат в "named"
+```
+
+При проигрывании такой checkpoint проверяется автоматически (даже при
+`checkpoints({ every: 0 })`), а расхождение содержит имя:
+
+```js
+const d = $.replay.divergence();
+// { ok:false, checkpoint:'after_boss', tick:4200, expected:'…', actual:'…',
+//   fields:[{ field:'hero.hp', expected:100, actual:35 }, …] }
+```
+
+`opts.hash` задаёт ожидаемый хэш заранее — CI-прогон падает на первом же
+расхождении, не дожидаясь конца записи. Имя уникально: повторный вызов его не
+дублирует. Checkpoint на уже прошедший кадр не выдумывается — пишется строка в
+журнал, снимок не создаётся. Без `stateProvider`/снимка состояния вызов
+безопасен и просто ничего не записывает.
 * `$.replay.stateProvider(fn)` заменяет снимок состояния на свой:
   `() => ({ labels, values })`. По умолчанию — `gameplaySnapshot()`.
 
@@ -182,6 +218,70 @@ const div = $.replay.divergence();
 alpha/color/visible/blend, id спрайтов — всё presentation-only. Потребление
 `presentation`-потока на расхождение не влияет: косметика не меняет
 gameplay-сравнение.
+
+## 2.3. C-формат CLI (`--record`/`--replay`)
+
+Кроме `$.replay` в игре есть запись на уровне движка; это ДРУГОЙ файл и другая
+зона ответственности (записывается ввод кадра, а не объекты игры). Полные
+требования — [RECORD_REPLAY.md](../RECORD_REPLAY.md); здесь — что именно
+появилось в заголовке и checkpoints.
+
+### Заголовок
+
+```json
+{"r2d_replay":1,"version":"1.3.0","game":"game","content":"fnv1a64:ff3c3505c98852b2","content_files":12,"content_bytes":34567,"fixed_dt":0.0166666675,"seed":777}
+```
+
+| Поле | Смысл |
+|---|---|
+| `r2d_replay` | версия формата; чужая версия отвергается с причиной |
+| `version` | `R2D_VERSION_STRING` сборки |
+| `game` | каталог `--game` |
+| `content` | `fnv1a64:<16 hex>` — FNV-1a 64 по отсортированным каноническим файлам: корневой `project.json`, корневой `main.js` и каждый `*.js` рекурсивно (путь + размер + байты); скрытые каталоги и `node_modules` пропускаются |
+| `content_files`/`content_bytes` | сколько файлов/байт вошло в content ID |
+| `fixed_dt`, `seed` | шаг времени и зерно |
+
+`content*` необязательны: старые записи без них читаются как «content
+неизвестен» (не отказ). Явный `--replay-content <id>` подменяет автохэш —
+для собранных игр и CI-сборок. При `--replay` текущий content сравнивается с
+записанным; расхождение — предупреждение в stderr, а не отказ (игру могли
+поправить осознанно).
+
+### Checkpoints нативного состояния
+
+```json
+{"check":{"frame":20,"name":"after_walk","hash":"1c894c9eab51b351"}}
+```
+
+Строка живёт в том же потоке, что и кадры. `--checkpoint <кадр>[:<имя>]`
+(повторяемый, до 256) назначает кадр при записи; `frame` — это `engine.frame`,
+1 — первый кадр.
+
+**Hash** — FNV-1a 64 по нативному состоянию, которым владеет C:
+
+* номер кадра;
+* количество живых физических тел;
+* для каждого живого тела — id слота, позиция (x, y), угол, линейная и
+  угловая скорость (Box2D).
+
+Обход идёт по dense-списку пула тел, поэтому порядок детерминирован
+историей create/destroy. **JS-состояние узлов и `$.random` сюда не входят** —
+их видит только игра; для них используйте `$.replay.checkpoints({every})` и
+именованные checkpoints (§2.2). Это не «упрощение», а граница C ↔ JS.
+
+При `--replay` hash считается на тех же кадрах и сравнивается:
+
+* совпало — тишина;
+* разошлось — stderr: имя checkpoint, кадр, expected/actual; код возврата
+  процесса **3**;
+* `--checkpoints off` — checkpoints читаются, но не сверяются (код 0);
+* сессия кончилась раньше checkpoint'а — в лог пишется, сколько проверок не
+  выполнено (молчаливого «всё сошлось» нет).
+
+Старые файлы (без `content*` и `check`) открываются и проигрываются как
+раньше: версия формата осталась 1, добавленные поля необязательные.
+
+---
 
 ## 3. Что записывать
 

@@ -4,9 +4,9 @@
      Source: Russiano2D $ API Registry
      Generator: r2d-sdk -->
 
-Engine version: "1.2.13"
+Engine version: "1.3.0"
 
-Entries: 4053
+Entries: 4101
 
 ## $
 
@@ -40,6 +40,7 @@ Entries: 4053
 | `cutscene` | object | — |
 | `debug` | object | — |
 | `devtools` | object | — |
+| `diag` | object | — |
 | `dialog` | object | — |
 | `easing` | function | `(arg0: any) -> any` |
 | `emit` | function | `(arg0: any, arg1: any) -> any` |
@@ -743,6 +744,7 @@ Entries: 4053
 | Name | Kind | Signature / value |
 |---|---|---|
 | `anatomy` | function | `(arg0: any) -> any` |
+| `budget` | function | `(arg0: any) -> any` |
 | `classify` | function | `(arg0: any) -> any` |
 | `clearErrors` | function | `() -> any` |
 | `contacts` | function | `(arg0: any) -> any` |
@@ -765,6 +767,8 @@ Entries: 4053
 | `render` | function | `() -> any` |
 | `report` | function | `() -> any` |
 | `reportError` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `resources` | function | `(arg0: any) -> any` |
+| `resourcesResetPeaks` | function | `() -> any` |
 | `stats` | function | `() -> any` |
 | `textures` | function | `() -> any` |
 | `toggle` | function | `() -> any` |
@@ -817,8 +821,10 @@ Entries: 4053
 | `consoleRun` | function | `(arg0: any) -> any` |
 | `copyJs` | function | `() -> any` |
 | `copyNodeId` | function | `() -> any` |
+| `copyOverride` | function | `() -> any` |
 | `copyReport` | function | `(arg0: any) -> any` |
 | `copySelector` | function | `() -> any` |
+| `editFields` | function | `(arg0: any) -> any` |
 | `events` | function | `() -> any` |
 | `eventsClear` | function | `() -> any` |
 | `eventsFilter` | function | `(arg0: any) -> any` |
@@ -839,6 +845,7 @@ Entries: 4053
 | `narrative` | function | `() -> any` |
 | `open` | function | `() -> any` |
 | `openRuntime` | function | `() -> any` |
+| `overrideText` | function | `(arg0: any) -> any` |
 | `panel` | function | `() -> any` |
 | `pause` | function | `(arg0: any) -> any` |
 | `perf` | function | `() -> any` |
@@ -853,6 +860,7 @@ Entries: 4053
 | `refreshRuntime` | function | `(arg0: any) -> any` |
 | `render` | function | `() -> any` |
 | `report` | function | `() -> any` |
+| `resources` | function | `(arg0: any) -> any` |
 | `runtimeOpen` | function | `() -> any` |
 | `runtimePanel` | function | `() -> any` |
 | `search` | function | `(arg0: any) -> any` |
@@ -862,6 +870,8 @@ Entries: 4053
 | `select` | function | `(arg0: any) -> any` |
 | `selectBy` | function | `(arg0: any) -> any` |
 | `selector` | function | `() -> any` |
+| `set` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `setMany` | function | `(arg0: any, arg1: any) -> any` |
 | `step` | function | `() -> any` |
 | `steps` | function | `(arg0: any) -> any` |
 | `tab` | function | `(arg0: any) -> any` |
@@ -874,6 +884,7 @@ Entries: 4053
 | `timeStep` | function | `() -> any` |
 | `toggle` | function | `() -> any` |
 | `tree` | function | `() -> any` |
+| `undo` | function | `() -> any` |
 | `vfx` | function | `() -> any` |
 | `vfxExport` | function | `() -> any` |
 | `vfxPlay` | function | `() -> any` |
@@ -883,6 +894,12 @@ Entries: 4053
 | `watchReset` | function | `() -> any` |
 | `watchThreshold` | function | `(arg0: any, arg1: any) -> any` |
 | `watches` | function | `() -> any` |
+
+## $.diag
+
+| Name | Kind | Signature / value |
+|---|---|---|
+| `bundle` | function | `(arg0: any) -> any` |
 
 ## $.dialog
 
@@ -998,6 +1015,7 @@ Entries: 4053
 | `angleTo` | function | `() -> any` |
 | `angularVelocity` | function | `(arg0: any) -> any` |
 | `animate` | function | `(arg0: any) -> any` |
+| `animations` | function | `(arg0: any) -> any` |
 | `append` | function | `(arg0: any, arg1: any) -> any` |
 | `appendTo` | function | `(arg0: any, arg1: any) -> any` |
 | `applyForce` | function | `(arg0: any, arg1: any) -> any` |
@@ -1093,7 +1111,7 @@ Entries: 4053
 | `html` | function | `(arg0: any) -> any` |
 | `hurtbox` | function | `(arg0: any, arg1: any) -> any` |
 | `inputValue` | function | `(arg0: any) -> any` |
-| `inside` | function | `() -> any` |
+| `inside` | function | `(arg0: any) -> any` |
 | `intensity` | function | `(arg0: any) -> any` |
 | `interaction` | function | `(arg0: any, arg1: any) -> any` |
 | `invulnerable` | function | `(arg0: any) -> any` |
@@ -1285,6 +1303,7 @@ Entries: 4053
 | `textStyle` | function | `(arg0: any) -> any` |
 | `theme` | function | `(arg0: any) -> any` |
 | `tileAnimation` | function | `() -> any` |
+| `tileAnimations` | function | `() -> any` |
 | `tileAt` | function | `() -> any` |
 | `tileLayer` | function | `(arg0: any) -> any` |
 | `tileOccluders` | function | `(arg0: any) -> any` |
@@ -1373,11 +1392,12 @@ Entries: 4053
 | `default` | function | `() -> any` |
 | `defaults` | function | `() -> any` |
 | `define` | function | `(arg0: any, arg1: any) -> any` |
+| `faces` | function | `() -> any` |
 | `families` | function | `() -> any` |
 | `get` | function | `(arg0: any) -> any` |
 | `has` | function | `(arg0: any) -> any` |
 | `list` | function | `() -> any` |
-| `load` | function | `(arg0: any, arg1: any) -> any` |
+| `load` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `measure` | function | `(arg0: any, arg1: any) -> any` |
 | `of` | function | `(arg0: any) -> any` |
 | `remove` | function | `(arg0: any) -> any` |
@@ -1396,6 +1416,7 @@ Entries: 4053
 | `readText` | function | `(arg0: any) -> any` |
 | `remove` | function | `(arg0: any) -> any` |
 | `write` | function | `(arg0: any, arg1: any) -> any` |
+| `writeAtomic` | function | `(arg0: any, arg1: any) -> any` |
 | `writeJSON` | function | `(arg0: any, arg1: any) -> any` |
 
 ## $.fx
@@ -1767,11 +1788,14 @@ Entries: 4053
 
 | Name | Kind | Signature / value |
 |---|---|---|
-| `cancel` | function | `() -> any` |
+| `cancel` | function | `(arg0: any) -> any` |
 | `hide` | function | `() -> any` |
+| `job` | function | `() -> any` |
 | `label` | function | `(arg0: any) -> any` |
 | `progress` | function | `(arg0: any, arg1: any) -> any` |
+| `rml` | function | `(arg0: any, arg1: any) -> any` |
 | `run` | function | `(arg0: any, arg1: any) -> any` |
+| `scene` | function | `(arg0: any, arg1: any) -> any` |
 | `show` | function | `(arg0: any) -> any` |
 | `title` | function | `(arg0: any) -> any` |
 | `value` | function | `() -> any` |
@@ -2250,7 +2274,9 @@ Entries: 4053
 |---|---|---|
 | `actions` | function | `(arg0: any, arg1: any) -> any` |
 | `at` | function | `(arg0: any) -> any` |
+| `checkpoint` | function | `(arg0: any, arg1: any) -> any` |
 | `checkpointAt` | function | `(arg0: any) -> any` |
+| `checkpointNamed` | function | `(arg0: any) -> any` |
 | `checkpoints` | function | `(arg0: any) -> any` |
 | `checkpointsList` | function | `() -> any` |
 | `clear` | function | `() -> any` |
@@ -2265,6 +2291,7 @@ Entries: 4053
 | `length` | function | `() -> any` |
 | `load` | function | `(arg0: any) -> any` |
 | `mode` | function | `() -> any` |
+| `namedCheckpoints` | function | `() -> any` |
 | `play` | function | `(arg0: any) -> any` |
 | `position` | function | `() -> any` |
 | `record` | function | `(arg0: any, arg1: any) -> any` |
@@ -2277,6 +2304,7 @@ Entries: 4053
 | `toText` | function | `() -> any` |
 | `unknownActions` | function | `() -> any` |
 | `verify` | function | `(arg0: any) -> any` |
+| `verifyCheckpoint` | function | `(arg0: any) -> any` |
 | `verifyState` | function | `(arg0: any) -> any` |
 
 ## $.resource
@@ -2384,6 +2412,7 @@ Entries: 4053
 | `room` | function | `() -> any` |
 | `run` | function | `() -> any` |
 | `save` | function | `(arg0: any, arg1: any) -> any` |
+| `schema` | function | `(arg0: any) -> any` |
 | `set` | function | `(arg0: any, arg1: any) -> any` |
 | `setNodeState` | function | `(arg0: any, arg1: any) -> any` |
 | `slot` | function | `(arg0: any) -> any` |
@@ -2415,6 +2444,7 @@ Entries: 4053
 | `discard` | function | `(arg0: any) -> any` |
 | `has` | function | `(arg0: any) -> any` |
 | `inScope` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `job` | function | `(arg0: any, arg1: any) -> any` |
 | `load` | function | `(arg0: any, arg1: any) -> any` |
 | `loadAsync` | function | `(arg0: any, arg1: any) -> any` |
 | `loading` | function | `(arg0: any) -> any` |
@@ -2505,6 +2535,7 @@ Entries: 4053
 | `angleTo` | function | `() -> any` |
 | `angularVelocity` | function | `(arg0: any) -> any` |
 | `animate` | function | `(arg0: any) -> any` |
+| `animations` | function | `(arg0: any) -> any` |
 | `append` | function | `(arg0: any, arg1: any) -> any` |
 | `appendTo` | function | `(arg0: any, arg1: any) -> any` |
 | `applyForce` | function | `(arg0: any, arg1: any) -> any` |
@@ -2606,7 +2637,7 @@ Entries: 4053
 | `hurtbox` | function | `(arg0: any, arg1: any) -> any` |
 | `index` | function | `() -> any` |
 | `inputValue` | function | `(arg0: any) -> any` |
-| `inside` | function | `() -> any` |
+| `inside` | function | `(arg0: any) -> any` |
 | `intensity` | function | `(arg0: any) -> any` |
 | `interaction` | function | `(arg0: any, arg1: any) -> any` |
 | `invulnerable` | function | `(arg0: any) -> any` |
@@ -2630,6 +2661,7 @@ Entries: 4053
 | `length` | number | `1` |
 | `lightLayer` | function | `(arg0: any) -> any` |
 | `lightMask` | function | `(arg0: any) -> any` |
+| `limit` | function | `(arg0: any) -> any` |
 | `lit` | function | `(arg0: any) -> any` |
 | `localAngle` | function | `(arg0: any) -> any` |
 | `localAt` | function | `(arg0: any, arg1: any) -> any` |
@@ -2653,6 +2685,7 @@ Entries: 4053
 | `navPath` | function | `() -> any` |
 | `navTarget` | function | `() -> any` |
 | `navigateTo` | function | `(arg0: any, arg1: any) -> any` |
+| `nearest` | function | `(arg0: any) -> any` |
 | `nid` | function | `() -> any` |
 | `nodes` | array | — |
 | `not` | function | `(arg0: any) -> any` |
@@ -2800,6 +2833,7 @@ Entries: 4053
 | `textStyle` | function | `(arg0: any) -> any` |
 | `theme` | function | `(arg0: any) -> any` |
 | `tileAnimation` | function | `() -> any` |
+| `tileAnimations` | function | `() -> any` |
 | `tileAt` | function | `() -> any` |
 | `tileLayer` | function | `(arg0: any) -> any` |
 | `tileOccluders` | function | `(arg0: any) -> any` |
@@ -2820,6 +2854,7 @@ Entries: 4053
 | `value` | function | `(arg0: any) -> any` |
 | `velocity` | function | `(arg0: any, arg1: any) -> any` |
 | `visible` | function | `(arg0: any) -> any` |
+| `visibleFrom` | function | `(arg0: any, arg1: any) -> any` |
 | `volume` | function | `(arg0: any) -> any` |
 | `w` | number | `32` |
 | `wake` | function | `() -> any` |
@@ -3019,11 +3054,16 @@ Entries: 4053
 | `get` | function | `(arg0: any, arg1: any) -> any` |
 | `has` | function | `(arg0: any) -> any` |
 | `keys` | function | `() -> any` |
+| `lastFailure` | function | `() -> any` |
 | `load` | function | `(arg0: any) -> any` |
+| `loadResult` | function | `(arg0: any) -> any` |
 | `remove` | function | `(arg0: any) -> any` |
 | `save` | function | `(arg0: any) -> any` |
+| `saveResult` | function | `(arg0: any) -> any` |
+| `schema` | function | `(arg0: any) -> any` |
 | `set` | function | `(arg0: any, arg1: any) -> any` |
 | `setAll` | function | `(arg0: any) -> any` |
+| `stats` | function | `() -> any` |
 | `stopAutoSave` | function | `() -> any` |
 
 ## $.story
@@ -3213,14 +3253,18 @@ Entries: 4053
 
 | Name | Kind | Signature / value |
 |---|---|---|
+| `categories` | function | `() -> any` |
 | `clear` | function | `() -> any` |
 | `dropped` | function | `() -> any` |
+| `export` | function | `(arg0: any) -> any` |
+| `filter` | function | `(arg0: any) -> any` |
 | `hit` | function | `(arg0: any) -> any` |
 | `hits` | function | `() -> any` |
 | `limit` | number | `256` |
 | `list` | function | `() -> any` |
 | `note` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `on` | function | `(arg0: any) -> any` |
+| `read` | function | `(arg0: any) -> any` |
 
 ## $.triggers
 
@@ -4030,6 +4074,7 @@ Entries: 4053
 | Name | Kind | Signature / value |
 |---|---|---|
 | `anatomy` | function | `(arg0: any) -> any` |
+| `budget` | function | `(arg0: any) -> any` |
 | `classify` | function | `(arg0: any) -> any` |
 | `clearErrors` | function | `() -> any` |
 | `contacts` | function | `(arg0: any) -> any` |
@@ -4052,6 +4097,8 @@ Entries: 4053
 | `render` | function | `() -> any` |
 | `report` | function | `() -> any` |
 | `reportError` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `resources` | function | `(arg0: any) -> any` |
+| `resourcesResetPeaks` | function | `() -> any` |
 | `stats` | function | `() -> any` |
 | `textures` | function | `() -> any` |
 | `toggle` | function | `() -> any` |
@@ -4176,11 +4223,16 @@ Entries: 4053
 | `get` | function | `(arg0: any, arg1: any) -> any` |
 | `has` | function | `(arg0: any) -> any` |
 | `keys` | function | `() -> any` |
+| `lastFailure` | function | `() -> any` |
 | `load` | function | `(arg0: any) -> any` |
+| `loadResult` | function | `(arg0: any) -> any` |
 | `remove` | function | `(arg0: any) -> any` |
 | `save` | function | `(arg0: any) -> any` |
+| `saveResult` | function | `(arg0: any) -> any` |
+| `schema` | function | `(arg0: any) -> any` |
 | `set` | function | `(arg0: any, arg1: any) -> any` |
 | `setAll` | function | `(arg0: any) -> any` |
+| `stats` | function | `() -> any` |
 | `stopAutoSave` | function | `() -> any` |
 
 ## $.сцена
@@ -4201,6 +4253,7 @@ Entries: 4053
 | `discard` | function | `(arg0: any) -> any` |
 | `has` | function | `(arg0: any) -> any` |
 | `inScope` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `job` | function | `(arg0: any, arg1: any) -> any` |
 | `load` | function | `(arg0: any, arg1: any) -> any` |
 | `loadAsync` | function | `(arg0: any, arg1: any) -> any` |
 | `loading` | function | `(arg0: any) -> any` |

@@ -64,8 +64,11 @@ $.ready(() => {
 | `$.font.styleOf(target)` | что реально читает отрисовка: `{ font, size, align, lineHeight, color }` |
 | `$.font.measure(text, name)` | ширина строки в пикселях этим стилем |
 | `$.font.defaults()` | значения по умолчанию (копия) |
-| `$.font.load(name, path)` | загрузить `.ttf`/`.otf` как семейство (без имени — имя файла) |
-| `$.font.uploaded()` / `families()` / `default()` | что загрузила игра / все семейства движка / семейство по умолчанию |
+| `$.font.load(name, path, opts?)` | загрузить `.ttf`/`.otf` как семейство (без имени — имя файла). `opts`: `{ weight, style }` — лицо RmlUi (§6) |
+| `$.font.uploaded()` | семейства, загруженные через `$.font.load` |
+| `$.font.faces()` | явные лица RmlUi: `[{ family, weight, style, path }]` |
+| `$.font.families()` | все семейства: атлас сцены + семейства явных лиц RmlUi |
+| `$.font.default()` | семейство шрифта сцены по умолчанию |
 | `$.font.atlas()` | `{ glyphs, atlas_w, atlas_h }` — состояние атласа глифов |
 | `$.font.width(text, size, family?)` | ширина строки явным кеглем |
 
@@ -100,10 +103,63 @@ $.font.get('title');   // { size: 40, color: '#c8d4e8', align: 'left', lineHeigh
 пропускается. Ссылка на несуществующую базу — предупреждение в лог один раз,
 стиль продолжает работать без неё.
 
-## 6. Ограничения
+## 6. Лица RmlUi: weight и style
 
-* кроме `size`/`color`/`align`/`lineHeight` движок ничего у текста не умеет:
-  жирный, курсив, свои файлы шрифтов и перенос строк стилем не задать;
+Интерфейс на RmlUi умеет настоящие шрифтовые лица. Файл регистрируется как
+**именованное семейство с начертанием**, и дальше его выбирает RCSS:
+
+```js
+// обычный файл → семейство + нормальное лицо (400/normal)
+$.font.load('title', 'assets/fonts/NotoSans-Bold.ttf');
+
+// то же семейство, но явное лицо: жирное/курсивное
+$.font.load('title', 'assets/fonts/NotoSans-Bold.ttf', { weight: 'bold' });
+$.font.load('title', 'assets/fonts/NotoSans-Italic.ttf', { weight: 400, style: 'italic' });
+```
+
+```css
+h1 { font-family: title; font-weight: bold; }
+blockquote { font-family: title; font-weight: 400; font-style: italic; }
+```
+
+| Параметр | Значения | По умолчанию |
+|---|---|---|
+| `weight` | `'normal'`/`'regular'` (400), `'bold'` (700), целое 1..1000 | 400 |
+| `style` | `'normal'`, `'italic'` | `'normal'` |
+
+Неверное значение — строка в журнал и `false`; начертание не подменяется
+молча. На низком уровне это `engine.ui.loadFontFace(path, family, weight,
+style)` → `Rml::LoadFontFace(path, family, style, weight)`; метаданные явных
+лиц отдаёт `engine.ui.fontFaces()`.
+
+```js
+$.font.load('title', 'assets/fonts/NotoSans-Regular.ttf', { weight: 'bold' });
+$.font.faces();      // [{ family:'title', weight:700, style:'normal', path:'…' }]
+$.font.families();   // ['Open Sans', …, 'title']
+```
+
+**Что это НЕ делает.** Кастомный рендерер текста сцены (`$.gfx.text`,
+тег `<text>`) по-прежнему растеризует один атлас и не умеет bold/italic:
+движок не «подделывает» жирность/наклон обводкой или матрицей. Поэтому:
+
+* `$.font.load(name, path)` без `opts` сохраняет прежнее поведение — грузит
+  файл в атлас сцены (для `<text>`/мирового текста) и дополнительно
+  регистрирует нормальное лицо RmlUi;
+* `$.font.load(name, path, { weight, style })` с не-400/normal грузит
+  **только лицо RmlUi** для HTML-интерфейса и НЕ перезагружает атлас сцены
+  чужим файлом — иначе обычный текст молча стал бы жирным;
+* хотите жирный мирровой текст — нужен отдельный файл и отдельное семейство
+  (`$.font.load('title-bold', '…-Bold.ttf')`), а не `weight` у того же имени.
+
+Проверка: `tests/js/font_weight_test.mjs` (валидация и проводка без движка) и
+`tests/agent/highlevel_text_test.py` (живое лицо, RCSS-документ, текст/rect).
+
+## 7. Ограничения
+
+* RmlUi-лица (§6) дают жирный/курсив/свой файл только HTML-интерфейсу; текстовый
+  рендерер сцены (`$.gfx.text`, `<text>`) остаётся одноатласным, bold/italic
+  там не подделываются;
+* перенос строк стилем по-прежнему не задаётся;
 * `apply()` пишет в `attrs.align` — у тега `<text>` это то же поле, что и у
   `<ui.label>`, поэтому стиль с `align` действует на оба;
 * `align` вне `left/center/right` подменяется на `left` с предупреждением;
@@ -116,12 +172,18 @@ $.font.get('title');   // { size: 40, color: '#c8d4e8', align: 'left', lineHeigh
 * `$.font.measure()` без движка (qjs) возвращает 0 — тесты проверяют логику,
   а не метрики шрифта.
 
-## 7. Проверка
+## 8. Проверка
 
 ```bash
 build/_deps/quickjs-build/qjs tests/js/font_test.mjs
+build/_deps/quickjs-build/qjs tests/js/font_weight_test.mjs
+python3 tests/agent/highlevel_text_test.py     # после сборки движка
 ```
 
-Покрыто: разбор и слияние стилей, наследование (`base`, неявный `default`),
-циклы, выбор свойства для цвета, копия из `get()`, неизвестный стиль,
-`.textStyle()`, `measure()`, `styleOf()`.
+`font_test.mjs`: разбор и слияние стилей, наследование (`base`, неявный
+`default`), циклы, выбор свойства для цвета, копия из `get()`, неизвестный
+стиль, `.textStyle()`, `measure()`, `styleOf()`.
+
+`font_weight_test.mjs`: weight/style (normal/bold/1..1000, italic), отказ на
+мусоре, прежний контракт `load(name,path)`, лица RmlUi и `faces()/families()`,
+поведение без GUI.

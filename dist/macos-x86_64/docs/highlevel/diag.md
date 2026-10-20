@@ -19,6 +19,8 @@ $.debug.reportError(where, error, { fatal: true, assetPath: 'a.png' })
 $.debug.clearErrors()
 $.debug.expectClean()       // бросает исключение на неустранимой ошибке
 $.debug.classify(where)     // { code, subsystem } — как движок классифицирует место
+
+$.diag.bundle(opts?)        // diagnostics/<timestamp>/: { ok, path, files, error }
 ```
 
 ## Форма записи
@@ -71,10 +73,51 @@ $.debug.classify(where)     // { code, subsystem } — как движок кл�
 создалась обязательная коллизия) — портит. Загрузчик обязан считать такую
 операцию неуспешной, а не «подготовкой завершено».
 
+## Диагностический пакет (`$.diag.bundle`)
+
+```js
+const r = $.diag.bundle({ dir: 'diagnostics', timestamp: '20260102-030405' });
+// { ok: true, path: 'diagnostics/20260102-030405',
+//   files: ['diagnostics/20260102-030405/engine.json', …], error: null }
+```
+
+Пишет через `$.fs` (модуль `store.js`; относительный путь создаётся сам):
+
+| Файл | Что внутри |
+|---|---|
+| `engine.json` | `engine.version/build/platform/arch/gpu` (что движок отдаёт в JS), renderer info/depth, сцена, `seed`, `fixed_dt`, кадр/время, replay |
+| `stats.json` | `$.debug.stats()/counters()/limits()/resources()` |
+| `trace.json` | хвост `$.trace.list()` (если журнал включён) с `dropped` |
+| `replay.json` | режим/длина/позиция/заголовок/checkpoints `$.replay` |
+| `log.txt` | структурные ошибки `$.debug.errors()` + хвост консоли DevTools |
+| `README.txt` | состав пакета и честные ограничения |
+
+`opts`: `dir` (по умолчанию `diagnostics`), `timestamp` (по умолчанию
+локальные дата-время), `trace`/`errors`/`log` — сколько записей хвоста
+(по умолчанию 128/128/64, сверху ограничено 512/512/256).
+
+**Путь проверяется, а не «чинится молча»**: `dir` — до 4 относительных
+сегментов `[A-Za-z0-9._-]`, `timestamp` — одно такое имя без ведущей точки;
+абсолютные пути, `..`, `~`, `:` и разделители внутри сегментов отклоняются с
+`{ ok: false, path: null, files: [], error }` и без единой записи. Отказ
+`$.fs.write` (диск только для чтения) возвращает частичный `files` и текст
+ошибки с путём — молчания нет.
+
+Никакой сети/телеметрии. Автосборки на fatal-ошибке нет: безопасного хука,
+который не рискует рекурсией и не теряет исходную ошибку, в движке нет —
+`bundle()` зовут явно командой/тестом. `platform/gpu/arch` остаются `null`,
+если движок не передал их в JS; текст stderr не перехватывается (движок не
+хранит его в JS), поэтому `log.txt` — структурный журнал плюс консоль
+DevTools, и это написано и в `README.txt`.
+
+```bash
+build/_deps/quickjs-build/qjs tests/js/diag_bundle_test.mjs
+```
+
 ## Ограничения
 
 * Это **не** второй лог-фреймворк: модуль не фильтрует по уровню важности, не
-  пишет в файлы и не заменяет `ctx.log`.
+  заменяет `ctx.log`; в файлы пишет только явный `$.diag.bundle()`.
 * Полная трассировка сценария (attack → contact → damage → death → transition)
   живёт в `$.trace` (см. `docs/FRAME_PHASES.md` и §32.1 в
   [HIGH_LEVEL_API.md](../HIGH_LEVEL_API.md)); `diag` отвечает за ошибки.

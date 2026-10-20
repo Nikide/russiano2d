@@ -12,7 +12,7 @@
 import { openStudio } from '../lib/studio_host.js';
 import * as K from '../lib/kinds/tilemap.js';
 import { escapeHtml, joinPath, dirOf } from '../lib/model.js';
-import { button, fieldRow, pairRow, parseNum, isNum } from '../lib/kit.js';
+import { button, fieldRow, pairRow, parseNum, parseBool } from '../lib/kit.js';
 
 export const standalone = true;
 
@@ -143,9 +143,112 @@ function solidSet(h, layer) {
     return s === true ? 'all' : (Array.isArray(s) ? new Set(s) : null);
 }
 
+// --- Террейны и анимации: обычные поля JSON-файла (не отдельный формат) ---------------------------------------------------
+
+function solidText(v) {
+    return Array.isArray(v) ? v.join(', ') : (v === true ? 'все' : '');
+}
+
+function terrainNames(h) { return Object.keys((h.model && h.model.terrains) || {}); }
+
+function animationList(h) { return Array.isArray(h.model.animations) ? h.model.animations : []; }
+
+/** Кисть для набора: «свой» id, который потом раскрасит terrain-автотайл. */
+function terrainBrush(set) {
+    const s = set && set.solid;
+    if (Array.isArray(s) && s.length) return s[0];
+    return (set && set.base) || 1;
+}
+
+function transitionsText(t) {
+    if (!t) return '';
+    return Object.keys(t).map((k) => k + ':' + t[k]).join(', ');
+}
+
+/** Список id из поля: пусто → []; мусор → Error (его ловит run и показывает диагностику). */
+function parseIds(text, label) {
+    const t = String(text === undefined || text === null ? '' : text).trim();
+    if (!t) return [];
+    const list = t.split(/[,\s]+/).filter(Boolean).map(Number);
+    if (!list.every((x) => Number.isInteger(x) && x >= 1 && x <= K.MAX_ID)) throw new Error(label + ' — целые 1..' + K.MAX_ID + ' через запятую');
+    return list;
+}
+
+/** «все» | id через запятую → true | id[]; пусто → undefined. */
+function parseSolidValue(text, label) {
+    const t = String(text === undefined || text === null ? '' : text).trim();
+    if (!t) return undefined;
+    if (/^(все|all|true)$/i.test(t)) return true;
+    const list = parseIds(t, label);
+    if (!list.length) throw new Error(label + ' — целые 1..' + K.MAX_ID + ' через запятую или «все»');
+    return list;
+}
+
+/** «маска:тайл, …» → { маска: тайл } (ключи 0..255, тайлы 1..65535). */
+function parseTransitions(text) {
+    const t = String(text === undefined || text === null ? '' : text).trim();
+    if (!t) return {};
+    const out = {};
+    for (const part of t.split(/[;,\s]+/).filter(Boolean)) {
+        const m = /^(\d+)\s*[:=]\s*(\d+)$/.exec(part);
+        if (!m) throw new Error('Переходы — «маска:тайл» через запятую');
+        const key = Number(m[1]), id = Number(m[2]);
+        if (key > 255 || !(id >= 1 && id <= K.MAX_ID)) throw new Error('Переходы: маска 0..255, тайл 1..' + K.MAX_ID);
+        out[key] = id;
+    }
+    return out;
+}
+
 function palRect(h) {
     const r = h.rect();
     return { x: r.x + r.w - PAL.w - PAL.pad, y: r.y + PAL.pad, w: PAL.w, h: Math.min(r.h - PAL.pad * 2, 300) };
+}
+
+/** Секция «ТЕРРЕЙН» правой панели: наборы карты и переключение на terrain-автотайл. */
+function terrainSection(h, m) {
+    const names = terrainNames(h);
+    let sel = h.ext.terrainSel;
+    if (names.indexOf(sel) < 0) sel = names[0] || '';
+    const set = sel ? (m.terrains || {})[sel] : null;
+    const mode = h.ext.terMode || (set && set.mode) || 'bit16';
+    const border = h.ext.terBorder === undefined ? !!(set && set.border) : !!h.ext.terBorder;
+    return '<h4>ТЕРРЕЙН</h4><div class="field-row">' +
+        (names.length ? names.map((n) => button('ter:' + n, n, 'small' + (n === sel ? ' on' : ''))).join('')
+                      : '<span class="hint">наборов нет</span>') + '</div>' +
+        fieldRow({ id: 'tm-ter-name', label: 'Имя набора', value: sel, hint: 'ключ в terrains{}; пусто — новый набор' }) +
+        '<div class="field-row">' + button('termode:bit16', 'bit16', 'small' + (mode === 'bit16' ? ' on' : '')) +
+        button('termode:blob47', 'blob47', 'small' + (mode === 'blob47' ? ' on' : '')) +
+        button('terborder', 'Граница', 'small' + (border ? ' on' : '')) + '</div>' +
+        pairRow('base / твёрдые id', 'tm-ter-base', set && set.base !== undefined ? set.base : 1, 'tm-ter-solid', solidText(set && set.solid)) +
+        fieldRow({ id: 'tm-ter-trans', label: 'Переходы', value: transitionsText(set && set.transitions),
+            hint: 'маска:тайл (0..255 → id) через запятую; пусто — base + форма' }) +
+        '<div class="field-row">' + button('ter-apply', 'Сохранить', 'small') + button('ter-paint', 'Красить', 'small') +
+        button('ter-del', 'Удалить', 'small danger') + '</div>' +
+        '<div class="hint">«Красить» берёт кисть из набора и включает autotile mode terrain; файл остаётся обычным JSON. ' +
+        (m.autotile && m.autotile.mode === 'terrain' ? 'Сейчас terrain: ' + escapeHtml(m.autotile.terrain || '')
+                                                     : 'Сейчас автотайл: ' + (m.autotile ? m.autotile.mode : 'выкл')) + '</div>';
+}
+
+/** Секция «АНИМАЦИЯ ТАЙЛОВ»: кадры — явные id, время идёт из tickTilemap. */
+function animSection(h, m) {
+    const list = animationList(h);
+    let sel = h.ext.animSel | 0;
+    if (sel < 0 || sel >= list.length) sel = 0;
+    const cur = list[sel] || null;
+    let html = '<h4>АНИМАЦИЯ ТАЙЛОВ</h4><div class="field-row">' +
+        (list.length ? list.slice(0, 8).map((a, i) => button('animsel:' + i,
+            a.tile + ' · ' + (Array.isArray(a.frames) ? a.frames.length : 0) + 'к', 'small' + (i === sel ? ' on' : ''))).join('')
+                     : '<span class="hint">анимаций нет</span>') + '</div>' +
+        pairRow('тайл / fps', 'tm-anim-tile', cur ? cur.tile : '', 'tm-anim-fps', cur && cur.fps !== undefined ? cur.fps : 8) +
+        fieldRow({ id: 'tm-anim-frames', label: 'Кадры (id)', value: cur ? (cur.frames || []).join(', ') : '',
+            hint: 'явные id тайлов через запятую, 1..' + K.MAX_ANIM_FRAMES }) +
+        pairRow('слой / случайно', 'tm-anim-layer', cur && cur.layer !== undefined ? cur.layer : '',
+            'tm-anim-random', cur && cur.random ? 1 : 0) +
+        '<div class="field-row">' + button('anim-set', 'Сохранить', 'small') + button('anim-del', 'Удалить', 'small danger') + '</div>' +
+        '<div class="hint">Анимация идёт по игровому времени (tickTilemap): пауза и fixed-dt действуют. Предпросмотр — настоящий ' +
+        '<span class="mono">$.tilemap</span>; слой пуст — все слои.</div>';
+    if (list.length > 8) html += '<div class="hint">Показаны первые 8 из ' + list.length + ' — остальные правьте через API.</div>';
+    return html;
 }
 
 const DEF = {
@@ -192,7 +295,8 @@ const DEF = {
             '<h4>АВТОТАЙЛ</h4><div class="field-row">' +
             button('auto:off', 'Выкл', 'small' + (!m.autotile ? ' on' : '')) + button('auto:bit16', 'bit16', 'small' + (m.autotile && m.autotile.mode === 'bit16' ? ' on' : '')) +
             button('auto:blob47', 'blob47', 'small' + (m.autotile && m.autotile.mode === 'blob47' ? ' on' : '')) + '</div>' +
-            '<div class="hint">Автотайл применяет игра: <span class="mono">$(\'#level\').autotile(file.autotile)</span>; предпросмотр делает то же.</div>';
+            '<div class="hint">Автотайл применяет игра: <span class="mono">$(\'#level\').autotile(file.autotile)</span>; предпросмотр делает то же.</div>' +
+            terrainSection(h, m) + animSection(h, m);
         const cap = h.ext.tex ? K.tilesetCapacity(m, h.ext.tex[0], h.ext.tex[1]) : 0;
         html += '<div class="hint">Использован id до ' + K.maxUsedId(m) + (cap ? ' · в тайлсете ' + cap + ' ячеек' : '') + '</div>';
         if (cap && K.maxUsedId(m) > cap && !m.autotile) html += '<div class="card-note">Есть id больше размера тайлсета — такие тайлы рантайм не нарисует.</div>';
@@ -224,10 +328,48 @@ const DEF = {
         else if (key === 'up') a.moveLayer(h.sel, h.sel - 1);
         else if (key === 'down') a.moveLayer(h.sel, h.sel + 1);
         else if (key.startsWith('auto:')) a.setAutotile(key.slice(5));
+        else if (key.startsWith('ter:')) { h.ext.terrainSel = key.slice(4); h.ext.terMode = undefined; h.ext.terBorder = undefined; h.renderAll(); }
+        else if (key.startsWith('termode:')) { h.ext.terMode = key.slice(8); h.renderAll(); }
+        else if (key === 'terborder') {
+            const set = (h.model.terrains || {})[h.ext.terrainSel || terrainNames(h)[0]];
+            const cur = h.ext.terBorder === undefined ? !!(set && set.border) : !!h.ext.terBorder;
+            h.ext.terBorder = !cur;
+            h.renderAll();
+        }
+        else if (key === 'ter-apply') {
+            const name = String(d.value('tm-ter-name') || '').trim() || h.ext.terrainSel || '';
+            a.setTerrain(name, {
+                mode: h.ext.terMode || 'bit16',
+                base: d.value('tm-ter-base'),
+                solid: d.value('tm-ter-solid'),
+                transitions: d.value('tm-ter-trans'),
+                border: (() => {
+                    const set = (h.model.terrains || {})[name];
+                    return h.ext.terBorder === undefined ? !!(set && set.border) : !!h.ext.terBorder;
+                })(),
+            });
+        }
+        else if (key === 'ter-paint') {
+            const name = String(d.value('tm-ter-name') || '').trim() || h.ext.terrainSel || '';
+            a.paintTerrain(name);
+        }
+        else if (key === 'ter-del') a.removeTerrain(String(d.value('tm-ter-name') || '').trim() || h.ext.terrainSel || '');
+        else if (key.startsWith('animsel:')) { h.ext.animSel = parseInt(key.slice(8), 10) | 0; h.renderAll(); }
+        else if (key === 'anim-set') {
+            a.setAnimation({
+                tile: d.value('tm-anim-tile'), frames: d.value('tm-anim-frames'), fps: d.value('tm-anim-fps'),
+                random: d.value('tm-anim-random'), layer: d.value('tm-anim-layer'),
+            });
+        }
+        else if (key === 'anim-del') {
+            const cur = animationList(h)[h.ext.animSel | 0];
+            if (cur) a.removeAnimation(cur.tile, cur.layer);
+        }
     },
 
     mount(h) {
-        Object.assign(h.ext, { tool: 'brush', brush: 1, grid: true, showSolid: false, idView: false, palette: true, zoom: 1, panX: 0, panY: 0, stroke: null, rectDrag: null, hover: null, tex: null, needFit: true });
+        Object.assign(h.ext, { tool: 'brush', brush: 1, grid: true, showSolid: false, idView: false, palette: true, zoom: 1, panX: 0, panY: 0, stroke: null, rectDrag: null, hover: null, tex: null, needFit: true,
+            terrainSel: '', terMode: undefined, terBorder: undefined, animSel: 0 });
         mountMap(h);
     },
 
@@ -250,6 +392,9 @@ const DEF = {
         return {
             layers: h.model ? h.model.layers.length : 0, layer: h.sel, tool: h.ext.tool, brush: h.ext.brush, zoom: h.ext.zoom,
             size: l ? K.size(l) : null, node: !!h.ext.node, tileset: h.ext.tex ? { w: h.ext.tex[0], h: h.ext.tex[1] } : null,
+            autotile: h.model && h.model.autotile ? h.model.autotile.mode : null,
+            terrains: h.model ? terrainNames(h).length : 0,
+            animations: h.model ? animationList(h).length : 0,
         };
     },
 
@@ -481,6 +626,98 @@ function api(h) {
                 if (mode === 'off') delete m.autotile;
                 else m.autotile = { mode, base: 1, solid: Array.isArray(m.solid) ? m.solid.slice() : [1] };
             }) !== null;
+        },
+        /** Набор террейна в обычном JSON: terrains[имя] = { mode, base, solid, transitions, border }. */
+        setTerrain(name, f) {
+            const nm = String(name || '').trim();
+            const ok = h.run('террейн', (m) => {
+                if (!nm) throw new Error('Имя набора террейна не пустое');
+                if (!m.terrains || typeof m.terrains !== 'object' || Array.isArray(m.terrains)) m.terrains = {};
+                const spec = Object.assign({}, m.terrains[nm] || {}, { name: nm });
+                const fields = f || {};
+                if (fields.mode !== undefined) spec.mode = fields.mode;
+                if (fields.base !== undefined) {
+                    const v = num(fields.base);
+                    if (v === null || Number.isNaN(v) || Math.floor(v) !== v || v < 1 || v > K.MAX_ID) throw new Error('base — целое 1..' + K.MAX_ID);
+                    spec.base = v;
+                }
+                if (fields.solid !== undefined) {
+                    const s = parseSolidValue(fields.solid, 'Твёрдые id террейна');
+                    if (s === undefined) delete spec.solid; else spec.solid = s;
+                }
+                if (fields.transitions !== undefined) spec.transitions = typeof fields.transitions === 'string'
+                    ? parseTransitions(fields.transitions) : fields.transitions;
+                if (fields.border !== undefined) spec.border = !!fields.border;
+                if (!K.terrainSpecOk(spec)) throw new Error('Набор террейна: mode bit16|blob47, base 1..' + K.MAX_ID + ', transitions «маска:тайл»');
+                m.terrains[nm] = spec;
+            }) !== null;
+            if (ok) { h.ext.terrainSel = nm; h.ext.terMode = undefined; h.ext.terBorder = undefined; h.renderAll(); }
+            return ok;
+        },
+        removeTerrain(name) {
+            const nm = String(name || '').trim();
+            const ok = h.run('удаление террейна', (m) => {
+                if (!m.terrains || typeof m.terrains !== 'object' || !m.terrains[nm]) throw new Error('Нет набора «' + nm + '»');
+                delete m.terrains[nm];
+                if (!Object.keys(m.terrains).length) delete m.terrains;
+                if (m.autotile && m.autotile.mode === 'terrain' && m.autotile.terrain === nm) delete m.autotile;
+            }) !== null;
+            if (ok) { h.ext.terrainSel = ''; h.renderAll(); }
+            return ok;
+        },
+        /** Переключить карту на autotile mode terrain и взять кисть «своего» id набора. */
+        paintTerrain(name) {
+            const nm = String(name || '').trim();
+            return h.run('красить террейном', (m) => {
+                const set = m.terrains && typeof m.terrains === 'object' ? m.terrains[nm] : null;
+                if (!set || typeof set !== 'object' || Array.isArray(set)) throw new Error('Нет набора «' + nm + '»');
+                m.autotile = { mode: 'terrain', terrain: nm };
+                h.ext.brush = terrainBrush(set);
+                h.ext.tool = 'brush';
+            }) !== null;
+        },
+        /** Покадровая анимация: animations[] = { tile, frames: [id], fps?, random?, layer? }. */
+        setAnimation(f) {
+            const fields = f || {};
+            return h.run('анимация тайла', (m) => {
+                const tile = num(fields.tile);
+                if (tile === null || Number.isNaN(tile) || Math.floor(tile) !== tile || tile < 1 || tile > K.MAX_ID) throw new Error('Тайл анимации — целое 1..' + K.MAX_ID);
+                const frames = Array.isArray(fields.frames) ? fields.frames.map(Number) : parseIds(fields.frames, 'Кадры анимации');
+                const entry = { tile, frames };
+                const has = (v) => v !== undefined && String(v).trim() !== '';
+                if (has(fields.fps)) {
+                    const fps = num(fields.fps);
+                    if (fps === null || Number.isNaN(fps) || !(fps > 0) || fps > 1000) throw new Error('fps — число больше 0');
+                    entry.fps = fps;
+                }
+                if (fields.random !== undefined) entry.random = parseBool(fields.random);
+                if (has(fields.layer)) {
+                    const layer = num(fields.layer);
+                    if (layer === null || Number.isNaN(layer) || Math.floor(layer) !== layer || layer < 0 || layer > K.MAX_LAYERS - 1) {
+                        throw new Error('Слой анимации — целое 0..' + (K.MAX_LAYERS - 1));
+                    }
+                    entry.layer = layer;
+                }
+                if (!K.animationSpecOk(entry)) throw new Error('Анимация: tile 1..' + K.MAX_ID + ', frames 1..' + K.MAX_ANIM_FRAMES + ' id, fps > 0');
+                if (!Array.isArray(m.animations)) m.animations = [];
+                const lk = (e) => (e.layer === undefined ? -1 : e.layer);
+                const i = m.animations.findIndex((e) => e.tile === entry.tile && lk(e) === lk(entry));
+                if (i >= 0) m.animations[i] = entry; else m.animations.push(entry);
+                h.ext.animSel = i >= 0 ? i : m.animations.length - 1;
+            }) !== null;
+        },
+        removeAnimation(tile, layer) {
+            const t = num(tile);
+            const ok = h.run('удаление анимации', (m) => {
+                const list = Array.isArray(m.animations) ? m.animations : [];
+                const want = layer === undefined ? -1 : num(layer);
+                const i = list.findIndex((e) => e.tile === t && (e.layer === undefined ? -1 : e.layer) === want);
+                if (i < 0) throw new Error('Нет анимации тайла ' + t);
+                list.splice(i, 1);
+                if (!list.length) delete m.animations;
+            }) !== null;
+            if (ok) h.renderAll();
+            return ok;
         },
         tileAt(x, y) { const l = layerOf(h); return l && K.inBounds(l, x, y) ? l.data[y][x] : null; },
         node: () => h.ext.node,

@@ -411,7 +411,8 @@ $.gfx.filter(true)                        // линейная фильтраци
 .stopAll() .pause() .wake()
 .overlaps('.wall')                          // → bool по пересечению прямоугольников
 .overlaps('.wall', (hit, self) => { })      // колбэк каждый кадр (hit | null)
-.inside('#zone')                            // → bool
+.inside('#zone')                            // → выборка: центры внутри зоны
+.inside({ x: 0, y: 0, w: 640, h: 360 })     // оператор запроса, не bool
 .layerBits(bits)                            // слой тела: 1, 2, 4, … (по умолчанию 1)
 .mask(bits | узел | селектор)               // с какими слоями сталкиваться (по умолчанию все)
 .collidesWith('#wall')                      // → bool: столкнутся ли узлы по слоям и маскам

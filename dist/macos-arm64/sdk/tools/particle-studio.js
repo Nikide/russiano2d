@@ -17,6 +17,50 @@ const fmt = (v) => (v === undefined ? '' : Array.isArray(v) ? v.join(', ') : v);
 const lo = (v) => (Array.isArray(v) ? v[0] : v);
 const hi = (v) => (Array.isArray(v) ? v[1] : v);
 
+// --- Граф рамп: тот же формат color_ramp/alpha_ramp/size_ramp -------------------
+const GRAPH_PAD = 8;
+const RAMP_KINDS = [['color', 'цвет'], ['alpha', 'альфа'], ['size', 'размер']];
+const RAMP_INPUT = { color: 'pe-cramp', alpha: 'pe-aramp', size: 'pe-sramp' };
+
+const rampKind = (h) => (K.RAMP_FIELDS[h.ext.ramp] ? h.ext.ramp : 'color');
+const rampIn = (h, kind) => (h.model && h.model[K.RAMP_FIELDS[kind]]) || [];
+
+/** Точка графа (окно) по t и значению; для color значение не нужно — середина полосы. */
+export function graphBoxPoint(box, kind, t, value, range) {
+    const x0 = box.x + GRAPH_PAD, x1 = box.x + box.w - GRAPH_PAD;
+    const y0 = box.y + GRAPH_PAD, y1 = box.y + box.h - GRAPH_PAD;
+    const tt = Math.max(0, Math.min(1, Number(t)));
+    if (kind === 'color') return { x: x0 + tt * (x1 - x0), y: (y0 + y1) / 2 };
+    const v = Math.max(range[0], Math.min(range[1], Number(value)));
+    const span = range[1] - range[0];
+    return { x: x0 + tt * (x1 - x0), y: span > 0 ? y1 - (v - range[0]) / span * (y1 - y0) : y1 };
+}
+
+/** Обратно: t по x в окне графа. */
+export function graphBoxT(box, x) {
+    const x0 = box.x + GRAPH_PAD, x1 = box.x + box.w - GRAPH_PAD;
+    return Math.max(0, Math.min(1, x1 > x0 ? (x - x0) / (x1 - x0) : 0));
+}
+
+/** Обратно: значение по y в окне графа (color → null). */
+export function graphBoxValue(box, kind, y, range) {
+    if (kind === 'color') return null;
+    const y0 = box.y + GRAPH_PAD, y1 = box.y + box.h - GRAPH_PAD;
+    const f = Math.max(0, Math.min(1, y1 > y0 ? (y1 - y) / (y1 - y0) : 0));
+    return range[0] + f * (range[1] - range[0]);
+}
+
+/** Индекс точки под курсором (окно графа), иначе -1. */
+export function graphPointAt(ramp, kind, box, range, x, y, tol) {
+    let best = -1, dist = Infinity;
+    (ramp || []).forEach((p, i) => {
+        const q = graphBoxPoint(box, kind, p.t, K.stopValue(p, kind), range);
+        const d = Math.hypot(q.x - x, q.y - y);
+        if (d <= tol && d < dist) { best = i; dist = d; }
+    });
+    return best;
+}
+
 function emitterOpts(h) {
     const o = K.emitterOpts(h.model);
     for (const k of ['src', 'texture']) {
@@ -80,6 +124,10 @@ const DEF = {
             '<h4>РАМПЫ</h4>' + fieldRow({ id: 'pe-cramp', label: 'color_ramp', value: K.rampText(m.color_ramp, 'color'), hint: 't:цвет через пробел: 0:#fff 0.5:#f90 1:#c00' }) +
             fieldRow({ id: 'pe-aramp', label: 'alpha_ramp', value: K.rampText(m.alpha_ramp, 'alpha'), hint: '0:1 0.7:0.6 1:0' }) +
             fieldRow({ id: 'pe-sramp', label: 'size_ramp', value: K.rampText(m.size_ramp, 'size'), hint: '0:4 1:20 (перекрывает size / end_size)' }) +
+            '<h4>ГРАФ РАМП</h4><div class="field-row">' + RAMP_KINDS.map(([k, t]) => button('ramp:kind:' + k, t, 'small' + (rampKind(h) === k ? ' on' : ''))).join('') + '</div>' +
+            '<div id="pp-graph" style="position:relative;height:110px;margin:6px 0px;background-color:#0a0d13;border-width:1px;border-color:#232b3d;border-radius:8px;overflow:hidden;"></div>' +
+            '<div class="field-row">' + button('ramp:add', '+ Точка', 'small') + button('ramp:del', '− Точка', 'small') + '</div>' +
+            '<div class="hint">Точки тянутся мышью; клик по графику добавляет точку. Числовые поля выше остаются запасным путём.</div>' +
             '<h4>ЗОНА И ЗЕРНО</h4><div class="field-row">' + ['point', 'rect', 'circle'].map((z) => button('zone:' + z, z, 'small' + (zone === z ? ' on' : ''))).join('') + '</div>' +
             pairRow('зона w, h', 'pe-zw', fmt(m.emit_zone_w), 'pe-zh', fmt(m.emit_zone_h)) + fieldRow({ id: 'pe-zr', label: 'радиус', value: fmt(m.emit_zone_radius) }) +
             fieldRow({ id: 'pe-seed', label: 'seed', value: fmt(m.seed) }) + fieldRow({ id: 'pe-name', label: 'name', value: fmt(m.name) });
@@ -102,15 +150,25 @@ const DEF = {
         const a = api(h);
         if (key === 'apply') a.applyForm();
         else if (key === 'defaults') a.reset();
+        else if (key.startsWith('ramp:kind:')) a.curveKind(key.slice(10));
+        else if (key === 'ramp:add') a.curveAdd(rampKind(h));
+        else if (key === 'ramp:del') a.curveRemove(rampKind(h), h.ext.rampSel);
         else if (key.startsWith('blend:')) a.set({ blend: key.slice(6) });
         else if (key.startsWith('zone:')) a.set({ emit_zone: key.slice(5) });
     },
 
-    mount(h) { h.ext.emitting = true; h.ext.loop = true; mount(h); },
-    unmount(h) { unmount(h); h.doc.html('ds-overlay', ''); },
+    mount(h) {
+        if (!K.RAMP_FIELDS[h.ext.ramp]) h.ext.ramp = 'color';
+        if (h.ext.rampSel === undefined) h.ext.rampSel = -1;
+        h.ext.rampDrag = null; h.ext.graphSig = '';
+        h.ext.emitting = true; h.ext.loop = true; mount(h);
+    },
+    unmount(h) { unmount(h); h.doc.html('ds-overlay', ''); h.ext.graphSig = ''; h.ext.rampDrag = null; },
     changed(h) { mount(h); },
 
     tick(h) {
+        curveInput(h);
+        paintGraph(h);
         const n = h.ext.node;
         if (!n) return;
         const r = h.rect();
@@ -133,6 +191,113 @@ const DEF = {
 
 function presetHint(p) {
     return { explosion: 'разовый взрыв', smoke: 'дым', sparks: 'искры', fire: 'пламя', rain: 'дождь', dust: 'пыль' }[p] || '';
+}
+
+// --- Граф рамп: отрисовка (RmlUi-элементы) и мышь ---------------------------------
+const px = (v) => Math.round(v * 10) / 10;
+
+function paintGraph(h) {
+    if (!h.model) return false;
+    const box = h.doc.layoutRect('pp-graph');
+    if (!box || !(box.w > 0) || !(box.h > 0)) return false;
+    const kind = rampKind(h);
+    const ramp = rampIn(h, kind);
+    const sel = h.ext.rampSel;
+    const sig = kind + '|' + JSON.stringify(ramp) + '|' + sel + '|' + Math.round(box.w) + 'x' + Math.round(box.h);
+    if (h.ext.graphSig === sig) return true;
+    const range = K.rampRange(ramp, kind);
+    const at = (q) => 'left:' + px(q.x - box.x) + 'px;top:' + px(q.y - box.y) + 'px;';
+    let out = '';
+    if (kind === 'color') {
+        // Полоса цветов: сегмент от точки до следующей, последний — до t=1.
+        let prev = 0;
+        ramp.forEach((p, i) => {
+            const t = Math.max(prev, Math.min(1, Number(p.t)));
+            const next = i < ramp.length - 1 ? Math.max(t, Math.min(1, Number(ramp[i + 1].t))) : 1;
+            const left = GRAPH_PAD + (box.w - 2 * GRAPH_PAD) * prev;
+            const w = Math.max(0, (box.w - 2 * GRAPH_PAD) * (next - prev));
+            out += '<div style="position:absolute;left:' + px(left) + 'px;top:' + px(box.h / 2 - 9) +
+                'px;width:' + px(w) + 'px;height:18px;background-color:' + escapeHtml(p.color || '#ffffff') + ';"></div>';
+            prev = next;
+        });
+        if (!ramp.length) out += '<div style="position:absolute;left:' + GRAPH_PAD + 'px;top:' + px(box.h / 2 - 9) + 'px;width:' + px(box.w - 2 * GRAPH_PAD) + 'px;height:18px;background-color:#1a2030;"></div>';
+    } else {
+        for (const f of [0, 0.5, 1]) {
+            const y = box.y + GRAPH_PAD + (box.h - 2 * GRAPH_PAD) * f;
+            out += '<div style="position:absolute;left:' + GRAPH_PAD + 'px;top:' + px(y - box.y) + 'px;width:' + px(box.w - 2 * GRAPH_PAD) + 'px;height:1px;background-color:#1f2740;"></div>';
+        }
+        const steps = Math.max(2, Math.round((box.w - 2 * GRAPH_PAD) / 6));
+        let prev = null;
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const q = graphBoxPoint(box, kind, t, K.sampleRamp(ramp, kind, t), range);
+            if (prev) {
+                const dx = q.x - prev.x, dy = q.y - prev.y, len = Math.hypot(dx, dy);
+                const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+                out += '<div style="position:absolute;left:' + px(prev.x - box.x) + 'px;top:' + px(prev.y - box.y) + 'px;width:' + px(len) +
+                    'px;height:2px;background-color:#6cc7ff;transform-origin:left center;transform:rotate(' + px(ang) + 'deg);"></div>';
+            }
+            prev = q;
+        }
+        out += '<div style="position:absolute;left:4px;top:2px;color:#7b87a0;font-size:10px;">' + escapeHtml(range[1]) + '</div>' +
+            '<div style="position:absolute;left:4px;top:' + px(box.h - 16) + 'px;color:#7b87a0;font-size:10px;">' + escapeHtml(range[0]) + '</div>';
+    }
+    ramp.forEach((p, i) => {
+        const q = graphBoxPoint(box, kind, p.t, K.stopValue(p, kind), range);
+        const size = i === sel ? 12 : 9;
+        out += '<div style="position:absolute;' + at(q) + 'margin-left:' + px(-size / 2) + 'px;margin-top:' + px(-size / 2) +
+            'px;width:' + size + 'px;height:' + size + 'px;background-color:' + (i === sel ? '#ff5a3c' : '#ffb03a') +
+            ';border-width:1px;border-color:#ffffff;border-radius:' + px(size / 2) + 'px;"></div>';
+    });
+    out += '<div style="position:absolute;left:' + px(box.w - 26) + 'px;top:' + px(box.h - 16) + 'px;color:#7b87a0;font-size:10px;">t 1</div>';
+    h.doc.html('pp-graph', out);
+    h.ext.graphSig = sig;
+    return true;
+}
+
+function curveInput(h) {
+    if (!h.model) return;
+    const box = h.doc.layoutRect('pp-graph');
+    if (!box || !(box.w > 0) || !(box.h > 0)) return;
+    const $ = h.$, m = $.input.mouse();
+    const inside = m.x >= box.x && m.x <= box.x + box.w && m.y >= box.y && m.y <= box.y + box.h;
+    const down = $.input.mouseDown('left');
+    if ($.input.mousePressed('left') && inside) {
+        const kind = rampKind(h);
+        const ramp = rampIn(h, kind);
+        const range = K.rampRange(ramp, kind);
+        const hit = graphPointAt(ramp, kind, box, range, m.x, m.y, 10);
+        if (hit >= 0) {
+            h.ext.rampSel = hit;
+            h.ext.rampDrag = { kind, field: K.RAMP_FIELDS[kind], index: hit, start: JSON.parse(JSON.stringify(ramp)), moved: false, x: m.x, y: m.y };
+            h.ext.graphSig = '';
+            paintGraph(h);
+        } else {
+            api(h).curveAdd(kind, graphBoxT(box, m.x), graphBoxValue(box, kind, m.y, range));
+        }
+    }
+    const d = h.ext.rampDrag;
+    if (!d) return;
+    if (down) {
+        // Клик без движения не должен создавать шаг undo и сдвигать точку пинселем.
+        if (!d.moved && Math.abs(m.x - d.x) < 2 && Math.abs(m.y - d.y) < 2) return;
+        const range = K.rampRange(d.start, d.kind);
+        const next = K.moveRampPoint(d.start, d.kind, d.index, graphBoxT(box, m.x), graphBoxValue(box, d.kind, m.y, range));
+        if (next) {
+            K.setRamp(h.model, d.field, next);
+            h.doc.setValue(RAMP_INPUT[d.kind], K.rampText(next, d.kind));
+            h.ext.rampSel = d.index; h.ext.graphSig = '';
+            paintGraph(h);
+            d.moved = true;
+        }
+    } else {
+        h.ext.rampDrag = null;
+        if (d.moved) {
+            const final = JSON.parse(JSON.stringify(h.model[d.field] || []));
+            K.setRamp(h.model, d.field, d.start);
+            h.run('точка рампы', (mm) => K.setRamp(mm, d.field, final));
+        } else paintGraph(h);
+    }
 }
 
 const numOrDelete = (m, key, text, opts) => {
@@ -160,6 +325,53 @@ const rampOrDelete = (m, key, text, kind) => {
 function api(h) {
     const d = h.doc, v = (id) => d.value(id);
     return {
+        /** Выбранная рампа графа: color | alpha | size. */
+        curveKind(kind) {
+            if (!K.RAMP_FIELDS[kind]) return false;
+            h.ext.ramp = kind; h.ext.rampSel = -1; h.ext.rampDrag = null; h.ext.graphSig = '';
+            h.renderAll();
+            return true;
+        },
+        curveSelect(kind, i) {
+            if (!K.RAMP_FIELDS[kind]) return -1;
+            h.ext.ramp = kind;
+            h.ext.rampSel = i >= 0 && i < rampIn(h, kind).length ? i : -1;
+            h.ext.graphSig = '';
+            paintGraph(h);
+            return h.ext.rampSel;
+        },
+        /** Добавить точку графика. Та же операция у кнопки «+ Точка», клика по графику и агента. */
+        curveAdd(kind, t, value) {
+            const field = K.RAMP_FIELDS[kind];
+            if (!field) return -1;
+            const ramp = rampIn(h, kind);
+            const at = t === undefined ? (ramp.length ? Math.min(1, (ramp[ramp.length - 1].t + 1) / 2) : 0.5) : t;
+            const r = K.addRampPoint(ramp, kind, at, value === undefined ? K.rampDefaultValue(kind) : value);
+            if (!r) { h.note('warning', 'SDK_PARTICLES_RAMP', 'В рампе уже 32 точки'); return -1; }
+            h.ext.ramp = kind; h.ext.rampSel = r.index; h.ext.rampDrag = null; h.ext.graphSig = '';
+            return h.run('точка рампы', (m) => K.setRamp(m, field, r.points)) === null ? -1 : r.index;
+        },
+        /** Удалить точку графика (последнюю не удаляем — так же, как проверяет validate). */
+        curveRemove(kind, i) {
+            const field = K.RAMP_FIELDS[kind];
+            if (!field) return false;
+            const index = i === undefined ? h.ext.rampSel : i;
+            const next = K.removeRampPoint(rampIn(h, kind), index);
+            if (!next) { h.note('warning', 'SDK_PARTICLES_RAMP', 'У рампы должна остаться хотя бы одна точка'); return false; }
+            h.ext.ramp = kind; h.ext.rampSel = next.length ? Math.min(Math.max(0, index), next.length - 1) : -1; h.ext.graphSig = '';
+            return h.run('точка рампы', (m) => K.setRamp(m, field, next)) !== null;
+        },
+        curveMove(kind, i, t, value) {
+            const field = K.RAMP_FIELDS[kind];
+            if (!field) return false;
+            const next = K.moveRampPoint(rampIn(h, kind), kind, i, t, value);
+            if (!next) return false;
+            h.ext.ramp = kind; h.ext.rampSel = i; h.ext.graphSig = '';
+            return h.run('точка рампы', (m) => K.setRamp(m, field, next)) !== null;
+        },
+        /** Копия рампы для отчёта/теста (не ссылка на модель). */
+        ramp(kind) { return JSON.parse(JSON.stringify(rampIn(h, kind || rampKind(h)))); },
+
         /** Частичная правка параметров: `null` убирает поле. Одна правка — один шаг undo. */
         set(patch) {
             return h.run('параметры', (m) => {
