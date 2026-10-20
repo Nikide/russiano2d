@@ -97,7 +97,7 @@ export function createWorkspace(host,def) {
             try{if(def.update)def.update(w,dt);}catch(e){w.fail('EDITOR_ASSET_PREVIEW',e.message);}
             doc.text('aw-hud',def.hud?def.hud(w):def.kind.summary(w.data));
         },layout(){needsPreview=true;},save,undo,redo,dirty:file.dirty,diagnostics:file.diagnostics,
-        close(){closed=true;active=false;file.close();disposePreview();doc.unload();},
+        close(){if(active&&def.deactivate)def.deactivate(w);closed=true;active=false;file.close();disposePreview();doc.unload();},
         snapshot:()=>Object.assign(file.snapshot(),{selected:w.selected,previewNodes:w.nodes.length},def.snapshot?def.snapshot(w):{}),
         commands:()=>[{label:def.title+': проверить',run:validate},...(def.commands?def.commands(w):[])],
     };

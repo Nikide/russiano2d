@@ -10,8 +10,9 @@ import * as narrative from './narrative.js';
 import * as spriteMesh from './sprite_mesh.js';
 import * as tilemap from './tilemap.js';
 import * as particles from './particles.js';
+import * as collision from './collision.js';
 
-const MODULES = [atlas, hammer, narrative, spriteMesh, tilemap, particles];
+const MODULES = [atlas, hammer, narrative, spriteMesh, tilemap, particles, collision];
 
 export const NATIVE = MODULES.map((m) => Object.assign({ native: true, module: m }, m.meta));
 
