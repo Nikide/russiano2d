@@ -293,6 +293,7 @@ export function createEditor($) {
                 tab.abs = full(relPath);
                 tab.loading = true;
                 studios.open(tab).then(() => {
+                    if (!s.tabs.includes(tab)) return;
                     tab.loading = false;
                     if (tab.problemTarget && tab.inst && tab.inst.navigateDiagnostic) { tab.inst.navigateDiagnostic(tab.problemTarget); tab.problemTarget = null; }
                     if (s.active === tab.id) { studios.setActive(tab, true); tab.placed = null; }
@@ -916,7 +917,8 @@ export function createEditor($) {
         if (!s.project) return;
         if (s.fullPreview) {
             $.gfx.text('Esc — вернуться в Editor', 16, 12, { size: 14, color: '#ffffffb0' });
-            if ($.input.pressed('escape')) leaveFullPreview();
+            const api = s.fullPreview.api;
+            if (!api || $.input.rawPressed('escape') || (api.previewRunning && !api.previewRunning())) leaveFullPreview();
             return;
         }
         shortcuts();

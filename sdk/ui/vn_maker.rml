@@ -10,7 +10,7 @@
     <button id="vnm-play" class="btn small">Запустить</button>
     <button id="vnm-from" class="btn small">С этой строки</button>
     <button id="vnm-stop" class="btn small">Остановить</button>
-    <button id="vnm-source" class="btn small">Исходник</button>
+    <button id="vnm-source-mode" class="btn small">Исходник</button>
     <button id="vnm-graph" class="btn small">Граф</button>
   </div>
   <div class="body-row vnm-row">
@@ -45,8 +45,8 @@
         <button id="vnm-down" class="btn small">↓</button>
         <button id="vnm-dup" class="btn small">Дубль</button>
       </div>
-      <div id="vnm-commands" class="vnm-commands"></div>
-      <textarea id="vnm-source" class="vnm-source" style="display:none;"></textarea>
+      <div id="vnm-commands" class="vnm-commands"></div><div id="vnm-graph-view" class="vnm-commands" style="display:none;"></div>
+      <textarea id="vnm-source-buffer" class="vnm-source" style="display:none;"></textarea>
     </div>
     <div class="vnm-side vnm-right">
       <h4>Инспектор</h4>

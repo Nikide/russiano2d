@@ -6,8 +6,9 @@
 
 import * as atlas from './atlas.js';
 import * as hammer from './hammer.js';
+import * as narrative from './narrative.js';
 
-const MODULES = [atlas, hammer];
+const MODULES = [atlas, hammer, narrative];
 
 export const NATIVE = MODULES.map((m) => Object.assign({ native: true, module: m }, m.meta));
 

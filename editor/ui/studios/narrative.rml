@@ -1,10 +1,8 @@
 <rml>
 <head>
-<!-- VN Maker во вкладке Editor. Логика — sdk/lib/vn_maker.js; здесь раскладка
-     по макету Editor. id — те же, что в sdk/ui/vn_maker.rml (их читает модуль),
-     плюс vnm-preview (карточка кадра) и vnm-add-* (кнопки Editor). -->
-<link type="text/rcss" href="../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../sdk/ui/studio.rcss"/><link type="text/rcss" href="hammer.rcss"/><link type="text/rcss" href="vn_maker.rcss"/>
-<title>Narrative</title>
+<!-- Narrative Studio: separate RmlUi document for each Editor tab. -->
+<link type="text/rcss" href="../../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../../sdk/ui/studio.rcss"/><link type="text/rcss" href="../hammer.rcss"/><link type="text/rcss" href="../vn_maker.rcss"/>
+<link type="text/rcss" href="kit.rcss"/><title>Narrative</title>
 </head>
 <body>
 <div class="hm-root">
@@ -19,7 +17,7 @@
     <button id="vnm-from" class="hm-btn" title="Проиграть с выбранной строки">С этой строки</button>
     <button id="vnm-stop" class="hm-btn" title="Остановить проигрывание">Stop</button>
     <span class="hm-sep"></span>
-    <button id="vnm-source" class="hm-btn" title="Исходник .scene текстом">Исходник</button>
+    <button id="vnm-source-mode" class="hm-btn" title="Исходник .scene текстом">Исходник</button>
     <button id="vnm-graph" class="hm-btn" title="Граф меток">Граф</button>
     <span class="we-spacer"></span>
     <span id="vnm-scene-name" class="hm-pill">—</span>
@@ -45,8 +43,8 @@
         <button id="vnm-dup" class="hm-btn" title="Дублировать">Дубль</button>
         <button id="vnm-del" class="hm-btn" title="Удалить">Удалить</button>
       </div>
-      <div id="vnm-commands" class="vnm-commands"></div>
-      <textarea id="vnm-source" class="vnm-source" style="display:none;"></textarea>
+      <div id="vnm-commands" class="vnm-commands"></div><div id="vnm-graph-view" class="vnm-commands" style="display:none;"></div>
+      <textarea id="vnm-source-buffer" class="vnm-source" style="display:none;"></textarea>
     </div>
 
     <!-- Preview -->
@@ -73,6 +71,7 @@
             <div class="hm-field"><label>Переход</label><input id="vnm-f-goto" class="field" type="text"/></div>
             <div class="hm-h">Строка целиком</div>
             <textarea id="vnm-f-raw" class="area" style="height:44px;"></textarea>
+            <div id="vnm-command-help" class="hint"></div>
             <button id="vnm-apply" class="hm-btn hm-primary hm-wide">Применить</button>
           </div>
         </div>

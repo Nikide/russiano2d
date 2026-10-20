@@ -1,3 +1,13 @@
+> EDITOR NARRATIVE — VN Maker на общем каркасе (2026-10-20).
+> У каждой `.scene/.story` свои документ, история и dirty; Save/Undo/Redo и
+> Problems ведёт Editor. Inspector сохраняет choice commits и image duration.
+> Исправлен конфликт ID Source, подключены его буфер, метки/переходы, asset
+> picker и i18n. Play использует несохранённый текст через существующие
+> story/dialog и тему проекта; Esc/конец/закрытие возвращают Editor, другая
+> вкладка не останавливает preview. Validate проверяет отдельный черновик
+> native-командой без записи исходника. Старый SDK использует адаптер к тому
+> же контроллеру. Форматы и публичный `$` API не меняются.
+
 > VN VALIDATE — image duration/off (2026-10-20).
 > Native `r2d story validate` больше не принимает длительность `image` за
 > часть имени файла и не ищет ассет `off`. CLI-тест использует единый `r2d`

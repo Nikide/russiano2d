@@ -40,7 +40,7 @@
 | Build | validate → `r2d build <проект> --out <проект>/dist/<имя>`; ошибки validate останавливают сборку |
 | Inspector | проект (`project.json`), файл (язык, строки, состояние, проблемы) и навигация по тексту: `$.scene.add(…)`, `id: …` |
 | Изображения | просмотр PNG/JPG с размером |
-| VN Maker (`.scene`, `.story`) | вкладка-студия: `sdk/lib/vn_maker.js`, раскладка `editor/ui/vn_maker.rml` по макету — Script (+Dialogue/+Choice/+Jump/+Label/+Background), Preview, Inspector команды, метки/сцены/персонажи/ассеты/темы. Preview — кадр выбранной команды из настоящих ассетов проекта (последний `image`, портрет по эмоции из `speakers.json`, имя, реплика, варианты); Play — runtime `$.story` на весь кадр, Esc — назад; Validate Story — `r2d story validate` в Problems |
+| VN Maker (`.scene`, `.story`) | студия Editor `editor/studios/narrative.js`, отдельные документ и история на вкладку (`ui/studios/narrative.rml`); Script/Source/Preview/Inspector, метки/сцены/персонажи/ассеты/темы/i18n. Save/Undo/Redo — Editor; Play — несохранённый буфер через `$.story`/`$.dialog` без автосохранения, Esc/конец/закрытие — назад; Validate Story — native проверка временного черновика в Problems. Подробности: [VN_MAKER.md](VN_MAKER.md) |
 | Atlas (`.atlas.json`, PNG без атласа) | студия Editor `editor/studios/atlas.js`: режимы Sprite и Animation одной вкладки и одной истории. Sprite — выбор/рисование/перенос кадра мышью, пивот, сдвиг стрелками, сетка пикселей, зум к курсору, инспектор кадра; Animation — теги (диапазон, direction, loop, длительность), проигрывание путём игры (`$.atlas` → `.frames().animate()`), лента кадров, скорость, шаг. Нарезка — `r2d atlas-grid` во временный файл и одна правка с undo; проверка черновика — `r2d validate`; запись — канонический вывод `atlas_model.js`, нетронутый файл не переписывается |
 | Студии данных | Tilemap (`.tilemap.json`), Particles, Collision, Parallax (`.layers.json`), Fonts, Audio, Input — общий хост `sdk/lib/studio_host.js` в исходной разметке; один документ на всех, поэтому открыта одна вкладка этой группы |
 | RmlUi (`.rml`, `.rcss`), Re2D World (cells/walls карты) | студии SDK в исходной разметке; Re2D World — «Открыть как» для `.re2dmap` и кнопка Hammer для карт без brushes |
@@ -67,7 +67,7 @@ Sprite, `.re2dmap` — Hammer, `.rml` — RmlUi). Палитра команд (`
   студии встроены в своей разметке SDK (своя палитра, кнопка «К SDK» скрыта);
 * студии данных делят один документ: открыта одна вкладка этой группы;
   Sprite/Animation объединены в Atlas, где у каждой вкладки своя сессия;
-* у старых студий SDK остаётся одна сессия на тип; Hammer и Atlas уже
+* у старых студий SDK остаётся одна сессия на тип; Hammer, Narrative и Atlas уже
   держат несколько файлов одновременно;
 * поиска по проекту (боковая «Search») нет — открывается Quick Open;
 * `project.json` v2 (индекс сцен/ролей) не введён;
@@ -133,6 +133,23 @@ RmlUi отдаёт `src="/abs/path.png"` файловому интерфейсу
 Визуальная проверка — снимок настоящего RmlUi из агентского прогона;
 ручной интерактивный прогон, HiDPI и другие ОС пока не подтверждены.
 
-Следующий перенос по согласованному порядку: VN Maker → SpriteMesh →
+Следующий перенос по согласованному порядку: SpriteMesh →
 Re2DSprite → студии данных → RmlUi/Re2D World. Старый мост удаляется после
 переноса его оставшихся потребителей.
+
+
+## 6. Перенос VN Maker (2026-10-20)
+
+Narrative входит в `editor/studios/index.js`; прежние `vn-maker` и
+`vn-narrative` ведут к нему через алиасы. Старый SDK-мост в Editor больше
+не участвует в открытии сцен. Каркас передаёт студии общий fullscreen-preview
+и возвращает интерфейс по завершении runtime. `sdk/lib/vn_maker.js` остаётся
+адаптером для потребителей старой оболочки; отдельной реализации студии нет.
+
+Проверки переноса VN: `tests/agent/editor_narrative_test.py` — 49 сценариев;
+`tests/agent/sdk_gui_entrypoints_test.py` и `editor_hammer_test.py` прошли.
+Четыре qjs-набора (`vn_model`, `story`, `vn_narrative`, `vn_gaps`) — 50 тестов.
+Xmake-сборка, 15 native story/dialog CLI-проверок, линт изменённых скриптов,
+`r2d validate editor` и четыре стража документации прошли. Снимок вкладки:
+`build/editor-narrative-tabs.png`; это проверка отрисованного RmlUi, не ручного
+ввода с клавиатуры и не проверки других ОС.

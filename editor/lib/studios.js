@@ -18,32 +18,9 @@ const dataStudio = (id, title, re) => sdkStudio(id, title, (p) => re.test(p), DA
 import { nativeFor, nativeById, nativeAlso } from '../studios/index.js';
 
 // Старые id студий SDK, которые заменили студии Editor.
-const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer' };
+const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative' };
 
 const STUDIOS = [
-    {
-        id: 'vn-maker',
-        title: 'Narrative',
-        match: (p) => /\.(scene|story)$/i.test(p),
-        module: '../../sdk/tools/vn-narrative.js',
-        doc: 'ui/vn_maker.rml',
-        ownKeys: ['s', 'z'],
-        // Play проигрывает $.story узлами <ui.*> в проходе сцены — под RmlUi:
-        // на время проигрывания документы Editor скрываются (fullPreview).
-        fullPreview: ['vnm-play', 'vnm-from'],
-        wire(doc, api) {
-            doc.on('vnm-add-choice', 'click', () => api.insert('choice'));
-            doc.on('vnm-add-jump', 'click', () => api.insert('flow'));
-            doc.on('vnm-add-label', 'click', () => api.insert('label'));
-            doc.on('vnm-add-image', 'click', () => api.insert('image'));
-        },
-        summary: (snap) => snap ? [
-            ['Состояние', snap.dirty ? 'изменён, не сохранён' : 'сохранён'],
-            ['Команд', String(snap.commandCount)],
-            ['Выбрана', snap.selectedCommand >= 0 ? '#' + (snap.selectedCommand + 1) : 'нет'],
-            ['Проверка', snap.validation ? ((snap.validation.diagnostics || []).length + ' сообщений') : 'не запускалась'],
-        ] : [],
-    },
     {
         id: 'sprite-mesh-studio',
         title: 'SpriteMesh',
@@ -112,7 +89,7 @@ export function createStudioHost($, editor) {
         $,
         doc: null,                 // Editor не прячет свой документ при открытии студии
         studios: {},
-        layouts: { vn: 'ui/vn_maker.rml', vnPreview: true, spriteMesh: 'ui/sprite_mesh.rml', spriteMeshThumbs: true },
+        layouts: { spriteMesh: 'ui/sprite_mesh.rml', spriteMeshThumbs: true },
         get projectRoot() { return editor.projectRoot(); },
         recovery: null,
         extensions: null,
@@ -165,6 +142,7 @@ export function createStudioHost($, editor) {
             changed: () => editor.changed(tab),
             openWith: (path, id) => editor.openWith(path, id),
             typing: () => editor.typing(),
+            preview: () => editor.fullPreview(tab),
         };
     }
 
@@ -175,6 +153,7 @@ export function createStudioHost($, editor) {
             tab.inst = inst;
             try { await inst.open(tab.abs); }
             catch (e) { if (inst.close) inst.close(); tab.inst = null; throw e; }
+            if (tab.inst !== inst) return null; // closed while open() was pending
             tab.api = inst;
             return inst;
         }
@@ -240,8 +219,9 @@ export function createStudioHost($, editor) {
     }
 
     function close(tab) {
-        if (!tab || !tab.api) return;
+        if (!tab) return;
         if (tab.inst) { tab.inst.close(); tab.inst = null; tab.api = null; return; }
+        if (!tab.api) return;
         closing = true;
         try { if (tab.api.close) tab.api.close(); } finally { closing = false; }
         // close() студии может отказать (несохранённое) — Editor уже спросил.
