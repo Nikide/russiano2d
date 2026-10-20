@@ -14,8 +14,9 @@ import * as collision from './collision.js';
 import * as parallax from './parallax.js';
 import * as fonts from './fonts.js';
 import * as audio from './audio.js';
+import * as input from './input.js';
 
-const MODULES = [atlas, hammer, narrative, spriteMesh, tilemap, particles, collision, parallax, fonts, audio];
+const MODULES = [atlas, hammer, narrative, spriteMesh, tilemap, particles, collision, parallax, fonts, audio, input];
 
 export const NATIVE = MODULES.map((m) => Object.assign({ native: true, module: m }, m.meta));
 

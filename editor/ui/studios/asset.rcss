@@ -61,3 +61,19 @@ input.st-in.px-n { flex: 0 0 auto; width: 36px; margin-left: 4px; }
 .au-sounds { display: block; padding: 2px 10px 8px 10px; }
 .au-tx { float: right; }
 .au-tx .st-btn { padding: 1px 7px; }
+/* Input: тестер действий и клавиши выбранного действия */
+.in-grid { display: block; padding: 12px 16px; overflow-y: auto; height: 100%; }
+.in-tile { display: inline-block; width: 180px; margin: 0px 8px 8px 0px; padding: 8px 10px; background-color: #1b1e24; border: 1px #2a2f39; border-radius: 6px; cursor: pointer; vertical-align: top; }
+.in-tile.sel { border-color: #3b82f6; }
+.in-tile.lit { background-color: #1f5f3a; border-color: #4ad991; }
+.in-name { display: block; font-size: 13px; color: #e6e9ef; margin-bottom: 4px; }
+.in-keys { display: block; }
+.in-key { display: inline-block; font-size: 11px; color: #c9ced8; padding: 1px 6px; margin: 0px 3px 3px 0px; background-color: #262a33; border-radius: 3px; }
+.in-key.bad, .in-chip.bad { color: #ffb4a8; background-color: #4a2424; }
+.in-key.unknown { color: #e2b33c; }
+.in-conflict { display: block; font-size: 12px; color: #ffb4a8; }
+.aw-bottom.in-bottom-host { max-height: 80px; }
+.in-bottom { display: block; padding: 6px 10px; }
+.in-chip { display: inline-block; padding: 2px 2px 2px 8px; margin-right: 4px; font-size: 12px; background-color: #262a33; border-radius: 4px; }
+.in-chip .st-btn { padding: 0px 5px; margin: 0px 0px 0px 4px; }
+input.st-in.in-new { display: inline-block; width: 110px; flex: 0 0 auto; }

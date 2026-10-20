@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Editor Save / Save All: code tabs, legacy SDK studio tabs, no silent loss on group replacement."""
+"""Editor Save / Save All: code tabs and studio tabs, dirty close needs confirmation."""
 import json
 from pathlib import Path
 import sys
@@ -57,27 +57,23 @@ def test():
             a.eval(E + '.activeTab().model.insert("// x\\n");1')
             check(run(a, E + '.save()') is True and (root / 'main.js').read_text().startswith('// x'), 'dirty code Save writes the file')
 
-            # Legacy SDK data studio (Input): Save via Editor goes through the studio.
-            a.eval(E + '.openFile("a.input.json");1')
-            settle(a, '!!' + tab('a.input.json') + '.api && !!' + tab('a.input.json') + '.api.session')
-            a.eval(tab('a.input.json') + '.api.run("add", m=>{m.actions.fire=["f"];});1'); a.step(2)
-            check(a.eval(E + '.studios.dirty(' + tab('a.input.json') + ')'), 'legacy edit marks tab dirty')
-
-            # Opening another file of the same studio group must not drop A silently.
-            a.eval(E + '.openFile("b.input.json");1'); a.step(3)
-            check(a.eval('!!' + tab('a.input.json') + ' && !' + tab('b.input.json')), 'dirty A is kept, B is refused')
-            check(a.eval(E + '.state.active==="a.input.json"'), 'dirty A is brought to front')
-
-            # Save All saves legacy + reports success.
+            # Two native studio tabs, both dirty: Save All saves every tab.
+            for name in ('a.input.json', 'b.input.json'):
+                a.eval(E + '.openFile("' + name + '");1')
+                settle(a, E + '.activeTab().path==="' + name + '" && !!' + tab(name) + '.inst && !!' + tab(name) + '.inst.state.data')
+                a.eval(tab(name) + '.inst.ops.addKey("jump","f");1'); a.step(2)
+            check(a.eval(E + '.studios.dirty(' + tab('a.input.json') + ') && ' + E + '.studios.dirty(' + tab('b.input.json') + ')'), 'both studio tabs are dirty')
             check(run(a, E + '.saveAll()') is True, 'Save All reports success')
-            saved = json.loads((root / 'a.input.json').read_text())
-            check(saved['actions'].get('fire') == ['f'], 'Save All wrote the legacy studio file')
-            check(not a.eval(E + '.studios.dirty(' + tab('a.input.json') + ')'), 'legacy tab clean after Save All')
+            for name in ('a.input.json', 'b.input.json'):
+                check(json.loads((root / name).read_text())['actions']['jump'] == ['space', 'f'], 'Save All wrote ' + name)
+            check(not a.eval(E + '.studios.dirty(' + tab('a.input.json') + ')'), 'tabs clean after Save All')
 
-            # Now B may replace A (clean).
-            a.eval(E + '.openFile("b.input.json");1')
-            settle(a, '!!' + tab('b.input.json') + ' && !' + tab('a.input.json'))
-            check(True, 'clean A is replaced by B in the shared group document')
+            # Closing a dirty tab needs a second request; the first one keeps it.
+            a.eval(tab('b.input.json') + '.inst.ops.addKey("jump","g");1'); a.step(2)
+            a.eval(E + '.closeTab("b.input.json");1'); a.step(1)
+            check(a.eval('!!' + tab('b.input.json')), 'first close of a dirty tab is refused')
+            a.eval(E + '.closeTab("b.input.json");1'); a.step(1)
+            check(a.eval('!' + tab('b.input.json')) and json.loads((root / 'b.input.json').read_text())['actions']['jump'] == ['space', 'f'], 'second close discards unsaved edits without writing')
 
 
 if __name__ == '__main__':

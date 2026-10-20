@@ -12,13 +12,11 @@
 function sdkStudio(id, title, match, doc, back, extra) {
     return Object.assign({ id, title, match, module: '../../sdk/tools/' + id + '.js', doc, hideIds: [back] }, extra || {});
 }
-const DATA = 'sdk/ui/data_studio.rml';
-const dataStudio = (id, title, re) => sdkStudio(id, title, (p) => re.test(p), DATA, 'ds-back', { group: 'data', ownKeys: ['s', 'z', 'y'] });
 
 import { nativeFor, nativeById, nativeAlso } from '../studios/index.js';
 
 // Старые id студий SDK, которые заменили студии Editor.
-const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 're2d-world-studio': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative', 'sprite-mesh-studio': 'sprite-mesh', 'tilemap-studio': 'tilemap', 'particle-studio': 'particles', 'collision-tools': 'collision', 'parallax-tools': 'parallax', 'font-tools': 'fonts', 'audio-tools': 'audio' };
+const ALIASES = { 'sprite-studio': 'atlas', 'animation-studio': 'atlas', 'world-editor': 'hammer', 're2d-world-studio': 'hammer', 'vn-maker': 'narrative', 'vn-narrative': 'narrative', 'sprite-mesh-studio': 'sprite-mesh', 'tilemap-studio': 'tilemap', 'particle-studio': 'particles', 'collision-tools': 'collision', 'parallax-tools': 'parallax', 'font-tools': 'fonts', 'audio-tools': 'audio', 'input-tools': 'input' };
 
 const STUDIOS = [
     {
@@ -34,7 +32,6 @@ const STUDIOS = [
             ['Экипировка', snap.equipped.join(', ') || 'нет'],
         ] : [],
     },
-    dataStudio('input-tools', 'Input', /\.input\.json$/i),
     sdkStudio('rmlui-studio', 'RmlUi', (p) => /\.(rml|rcss)$/i.test(p), 'sdk/ui/rmlui_studio.rml', 'rm-back',
         { ownKeys: ['s', 'z', 'y'] }),
 ];
