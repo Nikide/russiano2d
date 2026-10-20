@@ -11,8 +11,9 @@ import * as spriteMesh from './sprite_mesh.js';
 import * as tilemap from './tilemap.js';
 import * as particles from './particles.js';
 import * as collision from './collision.js';
+import * as parallax from './parallax.js';
 
-const MODULES = [atlas, hammer, narrative, spriteMesh, tilemap, particles, collision];
+const MODULES = [atlas, hammer, narrative, spriteMesh, tilemap, particles, collision, parallax];
 
 export const NATIVE = MODULES.map((m) => Object.assign({ native: true, module: m }, m.meta));
 

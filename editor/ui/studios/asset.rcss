@@ -29,3 +29,11 @@
 .pt-axis { position: absolute; color: #7b87a0; font-size: 10px; }
 input.st-in.pt-small { flex: 0 0 auto; width: 56px; }
 .pt-code { display: block; white-space: pre-wrap; font-family: Roboto Mono; font-size: 11px; color: #9fb4d0; padding: 6px; background-color: #14161b; border-radius: 4px; overflow: hidden; word-break: break-word; }
+/* Parallax: спрайты слоя и картинки проекта */
+.aw-bottom.px-bottom-host { max-height: 230px; }
+.px-bottom { display: flex; flex-direction: row; padding: 4px 10px 8px 10px; }
+.px-col { display: block; flex: 1 1 0; min-width: 0px; padding-right: 10px; }
+.px-list { display: block; max-height: 170px; overflow-y: auto; }
+input.st-in.px-n { flex: 0 0 auto; width: 36px; margin-left: 4px; }
+.px-img { height: 28px; }
+.px-img img { width: 24px; height: 24px; margin-right: 6px; vertical-align: middle; }
