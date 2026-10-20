@@ -19,6 +19,7 @@ typedef struct R2DSpriteMesh {
     float *vertices; /* 8 floats per vertex, triangle list */
     uint32_t vertex_count;
     uint32_t opaque_pixels;
+    uint32_t source_width, source_height;
 } R2DSpriteMesh;
 
 typedef struct R2DSpriteMeshFrameInput {
@@ -27,6 +28,8 @@ typedef struct R2DSpriteMeshFrameInput {
 } R2DSpriteMeshFrameInput;
 typedef struct R2DSpriteMeshCache {
     uint64_t source_hash, layout_hash, settings_hash;
+    float depth, units_per_pixel;
+    uint8_t alpha_threshold;
     uint32_t frame_count;
     R2DSpriteMesh *frames;
 } R2DSpriteMeshCache;

@@ -20,6 +20,7 @@ set(R2D_SDK_SOURCES
     sdk_json.c
     sdk_image.c
     sdk_atlas.c
+    sdk_sprite_mesh.c
     "${CMAKE_SOURCE_DIR}/src/sprite_mesh.c"
     sdk_world.c
     sdk_world_edit.c

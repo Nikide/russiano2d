@@ -661,7 +661,15 @@ hashes + frame count. Декодер отклоняет усечённые, не
 нетреугольные и non-finite vertex payloads. Тест проверяет несколько кадров,
 round-trip и условия invalidation; `r2d_sprite_mesh_test` проходит (6/6).
 
-Не завершено: связка SDK с full-atlas bake/cache, runtime selection без rebuild,
+Третий этап добавил CLI `r2d-sdk sprite-mesh-bake`: читает статический PNG
+или одностраничный существующий `*.atlas.json`, строит cache на каждый frame,
+пишет атомарно во временный файл и возвращает машинный JSON со статистикой и
+hash identity. На generated two-frame sheet проверено, что соседние opaque
+пиксели на границах кадров получают наружные стенки у обоих кадров; смены
+source/settings/layout меняют соответствующие hashes. `tests/agent/sdk_sprite_mesh_test.py`
+проходит 5 интеграционных assertions; C suite проходит 6/6.
+
+Не завершено: multi-page atlas bake, per-frame pivot metadata, runtime selection без rebuild,
 `$` property API/schema, SpriteMesh Tool/preview/playback,
 save workflow, integration test и sample. Текущая работа требует продолжения;
 не маркировать SpriteMesh V1 как готовый до закрытия всех пунктов.

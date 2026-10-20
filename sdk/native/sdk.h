@@ -295,6 +295,7 @@ char *sdk_atlas_canonical(const R2dJson *root, SdkReport *rep, const char *asset
 int sdk_cmd_atlas_grid(const SdkArgs *a);
 int sdk_cmd_atlas_format(const SdkArgs *a);
 int sdk_cmd_atlas_info(const SdkArgs *a);
+int sdk_cmd_sprite_mesh_bake(const SdkArgs *a);
 
 // ---------------------------------------------------------------------------
 // Re2D World: `*.re2dmap` → `.re2dworld` (тот же native bake, что читает

@@ -125,6 +125,7 @@ Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `co
 | `atlas-grid <png> --out f.atlas.json (--cell WxH \| --cols N --rows N) [--prefix p] [--duration мс] [--tags idle:0-3,…]` | атлас сеткой из картинки |
 | `atlas-format <f.atlas.json> [--write] [--text]` | привести к каноническому виду |
 | `atlas-info <f.atlas.json>` | кадры, теги, слайсы, картинка + проверка |
+| `sprite-mesh-bake <sprite.png|sprite.atlas.json> [--depth N --alpha-threshold N --units-per-pixel N --pivot-x N --pivot-y N --out cache]` | bake mesh-cache для каждого кадра атласа |
 | `world compile <f.re2dmap> [--renderer] [--pvs] [--region-size N] [--output f.re2dworld]` | Re2D World: brush/cell authoring → baked мир; stage report, region grid, coarse PVS; `--pvs` добавляет legacy portal-reachability report |
 | `world info <f.re2dmap>` | то же без записи: статистика/порталы/регионы/проверка карты |
 | `world validate <f.re2dmap>` | компиляция в память + диагностика без записи |

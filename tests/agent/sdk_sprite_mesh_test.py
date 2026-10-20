@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""End-to-end test for r2d-sdk SpriteMesh bake and cache identity."""
+import json
+import os
+import struct
+import subprocess
+import tempfile
+import zlib
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+SDK = os.path.join(ROOT, "build", "r2d-sdk")
+
+
+def png(path, pixels):
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xffffffff)
+    raw = b"\0" + b"".join(bytes(px) for px in pixels)
+    data = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", len(pixels), 1, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+    open(path, "wb").write(data)
+
+
+def bake(atlas, out, *args):
+    p = subprocess.run([SDK, "sprite-mesh-bake", atlas, "--out", out, *args],
+                       cwd=ROOT, text=True, capture_output=True)
+    try:
+        return p.returncode, json.loads(p.stdout)
+    except Exception as exc:
+        raise AssertionError(f"invalid bake response: {p.stdout!r} {p.stderr!r}") from exc
+
+
+def main():
+    assert os.path.isfile(SDK), "build r2d-sdk before this integration test"
+    with tempfile.TemporaryDirectory(prefix="r2d-spritemesh-") as tmp:
+        image = os.path.join(tmp, "sheet.png")
+        atlas = os.path.join(tmp, "hero.atlas.json")
+        cache = os.path.join(tmp, "hero.cache")
+        # Adjacent opaque texels are deliberately split across frame bounds.
+        png(image, [(255, 255, 255, 255), (255, 255, 255, 255)])
+        doc = {"meta": {"image": "sheet.png", "frameTags": [
+            {"name": "idle", "from": 0, "to": 0}, {"name": "walk", "from": 0, "to": 1}]},
+            "frames": {"idle_0": {"frame": {"x": 0, "y": 0, "w": 1, "h": 1}},
+                       "walk_0": {"frame": {"x": 1, "y": 0, "w": 1, "h": 1}}}}
+        open(atlas, "w", encoding="utf-8").write(json.dumps(doc))
+        rc, first = bake(atlas, cache)
+        assert rc == 0 and first["ok"], first
+        assert first["frames"] == 2 and first["opaquePixels"] == 2
+        assert first["vertices"] == 72 and first["triangles"] == 24, first
+        raw = open(cache, "rb").read()
+        assert raw[:8] == b"R2DSMCH1" and struct.unpack_from("<I", raw, 8)[0] == 2
+        assert struct.unpack_from("<I", raw, 12)[0] == 2
+        _, second = bake(atlas, cache, "--depth", "0.12")
+        assert second["settingsHash"] != first["settingsHash"]
+        doc["frames"]["walk_0"]["frame"]["x"] = 0
+        open(atlas, "w", encoding="utf-8").write(json.dumps(doc))
+        _, third = bake(atlas, cache, "--depth", "0.12")
+        assert third["layoutHash"] != second["layoutHash"]
+        png(image, [(255, 255, 255, 255), (255, 255, 255, 0)])
+        _, fourth = bake(atlas, cache, "--depth", "0.12")
+        assert fourth["sourceHash"] != third["sourceHash"]
+        bad = os.path.join(tmp, "bad.atlas.json")
+        open(bad, "w", encoding="utf-8").write('{"frames": []}')
+        rc, failure = bake(bad, cache)
+        assert rc == 1 and failure["ok"] is False
+        codes = {d["code"] for d in failure["diagnostics"]}
+        assert "SDK_SPRITEMESH_FRAMES" in codes, failure
+    print("SDK SpriteMesh bake: 5 checks passed")
+
+
+if __name__ == "__main__":
+    main()

@@ -38,6 +38,7 @@ static const Command k_commands[] = {
     { "atlas-grid",   sdk_cmd_atlas_grid,   "создать атлас спрайтов сеткой из картинки" },
     { "atlas-format", sdk_cmd_atlas_format, "привести атлас к каноническому виду" },
     { "atlas-info",   sdk_cmd_atlas_info,   "кадры, теги, слайсы и проверка атласа" },
+    { "sprite-mesh-bake", sdk_cmd_sprite_mesh_bake, "bake SpriteMesh для всех кадров PNG или atlas" },
     { "world",         sdk_cmd_world,         "Re2D World: world compile|info|validate <map.re2dmap> (brushes, regions, --renderer, --pvs)" },
     { "world-compile", sdk_cmd_world_compile, "Re2D World: *.re2dmap → *.re2dworld (--renderer для нового runtime)" },
     { "world-info",    sdk_cmd_world_info,    "Re2D World: статистика/порталы/проверка *.re2dmap без записи" },
