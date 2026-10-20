@@ -26,7 +26,9 @@ fail() { echo "!! release_build: $*" >&2; exit 3; }
 command -v xmake >/dev/null 2>&1 || fail "xmake не найден в PATH (brew install xmake)"
 [ -f xmake.lua ] || fail "нет xmake.lua — миграция на Xmake не завершена"
 
-command -v zig >/dev/null 2>&1 || fail "zig не найден в PATH (brew install zig) для Linux cross"
+if [ "${R2D_BUILD_LINUX:-0}" = "1" ]; then
+    command -v zig >/dev/null 2>&1 || fail "zig не найден в PATH (brew install zig) для Linux cross"
+fi
 # CMake 4.x ломает try_compile у кросс-пакетов; для Windows нужен CMake 3.31.
 if [ -d /tmp/cmake331/CMake.app/Contents/bin ]; then
     export PATH="/tmp/cmake331/CMake.app/Contents/bin:$PATH"
