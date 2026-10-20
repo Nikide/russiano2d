@@ -32,7 +32,7 @@ export function createEditor($) {
     const icon = (name) => $.ui.icon(name) || '';
     const studios = createStudioHost($, {
         log: (t) => log(t), setStatus: (t, k) => setStatus(t, k),
-        run: (opts) => run(opts), stop: () => stop(), closeStudioTab: () => { const t = activeTab(); if (t && t.kind === 'studio') closeTab(t.id, true); },
+        run: (opts) => run(opts), stop: () => stop(),
         projectRoot: () => (s.project ? s.project.abs : ''),
         fullPreview: (tab) => enterFullPreview(tab),
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
@@ -284,18 +284,7 @@ export function createEditor($) {
                 tab.lang = languageOf(relPath);
             }
             if (kind === 'studio') {
-                // Студия одна на тип файла: прежняя вкладка этой студии закрывается.
                 const studio = asStudio || studioFor(relPath);
-                // Одна сессия на студию (и на группу студий с общим документом).
-                // Студии Editor — экземпляр на вкладку; старые модули SDK — один на студию/группу.
-                const old = studio.native ? null : s.tabs.find((t) => t.kind === 'studio' && !t.studio.native && (t.studio.id === studio.id || (studio.group && t.studio.group === studio.group)));
-                if (old && studios.dirty(old)) {
-                    // Старая студия SDK держит одну сессию: не выбрасываем чужие правки молча.
-                    setStatus('«' + old.path + '» в ' + studio.title + ' не сохранён: сохраните или закройте его вкладку', 'err');
-                    activate(old.id, true);
-                    return old;
-                }
-                if (old) closeTab(old.id, true);
                 tab.studio = studio;
                 tab.abs = full(relPath);
                 tab.loading = true;
