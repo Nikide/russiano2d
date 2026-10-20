@@ -664,7 +664,7 @@ int sdk_cmd_atlas_grid(const SdkArgs *a)
     const char *out_path = sdk_arg_value(a, "--out");
     if (!png || !out_path) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk atlas-grid <картинка> --out <файл.atlas.json> (--cols N --rows N | --cell WxH) "
+            "Использование: r2d atlas-grid <картинка> --out <файл.atlas.json> (--cols N --rows N | --cell WxH) "
             "[--prefix имя] [--duration мс] [--tags idle:0-3,walk:4-9]");
         sdk_report_free(&rep);
         return rc;
@@ -734,7 +734,7 @@ int sdk_cmd_atlas_grid(const SdkArgs *a)
 
     R2dSb doc;
     r2d_sb_init(&doc);
-    r2d_sb_puts(&doc, "{\"meta\":{\"app\":\"r2d-sdk\",\"image\":");
+    r2d_sb_puts(&doc, "{\"meta\":{\"app\":\"r2d\",\"image\":");
     r2d_sb_put_json_string(&doc, rel);
     r2d_sb_printf(&doc, ",\"size\":{\"w\":%d,\"h\":%d}", w, h);
     const char *tags = sdk_arg_value(a, "--tags");
@@ -815,7 +815,7 @@ int sdk_cmd_atlas_format(const SdkArgs *a)
     sdk_report_init(&rep);
     const char *path = sdk_arg_positional(a, 0);
     if (!path) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk atlas-format <файл.atlas.json> [--write] [--text]");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d atlas-format <файл.atlas.json> [--write] [--text]");
         sdk_report_free(&rep);
         return rc;
     }
@@ -859,7 +859,7 @@ int sdk_cmd_atlas_info(const SdkArgs *a)
     sdk_report_init(&rep);
     const char *path = sdk_arg_positional(a, 0);
     if (!path) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk atlas-info <файл.atlas.json>");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d atlas-info <файл.atlas.json>");
         sdk_report_free(&rep);
         return rc;
     }

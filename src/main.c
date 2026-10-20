@@ -113,6 +113,13 @@ static void r2d__print_usage(const char *exe)
         "  --checkpoints strict|off     сверять checkpoints при --replay (по умолчанию strict)\n"
         "  --replay-content <id>        явный content ID игры вместо автохэша её файлов\n"
         "\n"
+        "  --- Команды (первый аргумент без «-») ---\n"
+        "  (без аргументов), edit [проект]          редактор: Project Manager или проект\n"
+        "  build --project <каталог> --out <файл>  собрать игру в один файл (docs/BUILD.md)\n"
+#ifdef R2D_HAVE_SDK
+        "  <команда> ...      инструменты: validate, lint, world, atlas-info, …; список — %s commands\n"
+#endif
+        "\n"
         "  --help             эта справка\n"
         "  --version          версия движка и выход\n"
         "\n"
@@ -121,7 +128,11 @@ static void r2d__print_usage(const char *exe)
         "  --height <N>       высота окна, точек\n"
         "Базовый каталог берётся из R2D_GAME_DIR, иначе — текущий каталог,\n"
         "если в нём есть game/main.js, иначе каталог исполняемого файла.\n",
-        exe);
+        exe
+#ifdef R2D_HAVE_SDK
+        , exe
+#endif
+        );
 }
 
 // --- Снимок кадра -----------------------------------------------------------
@@ -726,8 +737,97 @@ static void r2d__web_frame(void *user)
 }
 #endif
 
+#ifdef R2D_HAVE_SDK
+// sdk/native/sdk_entry.c: таблица команд инструментов (validate, lint, world, …).
+int r2d_sdk_main(int argc, char **argv);
+#endif
+
+static bool r2d__has_arg(int argc, char **argv, const char *name)
+{
+    for (int i = 1; i < argc; ++i)
+        if (SDL_strcmp(argv[i], name) == 0) return true;
+    return false;
+}
+
+// Каталог редактора: <каталог r2d>/editor (пакет) или выше по дереву
+// (build/r2d в репозитории → ../editor). Признак — editor/project.json.
+static bool r2d__find_editor(char *out, size_t cap)
+{
+    const char *base = SDL_GetBasePath();
+    char dir[2048];
+    SDL_snprintf(dir, sizeof dir, "%s", base ? base : "./");
+    for (int up = 0; up < 4; ++up) {
+        char probe[2300];
+        SDL_snprintf(probe, sizeof probe, "%seditor/project.json", dir);
+        SDL_PathInfo info;
+        if (SDL_GetPathInfo(probe, &info) && info.type == SDL_PATHTYPE_FILE) {
+            SDL_snprintf(out, cap, "%seditor", dir);
+            return true;
+        }
+        size_t len = SDL_strlen(dir);
+        if (len > 0 && (dir[len - 1] == '/' || dir[len - 1] == '\\')) dir[--len] = '\0';
+        char *slash = SDL_strrchr(dir, '/');
+#ifdef _WIN32
+        char *bslash = SDL_strrchr(dir, '\\');
+        if (!slash || (bslash && bslash > slash)) slash = bslash;
+#endif
+        if (!slash) break;
+        slash[1] = '\0';
+    }
+    return false;
+}
+
 int main(int argc, char **argv)
 {
+    // `r2d` без аргументов и `r2d edit [проект]` — редактор (editor/, обычный
+    // проект на $ и RmlUi). Путь проекта уходит в --scene: редактор читает его
+    // как $.startScene. Пустая строка — Project Manager.
+    static char editor_dir[2048], project_abs[4096];
+    static char *edit_argv[64];
+    if (argc == 1 || (argc > 1 && SDL_strcmp(argv[1], "edit") == 0)) {
+        if (!r2d__find_editor(editor_dir, sizeof editor_dir)) {
+            fprintf(stderr, "r2d: каталог editor/ не найден рядом с бинарником; запуск игры — r2d --game <каталог>\n");
+            return 2;
+        }
+        project_abs[0] = '\0';
+        if (argc > 2) {
+            const char *p = argv[2];
+            const bool absolute = p[0] == '/' || p[0] == '\\' || (p[0] && p[1] == ':');
+            char *cwd = absolute ? NULL : SDL_GetCurrentDirectory();
+            SDL_snprintf(project_abs, sizeof project_abs, "%s%s", cwd ? cwd : "", p);
+            SDL_free(cwd);
+        }
+        edit_argv[0] = argv[0];
+        edit_argv[1] = "--game";
+        edit_argv[2] = editor_dir;
+        edit_argv[3] = "--scene";
+        edit_argv[4] = project_abs;
+        // Опции после проекта идут движку как есть: r2d edit game --headless.
+        int n = 5;
+        for (int i = 3; i < argc && n < 63; ++i) edit_argv[n++] = argv[i];
+        edit_argv[n] = NULL;
+        argc = n;
+        argv = edit_argv;
+    }
+    // Один бинарник r2d: первый аргумент без «-» — глагол.
+    //   r2d build --project <dir> ...  нативный билдер (src/build.c, docs/BUILD.md);
+    //   r2d <команда> ...              инструменты (r2d validate game, r2d world
+    //                                  compile ...): один JSON в stdout, без окна;
+    //   r2d [--опции]                  игра/движок, как раньше.
+    // `r2d build <dir> --out f` без --project — команда инструментов, она сама
+    // зовёт нативный билдер с --project, поэтому рекурсии нет.
+    if (argc > 1 && SDL_strcmp(argv[1], "build") == 0 && r2d__has_arg(argc, argv, "--project")) {
+        return r2d_build_main(argc, argv);
+    }
+#ifdef R2D_HAVE_SDK
+    if (argc > 1 && argv[1][0] != '-') {
+        return r2d_sdk_main(argc, argv);
+    }
+#else
+    if (argc > 1 && SDL_strcmp(argv[1], "build") == 0) {
+        return r2d_build_main(argc, argv);
+    }
+#endif
     // --dump-api is consumed by r2d-sdk: stdout must contain only the JSON
     // snapshot, so silence engine logs before project/window startup.
     for (int i = 1; i < argc; ++i)
@@ -735,11 +835,6 @@ int main(int argc, char **argv)
             SDL_SetLogPriorities(SDL_LOG_PRIORITY_ERROR);
             r2d_log_stderr = true;   // stdout reserved for the JSON snapshot
         }
-    // Подкоманда сборки: `russiano2d build ...` собирает игру в один файл и
-    // завершается, не создавая окна (см. src/build.c).
-    if (argc > 1 && SDL_strcmp(argv[1], "build") == 0) {
-        return r2d_build_main(argc, argv);
-    }
 
     bool   opt_stats = false;
     bool   opt_hot_reload = true;

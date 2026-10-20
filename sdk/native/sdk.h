@@ -1,8 +1,8 @@
 // ===========================================================================
-// r2d-sdk: нативный бэкенд инструментов Russiano2D SDK.
+// r2d: нативный бэкенд инструментов Russiano2D SDK.
 //
 // Один C-код для всех клиентов (docs/SDK.md §2): GUI SDK (приложение R2D, мост
-// `$.sdk`), CLI `r2d-sdk` и агент вызывают одни и те же функции. Внешних
+// `$.sdk`), CLI `r2d` и агент вызывают одни и те же функции. Внешних
 // runtime (Python, Node.js, shell) здесь нет и быть не должно.
 //
 // Все команды отвечают одним JSON-объектом на stdout:
@@ -257,7 +257,7 @@ typedef struct SdkProcResult {
 
 bool sdk_run_process(const char *const *argv, SdkProcResult *res);
 void sdk_proc_free(SdkProcResult *res);
-// Путь к бинарнику движка: --engine, R2D_ENGINE, рядом с r2d-sdk.
+// Путь к бинарнику движка: --engine, R2D_ENGINE, рядом с r2d.
 bool sdk_find_engine(const char *override_path, char *out, size_t cap);
 
 typedef struct SdkArgs {
@@ -367,7 +367,7 @@ int sdk_cmd_lint(const SdkArgs *a);
 int sdk_cmd_doctor(const SdkArgs *a);
 int sdk_lint_run(const char *schema_path,const char *target,SdkReport *rep,int *files);
 // Находит api.schema.json для validate/lint/doctor: явный --schema (без
-// молчаливой подмены), затем каталог проекта, cwd, каталог r2d-sdk и два
+// молчаливой подмены), затем каталог проекта, cwd, каталог r2d и два
 // уровня выше него. Так установленный пакет проверяет проект из любого cwd.
 bool sdk_schema_resolve(const char *explicit_path, const char *preferred_dir,
                         char *out, size_t cap);
@@ -376,6 +376,10 @@ int cmd_docs_generate(const SdkArgs *a);
 void sdk_project_validate(const char *dir,const char *schema_path,SdkReport *rep);
 int sdk_cmd_run(const SdkArgs *a);
 int sdk_cmd_build(const SdkArgs *a);
+
+// Разбор `<команда> [аргументы]` и вызов команды; argv[0] — имя вызова.
+// Общая точка входа `r2d` (sdk_cli.c) и `russiano2d sdk` (src/main.c).
+int r2d_sdk_main(int argc, char **argv);
 
 // Печатает {"ok":false,"error":...} + диагностику и возвращает 2.
 int sdk_fail(SdkReport *rep, const char *code, const char *fmt, ...);

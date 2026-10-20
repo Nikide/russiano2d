@@ -3,7 +3,8 @@
 Движок и игры проекта — **2D/2.5D только**. Не добавляй ECS, альтернативный scene
 graph, собственный event bus, asset loader, physics/audio-абстракции или
 «менеджеры ради менеджеров». Публичный API — это `$` API; сначала проверь его,
-потом пиши игру. Runtime (`russiano2d`) не зависит от SDK (`r2d-sdk`).
+потом пиши игру. Один бинарник `r2d`: игра, движок, инструменты и редактор
+(docs/EDITOR.md).
 
 ## Перед реализацией игровой функциональности
 
@@ -11,8 +12,8 @@ graph, собственный event bus, asset loader, physics/audio-абстр�
 2. Проверь существующие recipes/examples.
 3. Переиспользуй движковые возможности; не дублируй подсистемы.
 4. Не пиши второй движок внутри игры.
-5. Запусти `r2d-sdk lint` на изменённых скриптах.
-6. Запусти `r2d-sdk validate` на проекте.
+5. Запусти `r2d lint` на изменённых скриптах.
+6. Запусти `r2d validate` на проекте.
 7. Исправь диагностику до того, как считать задачу готовой.
 
 ## Сборка и проверки
@@ -25,10 +26,11 @@ python3 tests/doc_claims_test.py && python3 tests/doc_coverage_test.py && \
 python3 tests/api_docs_sync_test.py && python3 tests/api_freeze_test.py
 ```
 
-- Runtime: `./build/russiano2d --game <dir> --scene <name>`.
-- SDK CLI: `./build/r2d-sdk <command>` (единственный backend для CLI, GUI и агентов).
-- GUI SDK: `./build/russiano2d --game sdk` / `./run_sdk.sh`; GUI вызывает native
-  операции, а не реализует второй линтер/валидатор.
+- Игра: `./build/r2d --game <dir> --scene <name>`.
+- Инструменты: `./build/r2d <command>` (`r2d commands`; единственный backend для CLI, Editor и агентов).
+- Editor: `./build/r2d` или `./build/r2d edit <dir>` (`editor/`); вызывает native
+  операции, а не реализует второй линтер/валидатор. `sdk/` — старое SDK-приложение, только референс.
+- Релизная сборка — xmake (`xmake.lua`, цель `r2d`), dev и тесты — CMake (`build/`).
 - Документация: `docs/` — human docs; generated API reference не править руками.
 - `dist/` — релизный пакет; не создавать параллельные бинарники и не менять его
   структуру без релизного инструмента.

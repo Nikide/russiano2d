@@ -822,6 +822,7 @@ $.input.on('key', e => { })            // e.key, e.pressed, e.shift/ctrl/alt
 $.input.on('mouse', e => { }) .on('wheel', e => { }) .on('gamepadOn', e => { })
 $.input.off()
 $.input.text()                         // символы, набранные за этот кадр
+$.input.clipboard() .setClipboard('x') // системный буфер обмена (текст | null / bool)
 
 // Контексты ввода (§15): приоритет решает, кому достанется нажатие.
 $.input.context('menu', { active: false, priority: 20, binds: { confirm: ['space'] } })

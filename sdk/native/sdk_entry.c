@@ -1,7 +1,6 @@
 // ===========================================================================
-// r2d-sdk — CLI инструментов Russiano2D SDK.
-//
-//   r2d-sdk <команда> [аргументы]
+// Команды инструментов единого бинарника r2d: r2d_sdk_main() разбирает
+// `r2d <команда> [аргументы]` (диспетчер — src/main.c).
 //
 // Все команды печатают один JSON-объект в stdout. Код выхода: 0 — ok,
 // 1 — операция выполнена, но есть ошибки данных, 2 — неверное использование.
@@ -52,7 +51,7 @@ static const Command k_commands[] = {
     { "agent", sdk_cmd_agent, "Нативный клиент существующего агентского протокола (JSON session)" },
     { "templates", sdk_cmd_templates, "шаблоны проектов sdk/templates" },
     { "new",       sdk_cmd_new,       "создать проект из шаблона (копирование файлов)" },
-    { "engines",   sdk_cmd_engines,   "найденные сборки движка russiano2d" },
+    { "engines",   sdk_cmd_engines,   "найденные сборки движка r2d" },
     { "run",      sdk_cmd_run,      "запустить игру движком" },
     { "build",    sdk_cmd_build,    "собрать игру в один файл" },
 };
@@ -82,7 +81,7 @@ static int cmd_version(const SdkArgs *a)
     (void)a;
     R2dSb out;
     r2d_sb_init(&out);
-    r2d_sb_puts(&out, "{\"ok\":true,\"name\":\"r2d-sdk\",\"version\":\"" SDK_VERSION "\",\"validators\":[");
+    r2d_sb_puts(&out, "{\"ok\":true,\"name\":\"r2d\",\"version\":\"" SDK_VERSION "\",\"validators\":[");
     for (int i = 0; i < sdk_validator_count(); ++i) {
         if (i) r2d_sb_putc(&out, ',');
         r2d_sb_put_json_string(&out, sdk_validator_type(i));
@@ -93,12 +92,12 @@ static int cmd_version(const SdkArgs *a)
     return 0;
 }
 
-int main(int argc, char **argv)
+int r2d_sdk_main(int argc, char **argv)
 {
     if (argc < 2) {
         SdkReport rep;
         sdk_report_init(&rep);
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk <команда> [аргументы]; список — r2d-sdk commands");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d <команда> [аргументы]; список — r2d commands");
         sdk_report_free(&rep);
         return rc;
     }
@@ -108,7 +107,7 @@ int main(int argc, char **argv)
     }
     SdkReport rep;
     sdk_report_init(&rep);
-    const int rc = sdk_fail(&rep, "SDK_UNKNOWN_COMMAND", "Неизвестная команда «%s»; список — r2d-sdk commands", argv[1]);
+    const int rc = sdk_fail(&rep, "SDK_UNKNOWN_COMMAND", "Неизвестная команда «%s»; список — r2d commands", argv[1]);
     sdk_report_free(&rep);
     return rc;
 }

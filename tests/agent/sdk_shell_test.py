@@ -164,13 +164,15 @@ def main():
         a.step(2)
         check(a.eval(f"{DOC}.rect('view-tools').h") > 100, "экран инструментов виден (занимает место)")
         a.eval(f"{DOC}.setValue('tool-filter', '.atlas.json'); {DOC}.click('btn-tool-filter')")
-        check(a.eval("$.sdkApp.state.registry.tools.filter(t => (t.assets || []).some(p => p.endsWith('.atlas.json'))).length") == 1
-              and 'найдено 1 из' in a.eval(f"{DOC}.content('tool-count')"),
+        check(a.eval("$.sdkApp.state.registry.tools.filter(t => (t.assets || []).some(p => p.endsWith('.atlas.json'))).length") == 2
+              and 'найдено 2 из' in a.eval(f"{DOC}.content('tool-count')"),
               "кнопка поиска фильтрует каталог по типу файла")
         filtered = a.eval(f"{DOC}.content('tool-list')")
-        check('tool-sprite-studio' in filtered and 'tool-particle-studio' not in filtered,
+        # *.atlas.json открывают Sprite Studio и SpriteMesh Studio (sdk_tools.json).
+        check('tool-sprite-studio' in filtered and 'tool-sprite-mesh-studio' in filtered
+              and 'tool-particle-studio' not in filtered,
               "результат поиска показывает только подходящий инструмент")
-        check('найдено 1 из' in a.eval(f"{DOC}.content('tool-count')"),
+        check('найдено 2 из' in a.eval(f"{DOC}.content('tool-count')"),
               "счётчик поиска показывает число результатов")
         a.eval(f"{DOC}.click('btn-tool-filter-clear')")
         check(a.eval(f"{DOC}.content('tool-list')").count('class=\"card') >= len(ids),

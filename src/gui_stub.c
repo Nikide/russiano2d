@@ -245,3 +245,27 @@ bool r2d_gui_click(R2DGui *g, int doc, const char *element_id)
     R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id);
     return false;
 }
+
+bool r2d_gui_place(R2DGui *g, int doc, float x, float y, float w, float h)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(x); R2D_UNUSED(y); R2D_UNUSED(w); R2D_UNUSED(h);
+    return false;
+}
+
+bool r2d_gui_typing(R2DGui *g)
+{
+    R2D_UNUSED(g);
+    return false;
+}
+
+bool r2d_gui_front(R2DGui *g, int doc)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc);
+    return false;
+}
+
+bool r2d_gui_focus(R2DGui *g, int doc, const char *element_id, bool focus)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id); R2D_UNUSED(focus);
+    return false;
+}

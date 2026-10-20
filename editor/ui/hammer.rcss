@@ -1,0 +1,101 @@
+/* ---------------------------------------------------------------------------
+   Hammer во вкладке Editor: раскладка по макету и палитра Editor
+   (editor.rcss). Базовые фигуры вьюпортов (.we-shape, .we-brush, …) — из
+   sdk/ui/world_editor.rcss. Фон документа прозрачный: 3D CAMERA показывает
+   настоящий runtime-кадр мира, нарисованный под RmlUi.
+   --------------------------------------------------------------------------- */
+
+body { font-family: Open Sans; font-size: 13px; color: #d7dce6; background-color: transparent; }
+.hm-root { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.hm-hidden { display: none; }
+
+.hm-bar, .hm-file {
+    display: flex; flex-direction: row; align-items: center; flex: 0 0 auto;
+    padding: 5px 8px; background-color: #1b1e24; border-bottom: 1px #2a2f39;
+}
+.hm-file { border-bottom-width: 0px; border-top: 1px #2a2f39; padding: 3px 8px; }
+.hm-sep { display: inline-block; width: 1px; height: 20px; margin: 0px 8px; background-color: #2f3440; }
+.hm-label { color: #8b93a3; font-size: 12px; margin: 0px 6px 0px 2px; }
+.hm-btn {
+    display: inline-block; padding: 4px 9px; margin: 0px 3px 0px 0px; color: #d7dce6; font-size: 12px; cursor: pointer;
+    background-color: #262a33; border-width: 1px; border-color: #343a46; border-radius: 4px;
+}
+.hm-btn:hover { background-color: #30353f; border-color: #4a5160; }
+.hm-btn.on { color: #ffffff; border-color: #3b82f6; background-color: #1f3a5f; }
+.hm-btn.off { color: #5b6270; }
+.hm-btn.hm-primary { background-color: #238636; border-color: #2ea043; color: #ffffff; }
+.hm-btn.hm-primary:hover { background-color: #2ea043; }
+.hm-sq { padding: 4px 7px; }
+.hm-wide { display: block; width: 100%; margin: 3px 0px; box-sizing: border-box; text-align: center; }
+.hm-pill {
+    display: inline-block; padding: 2px 9px; margin-left: 4px; font-size: 12px; color: #c3c9d4;
+    background-color: #14161b; border-width: 1px; border-color: #2f3440; border-radius: 10px;
+}
+.hm-pill.ok { color: #4ad991; }
+.hm-pill.fail { color: #f14c4c; border-color: #6b2b2b; }
+.hm-dirty { color: #e2b33c; margin-right: 6px; }
+.hm-bar .we-icon, .hm-file .we-icon { color: #9fb3d1; width: 14px; height: 14px; font-size: 14px; line-height: 14px; margin-right: 4px; }
+.hm-sq .we-icon { margin-right: 0px; }
+
+.hm-main { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0px; }
+
+/* Палитра инструментов слева */
+.hm-tools {
+    display: block; width: 118px; flex: 0 0 118px; padding: 6px; overflow-y: auto;
+    background-color: #1b1e24; border-right: 1px #2a2f39;
+}
+.hm-tool {
+    display: block; width: 100%; box-sizing: border-box; padding: 6px 8px; margin-bottom: 3px; text-align: left;
+    font-size: 13px; color: #c9ced8; cursor: pointer; border-width: 1px; border-color: transparent; border-radius: 5px;
+}
+.hm-tool:hover { background-color: #262a33; }
+.hm-tool.on { color: #ffffff; background-color: #1f3a5f; border-color: #3b82f6; }
+.hm-tool .we-icon { width: 16px; height: 16px; font-size: 16px; line-height: 16px; margin-right: 6px; color: #9fb3d1; }
+.hm-ext { display: block; }
+.hm-h { display: block; margin: 12px 0px 4px 0px; font-size: 11px; letter-spacing: 1px; color: #8b93a3; }
+.hm-h-first { margin-top: 4px; }
+.hm-field { display: flex; flex-direction: row; align-items: center; margin: 3px 0px; }
+.hm-field label { flex: 0 0 auto; width: 52px; color: #8b93a3; font-size: 12px; }
+.hm-field input.field, .hm-field select.field { display: block; flex: 1 1 0; width: 40px; min-width: 30px; padding: 3px 6px; height: 16px; }
+.hm-row { display: flex; flex-direction: row; flex-wrap: wrap; margin: 3px 0px; }
+.hm-tools select.field, .hm-right input.field.hm-wide { padding: 3px 6px; height: 16px; }
+
+/* Виды */
+.hm-center { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0px; background-color: transparent; }
+.hm-center .we-viewgrid { padding: 2px; }
+.hm-center .we-pane { margin: 2px; border-color: #2f3440; background-color: #101216; }
+.hm-center #we-pane-3d { background-color: transparent; }
+.hm-pane-bar {
+    display: flex; flex-direction: row; align-items: center; padding: 3px 8px;
+    background-color: #1b1e24; border-bottom: 1px #2a2f39;
+}
+.hm-pane-bar .we-pane-title { color: #d7dce6; font-size: 12px; letter-spacing: 1px; }
+.hm-pane-bar .sub { font-size: 11px; color: #8b93a3; margin-left: 8px; }
+.hm-mini { display: inline-block; padding: 1px 7px; margin-left: 4px; font-size: 11px; color: #9aa2b1; cursor: pointer; border-radius: 3px; }
+.hm-mini:hover { color: #ffffff; background-color: #30353f; }
+.hm-center .we-vp { background-color: #0e1014; }
+.hm-center .we-grid-line { background-color: #1c2029; }
+
+/* Правая колонка: инспектор + объекты */
+.hm-right {
+    display: flex; flex-direction: column; width: 290px; flex: 0 0 290px;
+    background-color: #1b1e24; border-left: 1px #2a2f39;
+}
+.hm-insp { display: block; flex: 1 1 0; min-height: 0px; overflow-y: auto; padding: 8px 10px; }
+.hm-objects { display: block; flex: 1 1 0; min-height: 0px; overflow-y: auto; padding: 6px 10px 10px 10px; border-top: 1px #2a2f39; }
+.hm-title { display: block; color: #e6e9ef; font-size: 14px; margin-bottom: 6px; }
+.hm-tree { display: block; margin-top: 4px; }
+.hm-tree .row { padding: 3px 8px; font-size: 12px; border-radius: 3px; }
+.hm-tree .row.sel { background-color: #1f3a5f; }
+.hm-right .we-section-toggle { color: #c3c9d4; background-color: #20242b; border-color: #2f3440; padding: 5px 8px; font-size: 12px; }
+.hm-right .field-row label { color: #8b93a3; }
+.hm-path { display: block; flex: 1 1 0; max-width: 420px; padding: 3px 6px; height: 16px; }
+.hm-filename { margin-left: 8px; font-size: 11px; color: #8b93a3; white-space: nowrap; overflow: hidden; }
+.hm-diag { flex: 0 0 auto; max-height: 60px; overflow-y: auto; }
+
+/* Элементы тулбара не сжимаются (иначе иконка встаёт над подписью). */
+.hm-bar > *, .hm-file > button, .hm-file > span.hm-label { flex: 0 0 auto; }
+.hm-btn, .hm-tool, .hm-pill, .hm-label { white-space: nowrap; }
+.hm-bar #we-status { flex: 0 1 auto; max-width: 280px; overflow: hidden; }
+.hm-bar .we-spacer { flex: 1 1 0; min-width: 8px; }
+.hm-bar .hm-btn .we-icon { vertical-align: middle; }

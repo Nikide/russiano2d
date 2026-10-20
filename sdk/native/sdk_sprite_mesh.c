@@ -61,7 +61,7 @@ static void frame_pivot(const R2dJson *root,const char *name,uint32_t i,
 int sdk_cmd_sprite_mesh_bake(const SdkArgs*a)
 {
     const char*asset=sdk_arg_positional(a,0);
-    if(!asset)return report("SDK_USAGE",NULL,"Использование: r2d-sdk sprite-mesh-bake <sprite.png|sprite.atlas.json> [--depth N --alpha-threshold N --units-per-pixel N --pivot-x N --pivot-y N --out cache] [--check]");
+    if(!asset)return report("SDK_USAGE",NULL,"Использование: r2d sprite-mesh-bake <sprite.png|sprite.atlas.json> [--depth N --alpha-threshold N --units-per-pixel N --pivot-x N --pivot-y N --out cache] [--check]");
     double depth,threshold,upp,px,py;const bool pivot_override=sdk_arg_value(a,"--pivot-x")||sdk_arg_value(a,"--pivot-y");
     if(!number_arg(a,"--depth",.08,&depth)||!number_arg(a,"--alpha-threshold",16,&threshold)||!number_arg(a,"--units-per-pixel",1.0/32.0,&upp)||!number_arg(a,"--pivot-x",0,&px)||!number_arg(a,"--pivot-y",0,&py)||depth<0||depth>1||threshold<0||threshold>255||floor(threshold)!=threshold||upp<=0)
         return report("SDK_SPRITEMESH_SETTINGS",asset,"Параметры SpriteMesh вне диапазона");

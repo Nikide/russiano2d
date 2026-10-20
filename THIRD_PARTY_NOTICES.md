@@ -33,6 +33,7 @@ Russiano2D собирается из исходников и тянет зави
 | Noto Sans | файл в репозитории | SIL OFL 1.1 |
 | LatoLatin | файл в репозитории | SIL OFL 1.1 |
 | Open Sans | файл в репозитории (`OpenSans-Regular.ttf`) | SIL OFL 1.1 |
+| Roboto Mono | файл в репозитории (`RobotoMono-Regular.ttf`, из образцов RmlUi 6.x) | SIL OFL 1.1 |
 | Material Design Icons | шрифт `MaterialIcons-Regular.ttf`, коммит `737e332` | Apache-2.0 |
 
 Все библиотеки берутся из своих официальных репозиториев при сборке
@@ -200,6 +201,9 @@ SPIR-V → MSL (`spirv-cross`). В **готовый бинарник не поп
 уведомление Apache-2.0 и уведомления этих файлов должны сохраняться.
 
 ### Шрифты — SIL OFL 1.1
+- **Roboto Mono** — `assets/fonts/RobotoMono-Regular.ttf`, полный текст:
+  `assets/fonts/LICENSE-RobotoMono.txt`. Моноширинный шрифт редактора кода
+  (`editor/`): позиция каретки считается как колонка × ширина символа.
 - **Open Sans** — `assets/fonts/OpenSans-Regular.ttf`, полный текст:
   `assets/fonts/LICENSE-OpenSans.txt`. Это **шрифт движка по умолчанию**: он
   покрывает и латиницу, и кириллицу. Взят статический Regular из официальной

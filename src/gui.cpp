@@ -119,11 +119,16 @@ private:
         // game/ui/menu.rml, а из JS пишут engine.ui.load('ui/menu.rml').
         // Проверяем три варианта по порядку, чтобы работали обе формы записи
         // и чтобы UI можно было держать и вне game/.
-        std::string candidates[3];
+        // Четвёртый вариант — абсолютный путь: RmlUi трактует src="/a/b.png" как
+        // «от корня приложения» и отдаёт сюда «a/b.png» без слеша. Абсолютные
+        // пути нужны инструментам (Editor показывает ассеты открытого проекта),
+        // поэтому, если ничего не нашлось, пробуем вернуть слеш.
+        std::string candidates[4];
         const std::string root = base_.empty() ? std::string() : base_ + "/";
         candidates[0] = root + "game/" + path;
         candidates[1] = root + path;
         candidates[2] = path;
+        if (!path.empty() && path[0] != '/' && path[0] != '\\') candidates[3] = "/" + path;
 
         for (const std::string &c : candidates) {
             if (c.empty()) continue;
@@ -801,6 +806,55 @@ bool r2d_gui_click(R2DGui *g, int doc, const char *element_id)
     Rml::Element *el = r2d__element(g, doc, element_id);
     if (!el) return false;
     el->Click();
+    return true;
+}
+
+bool r2d_gui_place(R2DGui *g, int doc, float x, float y, float w, float h)
+{
+    Rml::ElementDocument *d = r2d__doc(g, doc);
+    if (!d) return false;
+    if (w <= 0.0f || h <= 0.0f) {
+        // Вернуть раскладку документа из его RCSS (обычно весь экран).
+        for (const char *p : { "position", "left", "top", "width", "height", "overflow" }) d->RemoveProperty(p);
+        return true;
+    }
+    // Встроенный документ обрезается своим прямоугольником: элементы с
+    // абсолютной позицией (рамки, оверлеи студий) не вылезают на соседние панели.
+    d->SetProperty("overflow", "hidden");
+    d->SetProperty("position", "absolute");
+    d->SetProperty("left", Rml::ToString(x) + "px");
+    d->SetProperty("top", Rml::ToString(y) + "px");
+    d->SetProperty("width", Rml::ToString(w) + "px");
+    d->SetProperty("height", Rml::ToString(h) + "px");
+    return true;
+}
+
+bool r2d_gui_typing(R2DGui *g)
+{
+    if (!g || !g->context) return false;
+    Rml::Element *el = g->context->GetFocusElement();
+    if (!el) return false;
+    const Rml::String &tag = el->GetTagName();
+    if (tag == "textarea") return true;
+    if (tag != "input") return false;
+    const Rml::String type = el->GetAttribute<Rml::String>("type", "text");
+    return type == "text" || type == "password" || type == "search" || type == "number";
+}
+
+bool r2d_gui_front(R2DGui *g, int doc)
+{
+    Rml::ElementDocument *d = r2d__doc(g, doc);
+    if (!d) return false;
+    d->PullToFront();
+    return true;
+}
+
+bool r2d_gui_focus(R2DGui *g, int doc, const char *element_id, bool focus)
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    if (!el) return false;
+    if (focus) return el->Focus();
+    el->Blur();
     return true;
 }
 

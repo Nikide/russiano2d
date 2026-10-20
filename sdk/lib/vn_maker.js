@@ -14,7 +14,14 @@ export async function open(app, args) {
 }
 
 function create(app) {
-    const $ = app.$, doc = $.ui.doc('sdk/ui/vn_maker.rml');
+    // Хост может дать свою раскладку с теми же id (Editor: editor/ui/vn_maker.rml)
+    // и корень проекта: пути сцен остаются логическими (story/x.scene).
+    const $ = app.$, doc = $.ui.doc((app.layouts && app.layouts.vn) || 'sdk/ui/vn_maker.rml');
+    const at = (p) => {
+        const root = app.projectRoot ? String(app.projectRoot) : '';
+        return root && p && !/^(\/|[A-Za-z]:[\\/])/.test(p) ? root + '/' + p : p;
+    };
+    const hasPreview = !!(app.layouts && app.layouts.vnPreview);
     const s = {
         active: false, scenePath: '', source: '', lines: [], sel: -1,
         dirty: false, mode: 'commands', scenes: [], speakers: [], validation: null,
@@ -104,7 +111,7 @@ function create(app) {
 
     // --- files --------------------------------------------------------------
     function listDir(path) {
-        try { return $.fs.list(path) || []; } catch (_) { return []; }
+        try { return $.fs.list(at(path)) || []; } catch (_) { return []; }
     }
     function collectScenes(root, out) {
         out = out || [];
@@ -116,8 +123,8 @@ function create(app) {
         }
         return out;
     }
-    function readText(path) { try { return $.fs.readText(path); } catch (_) { return null; } }
-    function writeText(path, text) { try { return $.fs.write(path, text) !== false; } catch (_) { return false; } }
+    function readText(path) { try { return $.fs.readText(at(path)); } catch (_) { return null; } }
+    function writeText(path, text) { try { return $.fs.write(at(path), text) !== false; } catch (_) { return false; } }
 
     function loadScenes() {
         s.scenes = collectScenes('story');
@@ -169,7 +176,7 @@ function create(app) {
     }
     async function validateTheme() {
         if (!s.themeSel) { s.status = 'тема не выбрана'; renderAll(); return false; }
-        try { const r = await app.backend(['dialog', 'validate', s.themeSel], 'VN theme'); s.themeReport = r.json || {}; }
+        try { const r = await app.backend(['dialog', 'validate', at(s.themeSel)], 'VN theme'); s.themeReport = r.json || {}; }
         catch (e) { s.themeReport = { diagnostics: [{ severity: 'error', message: e.message }] }; }
         const d = (s.themeReport.diagnostics || []);
         doc.text('vnm-theme-info', d.length ? ('ошибок: ' + d.length + ' — ' + d[0].message) : 'тема валидна');
@@ -193,12 +200,12 @@ function create(app) {
         if (!list.length) { doc.html('vnm-commands', '<div class="hint">Пустая сцена. Добавьте команду.</div>'); return; }
         doc.html('vnm-commands', list.map((c, i) => {
             const body = c.kind === 'say' ? escapeHtml(c.text || '') :
-                c.kind === 'choice' ? escapeHtml(c.text || '') + (c.goto ? ' → ' + escapeHtml(c.goto) : '') :
+                c.kind === 'choice' ? escapeHtml(c.text || '') + (c.goto ? ' -> ' + escapeHtml(c.goto) : '') :
                 escapeHtml(c.kind === 'raw' ? c.raw : (c.text || ''));
             return '<div class="vnm-cmd' + (i === s.sel ? ' active' : '') + '" data-key="' + i + '">' +
                 '<div class="vnm-head">' + escapeHtml(String(c.kind).toUpperCase()) +
                 (c.speaker ? ' · ' + escapeHtml(c.speaker) : '') + (c.expr ? ' [' + escapeHtml(c.expr) + ']' : '') +
-                (c.goto && c.kind !== 'choice' ? ' → ' + escapeHtml(c.goto) : '') + '</div>' +
+                (c.goto && c.kind !== 'choice' ? ' -> ' + escapeHtml(c.goto) : '') + '</div>' +
                 '<div class="vnm-body">' + body + '</div></div>';
         }).join(''));
     }
@@ -218,9 +225,54 @@ function create(app) {
         const list = d ? (d.diagnostics || d.errors || []) : [];
         doc.html('vnm-diag', list.length ? list.map((x) => '<div class="diag">' + escapeHtml(String(x.severity || 'error')) + ': ' + escapeHtml(String(x.message || x.code || x)) + '</div>').join('') : '<div class="hint">Проверка не запускалась.</div>');
     }
+    // Предпросмотр выбранной команды из настоящих ассетов проекта: фон —
+    // последний `image` до строки, портрет и имя — speakers.json, варианты —
+    // соседние `- …` строки. Это композиция кадра, а не второй интерпретатор:
+    // проигрывание — $.story (Play).
+    function previewModel() {
+        const list = visible();
+        const c = list[s.sel] || list.find((x) => x.kind === 'say' || x.kind === 'narration') || null;
+        if (!c) return null;
+        let bg = '';
+        for (let i = 0; i <= c.index && i < s.lines.length; i++) {
+            const m = /^\s*image\s+(\S+)/.exec(s.lines[i]);
+            if (m) bg = m[1] === 'off' ? '' : m[1];
+        }
+        const sp = c.speaker && s.speakersData && s.speakersData.speakers ? s.speakersData.speakers[c.speaker] : null;
+        const portraits = sp && sp.portraits ? sp.portraits : {};
+        const portrait = c.kind === 'say' ? (portraits[c.expr] || portraits[Object.keys(portraits)[0]] || '') : '';
+        let choices = [];
+        const k = list.indexOf(c);
+        if (c.kind === 'choice' || (list[k + 1] && list[k + 1].kind === 'choice')) {
+            let a = c.kind === 'choice' ? k : k + 1;
+            while (a > 0 && list[a - 1].kind === 'choice') a--;
+            for (let i = a; i < list.length && list[i].kind === 'choice'; i++) choices.push({ text: list[i].text, goto: list[i].goto, on: list[i] === c });
+        }
+        let speaker = '', text = '';
+        if (c.kind === 'say') { speaker = sp && sp.name ? sp.name : c.speaker; text = c.text; }
+        else if (c.kind === 'narration') text = c.text;
+        else if (c.kind === 'choice') {
+            // Вопрос — ближайшая реплика выше блока выбора.
+            for (let i = k; i >= 0; i--) if (list[i].kind === 'say' || list[i].kind === 'narration') { speaker = list[i].kind === 'say' ? ((s.speakersData.speakers || {})[list[i].speaker] || {}).name || list[i].speaker : ''; text = list[i].text; break; }
+        } else text = c.raw || c.text || '';
+        return { kind: c.kind, bg, portrait, speaker, text, choices };
+    }
+    function renderPreview() {
+        if (!hasPreview) return;
+        const p = previewModel();
+        if (!p) { doc.html('vnm-preview', '<div class="vp-empty">Выберите реплику — здесь будет кадр.</div>'); return; }
+        const img = (path, cls) => path ? '<img class="' + cls + '" src="' + escapeHtml(at(path)) + '"/>' : '';
+        doc.html('vnm-preview',
+            '<div class="vp-stage">' + (p.bg ? img(p.bg, 'vp-bg') : '<div class="vp-nobg">фон не задан (image …)</div>') +
+            img(p.portrait, 'vp-portrait') +
+            (p.text || p.choices.length ? '<div class="vp-box">' + (p.speaker ? '<div class="vp-name">' + escapeHtml(p.speaker) + '</div>' : '') +
+                '<div class="vp-text">' + escapeHtml(p.text || '') + '</div>' +
+                p.choices.map((c) => '<div class="vp-choice' + (c.on ? ' on' : '') + '">' + escapeHtml(c.text) + '</div>').join('') + '</div>' : '') +
+            '</div>');
+    }
     function renderAll() {
         if (!s.active) return;
-        renderScenes(); renderLabels(); renderSpeakers(); renderCommands(); renderInspector(); renderDiag(); renderThemes(); renderEnv();
+        renderScenes(); renderLabels(); renderSpeakers(); renderCommands(); renderInspector(); renderDiag(); renderThemes(); renderEnv(); renderPreview();
         doc.text('vnm-scene-name', s.scenePath || '—');
         doc.text('vnm-state', s.dirty ? 'не сохранено' : (s.status || ''));
         doc.text('vnm-search', s.search || '');
@@ -276,7 +328,7 @@ function create(app) {
 
     async function validate() {
         const target = dir();
-        try { const r = await app.backend(['story', 'validate', target], 'VN validate'); s.validation = r.json || { diagnostics: [] }; }
+        try { const r = await app.backend(['story', 'validate', at(target)], 'VN validate'); s.validation = r.json || { diagnostics: [] }; }
         catch (e) { s.validation = { diagnostics: [{ severity: 'error', message: e.message }] }; }
         s.status = 'проверено'; renderDiag(); return s.validation;
     }
@@ -361,6 +413,10 @@ function create(app) {
         if (args && args.asset) s.scenePath = String(args.asset);
         loadScenes();
         if (s.scenePath && !s.source) openScene(s.scenePath);
+        // Повторное открытие с другим файлом (вкладка Editor, Asset Browser) — эта сцена.
+        else if (args && args.asset && String(args.asset) !== s.loadedPath) openScene(String(args.asset));
+        s.loadedPath = s.scenePath;
+        renderAll();
         return panel;
     }
     function close() { if (s.dirty && !s.closeWarned) { s.closeWarned = true; s.status = 'не сохранено: нажмите «К SDK» ещё раз'; renderAll(); return false; } s.active = false; doc.hide(); app.closeTool(); return true; }
@@ -443,7 +499,8 @@ function create(app) {
     $.update(() => { keys(); drag(); });
 
     const panel = {
-        state: s, open: openOpts, close,
+        state: s, open: openOpts, close, render: renderAll, commands: () => visible(), preview: previewModel,
+        diagnostics: () => (s.validation ? (s.validation.diagnostics || s.validation.errors || []) : []),
         setSource, openScene, newScene, save, validate, select, undo, redo, saveSpeakers,
         insert, update: applyInspector, delete: del, move, duplicate,
         listScenes: () => s.scenes.slice(), listLabels: () => visible().filter((c) => c.kind === 'label').map((c) => c.text),

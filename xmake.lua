@@ -339,13 +339,16 @@ add_requires("zstd", {system = false})
 add_requires("stb", {system = false})
 add_requires("tinyexr-r2d v1.0.13", {system = false})
 
-target("russiano2d")
+-- Один бинарник r2d: игра, движок, редактор и инструменты (r2d validate …).
+target("r2d")
     set_kind("binary")
     add_files("src/*.c", "src/*.cpp")
+    -- Инструменты (sdk/native): общие с движком src/*.c уже в цели выше.
+    add_files("sdk/native/*.c", {cflags = "-include stdio.h -include ctype.h -include string.h -include stdlib.h"})
     add_files("third_party/zlib/*.c")
     -- R2D_ENABLE_RE2D=0 / AUDIO=0 / LIVE_SHADERS=0 на этом этапе.
     remove_files("src/net_stub.c", "src/audio_stub.c", "src/gui_stub.c",
-                 "src/sdk_launcher.c", "src/rmlui_wgsl.c")
+                 "src/rmlui_wgsl.c")
     if is_plat("macosx") then
         remove_files("src/shader_live_stub.c")
     else
@@ -353,7 +356,7 @@ target("russiano2d")
     end
     add_files("third_party/rmlui_backends/RmlUi_Platform_SDL.cpp",
               "third_party/rmlui_backends/RmlUi_Renderer_SDL_GPU.cpp")
-    add_includedirs("src", "third_party/fastnoise_lite",
+    add_includedirs("src", "sdk/native", "third_party/fastnoise_lite",
                     "third_party/zlib",
                     "third_party/visibility",
                     "third_party/rmlui_backends",
@@ -368,7 +371,9 @@ target("russiano2d")
                 "R2D_ENABLE_RMLUI=1",
                 "R2D_ENABLE_ZSTD=1",
                 "RMLUI_SDL_VERSION_MAJOR=3",
-                "RMLUI_STATIC_LIB")
+                "RMLUI_STATIC_LIB",
+                "R2D_HAVE_SDK=1",
+                "R2D_SDK_VERSION=\"1.2.13\"")
     add_packages("libsdl3", "libsdl3_image", "libsdl3_mixer", "sdl3_net-r2d", "quickjs-ng", "box2d", "rmlui",
                  "freetype", "zstd", "stb", "tinyexr-r2d")
     if is_plat("macosx") then
@@ -382,42 +387,3 @@ target("russiano2d")
     before_build(function (target)
         os.execv("tools/xmake_generate.sh", {"build-xmake/generated"})
     end)
-
-target("russiano2d-sdk")
-    set_kind("binary")
-    add_files("src/sdk_launcher.c")
-    add_packages("libsdl3")
-
-target("r2d-sdk")
-    set_kind("binary")
-    add_files("sdk/native/*.c")
-    add_files("src/re2d_world.c", "src/re2d_world_region.c", "src/re2d_world_topology.c",
-              "src/re2d_world_visibility.c", "src/re2d_world_hint.c", "src/re2d_world_bake.c",
-              "src/re2d_world_semantic.c", "src/re2d_world_metadata.c", "src/re2d_world_polygon.c",
-              "src/re2d_world_light.c", "src/re2d_world_material.c", "src/re2d_world_render_features.c",
-              "src/re2d_math.c", "src/sprite_mesh.c", "src/bsp.c", "src/json.c")
-    add_includedirs("sdk/native", "src")
-    add_defines("R2D_SDK_VERSION=\"1.2.13\"")
-    add_cflags("-include stdio.h -include ctype.h -include string.h -include stdlib.h")
-    add_packages("libsdl3", "stb")
-    if is_plat("mingw", "windows") then
-        add_syslinks("ws2_32", "iphlpapi")
-    end
-
-if is_plat("macosx") then
-    target("russiano2d-sdk-app")
-        set_kind("phony")
-        add_deps("russiano2d", "russiano2d-sdk", "r2d-sdk")
-        after_build(function (target)
-            local outdir = target:dep("russiano2d"):targetdir()
-            local app = path.join(outdir, "Russiano2D SDK.app")
-            os.execv("python3", {
-                path.join(os.projectdir(), "tools/package_macos_sdk_app.py"),
-                "--app", app,
-                "--engine", target:dep("russiano2d"):targetfile(),
-                "--launcher", target:dep("russiano2d-sdk"):targetfile(),
-                "--backend", target:dep("r2d-sdk"):targetfile(),
-                "--source-root", os.projectdir()
-            })
-        end)
-end

@@ -32,7 +32,7 @@ static void report_json(R2dSb *out,const R2dJson *ready,const R2dSb *replies,con
 int sdk_cmd_agent(const SdkArgs *a) {
     SdkReport rep;sdk_report_init(&rep);R2dSb replies,line,out;r2d_sb_init(&replies);r2d_sb_init(&line);r2d_sb_init(&out);
     const char *path=sdk_arg_positional(a,0);R2dJson *root=NULL,*ready=NULL;SDL_Process *p=NULL;int completed=0,failed=0;
-    if(!path){sdk_diag(&rep,SDK_ERROR,"SDK_USAGE",NULL,NULL,NULL,"r2d-sdk agent <session.json> [--engine path] [--output report.json]");goto finish;}
+    if(!path){sdk_diag(&rep,SDK_ERROR,"SDK_USAGE",NULL,NULL,NULL,"r2d agent <session.json> [--engine path] [--output report.json]");goto finish;}
     root=sdk_load_json(path,&rep);const R2dJson *requests=root?r2d_json_get(root,"requests"):NULL;
     const char *game=r2d_json_str(r2d_json_get(root,"game"),NULL);double timeout=r2d_json_num(r2d_json_get(root,"timeoutMs"),30000);
     const R2dJson *timeout_node=r2d_json_get(root,"timeoutMs"),*seed_node=r2d_json_get(root,"seed"),*scene_node=r2d_json_get(root,"scene");

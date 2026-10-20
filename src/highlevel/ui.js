@@ -371,6 +371,25 @@ export function installUi($) {
             return wrapper;
         },
 
+        /**
+         * Документ из строки разметки — несколько экземпляров одного интерфейса
+         * (вкладки редактора). `name` — ключ кэша и адрес документа: ссылки
+         * <link href> внутри разметки считаются от его каталога. API — как у doc().
+         *
+         *   const d = $.ui.markup('ui/atlas.3.rml', rml).show();   // … d.unload()
+         */
+        /** Идёт ли набор текста в поле RmlUi (горячие клавиши в это время не нужны). */
+        typing() { return typeof engine.ui.typing === 'function' ? !!engine.ui.typing() : false; },
+
+        markup(name, rml) {
+            if (docs.has(name)) return docs.get(name);
+            const id = engine.ui.loadMarkup(String(name), String(rml));
+            if (id < 0) ctx.log(`$: не удалось создать документ "${name}" из разметки`);
+            const wrapper = makeDoc(id, name);
+            docs.set(name, wrapper);
+            return wrapper;
+        },
+
         // --- §16: локализация открытых документов и узлов --------------------
 
         /**
@@ -814,6 +833,15 @@ function makeDoc(id, path) {
         },
         /** Нажать элемент программно (событие click, как от мыши): агент и тесты управляют интерфейсом без пикселей. */
         click(element) { return engine.ui.click(id, element); },
+        /** Клавиатурный фокус элемента (поле ввода): focus(id) / focus(id, false) — снять. */
+        focus(element, on) { return typeof engine.ui.focus === 'function' ? engine.ui.focus(id, element, on !== false) : false; },
+        /** Встроить документ в прямоугольник {x, y, w, h} (пиксели, как rect()); null — весь экран. */
+        place(rect) {
+            const r = rect || { x: 0, y: 0, w: 0, h: 0 };
+            return typeof engine.ui.place === 'function' ? engine.ui.place(id, r.x, r.y, r.w, r.h) : false;
+        },
+        /** Поднять документ над остальными (оверлей поверх встроенного документа). */
+        front() { return typeof engine.ui.front === 'function' ? engine.ui.front(id) : false; },
         /** Прямоугольник элемента в координатах окна { x, y, w, h } — для тестов агента и наведения. */
         rect(element) { return engine.ui.rect(id, element); },
 

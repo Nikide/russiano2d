@@ -1,0 +1,112 @@
+<rml>
+<head>
+    <link type="text/rcss" href="editor.rcss"/>
+    <title>Russiano2D Editor</title>
+</head>
+<body>
+<!-- Project Manager: без открытого проекта -->
+<div id="pm">
+    <div id="pm-left">
+        <h1>Russiano2D</h1>
+        <span class="muted">Editor · один бинарник r2d</span>
+        <div class="pm-h">ОТКРЫТЬ ПРОЕКТ</div>
+        <div class="form"><input id="pm-path" type="text" class="field" value=""/></div>
+        <div class="form"><span class="grow"></span><button id="pm-open" class="btn primary">Открыть</button></div>
+        <span class="muted" style="font-size: 12px;">Папка с project.json. Абсолютный путь или относительно каталога запуска.</span>
+        <div id="pm-error" class="pm-err"></div>
+        <div class="pm-h">НОВЫЙ ПРОЕКТ</div>
+        <div class="form"><input id="pm-new-path" type="text" class="field" value=""/></div>
+        <span class="muted" style="font-size: 12px;">Каталог нового проекта; шаблон — справа.</span>
+    </div>
+    <div id="pm-main">
+        <div class="pm-h">НЕДАВНИЕ</div>
+        <div id="pm-recent"></div>
+        <div class="pm-h">ШАБЛОНЫ</div>
+        <div id="pm-templates"></div>
+    </div>
+</div>
+
+<!-- Рабочее пространство -->
+<div id="app" class="hidden">
+    <div id="topbar">
+        <span id="tb-project" class="tb-btn">проект</span>
+        <span id="tb-back" class="tb-btn icon"></span>
+        <span id="tb-fwd" class="tb-btn icon"></span>
+        <div id="tb-search"></div>
+        <span id="tb-run" class="run-btn"></span>
+        <span id="tb-stop" class="stop-btn disabled"></span>
+    </div>
+
+    <div id="main">
+        <div id="rail">
+            <div id="rail-project" class="rail-btn on"></div>
+            <div id="rail-search" class="rail-btn"></div>
+            <div id="rail-run" class="rail-btn"></div>
+            <div id="rail-tools" class="rail-btn"></div>
+        </div>
+
+        <div id="sidebar">
+            <div id="side-title" class="side-title">Проект</div>
+            <div id="side-search" class="form hidden" style="padding: 0px 10px;"><input id="search-input" type="text" class="field" value=""/></div>
+            <div id="side-body" class="side-body"></div>
+        </div>
+
+        <div id="center">
+            <div id="tabs"></div>
+            <div id="host">
+                <div id="welcome" class="welcome"></div>
+                <div id="code" class="hidden">
+                    <div id="code-gutter"></div>
+                    <div id="code-text">
+                        <div id="code-under"></div>
+                        <div id="code-lines"></div>
+                        <div id="caret"></div>
+                    </div>
+                    <div id="code-vscroll"></div>
+                    <span id="code-measure">MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM</span>
+                    <div id="findbar" class="hidden">
+                        <input id="find-input" type="text" class="field" value=""/>
+                        <span id="find-count"></span>
+                        <span id="find-prev" class="tb-btn icon"></span>
+                        <span id="find-next" class="tb-btn icon"></span>
+                        <span id="find-close" class="tb-btn icon"></span>
+                    </div>
+                </div>
+                <div id="pane" class="pane hidden"></div>
+            </div>
+        </div>
+
+        <div id="inspector">
+            <div class="side-title">Inspector</div>
+            <div id="insp-body" class="side-body"></div>
+        </div>
+    </div>
+
+    <div id="bottom">
+        <div id="bottom-tabs">
+            <span id="bt-problems" class="btab on">Problems<span id="prob-badge" class="badge zero">0</span></span>
+            <span id="bt-output" class="btab">Output</span>
+            <span id="bt-console" class="btab">Console</span>
+            <span class="grow"></span>
+            <span id="bt-toggle" class="tb-btn icon"></span>
+        </div>
+        <div id="bottom-body"></div>
+    </div>
+
+    <div id="statusbar">
+        <span id="st-project" class="st"></span>
+        <span id="st-dirty" class="st"></span>
+        <span id="st-runtime" class="st"></span>
+        <span id="st-msg" class="st"></span>
+        <span class="grow"></span>
+        <span id="st-pos" class="st right"></span>
+        <span id="st-lang" class="st right"></span>
+    </div>
+
+    <div id="palette" class="hidden">
+        <input id="palette-input" type="text" value=""/>
+        <div id="palette-list"></div>
+    </div>
+</div>
+</body>
+</rml>

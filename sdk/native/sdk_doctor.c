@@ -1,5 +1,5 @@
 // ===========================================================================
-// `r2d-sdk doctor` — один health check для CLI/CI/GUI/агента:
+// `r2d doctor` — один health check для CLI/CI/GUI/агента:
 // runtime + API metadata + generated artifacts freshness + project + lint.
 // ===========================================================================
 #include "sdk_api.h"
@@ -52,7 +52,7 @@ int sdk_cmd_doctor(const SdkArgs *a)
 {
     const char *project = sdk_arg_value(a, "--project");
     if (!project || !project[0]) project = "game";
-    // Схема — от --schema или рядом с r2d-sdk/проектом: doctor в установленном
+    // Схема — от --schema или рядом с r2d/проектом: doctor в установленном
     // пакете запускают из любого каталога.
     const char *explicit_schema = sdk_arg_value(a, "--schema");
     char schema[2048];
@@ -67,7 +67,7 @@ int sdk_cmd_doctor(const SdkArgs *a)
     R2dJson *root = NULL;
     if (engine_ok) root = sdk_api_snapshot(a, &rep, NULL);
     add(checks, &n, "runtime", engine_ok && root != NULL,
-        engine_ok ? "%s" : "russiano2d не найден (--engine/R2D_ENGINE)", engine);
+        engine_ok ? "%s" : "r2d не найден (--engine/R2D_ENGINE)", engine);
     add(checks, &n, "api_metadata", root != NULL, root ? "%d names" : "metadata dump не получен",
         root ? r2d_json_size(r2d_json_get(root, "names")) : 0);
 

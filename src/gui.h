@@ -110,6 +110,18 @@ bool r2d_gui_set_attr(R2DGui *g, int doc, const char *element_id, const char *na
 // Нажать элемент программно: RmlUi рассылает ему обычное событие click (так
 // интерфейс проверяет агент: виртуальная мышь SDL-событий не рождает).
 bool r2d_gui_click(R2DGui *g, int doc, const char *element_id);
+// Клавиатурный фокус элемента (поле ввода палитры/поиска в редакторе):
+// focus=true — Element::Focus(), false — Blur(). false, если элемента нет или
+// он не принимает фокус.
+bool r2d_gui_focus(R2DGui *g, int doc, const char *element_id, bool focus);
+// Встраивание документа в область другого (студия во вкладке редактора):
+// place — прямоугольник документа в пикселях контекста, w/h <= 0 — вернуть
+// раскладку из RCSS; front — поднять документ над остальными.
+bool r2d_gui_place(R2DGui *g, int doc, float x, float y, float w, float h);
+bool r2d_gui_front(R2DGui *g, int doc);
+// Идёт ли набор текста: фокус RmlUi на <input type=text|password|search|number>
+// или <textarea>. Горячие клавиши инструментов в это время молчат.
+bool r2d_gui_typing(R2DGui *g);
 // Абсолютный прямоугольник элемента в координатах окна: x, y, w, h.
 bool r2d_gui_get_rect(R2DGui *g, int doc, const char *element_id, float out[4]);
 // Геометрия раскладки: тот же бокс, но без проверки видимости (для проверок

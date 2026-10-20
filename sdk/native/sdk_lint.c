@@ -1,5 +1,5 @@
 // ===========================================================================
-// `r2d-sdk lint` — API-aware проверка JS без запуска игры.
+// `r2d lint` — API-aware проверка JS без запуска игры.
 //
 // Это не полноценный JS-парсер и не style police: детерминированный сканер
 // проверяет только обращения к $ API по сгенерированной api.schema.json.
@@ -403,8 +403,8 @@ static void walk_js(const char *path, SdkReport *rep, int *files)
 
 // Где искать api.schema.json. Явный --schema — приказ: если файла нет,
 // подстановка запрещена (молчаливый fallback запрещён правилами проекта).
-// Иначе — каталог проекта, cwd, каталог r2d-sdk и два уровня выше: в пакете
-// схема лежит рядом с r2d-sdk, в checkout — в корне репозитория (build/../).
+// Иначе — каталог проекта, cwd, каталог r2d и два уровня выше: в пакете
+// схема лежит рядом с r2d, в checkout — в корне репозитория (build/../).
 bool sdk_schema_resolve(const char *explicit_path, const char *preferred_dir,
                         char *out, size_t cap)
 {
@@ -421,7 +421,7 @@ bool sdk_schema_resolve(const char *explicit_path, const char *preferred_dir,
         snprintf(out, cap, "%s", "api.schema.json");
         return true;
     }
-    // exe_dir для r2d-sdk — build/ (checkout) или корень пакета; C-тесты лежат
+    // exe_dir для r2d — build/ (checkout) или корень пакета; C-тесты лежат
     // глубже (build/sdk/native), поэтому проверяем и три уровня.
     static const char *const relative[] = {
         "api.schema.json", "../api.schema.json", "../../api.schema.json",
@@ -442,7 +442,7 @@ int sdk_lint_run(const char *schema_path, const char *target, SdkReport *rep, in
     if (!schema_path || !schema_path[0]) schema_path = "api.schema.json";
     if (!sdk_file_exists(schema_path) || !load_schema(schema_path, &schema)) {
         sdk_diag(rep, SDK_ERROR, "SDK_LINT_SCHEMA", schema_path, NULL, NULL,
-                 "нет/битая api.schema.json; сначала выполните r2d-sdk api generate");
+                 "нет/битая api.schema.json; сначала выполните r2d api generate");
         return -1;
     }
     g_lint_schema = &schema;

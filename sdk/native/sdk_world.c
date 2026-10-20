@@ -2547,7 +2547,7 @@ static int world_cmd_at(const SdkArgs *a, bool write, int positional)
     sdk_report_init(&rep);
     const char *src = sdk_arg_positional(a, positional);
     if (!src) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", write ? "Использование: r2d-sdk world-compile <карта.re2dmap> [--output описание.json]" : "Использование: r2d-sdk world-info <карта.re2dmap>");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", write ? "Использование: r2d world-compile <карта.re2dmap> [--output описание.json]" : "Использование: r2d world-info <карта.re2dmap>");
         sdk_report_free(&rep);
         return rc;
     }
@@ -2666,7 +2666,7 @@ int sdk_cmd_world(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     const int rc = sdk_fail(&rep, "SDK_USAGE",
-        "Использование: r2d-sdk world compile|info|validate <карта.re2dmap> [--renderer] [--pvs] [--region-size N] [--output file]");
+        "Использование: r2d world compile|info|validate <карта.re2dmap> [--renderer] [--pvs] [--region-size N] [--output file]");
     sdk_report_free(&rep);
     return rc;
 }

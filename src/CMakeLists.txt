@@ -239,13 +239,12 @@ endif()
 
 add_executable(russiano2d ${R2D_SOURCES})
 
-# Кликабельный запуск SDK: тот же runtime, ничего второго. Двойной клик по
-# russiano2d-sdk запускает `russiano2d --game sdk` (docs/SDK.md §1).
+# Один бинарник: игра, движок и инструменты — исполняемый файл r2d
+# (`r2d --game x`, `r2d validate x`). Имя цели CMake остаётся russiano2d,
+# меняется только имя файла. Веб-сборка сохраняет russiano2d.js/.html:
+# на это имя завязан загрузчик страницы (docs/WEB_EXPORT.md).
 if(NOT EMSCRIPTEN)
-    add_executable(russiano2d-sdk sdk_launcher.c)
-    target_link_libraries(russiano2d-sdk PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS})
-    set_target_properties(russiano2d-sdk PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+    set_target_properties(russiano2d PROPERTIES OUTPUT_NAME r2d)
 endif()
 
 # §38: релизный профиль. Один таргет, никаких изменений в поведении.

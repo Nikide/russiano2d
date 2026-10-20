@@ -1,0 +1,23 @@
+/* Re2DSprite Studio (поверх hammer.rcss и sprite_mesh.rcss). */
+
+.rs-btns { display: flex; flex-direction: row; }
+.rs-btns .hm-btn { flex: 0 0 auto; }
+.rs-wrap { flex-wrap: wrap; }
+.rs-wrap .hm-btn { margin-bottom: 3px; }
+.rs-group { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; margin: 2px 0px; }
+.rs-group .hm-label { width: 64px; }
+.rs-layer { font-size: 11px; padding: 3px 7px; }
+.rs-timeline {
+    display: block; position: relative; flex: 1 1 0; height: 10px; margin: 0px 10px; cursor: pointer;
+    background-color: #14161b; border-width: 1px; border-color: #343a46; border-radius: 5px;
+}
+.rs-playhead { display: block; position: absolute; left: 0px; top: 0px; bottom: 0px; width: 0%; background-color: #3b82f6; border-radius: 5px; }
+.rs-val { display: block; flex: 1 1 0; color: #d7dce6; font-size: 12px; white-space: nowrap; overflow: hidden; }
+.rs-row { display: block; padding: 2px 6px; font-size: 12px; color: #c9ced8; cursor: pointer; border-radius: 3px; }
+.rs-row:hover { background-color: #23272f; }
+.rs-row.off { color: #5b6270; }
+.rs-eye { display: inline-block; width: 18px; font-size: 13px; color: #8b93a3; }
+#rs-status.fail { color: #f14c4c; }
+
+#rs-source .hm-field label { width: 96px; }
+.hm-right .hm-field label { flex: 0 0 auto; }

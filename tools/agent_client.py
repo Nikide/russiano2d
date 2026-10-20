@@ -10,7 +10,7 @@ JSON-строкой на запрос и одной на ответ** через
 
 Запуск (см. ``docs/AGENT_API.md``, раздел 1)::
 
-    ./build/russiano2d --agent --headless --fixed-dt 0.0166666667 \\
+    ./build/r2d --agent --headless --fixed-dt 0.0166666667 \\
         --no-hot-reload --game demos --scene platformer --seed 7
 
 Пример использования::
@@ -35,11 +35,11 @@ JSON-строкой на запрос и одной на ответ** через
         a.screenshot(os.path.join(ROOT, "build", "shot.png"))
 
 Бинарник ищется так: аргумент ``binary`` → переменная окружения ``R2D_BINARY``
-(прежнее имя — ``NK2D_BINARY``) → ``build/russiano2d`` (прежнее имя файла —
+(прежнее имя — ``NK2D_BINARY``) → ``build/r2d`` (прежнее имя файла —
 ``nikiniki2d``) в корне репозитория. Путь можно задать относительным —
 он разрешается от текущего каталога, а затем от корня репозитория::
 
-    R2D_BINARY=build-release/russiano2d python3 tools/run_tests.py
+    R2D_BINARY=build-release/r2d python3 tools/run_tests.py
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ __all__ = ["Agent", "AgentError", "ROOT", "DEFAULT_BINARY", "resolve_binary"]
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 #: Бинарник движка по умолчанию.
-DEFAULT_BINARY = os.path.join(ROOT, "build", "russiano2d")
+DEFAULT_BINARY = os.path.join(ROOT, "build", "r2d")
 
 #: Прежнее имя бинарника: движок переименовывали, старое имя ещё поддержано.
 LEGACY_BINARY = os.path.join(ROOT, "build", "nikiniki2d")
@@ -89,7 +89,7 @@ class AgentError(Exception):
 def resolve_binary(binary: Optional[str] = None) -> str:
     """Найти бинарник движка и вернуть абсолютный путь.
 
-    Порядок поиска: явный аргумент → ``R2D_BINARY`` → ``build/russiano2d``.
+    Порядок поиска: явный аргумент → ``R2D_BINARY`` → ``build/r2d``.
     Относительный путь проверяется от текущего каталога и от корня репозитория.
 
     Бросает :class:`AgentError`, если файла нет или он не исполняемый.
@@ -152,7 +152,7 @@ class Agent:
     * ``game`` — каталог игры (``--game``), по умолчанию ``"game"``;
     * ``scene`` — сцена для немедленной загрузки (``--scene``), иначе меню;
     * ``seed`` — зерно генератора (``--seed``), задаёт воспроизводимость;
-    * ``binary`` — путь к бинарнику (иначе ``R2D_BINARY`` / ``build/russiano2d``);
+    * ``binary`` — путь к бинарнику (иначе ``R2D_BINARY`` / ``build/r2d``);
     * ``headless`` — скрытое окно (``--headless``); скриншоты работают;
     * ``fixed_dt`` — детерминированный шаг кадра (``--fixed-dt``), секунды;
     * ``stats`` — печатать статистику кадра раз в секунду в stderr (``--stats``);

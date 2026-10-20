@@ -1586,6 +1586,11 @@ engine.ui.on(doc, 'btn-quit', 'click', () => engine.quit());
 | `engine.ui.getAttr(doc, id, name)` / `setAttr(doc, id, name, v)` | `string\|null` / `bool` | атрибут элемента |
 | `engine.ui.rect(doc, id)` | `{x,y,w,h}\|null` | абсолютный прямоугольник границы элемента |
 | `engine.ui.click(doc, id)` | `bool` | `Element::Click()` — событие `click` без мыши |
+| `engine.ui.focus(doc, id, on?)` | `bool` | `Element::Focus()` (`on=false` — `Blur()`): фокус клавиатуры для полей ввода |
+| `engine.ui.place(doc, x, y, w, h)` | `bool` | позиция и размер документа (`w/h <= 0` — сброс к RCSS) |
+| `engine.ui.front(doc)` | `bool` | `ElementDocument::PullToFront()` |
+| `engine.ui.typing()` | `bool` | фокус контекста на текстовом поле (`input` text/password/search/number, `textarea`) |
+| `engine.ui.loadMarkup(name, rml)` | `number` | документ из строки разметки; в `$` — `$.ui.markup(name, rml)` |
 
 Колбэк `engine.ui.on` теперь вызывается как
 `callback(elementId, eventName, targetKey, targetId)`: два последних аргумента

@@ -161,18 +161,14 @@ void r2d_sdk_host_shutdown(void)
     for (int i = 0; i < SDK_MAX_JOBS; ++i) job_release(&g_jobs[i]);
 }
 
+// Оба вида запускают этот же исполняемый файл r2d: 'engine' — игру, 'tool' —
+// команду инструментов (`r2d validate …`, src/main.c). Второго бинарника нет.
 static bool binary_path(const char *kind, char *out, size_t cap)
 {
     if (SDL_strcmp(kind, "engine") == 0) return r2d_self_executable_path(out, cap);
-    if (SDL_strcmp(kind, "tool") != 0) return false;
-    const char *dir = SDL_GetBasePath();
-    if (!dir) return false;
-    static const char *names[] = { "r2d-sdk", "r2d-sdk.exe" };
-    for (int i = 0; i < 2; ++i) {
-        SDL_snprintf(out, cap, "%s%s", dir, names[i]);
-        SDL_PathInfo info;
-        if (SDL_GetPathInfo(out, &info)) return true;
-    }
+#ifdef R2D_HAVE_SDK
+    if (SDL_strcmp(kind, "tool") == 0) return r2d_self_executable_path(out, cap);
+#endif
     return false;
 }
 
@@ -188,6 +184,9 @@ static int start_job(const char *kind, char **args, int argc)
     }
     if (slot < 0) return SDK_ERR_NO_SLOT;
 
+    // 'tool' обязан начинаться с глагола: аргумент с «-» первым запустил бы
+    // игру, а не команду инструментов.
+    if (SDL_strcmp(kind, "tool") == 0 && (argc < 1 || args[0][0] == '-')) return SDK_ERR_BAD_ARGS;
     const char **argv = (const char **)calloc((size_t)argc + 2, sizeof *argv);
     if (!argv) return SDK_ERR_SPAWN;
     argv[0] = exe;
@@ -207,7 +206,7 @@ static int start_job(const char *kind, char **args, int argc)
         return SDK_ERR_SPAWN;
     }
     job->used = true;
-    job->thread = SDL_CreateThread(job_thread, "r2d-sdk-job", job);
+    job->thread = SDL_CreateThread(job_thread, "r2d-tool-job", job);
     if (!job->thread) {
         SDL_KillProcess(job->proc, true);
         job->done = true;

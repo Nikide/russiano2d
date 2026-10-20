@@ -23,7 +23,7 @@ static void path_of(const char *dir,const char *p,char *out,size_t cap) {
 int sdk_cmd_batch(const SdkArgs *a) {
     SdkReport rep; sdk_report_init(&rep);
     const char *path=sdk_arg_positional(a,0);
-    if(!path) { int rc=sdk_fail(&rep,"SDK_USAGE","r2d-sdk batch <manifest.json> [--output report.json]");sdk_report_free(&rep);return rc; }
+    if(!path) { int rc=sdk_fail(&rep,"SDK_USAGE","r2d batch <manifest.json> [--output report.json]");sdk_report_free(&rep);return rc; }
     R2dJson *root=sdk_load_json(path,&rep); const R2dJson *jobs=root?r2d_json_get(root,"jobs"):NULL;
     if(!root || root->type!=R2D_JSON_OBJ || r2d_json_num(r2d_json_get(root,"version"),0)!=1 || !jobs || jobs->type!=R2D_JSON_ARR || jobs->count>4096) {
         sdk_diag(&rep,SDK_ERROR,"SDK_BATCH_FORMAT",path,NULL,NULL,"Нужен version:1 и массив jobs (до 4096)");

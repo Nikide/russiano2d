@@ -1,5 +1,5 @@
 // ===========================================================================
-// `r2d-sdk validate` в режиме проекта: project.json, main.js, JS API lint,
+// `r2d validate` в режиме проекта: project.json, main.js, JS API lint,
 // ссылки на ассеты и структурная валидация известных файлов. Один backend для
 // CLI, GUI и агента.
 // ===========================================================================
@@ -116,7 +116,7 @@ void sdk_project_validate(const char *dir, const char *schema_path, SdkReport *r
                  "нет main.js — проект не запустится");
     }
     int files = 0;
-    // Схема ищется от проекта/cwd/каталога r2d-sdk: validate обязан работать из
+    // Схема ищется от проекта/cwd/каталога r2d: validate обязан работать из
     // любого каталога в установленном пакете. Явный --schema не подменяется.
     char schema[2048];
     if (sdk_schema_resolve(schema_path, dir, schema, sizeof schema)) {
@@ -126,8 +126,8 @@ void sdk_project_validate(const char *dir, const char *schema_path, SdkReport *r
                  "файл схемы из --schema не найден: %s", schema_path);
     } else {
         sdk_diag(rep, SDK_ERROR, "SDK_LINT_SCHEMA", schema, NULL,
-                 "{\"searched\":[\"<project>/api.schema.json\",\"api.schema.json\",\"<r2d-sdk>/api.schema.json\"]}",
-                 "api.schema.json не найден: проверены каталог проекта «%s», cwd и каталог r2d-sdk (%s); укажите --schema",
+                 "{\"searched\":[\"<project>/api.schema.json\",\"api.schema.json\",\"<r2d>/api.schema.json\"]}",
+                 "api.schema.json не найден: проверены каталог проекта «%s», cwd и каталог r2d (%s); укажите --schema",
                  dir, sdk_exe_dir());
     }
     PV pv = { dir, rep, 0 };

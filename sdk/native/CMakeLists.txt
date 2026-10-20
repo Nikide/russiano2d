@@ -1,14 +1,17 @@
 # ---------------------------------------------------------------------------
-# r2d-sdk — нативный бэкенд инструментов SDK (docs/SDK.md).
+# Нативные инструменты единого бинарника r2d (validate, lint, world, …).
 #
 # Чистый C11 + SDL3 (файлы, каталоги, процессы) + JSON движка (src/json.c).
 # Никаких внешних runtime: ни Python, ни Node.js, ни shell-скриптов.
 # Re2D World (SDK authoring): world-compile/world-info + native world bake из src/.
-# Один набор исходников — статическая библиотека r2d_sdk_core: из неё собираются
-# CLI `r2d-sdk` и C-тесты, GUI SDK вызывает тот же CLI через мост `$.sdk`.
+# Один набор исходников — статическая библиотека r2d_sdk_core. Она линкуется в
+# r2d (`r2d <команда>`, мост `$.sdk` запускает сам r2d) и в C-тесты. Общие с
+# движком файлы (json.c, re2d_world*.c, …) архив отдаёт, только если их нет у
+# движка: статическая библиотека подтягивает объект лишь по недостающему символу.
 # ---------------------------------------------------------------------------
 
 set(R2D_SDK_SOURCES
+    sdk_entry.c
     sdk_util.c
     sdk_registry.c
     sdk_assets.c
@@ -55,7 +58,7 @@ target_include_directories(r2d_sdk_core PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/src")
 # Версия SDK — та же, что версия проекта: одна строка в корневом
-# CMakeLists.txt, её и печатает `r2d-sdk version`. PROJECT_VERSION приходит из
+# CMakeLists.txt, её и печатает `r2d version`. PROJECT_VERSION приходит из
 # project(...) и не дублируется в sdk.h.
 target_compile_definitions(r2d_sdk_core PUBLIC R2D_SDK_VERSION="${PROJECT_VERSION}")
 target_link_libraries(r2d_sdk_core PUBLIC SDL3::SDL3 r2d_stb ${R2D_WIN_LIBS})
@@ -64,10 +67,6 @@ if(NOT MSVC)
     target_link_libraries(r2d_sdk_core PUBLIC m)
     target_compile_options(r2d_sdk_core PRIVATE -Wall -Wextra -Wno-unused-parameter)
 endif()
-
-add_executable(r2d-sdk sdk_main.c)
-target_link_libraries(r2d-sdk PRIVATE r2d_sdk_core)
-set_target_properties(r2d-sdk PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 # C-тесты бэкенда (без окна и GPU).
 add_executable(r2d_sdk_core_test "${CMAKE_SOURCE_DIR}/tests/sdk/sdk_core_test.c")

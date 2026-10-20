@@ -1,5 +1,5 @@
 // ===========================================================================
-// `r2d-sdk api` — machine-readable публичного $ API.
+// `r2d api` — machine-readable публичного $ API.
 //
 // Источник истины — живой runtime: `russiano2d --dump-api` обходит `$` и
 // `engine.*` после загрузки скриптов. SDK не держит вторую рукописную копию
@@ -38,7 +38,7 @@ R2dJson *sdk_api_snapshot(const SdkArgs *a, SdkReport *rep, char **raw_out)
     char engine[1536];
     if (!sdk_find_engine(engine_arg, engine, sizeof engine)) {
         sdk_diag(rep, SDK_ERROR, "SDK_ENGINE_NOT_FOUND",
-                 engine_arg ? engine_arg : "russiano2d", NULL, NULL,
+                 engine_arg ? engine_arg : "r2d", NULL, NULL,
                  "движок не найден; укажите --engine или R2D_ENGINE");
         return NULL;
     }
@@ -149,7 +149,7 @@ static int cmd_api_check(const SdkArgs *a)
             const int ccount = cnames && cnames->type == R2D_JSON_ARR ? r2d_json_size(cnames) : -1;
             if (ccount != count) {
                 sdk_diag(&rep, SDK_ERROR, "SDK_API_SCHEMA_STALE", schema_path, NULL, NULL,
-                         "schema содержит %d имён, runtime — %d; запустите r2d-sdk api generate", ccount, count);
+                         "schema содержит %d имён, runtime — %d; запустите r2d api generate", ccount, count);
             } else {
                 for (int i = 0; i < count; ++i) {
                     const char *rp = r2d_json_str(r2d_json_get(r2d_json_at(names, i), "path"), "");
@@ -237,7 +237,7 @@ static const char *type_of(const R2dJson *item)
 // artifact, and `api check` fails when it is stale.
 void sdk_api_schema_text(const R2dJson *root, R2dSb *out)
 {
-    r2d_sb_puts(out, "{\n  \"schema_version\": 1,\n  \"generated_by\": \"r2d-sdk\",\n  \"engine_version\": ");
+    r2d_sb_puts(out, "{\n  \"schema_version\": 1,\n  \"generated_by\": \"r2d\",\n  \"engine_version\": ");
     r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(root, "engine_version"), ""));
     r2d_sb_puts(out, ",\n  \"names\": [\n");
     const R2dJson *names = r2d_json_get(root, "names");
@@ -317,8 +317,8 @@ void sdk_api_dts_text(const R2dJson *root, R2dSb *out)
     r2d_sb_puts(out,
         "// GENERATED FILE — DO NOT EDIT MANUALLY\n"
         "// Source: Russiano2D $ API Registry\n"
-        "// Generator: r2d-sdk\n"
-        "// Run: r2d-sdk api generate\n\n"
+        "// Generator: r2d\n"
+        "// Run: r2d api generate\n\n"
         "declare interface R2DNode {\n"
         "    [key: string]: any;\n");
     // Node methods ($.fn.*) make the selector wrapper useful.
@@ -395,7 +395,7 @@ void sdk_api_docs_text(const R2dJson *root, R2dSb *out)
         "# Russiano2D $ API reference\n\n"
         "<!-- GENERATED FILE - DO NOT EDIT MANUALLY\n"
         "     Source: Russiano2D $ API Registry\n"
-        "     Generator: r2d-sdk -->\n\n"
+        "     Generator: r2d -->\n\n"
         "Engine version: ");
     r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(root, "engine_version"), ""));
     r2d_sb_printf(out, "\n\nEntries: %d\n\n", r2d_json_size(names));
@@ -544,7 +544,7 @@ int sdk_cmd_api(const SdkArgs *a)
     if (!sub) {
         SdkReport rep; sdk_report_init(&rep);
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk api <dump|check|generate> [--game каталог] [--engine путь] [--json]");
+            "Использование: r2d api <dump|check|generate> [--game каталог] [--engine путь] [--json]");
         sdk_report_free(&rep); return rc;
     }
     if (!strcmp(sub, "dump")) return cmd_api_dump(a);

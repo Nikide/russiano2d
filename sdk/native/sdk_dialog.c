@@ -1,5 +1,5 @@
 // ===========================================================================
-// r2d-sdk dialog validate <file.rml> — native RML/RCSS theme validator.
+// r2d dialog validate <file.rml> — native RML/RCSS theme validator.
 //
 // Checks the semantic contract the VN view relies on: <rml> root, required
 // data-dialog-role values (root/text/choices), duplicate structural roles,
@@ -146,14 +146,14 @@ int sdk_cmd_dialog(const SdkArgs *a)
     const char *sub = sdk_arg_positional(a, 0);
     if (!sub || strcmp(sub, "validate")) {
         SdkReport rep; sdk_report_init(&rep);
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk dialog validate <file.rml>");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d dialog validate <file.rml>");
         sdk_report_free(&rep);
         return rc;
     }
     const char *path = sdk_arg_positional(a, 1);
     if (!path || !path[0]) {
         SdkReport rep; sdk_report_init(&rep);
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Укажите .rml файл: r2d-sdk dialog validate ui/dialog/custom.rml");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Укажите .rml файл: r2d dialog validate ui/dialog/custom.rml");
         sdk_report_free(&rep);
         return rc;
     }

@@ -1,5 +1,5 @@
 // ===========================================================================
-// r2d-sdk story validate <dir> — native .scene linter for the VN narrative DSL.
+// r2d story validate <dir> — native .scene linter for the VN narrative DSL.
 //
 // One backend for CLI/GUI/agent: no Python. Checks duplicate labels, unknown
 // goto/choice targets, unreachable branches, obvious goto cycles, speaker and
@@ -486,14 +486,14 @@ int sdk_cmd_story(const SdkArgs *a)
     const char *sub = sdk_arg_positional(a, 0);
     if (!sub || strcmp(sub, "validate")) {
         SdkReport rep; sdk_report_init(&rep);
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk story validate <каталог|файл> [--assets-root <dir>]");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d story validate <каталог|файл> [--assets-root <dir>]");
         sdk_report_free(&rep);
         return rc;
     }
     const char *root = sdk_arg_positional(a, 1);
     if (!root || !root[0]) {
         SdkReport rep; sdk_report_init(&rep);
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Укажите каталог или файл сценки: r2d-sdk story validate story/");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Укажите каталог или файл сценки: r2d story validate story/");
         sdk_report_free(&rep);
         return rc;
     }

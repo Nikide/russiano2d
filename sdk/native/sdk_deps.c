@@ -4,10 +4,10 @@
 //
 // Канонические файлы игры остаются обычными файлами: манифест зависимостей —
 // это JSON рядом с проектом, кэш — .r2d/cache/assets.json, который читает
-// только r2d-sdk (runtime его не читает никогда). Второго build system и
+// только r2d (runtime его не читает никогда). Второго build system и
 // закрытой ассет-базы здесь нет: команда лишь говорит, что устарело.
 //
-//   r2d-sdk deps <проект|deps.json> [--check|--record] [--json]
+//   r2d deps <проект|deps.json> [--check|--record] [--json]
 //
 // Манифест (форма для тестов и реальных проектов):
 //   {
@@ -766,7 +766,7 @@ static bool deps_write_cache(const DepsManifest *m, const DepsNodeState *st, Sdk
 
     R2dSb out;
     r2d_sb_init(&out);
-    r2d_sb_puts(&out, "{\n  \"version\": 1,\n  \"tool\": \"r2d-sdk " SDK_VERSION "\",\n  \"manifest\": ");
+    r2d_sb_puts(&out, "{\n  \"version\": 1,\n  \"tool\": \"r2d " SDK_VERSION "\",\n  \"manifest\": ");
     r2d_sb_put_json_string(&out, m->manifest);
     r2d_sb_puts(&out, ",\n  \"nodes\": [");
     for (int i = 0; i < m->count; ++i) {
@@ -930,7 +930,7 @@ int sdk_cmd_deps(const SdkArgs *a)
 
     if (!target) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk deps <проект|deps.json> [--check|--record] [--json] [--project dir]");
+            "Использование: r2d deps <проект|deps.json> [--check|--record] [--json] [--project dir]");
         sdk_report_free(&rep);
         return rc;
     }

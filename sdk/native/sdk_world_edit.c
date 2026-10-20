@@ -3,7 +3,7 @@
 //
 // Один backend для GUI, CLI и агента (docs/SDK.md §2):
 //
-//   r2d-sdk world-edit <file.re2dmap> --op <op> [--args 'JSON object'] [--out <file>]
+//   r2d world-edit <file.re2dmap> --op <op> [--args 'JSON object'] [--out <file>]
 //
 // Источник карты читается как JSON и правится как JSON-дерево, поэтому чужие
 // поля и порядок ключей сохраняются: операция меняет только те ключи, которые
@@ -2627,7 +2627,7 @@ int sdk_cmd_world_edit(const SdkArgs *a)
     if (!file || !op) {
         edit_diag(&rep, SDK_ERROR, "SDK_WORLD_EDIT_USAGE", NULL, NULL, -1, NULL,
                   "--op",
-                  "Использование: r2d-sdk world-edit <file.re2dmap> --op <op> "
+                  "Использование: r2d world-edit <file.re2dmap> --op <op> "
                   "[--args JSON] [--out <file>]");
         goto done;
     }

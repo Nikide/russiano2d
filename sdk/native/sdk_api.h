@@ -1,5 +1,5 @@
 #pragma once
-// Internal API between r2d-sdk commands (api/docs/doctor): one runtime snapshot,
+// Internal API between r2d commands (api/docs/doctor): one runtime snapshot,
 // multiple generated artifacts. Not part of the runtime/SDK public ABI.
 #include "sdk.h"
 

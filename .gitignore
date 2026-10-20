@@ -164,3 +164,4 @@ graphify-out/
 # Файлы остаются на диске локально, но не попадают в репозиторий.
 demos/**/*PROMPT*.md
 demos/**/*_PROMPTS.md
+editor/state.local.json

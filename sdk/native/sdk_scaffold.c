@@ -1,9 +1,9 @@
 // ===========================================================================
 // Шаблоны проектов и сборки движка (docs/SDK.md §3, §4).
 //
-//   r2d-sdk templates [--root sdk/templates]
-//   r2d-sdk new <шаблон> <каталог> [--name «Имя»] [--root sdk/templates]
-//   r2d-sdk engines
+//   r2d templates [--root sdk/templates]
+//   r2d new <шаблон> <каталог> [--name «Имя»] [--root sdk/templates]
+//   r2d engines
 //
 // Шаблон — обычный каталог `sdk/templates/<id>/` с `template.json`
 // ({name, description, category}) и файлами проекта. `new` копирует файлы как
@@ -311,7 +311,7 @@ int sdk_cmd_new(const SdkArgs *a)
     const char *dest = sdk_arg_positional(a, 1);
     if (!id || !dest) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk new <шаблон> <каталог проекта> [--name «Имя»] [--root sdk/templates]");
+            "Использование: r2d new <шаблон> <каталог проекта> [--name «Имя»] [--root sdk/templates]");
         sdk_report_free(&rep);
         return rc;
     }
@@ -410,6 +410,12 @@ static SDL_EnumerationResult SDLCALL on_dist(void *user, const char *dirname, co
     char sub[2048], exe[2200], label[96];
     snprintf(sub, sizeof sub, "%s/%s", d->dir, fname);
     if (!sdk_is_dir(sub)) return SDL_ENUM_CONTINUE;
+    snprintf(exe, sizeof exe, "%s/r2d", sub);
+    snprintf(label, sizeof label, "dist/%s", fname);
+    add_engine(d->rows, d->count, exe, label);
+    snprintf(exe, sizeof exe, "%s/r2d.exe", sub);
+    add_engine(d->rows, d->count, exe, label);
+    // Старые релизы (до единого бинарника r2d) называли движок russiano2d.
     snprintf(exe, sizeof exe, "%s/russiano2d", sub);
     snprintf(label, sizeof label, "dist/%s", fname);
     add_engine(d->rows, d->count, exe, label);
@@ -430,16 +436,16 @@ int sdk_cmd_engines(const SdkArgs *a)
 
     const char *env = SDL_getenv("R2D_ENGINE");
     if (env && env[0]) add_engine(rows, &count, env, "R2D_ENGINE");
-    sdk_join(sdk_exe_dir(), "russiano2d", path, sizeof path);
-    add_engine(rows, &count, path, "рядом с r2d-sdk");
-    sdk_join(sdk_exe_dir(), "russiano2d.exe", path, sizeof path);
-    add_engine(rows, &count, path, "рядом с r2d-sdk");
+    sdk_join(sdk_exe_dir(), "r2d", path, sizeof path);
+    add_engine(rows, &count, path, "этот бинарник");
+    sdk_join(sdk_exe_dir(), "r2d.exe", path, sizeof path);
+    add_engine(rows, &count, path, "этот бинарник");
     sdk_join(sdk_exe_dir(), "../dist", path, sizeof path);
     if (sdk_is_dir(path)) {
         DistCtx d = { rows, &count, path };
         SDL_EnumerateDirectory(path, on_dist, &d);
     }
-    sdk_join(sdk_exe_dir(), "../russiano2d", path, sizeof path);
+    sdk_join(sdk_exe_dir(), "../r2d", path, sizeof path);
     add_engine(rows, &count, path, "каталог проекта");
 
     if (!have_selected) {

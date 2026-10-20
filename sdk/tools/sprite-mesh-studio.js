@@ -11,7 +11,10 @@ export async function open(app, args) {
 }
 
 function create(app) {
-    const $ = app.$, doc = $.ui.doc(DOC);
+    // Хост может дать свою раскладку с теми же id (Editor: editor/ui/sprite_mesh.rml);
+    // в ней же лента кадров с миниатюрами (layouts.spriteMeshThumbs).
+    const $ = app.$, doc = $.ui.doc((app.layouts && app.layouts.spriteMesh) || DOC);
+    const thumbs = !!(app.layouts && app.layouts.spriteMeshThumbs);
     const s = { active: false, asset: '', cachePath: '', data: null, frames: [], tags: {}, texture: -1, textures: [],
         cache: null, selected: 0, animation: '', playing: false, elapsed: 0, camera: { yaw: .55, pitch: .3, zoom: 1 },
         drag: null, previewMode: 'textured', pivotOverride: false, updatingAnimationList: false, dirty: true, settings: { depth: .08, alphaThreshold: 16, unitsPerPixel: 1/32, pivotX: 0, pivotY: 0 }, error: '' };
@@ -44,10 +47,22 @@ function create(app) {
         fs.forEach(f=>{if(f.pivotX===undefined)f.pivotX=f.w/2;if(f.pivotY===undefined)f.pivotY=f.h/2;});
         return { frames: fs, tags };
     }
+    // Картинка страницы атласа (для миниатюр): путь из meta.image/pages
+    // относительно файла атласа; у PNG-ассета — сам файл.
+    function pageImage(page) {
+        if (!s.data) return s.asset;
+        const pages=(s.data.meta&&s.data.meta.pages)||s.data.pages||[];
+        const p=pages[page|0], name=typeof p==='string'?p:(p&&(p.image||p.file))||(page?'':(s.data.meta&&s.data.meta.image)||'');
+        if(!name)return '';
+        const dir=s.asset.replace(/[^/]*$/,'');
+        return /^(\/|[A-Za-z]:)/.test(name)?name:dir+name;
+    }
     function frameIndex() { return Math.max(0, Math.min(s.frames.length-1, s.selected|0)); }
-    function choose(i) { s.selected=Math.max(0,Math.min(s.frames.length-1,i|0));if(!s.pivotOverride){const f=s.frames[s.selected];s.settings.pivotX=f.pivotX;s.settings.pivotY=f.pivotY;doc.value('sm-px',String(f.pivotX));doc.value('sm-py',String(f.pivotY));}renderLists(); }
+    function choose(i) { s.selected=Math.max(0,Math.min(s.frames.length-1,i|0));if(!s.pivotOverride){const f=s.frames[s.selected];s.settings.pivotX=f.pivotX;s.settings.pivotY=f.pivotY;doc.setValue('sm-px',String(f.pivotX));doc.setValue('sm-py',String(f.pivotY));}renderLists(); }
     function renderLists() {
-        doc.html('sm-frames', s.frames.map((f,i)=>`<button class="item ${i===s.selected?'on':''}" data-key="${i}">[${i}] ${escapeHtml(f.name)}</button>`).join(''));
+        doc.html('sm-frames', s.frames.map((f,i)=>thumbs
+            ? `<button class="item thumb ${i===s.selected?'on':''}" data-key="${i}">${pageImage(f.page)?`<img class="thumb-img" src="${escapeHtml(pageImage(f.page))}" rect="${f.x} ${f.y} ${f.w} ${f.h}"/>`:''}<span class="thumb-n">${i}</span></button>`
+            : `<button class="item ${i===s.selected?'on':''}" data-key="${i}">[${i}] ${escapeHtml(f.name)}</button>`).join(''));
         doc.html('sm-animations', Object.keys(s.tags).map((n,i)=>`<button id="sm-anim-${i}" class="item ${n===s.animation?'on':''}" data-key="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join(''));
         s.updatingAnimationList=true;
         doc.html('sm-animation', Object.keys(s.tags).map(n=>`<option value="${escapeHtml(n)}" ${n===s.animation?'selected':''}>${escapeHtml(n)}</option>`).join(''));
@@ -64,7 +79,7 @@ function create(app) {
             if(s.pivotOverride)args.push('--pivot-x',String(s.settings.pivotX),'--pivot-y',String(s.settings.pivotY));
             const result=await app.backend(args,'SpriteMesh: bake всех кадров');
             if(!result.ok||!result.json||!result.json.ok)throw new Error((result.json&&result.json.diagnostics||[]).map(d=>d.message).join('\n')||'Bake завершился с ошибкой');
-            s.cache=$.spriteMesh.loadCache(outputPath||s.cachePath);s.cache.bytes=result.json.bytes;s.dirty=!saved;
+            s.cache=$.spriteMesh.loadCache(outputPath||s.cachePath);s.cache.bytes=result.json.bytes;s.dirty=!saved;s.error='';
             if(!saved&&outputPath&&$.fs&&typeof $.fs.remove==='function')$.fs.remove(outputPath);
             status(saved?'АКТУАЛЕН':'ПРЕДПРОСМОТР · не сохранён');renderLists();
         } catch(e) { s.error=e.message||String(e);status('',s.error); }
@@ -95,7 +110,7 @@ function create(app) {
         if(s.cache&&s.texture>=0){const r=doc.layoutRect('sm-view');if(r&&r.w>0&&r.h>0){const f=s.cache.frames[frameIndex()];if(f){const camera={yaw:s.camera.yaw,pitch:s.camera.pitch,zoom:Math.max(.01,Math.min((r.w-40)/Math.max(1,f.width*s.cache.unitsPerPixel),(r.h-40)/Math.max(1,f.height*s.cache.unitsPerPixel))*s.camera.zoom)};if(s.previewMode==='wireframe'){const p=$.spriteMesh.project(f.vertices,r,camera);for(let i=0;i<p.length;i+=24){const a=i,b=i+8,c=i+16;$.gfx.draw.line(p[a],p[a+1],p[b],p[b+1],'#8bd5ff',1);$.gfx.draw.line(p[b],p[b+1],p[c],p[c+1],'#8bd5ff',1);$.gfx.draw.line(p[c],p[c+1],p[a],p[a+1],'#8bd5ff',1);}}else $.spriteMesh.draw(s.cache,frameIndex(),s.textures[f.page]===undefined?s.texture:s.textures[f.page],r,camera);const px=r.x+r.w/2,py=r.y+r.h/2;$.gfx.draw.line(px-7,py,px+7,py,'#ff6b9d',1);$.gfx.draw.line(px,py-7,px,py+7,'#ff6b9d',1);}}}
     }
     function wire() {
-        doc.on('sm-back','click',()=>{s.active=false;doc.hide();app.doc.show();app.showView('tools');});
+        doc.on('sm-back','click',()=>{s.active=false;doc.hide();if(app.doc)app.doc.show();if(app.showView)app.showView('tools');});
         doc.on('sm-save-bake','click',saveAndBake);doc.on('sm-apply','click',applySettings);
         doc.on('sm-play','click',play);doc.on('sm-pause','click',()=>{s.playing=false;renderLists();});
         doc.on('sm-restart','click',()=>{s.elapsed=0;s.playing=true;if(s.tags[s.animation]){const i=s.frames.findIndex(f=>f.name===s.tags[s.animation].frames[0]);choose(i);}});
@@ -109,7 +124,7 @@ function create(app) {
         doc.on('sm-back-view','click',()=>{s.camera={yaw:Math.PI,pitch:0,zoom:1};});
         doc.on('sm-preview-mode','change',()=>{s.previewMode=doc.value('sm-preview-mode');});
         doc.on('sm-view','mousedown',()=>{const m=$.input.mouse();s.drag={x:m.x,y:m.y};});
-        $.update(dt=>{if(s.drag){const m=$.input.mouse();if($.input.mouseDown('left')){s.camera.yaw+=(m.x-s.drag.x)*.01;s.camera.pitch=Math.max(-1.2,Math.min(1.2,s.camera.pitch+(m.y-s.drag.y)*.01));s.drag={x:m.x,y:m.y};}else s.drag=null;}const w=$.input.wheel().y;if(w)s.camera.zoom=Math.max(.2,Math.min(8,s.camera.zoom*(w>0?1.1:.9)));tick(dt);});
+        $.update(dt=>{if(!s.active){s.drag=null;return;}if(s.drag){const m=$.input.mouse();if($.input.mouseDown('left')){s.camera.yaw+=(m.x-s.drag.x)*.01;s.camera.pitch=Math.max(-1.2,Math.min(1.2,s.camera.pitch+(m.y-s.drag.y)*.01));s.drag={x:m.x,y:m.y};}else s.drag=null;}const w=$.input.wheel().y;if(w)s.camera.zoom=Math.max(.2,Math.min(8,s.camera.zoom*(w>0?1.1:.9)));tick(dt);});
     }
     wire();
     async function open(path) {
@@ -121,8 +136,8 @@ function create(app) {
         s.animation=Object.keys(s.tags)[0]||'';s.selected=0;
         if(path.endsWith('.atlas.json')){const sheet=$.atlas.load('sprite-mesh-'+path,path);s.texture=sheet?sheet.texture:-1;s.textures=[];if(sheet)for(const f of s.frames){const info=sheet.spriteInfo(sheet.frame(f.name));if(info)s.textures[info.page]=info.texture;}}
         else {s.texture=$.gfx.texture(path);s.textures=[s.texture];}
-        doc.text('sm-file',path.split('/').pop());doc.value('sm-depth',String(s.settings.depth));doc.value('sm-threshold',String(s.settings.alphaThreshold));doc.value('sm-upp',String(s.settings.unitsPerPixel));doc.value('sm-px',String(s.settings.pivotX||0));doc.value('sm-py',String(s.settings.pivotY||0));
-        app.doc.hide();doc.show();renderLists();app.studios.spriteMesh=api;
+        doc.text('sm-file',path.split('/').pop());doc.setValue('sm-depth',String(s.settings.depth));doc.setValue('sm-threshold',String(s.settings.alphaThreshold));doc.setValue('sm-upp',String(s.settings.unitsPerPixel));doc.setValue('sm-px',String(s.settings.pivotX||0));doc.setValue('sm-py',String(s.settings.pivotY||0));
+        if(app.doc)app.doc.hide();doc.show();renderLists();app.studios.spriteMesh=api;
         const checkArgs=['sprite-mesh-bake',s.asset,'--check','--depth',String(s.settings.depth),'--alpha-threshold',String(s.settings.alphaThreshold),'--units-per-pixel',String(s.settings.unitsPerPixel)];if(s.pivotOverride)checkArgs.push('--pivot-x',String(s.settings.pivotX),'--pivot-y',String(s.settings.pivotY));
         const check=await app.backend(checkArgs,'SpriteMesh: проверка cache');
         if(check.json&&check.json.upToDate){try{s.cache=$.spriteMesh.loadCache(s.cachePath);s.dirty=false;status('АКТУАЛЕН');}catch(e){s.cache=null;s.dirty=true;status('',e.message);}}
@@ -130,6 +145,8 @@ function create(app) {
         renderLists();
         return {id:'sprite-mesh-studio',studio:api};
     }
-    const api={open,bake,saveAndBake,selectFrame:choose,selectAnimation(name){if(!s.tags[name])return false;s.animation=name;const i=s.frames.findIndex(f=>f.name===s.tags[name].frames[0]);choose(i);renderLists();return true;},play,pause:()=>{s.playing=false;},snapshot:()=>({asset:s.asset,frames:s.frames.length,animations:Object.keys(s.tags),animation:s.animation,selected:s.selected,playing:s.playing,dirty:s.dirty,texture:s.texture,cache:s.cache?$.spriteMesh.cacheInfo(s.cache):null,error:s.error})};
+    const api={state:s,render:renderLists,close(){s.active=false;s.playing=false;doc.hide();return true;},
+        diagnostics:()=>s.error?[{code:'SDK_SPRITE_MESH',severity:'error',asset:s.asset,location:null,message:s.error}]:[],
+        open,bake,saveAndBake,selectFrame:choose,selectAnimation(name){if(!s.tags[name])return false;s.animation=name;const i=s.frames.findIndex(f=>f.name===s.tags[name].frames[0]);choose(i);renderLists();return true;},play,pause:()=>{s.playing=false;},snapshot:()=>({asset:s.asset,frames:s.frames.length,animations:Object.keys(s.tags),animation:s.animation,selected:s.selected,playing:s.playing,dirty:s.dirty,texture:s.texture,cache:s.cache?$.spriteMesh.cacheInfo(s.cache):null,error:s.error})};
     return api;
 }

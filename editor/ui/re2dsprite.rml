@@ -1,0 +1,82 @@
+<rml>
+<head>
+<!-- Re2DSprite Studio (editor/studios/re2dsprite.js). Вьюпорт прозрачный:
+     персонаж — настоящий узел $.re2dSprite в кадре сцены под RmlUi. -->
+<link type="text/rcss" href="../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../sdk/ui/studio.rcss"/><link type="text/rcss" href="hammer.rcss"/><link type="text/rcss" href="sprite_mesh.rcss"/><link type="text/rcss" href="re2dsprite.rcss"/>
+<title>Re2DSprite</title>
+</head>
+<body>
+<div class="hm-root">
+  <div class="hm-bar">
+    <button id="rs-save" class="hm-btn" title="Записать character.json и перезагрузить (Cmd/Ctrl+S)">Save</button>
+    <button id="rs-reload" class="hm-btn" title="Перечитать описание, анимации и PNG с диска">Reload</button>
+    <span class="hm-sep"></span>
+    <span class="hm-label">Style</span>
+    <button id="rs-style-anime" class="hm-btn">anime</button>
+    <button id="rs-style-pixel" class="hm-btn">pixel</button>
+    <span class="hm-sep"></span>
+    <button id="rs-front" class="hm-btn" title="yaw 0">Спереди</button>
+    <button id="rs-three" class="hm-btn" title="yaw 30, pitch 8">3/4</button>
+    <button id="rs-side" class="hm-btn" title="yaw 90">Сбоку</button>
+    <button id="rs-back" class="hm-btn" title="yaw 180">Сзади</button>
+    <button id="rs-turntable" class="hm-btn" title="Вращать автоматически">Вертушка</button>
+    <span class="we-spacer"></span>
+    <span id="rs-pose" class="hm-pill">yaw 0°</span>
+    <span id="rs-dirty" class="hm-dirty"></span>
+    <span id="rs-status" class="hm-pill ok">—</span>
+  </div>
+
+  <div class="hm-main">
+    <div class="sm-center">
+      <div id="rs-view" class="sm-view"></div>
+      <div class="sm-hud">ЛКМ — вращение (yaw/pitch) · кнопки сверху — ракурсы</div>
+      <div class="sm-anim">
+        <div class="sm-anim-row">
+          <span class="sm-anim-title">Clip</span>
+          <div id="rs-clips" class="rs-btns"></div>
+        </div>
+        <div class="sm-anim-row">
+          <button id="rs-playpause" class="hm-btn hm-primary">Pause</button>
+          <div id="rs-timeline" class="rs-timeline"><div id="rs-playhead" class="rs-playhead"></div></div>
+          <span id="rs-time" class="hm-label">—</span>
+        </div>
+        <div class="sm-anim-row">
+          <span class="hm-label">Слои</span>
+          <div id="rs-layers" class="rs-btns"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hm-right">
+      <div class="hm-insp">
+        <div class="hm-title">Re2DSprite</div>
+        <div class="hm-h hm-h-first">Source</div>
+        <div id="rs-source"></div>
+        <div class="hm-h">Описание</div>
+        <div class="hm-field"><label>style</label><select id="rs-f-style" class="field"><option value="anime">anime</option><option value="pixel">pixel</option></select></div>
+        <div class="hm-field"><label>raster</label><input id="rs-f-raster" class="field" type="text" value=""/></div>
+        <div class="hm-field"><label>detail</label><input id="rs-f-detail" class="field" type="text" value=""/></div>
+        <div class="hm-field"><label>bodyScale</label><input id="rs-f-body" class="field" type="text" value=""/></div>
+        <div class="hm-field"><label>portrait</label><input id="rs-f-portrait" class="field" type="text" value=""/></div>
+        <div class="hm-field"><label>motion</label><input id="rs-f-motion" class="field" type="text" value=""/></div>
+        <button id="rs-apply" class="hm-btn hm-wide" title="Пустое поле — убрать ключ из описания">Применить к описанию</button>
+        <div class="hm-h">Эмоции</div>
+        <div id="rs-emotions" class="rs-btns rs-wrap"></div>
+        <div class="hm-h">Варианты</div>
+        <div id="rs-variants"></div>
+        <div class="hm-h">Экипировка</div>
+        <div id="rs-equipment" class="rs-btns rs-wrap"></div>
+      </div>
+      <div class="hm-objects">
+        <div class="hm-h hm-h-first">Части (видимость)</div>
+        <div id="rs-parts"></div>
+        <div class="hm-h">Кости</div>
+        <div id="rs-bones"></div>
+        <div class="hm-h">Сокеты</div>
+        <div id="rs-sockets"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</rml>

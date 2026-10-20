@@ -1,5 +1,5 @@
 // ===========================================================================
-// Команды CLI r2d-sdk: tools, assets, project, projects, validate, run, build.
+// Команды CLI r2d: tools, assets, project, projects, validate, run, build.
 // Каждая печатает один JSON-объект и возвращает код выхода (0 — ok).
 // ===========================================================================
 #include "sdk.h"
@@ -112,7 +112,7 @@ int sdk_cmd_assets(const SdkArgs *a)
     sdk_report_init(&rep);
     const char *root = sdk_arg_positional(a, 0);
     if (!root) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk assets <каталог проекта> [--registry sdk_tools.json]");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d assets <каталог проекта> [--registry sdk_tools.json]");
         sdk_report_free(&rep);
         return rc;
     }
@@ -178,7 +178,7 @@ int sdk_cmd_project(const SdkArgs *a)
     sdk_report_init(&rep);
     const char *dir = sdk_arg_positional(a, 0);
     if (!dir) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk project <каталог проекта>");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d project <каталог проекта>");
         sdk_report_free(&rep);
         return rc;
     }
@@ -398,7 +398,7 @@ int sdk_cmd_run(const SdkArgs *a)
         SdkReport rep;
         sdk_report_init(&rep);
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk run <каталог игры> [--scene имя] [--frames N] [--headless] [--agent] [--engine путь]");
+            "Использование: r2d run <каталог игры> [--scene имя] [--frames N] [--headless] [--agent] [--engine путь]");
         sdk_report_free(&rep);
         return rc;
     }
@@ -431,7 +431,7 @@ int sdk_cmd_build(const SdkArgs *a)
         SdkReport rep;
         sdk_report_init(&rep);
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d-sdk build <каталог проекта> --out <файл> [--entry main.js] [--encrypt|--no-encrypt] [--engine путь]");
+            "Использование: r2d build <каталог проекта> --out <файл> [--entry main.js] [--encrypt|--no-encrypt] [--engine путь]");
         sdk_report_free(&rep);
         return rc;
     }

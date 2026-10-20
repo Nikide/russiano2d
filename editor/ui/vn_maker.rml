@@ -1,0 +1,121 @@
+<rml>
+<head>
+<!-- VN Maker во вкладке Editor. Логика — sdk/lib/vn_maker.js; здесь раскладка
+     по макету Editor. id — те же, что в sdk/ui/vn_maker.rml (их читает модуль),
+     плюс vnm-preview (карточка кадра) и vnm-add-* (кнопки Editor). -->
+<link type="text/rcss" href="../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../sdk/ui/studio.rcss"/><link type="text/rcss" href="hammer.rcss"/><link type="text/rcss" href="vn_maker.rcss"/>
+<title>Narrative</title>
+</head>
+<body>
+<div class="hm-root">
+  <div class="hm-bar">
+    <button id="vnm-back" class="hm-hidden">Назад</button>
+    <button id="vnm-save" class="hm-btn" title="Сохранить сцену (Cmd/Ctrl+S)">Save</button>
+    <button id="vnm-undo" class="hm-btn" title="Отменить (Cmd/Ctrl+Z)">Undo</button>
+    <button id="vnm-redo" class="hm-btn" title="Повторить (Cmd/Ctrl+Shift+Z)">Redo</button>
+    <span class="hm-sep"></span>
+    <button id="vnm-validate" class="hm-btn" title="r2d story validate: метки, goto, спикеры, ассеты, i18n">Validate Story</button>
+    <button id="vnm-play" class="hm-btn hm-primary" title="Проиграть сцену runtime $.story (поверх окна)">Play Preview</button>
+    <button id="vnm-from" class="hm-btn" title="Проиграть с выбранной строки">С этой строки</button>
+    <button id="vnm-stop" class="hm-btn" title="Остановить проигрывание">Stop</button>
+    <span class="hm-sep"></span>
+    <button id="vnm-source" class="hm-btn" title="Исходник .scene текстом">Исходник</button>
+    <button id="vnm-graph" class="hm-btn" title="Граф меток">Граф</button>
+    <span class="we-spacer"></span>
+    <span id="vnm-scene-name" class="hm-pill">—</span>
+    <span id="vnm-state" class="hm-pill"></span>
+  </div>
+
+  <div class="hm-main">
+    <!-- Script -->
+    <div class="vn-script">
+      <div class="vn-head">
+        <span class="vn-title">Script</span>
+        <span class="we-spacer"></span>
+        <button id="vnm-add" class="hm-btn" title="Реплика">+ Dialogue</button>
+        <button id="vnm-add-choice" class="hm-btn" title="Вариант выбора">+ Choice</button>
+        <button id="vnm-add-jump" class="hm-btn" title="Переход goto">+ Jump</button>
+      </div>
+      <div class="vn-head vn-head2">
+        <button id="vnm-add-label" class="hm-btn">+ Label</button>
+        <button id="vnm-add-image" class="hm-btn">+ Background</button>
+        <span class="we-spacer"></span>
+        <button id="vnm-up" class="hm-btn hm-sq" title="Выше">Выше</button>
+        <button id="vnm-down" class="hm-btn hm-sq" title="Ниже">Ниже</button>
+        <button id="vnm-dup" class="hm-btn" title="Дублировать">Дубль</button>
+        <button id="vnm-del" class="hm-btn" title="Удалить">Удалить</button>
+      </div>
+      <div id="vnm-commands" class="vnm-commands"></div>
+      <textarea id="vnm-source" class="vnm-source" style="display:none;"></textarea>
+    </div>
+
+    <!-- Preview -->
+    <div class="vn-center">
+      <div class="hm-pane-bar"><span class="we-pane-title">Preview</span><span class="sub">кадр выбранной команды · Play — runtime</span></div>
+      <div id="vnm-preview" class="vn-preview"></div>
+    </div>
+
+    <!-- Inspector и данные истории -->
+    <div class="hm-right vn-right">
+      <div class="hm-insp">
+        <div class="hm-title">Inspector</div>
+        <div id="vnm-inspector">
+          <div id="vnm-insp-empty" class="hint">Выберите команду.</div>
+          <div id="vnm-insp-fields" style="display:none;">
+            <div class="hm-field"><label>Тип</label><input id="vnm-f-kind" class="field" type="text"/></div>
+            <div class="hm-field"><label>Спикер</label><input id="vnm-f-speaker" class="field" type="text"/></div>
+            <div class="hm-field"><label>Эмоция</label><input id="vnm-f-expr" class="field" type="text"/></div>
+            <div class="hm-field"><label>Слот</label><input id="vnm-f-slot" class="field" type="text"/></div>
+            <div class="hm-h">Текст</div>
+            <textarea id="vnm-f-text" class="area" style="height:70px;"></textarea>
+            <div class="hm-field"><label>Голос</label><input id="vnm-f-voice" class="field" type="text"/><button id="vnm-pick-voice" class="hm-btn hm-sq">…</button></div>
+            <div class="hm-field"><label>Ассет</label><input id="vnm-f-asset" class="field" type="text"/><button id="vnm-pick-asset" class="hm-btn hm-sq">…</button></div>
+            <div class="hm-field"><label>Переход</label><input id="vnm-f-goto" class="field" type="text"/></div>
+            <div class="hm-h">Строка целиком</div>
+            <textarea id="vnm-f-raw" class="area" style="height:44px;"></textarea>
+            <button id="vnm-apply" class="hm-btn hm-primary hm-wide">Применить</button>
+          </div>
+        </div>
+        <div class="hm-h">Проблемы истории</div>
+        <div id="vnm-diag" class="vnm-diag"></div>
+      </div>
+
+      <div class="hm-objects">
+        <div class="hm-h hm-h-first">Метки</div>
+        <div id="vnm-labels" class="vnm-list"></div>
+        <div class="hm-h">Сцены</div>
+        <div id="vnm-scenes" class="vnm-list"></div>
+        <div class="hm-field"><input id="vnm-new-path" class="field" type="text" value="story/new.scene"/><button id="vnm-new" class="hm-btn">Новая</button></div>
+        <div class="hm-h">Персонажи</div>
+        <div id="vnm-speakers" class="vnm-list"></div>
+        <div class="hm-field"><label>id</label><input id="vnm-ch-id" class="field" type="text"/></div>
+        <div class="hm-field"><label>Имя</label><input id="vnm-ch-name" class="field" type="text"/></div>
+        <div class="hm-field"><label>Слот</label><input id="vnm-ch-slot" class="field" type="text"/></div>
+        <div class="hm-field"><label>Звук</label><input id="vnm-ch-blip" class="field" type="text"/></div>
+        <div class="hm-field"><label>Эмоции</label><input id="vnm-ch-expr" class="field" type="text"/></div>
+        <button id="vnm-ch-save" class="hm-btn hm-wide">Сохранить персонажа</button>
+        <textarea id="vnm-speakers-json" class="area" style="height:70px;"></textarea>
+        <button id="vnm-speakers-save" class="hm-btn hm-wide">Сохранить speakers.json</button>
+        <div class="hm-h">Поиск</div>
+        <div class="hm-field"><input id="vnm-search" class="field" type="text"/><button id="vnm-find" class="hm-btn">Найти</button></div>
+        <div id="vnm-results" class="vnm-list"></div>
+        <div class="hm-h">Ассеты</div>
+        <div class="hm-field"><input id="vnm-asset-query" class="field" type="text"/><button id="vnm-asset-find" class="hm-btn">Найти</button></div>
+        <div id="vnm-assets" class="vnm-list"></div>
+        <div class="hm-h">Темы диалога</div>
+        <div id="vnm-themes" class="vnm-list"></div>
+        <div class="hm-row"><button id="vnm-theme-open" class="hm-btn">Открыть RML</button><button id="vnm-theme-validate" class="hm-btn">Проверить</button></div>
+        <div id="vnm-theme-info" class="hint"></div>
+        <textarea id="vnm-theme-rcss" class="area" style="height:60px;"></textarea>
+        <button id="vnm-theme-save" class="hm-btn hm-wide">Сохранить RCSS</button>
+        <div class="hm-h">Тема / i18n</div>
+        <div id="vnm-env" class="hint"></div>
+        <div id="vnm-i18n" class="vnm-list"></div>
+        <textarea id="vnm-i18n-json" class="area" style="height:60px;"></textarea>
+        <button id="vnm-i18n-save" class="hm-btn hm-wide">Сохранить i18n</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</rml>

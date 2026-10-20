@@ -130,13 +130,15 @@ add_subdirectory(src)
 # дымовой прогон страницы в браузере (tests/web/README.md).
 if(NOT EMSCRIPTEN)
     add_subdirectory(tests)
-    # Нативный бэкенд SDK (r2d-sdk): отдельный CLI-бинарник, не часть игры.
+    # Инструменты (validate, lint, world, …) живут внутри единого бинарника r2d.
     add_subdirectory(sdk/native)
+    target_link_libraries(russiano2d PRIVATE r2d_sdk_core)
+    target_compile_definitions(russiano2d PRIVATE R2D_HAVE_SDK=1)
 
     # P0-H: единый нативный gate. `ctest` — истина, `r2d_check` — короткая
     # команда из roadmap §82/§107 (собирает тесты и сразу гоняет CTest).
     add_test(NAME r2d_sdk_batch
-             COMMAND r2d-sdk batch "${CMAKE_SOURCE_DIR}/tests/fixtures/sdk/ci.batch.json"
+             COMMAND russiano2d batch "${CMAKE_SOURCE_DIR}/tests/fixtures/sdk/ci.batch.json"
                      --output "${CMAKE_BINARY_DIR}/sdk-ci-report.json"
              WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     add_custom_target(r2d_check
@@ -149,7 +151,7 @@ if(NOT EMSCRIPTEN)
                 r2d_world_stream_residency_test r2d_world_atlas_tiled_test r2d_atlas_prefetch_test
                 r2d_slot_pool_test r2d_async_backpressure_test
                 r2d_payload_lookup_test r2d_audio_sound_registry_test r2d_physics_stress_test r2d_re2d_scalability_test
-                r2d-sdk
+                russiano2d
         COMMENT "r2d_check: Unity C tests + QuickJS tests + SDK batch (CTest)"
         VERBATIM)
 endif()

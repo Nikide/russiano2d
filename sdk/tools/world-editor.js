@@ -38,7 +38,8 @@ export async function open(app, args) {
 
 export function createEditor(app) {
     const $ = app.$;
-    const doc = $.ui.doc('sdk/ui/world_editor.rml');
+    // Хост может дать свою раскладку с теми же id (Editor: editor/ui/hammer.rml).
+    const doc = $.ui.doc((app.layouts && app.layouts.world) || 'sdk/ui/world_editor.rml');
     const viewports = createViewports(16);
     let session = null;
     const selection = createSelection(() => session.state.map);

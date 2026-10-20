@@ -874,7 +874,7 @@ static int ext_info(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     if (!target) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk extension info <id|path>");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d extension info <id|path>");
         sdk_report_free(&rep);
         return rc;
     }
@@ -988,7 +988,7 @@ int sdk_cmd_extension(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     const int rc = sdk_fail(&rep, "SDK_USAGE",
-                            "Использование: r2d-sdk extension list|info <id>|validate [path] [--project DIR]");
+                            "Использование: r2d extension list|info <id>|validate [path] [--project DIR]");
     sdk_report_free(&rep);
     return rc;
 }
@@ -1088,7 +1088,7 @@ static int tool_info(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     if (!target) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk tool info <id|path>");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d tool info <id|path>");
         sdk_report_free(&rep);
         return rc;
     }
@@ -1135,7 +1135,7 @@ static int tool_run(const SdkArgs *a)
     sdk_report_init(&rep);
     if (!target) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-                                "Использование: r2d-sdk tool run <id|path> [--project DIR] [--headless] [--frames N]");
+                                "Использование: r2d tool run <id|path> [--project DIR] [--headless] [--frames N]");
         sdk_report_free(&rep);
         return rc;
     }
@@ -1147,7 +1147,7 @@ static int tool_run(const SdkArgs *a)
     const SdkTool *t = find_tool(&reg, target);
     if (!t) {
         sdk_diag(&rep, SDK_ERROR, "SDK_TOOL_NOT_FOUND", target, NULL, NULL,
-                 "Инструмент «%s» не найден; список — r2d-sdk tool list", target);
+                 "Инструмент «%s» не найден; список — r2d tool list", target);
         R2dSb out; r2d_sb_init(&out);
         r2d_sb_puts(&out, "{\"ok\":false");
         put_report(&rep, &out);
@@ -1270,7 +1270,7 @@ static int tool_install(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     if (!src) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk tool install <каталог>");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d tool install <каталог>");
         sdk_report_free(&rep);
         return rc;
     }
@@ -1327,7 +1327,7 @@ static int tool_uninstall(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     if (!id) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d-sdk tool uninstall <id>");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d tool uninstall <id>");
         sdk_report_free(&rep);
         return rc;
     }
@@ -1394,7 +1394,7 @@ int sdk_cmd_tool(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     const int rc = sdk_fail(&rep, "SDK_USAGE",
-                            "Использование: r2d-sdk tool list|info <id>|validate [path]|run <id>|install <path>|uninstall <id>");
+                            "Использование: r2d tool list|info <id>|validate [path]|run <id>|install <path>|uninstall <id>");
     sdk_report_free(&rep);
     return rc;
 }

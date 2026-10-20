@@ -1,5 +1,5 @@
 // ===========================================================================
-// Общие помощники r2d-sdk: диагностика, файлы, пути, процессы, аргументы.
+// Общие помощники r2d: диагностика, файлы, пути, процессы, аргументы.
 // ===========================================================================
 #include "sdk.h"
 
@@ -339,12 +339,12 @@ bool sdk_find_engine(const char *override_path, char *out, size_t cap)
         return true;
     }
     char path[1024];
-    sdk_join(sdk_exe_dir(), "russiano2d", path, sizeof path);
+    sdk_join(sdk_exe_dir(), "r2d", path, sizeof path);
     if (sdk_file_exists(path)) {
         snprintf(out, cap, "%s", path);
         return true;
     }
-    sdk_join(sdk_exe_dir(), "russiano2d.exe", path, sizeof path);
+    sdk_join(sdk_exe_dir(), "r2d.exe", path, sizeof path);
     if (sdk_file_exists(path)) {
         snprintf(out, cap, "%s", path);
         return true;

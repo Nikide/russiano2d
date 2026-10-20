@@ -3044,6 +3044,49 @@ static JSValue r2d__js_ui_click(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_NewBool(ctx, ok);
 }
 
+// engine.ui.focus(doc, id, on?) → bool: фокус клавиатуры (on=false — снять).
+static JSValue r2d__js_ui_focus(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const bool on = r2d__arg_bool(ctx, argc, argv, 2, true);
+    const bool ok = s && s->gui && element && r2d_gui_focus(s->gui, doc, element, on);
+    if (element) JS_FreeCString(ctx, element);
+    return JS_NewBool(ctx, ok);
+}
+
+// engine.ui.place(doc, x, y, w, h) → bool: прямоугольник документа (w<=0 — сброс).
+static JSValue r2d__js_ui_place(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const float x = (float)r2d__arg_num(ctx, argc, argv, 1, 0.0);
+    const float y = (float)r2d__arg_num(ctx, argc, argv, 2, 0.0);
+    const float w = (float)r2d__arg_num(ctx, argc, argv, 3, 0.0);
+    const float h = (float)r2d__arg_num(ctx, argc, argv, 4, 0.0);
+    return JS_NewBool(ctx, s && s->gui && r2d_gui_place(s->gui, doc, x, y, w, h));
+}
+
+// engine.ui.typing() → bool: фокус на текстовом поле RmlUi.
+static JSValue r2d__js_ui_typing(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    return JS_NewBool(ctx, s && s->gui && r2d_gui_typing(s->gui));
+}
+
+// engine.ui.front(doc) → bool: поднять документ над остальными.
+static JSValue r2d__js_ui_front(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    return JS_NewBool(ctx, s && s->gui && r2d_gui_front(s->gui, doc));
+}
+
 // engine.ui.rect(doc, id) → { x, y, w, h } в координатах окна или null.
 static JSValue r2d__js_ui_rect(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -6569,6 +6612,10 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, ui, "rect", r2d__js_ui_rect, 2);
     r2d__set_fn(ctx, ui, "layoutRect", r2d__js_ui_layout_rect, 2);
     r2d__set_fn(ctx, ui, "click", r2d__js_ui_click, 2);
+    r2d__set_fn(ctx, ui, "focus", r2d__js_ui_focus, 3);
+    r2d__set_fn(ctx, ui, "place", r2d__js_ui_place, 5);
+    r2d__set_fn(ctx, ui, "front", r2d__js_ui_front, 1);
+    r2d__set_fn(ctx, ui, "typing", r2d__js_ui_typing, 0);
     // Явные шрифтовые лица RmlUi (RCSS font-weight/font-style) и их метаданные.
     r2d__set_fn(ctx, ui, "loadFontFace", r2d__js_ui_load_font_face, 4);
     r2d__set_fn(ctx, ui, "fontFaces", r2d__js_ui_font_faces, 0);

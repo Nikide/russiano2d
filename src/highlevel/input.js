@@ -23,7 +23,10 @@ const ALIASES = {
     ctrl: 'Left Ctrl', lalt: 'Left Alt', ralt: 'Right Alt', alt: 'Left Alt',
     tab: 'Tab', backspace: 'Backspace', delete: 'Delete', insert: 'Insert',
     home: 'Home', end: 'End', pageup: 'PageUp', pagedown: 'PageDown',
-    cmd: 'Left GUI', win: 'Left GUI', meta: 'Left GUI',
+    // SDL3 называет клавишу по платформе: «Left Command» (macOS),
+    // «Left Windows» (Windows), «Left GUI» (прочие) — берётся первое известное.
+    cmd: ['Left GUI', 'Left Command', 'Left Windows'], win: ['Left GUI', 'Left Windows', 'Left Command'],
+    meta: ['Left GUI', 'Left Command', 'Left Windows'], rcmd: ['Right GUI', 'Right Command', 'Right Windows'],
     minus: '-', plus: '=', equals: '=', comma: ',', period: '.',
     slash: '/', backslash: '\\', semicolon: ';', quote: "'",
 };
@@ -132,7 +135,11 @@ function scancodeOf(name) {
     else if (/^f\d{1,2}$/.test(key)) sdl_name = key.toUpperCase();
     else sdl_name = raw.replace(/\b\w/g, (c) => c.toUpperCase());
 
-    const code = engine.scancode(sdl_name);
+    let code = 0;
+    for (const candidate of Array.isArray(sdl_name) ? sdl_name : [sdl_name]) {
+        code = engine.scancode(candidate);
+        if (code !== 0) break;
+    }
     if (code === 0) ctx.log(`$: неизвестная клавиша "${name}"`);
     code_cache.set(key, code);
     return code;
@@ -554,6 +561,17 @@ export function installInput($) {
         /** Символы, введённые за этот кадр (UTF-8, с учётом раскладки).
          *  Основа <ui.input>: скан-коды не знают про IME и compose. */
         text() { return engine.textInput(); },
+        /** Системный буфер обмена: текст или null (пусто/нет доступа). */
+        clipboard() {
+            if (typeof engine.clipboard !== 'function') return null;
+            const value = engine.clipboard();
+            return typeof value === 'string' ? value : null;
+        },
+        /** Записать текст в системный буфер обмена → bool (удалось ли). */
+        setClipboard(text) {
+            if (typeof engine.setClipboard !== 'function') return false;
+            return !!engine.setClipboard(String(text === undefined || text === null ? '' : text));
+        },
 
         /** Курсор в мировых координатах. */
         mouseWorld() { return ctx.camera.screenToWorld(input.mouse()); },
