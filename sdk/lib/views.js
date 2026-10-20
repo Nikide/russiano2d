@@ -132,6 +132,14 @@ export function diagRows(diags) {
     return html;
 }
 
+/** Общая нижняя панель студий: пустой список не занимает место в редакторе. */
+export function diagPanel(doc, id, diags) {
+    const list = Array.isArray(diags) ? diags : [];
+    doc.html(id, diagRows(list));
+    doc.cls(id, 'diag-empty', list.length === 0);
+    return list;
+}
+
 /** Сводка по открытому проекту. */
 export function projectPanel(project) {
     if (!project) return '<p class="empty">Проект не открыт. Укажите каталог проекта и нажмите «Открыть».</p>';

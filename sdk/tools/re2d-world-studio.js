@@ -46,7 +46,7 @@ export function createStudio(app) {
 
     const fail = (e, code = 'SDK_WORLD_EDIT') => {
         s.diagnostics = [{ code, severity: 'error', asset: s.path, message: String(e && e.message ? e.message : e), location: null, details: null }];
-        doc.html('ws-diag', views.diagRows(s.diagnostics));
+        views.diagPanel(doc, 'ws-diag', s.diagnostics);
         return null;
     };
 
@@ -199,7 +199,7 @@ export function createStudio(app) {
             const r = await app.backend(args, 'Компиляция мира');
             s.report = r.json;
             s.diagnostics = (r.json && r.json.diagnostics) || app.state.diagnostics;
-            doc.html('ws-diag', views.diagRows(s.diagnostics));
+            views.diagPanel(doc, 'ws-diag', s.diagnostics);
             dispose();
             if (r.json && r.json.ok && r.json.world) {
                 try {

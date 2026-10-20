@@ -116,6 +116,19 @@ test('diagRows: severity, код, экранирование', () => {
     truthy(v.diagRows([]).includes('Диагностик нет'));
 });
 
+test('diagPanel: пустую панель скрывает, ошибки раскрывает', () => {
+    const state = {};
+    const doc = {
+        html(id, value) { state.html = [id, value]; },
+        cls(id, name, add) { state.cls = [id, name, add]; },
+    };
+    v.diagPanel(doc, 'diag', []);
+    eq(state.cls.join(','), 'diag,diag-empty,true');
+    v.diagPanel(doc, 'diag', [{ severity: 'error', code: 'SDK_BAD', message: 'сломано' }]);
+    eq(state.cls.join(','), 'diag,diag-empty,false');
+    truthy(state.html[1].includes('SDK_BAD'));
+});
+
 test('projectPanel и typeFilters', () => {
     truthy(v.projectPanel(null).includes('Проект не открыт'));
     const p = v.projectPanel({ dir: 'd', title: 'T', width: 640, height: 360, hasMain: true, hasManifest: false });

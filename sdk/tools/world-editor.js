@@ -103,7 +103,7 @@ export function createEditor(app) {
     }
 
     function renderDiag() {
-        doc.html('we-diag', views.diagRows(allDiagnostics()));
+        views.diagPanel(doc, 'we-diag', allDiagnostics());
     }
 
     function renderBuildOutput() {

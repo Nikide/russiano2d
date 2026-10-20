@@ -22,6 +22,7 @@ function create(app) {
         const diags = (s.report && s.report.diagnostics) || [];
         doc.html('cc-diag', diags.map(d => '<div class="diag diag-err">' +
             escapeHtml(String(d.code || '')) + ' ' + escapeHtml(String(d.message || '')) + '</div>').join(''));
+        doc.cls('cc-diag', 'diag-empty', diags.length === 0);
     }
 
     async function run(args, label) {

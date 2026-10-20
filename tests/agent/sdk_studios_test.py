@@ -250,8 +250,18 @@ def main():
         check(a.eval(f"{T}.tileAt(5, 8)") == 0 and a.eval(f"{T}.tileAt(4, 2)") == 5, "undo откатил только заливку, мазок остался")
         a.eval("$.sdkApp.studios['tilemap-studio'].redo(); $.sdkApp.studios['tilemap-studio'].undo(); 1")
         a.eval(f"{T}.setTool('erase'); 1")
-        click_xy(a, cx(4), cy(2))
-        check(a.eval(f"{T}.tileAt(4, 2)") == 0, "ластик стёр тайл")
+        # Undo/redo can change the live layout state; reacquire the viewport
+        # before the next real pointer action.
+        r = rect(a, DS, "ds-view")
+        zoom = st(a, "tilemap-studio")["zoom"]
+        left = r["x"] + (r["w"] - 280) / 2 - 20 * 16 * zoom / 2
+        top = r["y"] + r["h"] / 2 - 12 * 16 * zoom / 2
+        t = 16 * zoom
+        a.mouse_move(x=left + 4 * t + t / 2, y=top + 2 * t + t / 2); a.step(3)
+        a.mouse(button=1, action="down"); a.step(2)
+        a.mouse(button=1, action="up"); a.step(4)
+        erased = a.eval(f"{T}.tileAt(4, 2)")
+        check(erased == 0, "ластик стёр тайл")
         a.eval(f"{T}.addLayer('deco'); {T}.setLayer(1, {{depth:10}}); {T}.setAutotile('bit16'); 1")
         check(st(a, "tilemap-studio")["layers"] == 2, "добавлен слой, включён автотайл")
         a.eval(f"{T}.setMap({{tile:'abc'}}); 1")

@@ -22,7 +22,7 @@ function create(app){
         if(!s.report)notes.push('прогон ещё не выполнялся: сводка только по файлу');
         return {operation:s.operation,jobs,ops,output:s.report?!!s.report.ok:null,notes};
     }
-    async function validate(){if(!s.path)return{ok:false,diagnostics:[]};if(!panel)makePanel();const r=await panel.validate();doc.html('au-diag',views.diagRows(r.diagnostics));doc.text('au-state',r.ok?'проверка: ошибок 0':'проверка: есть коды');return r;}
+    async function validate(){if(!s.path)return{ok:false,diagnostics:[]};if(!panel)makePanel();const r=await panel.validate();views.diagPanel(doc,'au-diag',r.diagnostics);doc.text('au-state',r.ok?'проверка: ошибок 0':'проверка: есть коды');return r;}
     function preview(){if(!panel)makePanel();const r=panel.preview();doc.text('au-state','preview: '+r.path);return r;}
     function openAsset(path){s.active=true;s.path=path||'';s.report=null;s.operation=path&&/\.agent\.json$/i.test(path)?'agent':'batch';doc.text('au-mode',s.operation);if(app.doc)app.doc.hide();doc.show();doc.setValue('au-path',s.path);doc.setValue('au-json',path?$.fs.readText(path)||'':'');return api;}
     function close(){s.active=false;doc.hide();app.closeTool();}
@@ -36,7 +36,7 @@ function create(app){
             if(!$.fs.write(s.path,text))throw new Error('Не удалось сохранить файл');
             const args=[s.operation,s.path],output=String(doc.value('au-output')||'').trim();if(output)args.push('--output',absolutePath($.fs.basePath(),output));
             doc.text('au-state','выполняю…');const r=await app.backend(args,'Automation: '+s.operation);s.report=r.json;
-            doc.text('au-report',JSON.stringify(r.json,null,2));doc.html('au-diag',views.diagRows(r.json?r.json.diagnostics:app.state.diagnostics));
+            doc.text('au-report',JSON.stringify(r.json,null,2));views.diagPanel(doc,'au-diag',r.json?r.json.diagnostics:app.state.diagnostics);
             doc.text('au-state',r.json&&r.json.ok?'готово':'есть ошибки');return r.json;
         }catch(e){doc.html('au-diag','<div class="diag diag-err">'+escapeHtml(e.message)+'</div>');doc.text('au-state','ошибка');return null;}
         finally{s.busy=false;}

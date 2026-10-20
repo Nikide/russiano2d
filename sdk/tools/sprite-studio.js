@@ -430,7 +430,7 @@ export function createStudio(app) {
     }
 
     function renderDiag(list) {
-        doc.html('ss-diag', views.diagRows(list || (s.session ? s.session.diagnostics : [])));
+        views.diagPanel(doc, 'ss-diag', list || (s.session ? s.session.diagnostics : []));
     }
 
     function renderOverlay() {
