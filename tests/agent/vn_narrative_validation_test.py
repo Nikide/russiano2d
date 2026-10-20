@@ -2,7 +2,7 @@
 # ===========================================================================
 # VN narrative validation: native SDK linter integration test.
 #
-# Proves `r2d-sdk story validate` and `r2d-sdk dialog validate` are real native
+# Proves `r2d story validate` and `r2d dialog validate` are real native
 # commands (single backend for CLI/GUI/agent), diagnose broken scenes/themes,
 # and accept valid authored data. Does not boot the engine or a window.
 #
@@ -16,7 +16,9 @@ import sys
 import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SDK = os.path.join(ROOT, "build", "r2d-sdk")
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+from agent_client import resolve_binary
+SDK = resolve_binary()
 FAILURES = []
 
 
@@ -47,7 +49,7 @@ def codes(payload):
 
 def main():
     if not os.path.isfile(SDK):
-        print("  FAIL r2d-sdk не собран: " + SDK)
+        print("  FAIL r2d не собран: " + SDK)
         return 1
     with tempfile.TemporaryDirectory(prefix="r2d-vn-") as work:
         # --- valid story ----------------------------------------------------
@@ -59,13 +61,13 @@ def main():
         write(os.path.join(good, "story", "ch1.scene"),
               "@theme dialog\n:start\nw (smirk): Привет.\n"
               "- Друг -> friend\n- Молчать -> end\n"
-              ":friend\nimage art/w.png\nend\n")
+              ":friend\nimage art/w.png 0.4\nimage off 0.5\nend\n")
         write(os.path.join(good, "ui", "dialog", "dialog.rml"),
               '<rml><body><div data-dialog-role="root">'
               '<div data-dialog-role="text"></div>'
               '<div data-dialog-role="choices"></div></div></body></rml>')
         rc, payload = run("story", "validate", os.path.join(good, "story"))
-        check(rc == 0 and payload.get("ok") is True, "valid .scene directory accepted")
+        check(rc == 0 and payload.get("ok") is True, "valid .scene directory with image duration/off accepted")
         check(payload.get("scenes") == 1, "scanner counted one scene")
         check(payload.get("speakers_registry") is True, "speaker registry discovered")
 

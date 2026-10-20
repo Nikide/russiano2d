@@ -213,8 +213,16 @@ static void parse_scene_file(StoryFile *f, const char *text, SdkReport *rep)
                           "if without -> target (line %d)", number);
         } else if (!strncmp(s, "goto ", 5)) {
             add_edge(f, skip_space(s + 5), number);
-        } else if (!strncmp(s, "image ", 6)) {
-            add_asset(f, skip_space(s + 6), number);
+        } else if (!strncmp(s, "image ", 6) || !strncmp(s, "image\t", 6)) {
+            // Runtime syntax: image <path|off> [seconds]. Duration is not
+            // part of the asset path, and off has no file dependency.
+            const char *path = skip_space(s + 6);
+            size_t length = 0;
+            while (path[length] && !isspace((unsigned char)path[length])) length++;
+            char asset[2048];
+            if (length >= sizeof asset) length = sizeof asset - 1;
+            memcpy(asset, path, length); asset[length] = '\0';
+            if (strcmp(asset, "off")) add_asset(f, asset, number);
         } else if (!strncmp(s, "sound ", 6)) {
             add_asset(f, skip_space(s + 6), number);
         } else if (!strncmp(s, "voice ", 6)) {
