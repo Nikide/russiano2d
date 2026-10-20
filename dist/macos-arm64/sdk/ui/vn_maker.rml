@@ -4,13 +4,13 @@
     <button id="vnm-back" class="btn small">К SDK</button>
     <span class="title">Visual Novel Maker</span>
     <button id="vnm-save" class="btn small">Сохранить</button>
-    <button id="vnm-undo" class="btn small">Undo</button>
-    <button id="vnm-redo" class="btn small">Redo</button>
+    <button id="vnm-undo" class="btn small">Отменить</button>
+    <button id="vnm-redo" class="btn small">Повторить</button>
     <button id="vnm-validate" class="btn small">Проверить</button>
-    <button id="vnm-play" class="btn small">Play</button>
+    <button id="vnm-play" class="btn small">Запустить</button>
     <button id="vnm-from" class="btn small">С этой строки</button>
-    <button id="vnm-stop" class="btn small">Stop</button>
-    <button id="vnm-source" class="btn small">Source</button>
+    <button id="vnm-stop" class="btn small">Остановить</button>
+    <button id="vnm-source" class="btn small">Исходник</button>
     <button id="vnm-graph" class="btn small">Граф</button>
   </div>
   <div class="body-row vnm-row">
@@ -25,11 +25,11 @@
       <textarea id="vnm-speakers-json" class="area" style="height:90px;"></textarea>
       <button id="vnm-speakers-save" class="btn small">Сохранить персонажей</button>
       <h4>Персонаж</h4>
-      <input id="vnm-ch-id" class="field" type="text" placeholder="speaker id"/>
-      <input id="vnm-ch-name" class="field" type="text" placeholder="display name"/>
-      <input id="vnm-ch-slot" class="field" type="text" placeholder="left/center/right"/>
-      <input id="vnm-ch-blip" class="field" type="text" placeholder="text blip"/>
-      <input id="vnm-ch-expr" class="field" type="text" placeholder="expressions: neutral, happy"/>
+      <input id="vnm-ch-id" class="field" type="text" placeholder="идентификатор персонажа"/>
+      <input id="vnm-ch-name" class="field" type="text" placeholder="имя на экране"/>
+      <input id="vnm-ch-slot" class="field" type="text" placeholder="слева / центр / справа"/>
+      <input id="vnm-ch-blip" class="field" type="text" placeholder="звук реплики"/>
+      <input id="vnm-ch-expr" class="field" type="text" placeholder="эмоции: neutral, happy"/>
       <button id="vnm-ch-save" class="btn small">Сохранить персонажа</button>
       <h4>Поиск</h4>
       <input id="vnm-search" class="field" type="text" placeholder="текст, метка, ассет…"/>

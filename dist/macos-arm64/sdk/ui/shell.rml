@@ -43,17 +43,20 @@
                         <button id="btn-open-project" class="btn primary">Открыть</button>
                         <button id="btn-find-projects" class="btn">Найти проекты</button>
                     </div>
+                    <span class="hint">Путь к папке с project.json. Например: game или demos/hello.</span>
                     <div id="project-info"></div>
                 </div>
                 <h3>НЕДАВНИЕ</h3>
                 <div id="recent-list" class="list"></div>
-                <h3>НАЙДЕННЫЕ В КАТАЛОГЕ</h3>
-                <div id="found-list" class="list"></div>
+                <div id="found-section" class="hidden">
+                    <h3>НАЙДЕННЫЕ В КАТАЛОГЕ</h3>
+                    <div id="found-list" class="list"></div>
+                </div>
             </div>
 
             <!-- Ассеты -->
             <div id="view-assets" class="view hidden">
-                <h2>Asset Browser</h2>
+                <h2>Файлы проекта</h2>
                 <span class="lead">Реальные файлы проекта. Тип определяется по имени, инструмент — по реестру.</span>
                 <div class="form-row">
                     <input id="asset-filter" type="text" value="" class="field"/>
@@ -72,9 +75,15 @@
             <!-- Инструменты -->
             <div id="view-tools" class="view hidden">
                 <h2>Инструменты</h2>
-                <span class="lead">Каталог читается из sdk_tools.json — списка инструментов в коде нет.</span>
+                <span class="lead">Выберите инструмент. Поиск учитывает название, описание, категорию и типы файлов.</span>
+                <div class="form-row">
+                    <input id="tool-filter" type="text" value="" class="field"/>
+                    <button id="btn-tool-filter" class="btn">Найти</button>
+                    <button id="btn-tool-filter-clear" class="btn">Сбросить</button>
+                    <span id="tool-count" class="pill">инструменты</span>
+                </div>
                 <div id="tool-list" class="cards"></div>
-                <div class="form-row"><button id="btn-tools-reload" class="btn">Перечитать реестр</button></div>
+                <div class="form-row"><button id="btn-tools-reload" class="btn">Обновить список инструментов</button></div>
             </div>
 
             <!-- Шаблоны -->
@@ -136,6 +145,7 @@
         <div id="diag-head">
             <span id="diag-title">ДИАГНОСТИКА</span>
             <span id="diag-counts">ошибок 0 · предупреждений 0</span>
+            <button id="btn-diag-toggle" class="btn small">Показать</button>
             <button id="btn-diag-clear" class="btn small">Очистить</button>
         </div>
         <div id="diag-list"></div>

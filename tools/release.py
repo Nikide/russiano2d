@@ -34,6 +34,7 @@
 
 from __future__ import annotations
 
+import errno
 import glob
 import gzip
 import hashlib
@@ -45,6 +46,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import zipfile
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -719,6 +721,28 @@ def prune_stale_archives(out_dir: str, platforms: Sequence[str], version: str) -
     return removed
 
 
+def remove_package_tree(path: str) -> None:
+    """Удалить старый пакет, переживая гонку с Finder на macOS.
+
+    Finder может создать ``.DS_Store`` в открытом каталоге пакета, пока
+    ``rmtree`` удаляет его содержимое. В этом случае последний ``rmdir``
+    получает ENOTEMPTY. Повторяем полный проход: уже удалённые файлы не мешают,
+    а вновь созданный системный файл удалится на следующей попытке.
+    """
+    for attempt in range(8):
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError as error:
+            if error.errno != errno.ENOTEMPTY or attempt == 7:
+                raise
+            delay = 0.1 * (attempt + 1)
+            log("    каталог занят системным файлом, повтор удаления через %.1f с" % delay)
+            time.sleep(delay)
+
+
 def package_platform(
     runner: Runner,
     platform_name: str,
@@ -798,7 +822,7 @@ def package_platform(
             "(каталог будет удалён)." % target
         )
     if os.path.isdir(target):
-        shutil.rmtree(target)
+        remove_package_tree(target)
     os.makedirs(target, exist_ok=True)
     for source, dest in collect_runtime_files(binary, with_demos):
         source_path = os.path.join(ROOT, source)

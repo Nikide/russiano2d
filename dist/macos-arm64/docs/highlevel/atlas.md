@@ -103,6 +103,7 @@ $.ready(() => {
 |---|---|
 | `sheet.page(name)` | индекс страницы кадра или `-1` |
 | `sheet.pages()` | `[{ index, name, image, mipmaps, frames }]` |
+| `$.atlas.spriteInfo(spriteId)` | внутренняя мета-спрайта: страница, индекс кадра, прямоугольник и SpriteMesh defaults |
 | `sheet.images` | пути страниц в порядке индексов |
 | `sheet.verify(opts)` | то же, что `$.atlas.verify(data, opts)` для своих данных |
 

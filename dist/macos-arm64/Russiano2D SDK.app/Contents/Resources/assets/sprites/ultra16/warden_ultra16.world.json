@@ -1,0 +1,151 @@
+{
+ "format": "r2d-world-ultra16",
+ "version": 1,
+ "name": "warden",
+ "image": "warden_ultra16.png",
+ "atlas": "warden_ultra16.atlas.json",
+ "directions": 16,
+ "columns": 16,
+ "rows": 15,
+ "cell": {
+  "w": 64,
+  "h": 64
+ },
+ "mirror": false,
+ "pivot": "feet",
+ "pivotX": 0.5,
+ "pivotY": 1.0,
+ "worldSize": {
+  "w": 64,
+  "h": 64
+ },
+ "states": {
+  "idle": {
+   "rows": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "fps": 7.143,
+   "frameMs": 140
+  },
+  "walk": {
+   "rows": [
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+   ],
+   "fps": 10.0,
+   "frameMs": 100
+  },
+  "attack": {
+   "rows": [
+    10,
+    11,
+    12,
+    13,
+    14
+   ],
+   "fps": 11.111,
+   "frameMs": 90
+  }
+ },
+ "spriteRows": [
+  {
+   "row": 0,
+   "state": "idle",
+   "frame": 0,
+   "duration": 140
+  },
+  {
+   "row": 1,
+   "state": "idle",
+   "frame": 1,
+   "duration": 140
+  },
+  {
+   "row": 2,
+   "state": "idle",
+   "frame": 2,
+   "duration": 140
+  },
+  {
+   "row": 3,
+   "state": "idle",
+   "frame": 3,
+   "duration": 140
+  },
+  {
+   "row": 4,
+   "state": "walk",
+   "frame": 0,
+   "duration": 100
+  },
+  {
+   "row": 5,
+   "state": "walk",
+   "frame": 1,
+   "duration": 100
+  },
+  {
+   "row": 6,
+   "state": "walk",
+   "frame": 2,
+   "duration": 100
+  },
+  {
+   "row": 7,
+   "state": "walk",
+   "frame": 3,
+   "duration": 100
+  },
+  {
+   "row": 8,
+   "state": "walk",
+   "frame": 4,
+   "duration": 100
+  },
+  {
+   "row": 9,
+   "state": "walk",
+   "frame": 5,
+   "duration": 100
+  },
+  {
+   "row": 10,
+   "state": "attack",
+   "frame": 0,
+   "duration": 90
+  },
+  {
+   "row": 11,
+   "state": "attack",
+   "frame": 1,
+   "duration": 90
+  },
+  {
+   "row": 12,
+   "state": "attack",
+   "frame": 2,
+   "duration": 90
+  },
+  {
+   "row": 13,
+   "state": "attack",
+   "frame": 3,
+   "duration": 90
+  },
+  {
+   "row": 14,
+   "state": "attack",
+   "frame": 4,
+   "duration": 90
+  }
+ ],
+ "rowOrder": "row = state/frame, column = direction 0..15",
+ "notes": "Use sprite_row from spriteRows; direction column is chosen by world.sprite(directions:16)."
+}

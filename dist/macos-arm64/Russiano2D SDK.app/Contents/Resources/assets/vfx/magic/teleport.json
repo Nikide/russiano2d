@@ -1,0 +1,20 @@
+{
+ "particles": [
+  {
+   "count": 16,
+   "life": 0.6,
+   "size": 4,
+   "endSize": 0,
+   "color": "#d0b0ff",
+   "blend": "additive",
+   "mode": "billboard",
+   "speed": 120,
+   "spread": 70
+  }
+ ],
+ "flash": {
+  "color": "#d0b0ff",
+  "ms": 60
+ },
+ "shake": 0.3
+}

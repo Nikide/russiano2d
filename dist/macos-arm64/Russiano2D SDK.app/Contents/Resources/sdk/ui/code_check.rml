@@ -1,0 +1,6 @@
+<rml><head><link type="text/rcss" href="theme.rcss"/><link type="text/rcss" href="studio.rcss"/><title>Code Check / API</title></head><body>
+<div class="studio">
+<div class="bar top"><button id="cc-back" class="btn small">К SDK</button><span class="title">Проверка кода и справочник API</span></div>
+<div class="bar"><button id="cc-doctor" class="btn">Диагностика</button><button id="cc-lint" class="btn">Проверить скрипты</button><button id="cc-validate" class="btn">Проверить проект</button><button id="cc-api" class="btn">Схема API</button><label>Проект</label><input id="cc-project" type="text" class="field" style="width:30%;" value="game"/><span id="cc-state"></span></div>
+<div class="body-row"><div style="width:100%;padding:12px;box-sizing:border-box;"><h4>Отчёт</h4><pre id="cc-report" style="display:block;white-space:pre-wrap;"/></div></div>
+<div id="cc-diag" class="diag-strip"/></div></body></rml>

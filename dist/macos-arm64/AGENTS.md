@@ -266,6 +266,7 @@ call(cmd="quit")
 * Звук — `$.sound` — `docs/highlevel/sound.md`
 * Банки звуков — `$.sound.bank*` — `docs/highlevel/soundbank.md`
 * Спрайт: пивот и nine-slice — `docs/highlevel/sprite.md`
+* SpriteMesh — baked mesh для обычного Sprite — `docs/highlevel/sprite_mesh.md`
 * Машина состояний — `$.state` и `.fsm()` — `docs/highlevel/state.md`
 * Шаги и реплики — `$.steps` и `$.barks` — `docs/highlevel/steps.md`
 * Файлы и сохранения — `$.fs` и `$.store` — `docs/highlevel/store.md`
@@ -14041,8 +14042,8 @@ Release version [1.2.14]:
 
 ```text
 dist/
-    macos-arm64/      {russiano2d, r2d-sdk, russiano2d-sdk}
-    macos-x86_64/
+    macos-arm64/      {russiano2d, r2d-sdk, russiano2d-sdk, Russiano2D SDK.app}
+    macos-x86_64/     {russiano2d, r2d-sdk, russiano2d-sdk, Russiano2D SDK.app}
     windows-x86_64/   {*.exe}
     russiano2d-vX.Y.Z-macos-arm64.tar.gz
     russiano2d-vX.Y.Z-macos-x86_64.tar.gz
@@ -14055,6 +14056,9 @@ Linux x86_64 из локального релиза временно исклю�
 `xmake f -p linux -a x86_64 -m release -o build-linux && xmake build -y`.
 
 Имена архивов сохраняют существующий контракт `release.archive_name()`.
+macOS-архив также содержит `Russiano2D SDK.app`: Finder-запускатель включает
+runtime, native backend и копию SDK-ресурсов. CLI-бинарники остаются в корне
+пакета для запуска игр и автоматизации.
 
 В пакетах игра по умолчанию — демо VN `game_vn/` (внутри пакета это `game/`); платформер из корневого `game/` в релиз не попадает.
 
@@ -14620,6 +14624,7 @@ Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `co
 | `api dump [--game dir] [--engine path]` | machine-readable снимок публичного `$` API из живого runtime |
 | `api check [--schema f]` | структурная проверка снимка + свежесть `api.schema.json` |
 | `api generate [--out-dir dir]` | записать `api.schema.json` и `russiano2d.d.ts` из runtime metadata |
+| `sprite-mesh-bake <sprite.png|sprite.atlas.json> [--out cache] [--depth N] [--alpha-threshold N] [--units-per-pixel N] [--pivot-x N --pivot-y N]` | построить cache геометрии для всех кадров спрайта/атласа; `--check` проверяет актуальность cache |
 | `lint [путь] [--schema f]` | API-aware линтер JS: `R2D001/002/004/014`, `--json` |
 | `docs generate` | generated `docs/api/API_REFERENCE.md` из runtime metadata |
 | `doctor [--project dir]` | health check: runtime/metadata/schema/typings/docs/project/lint |
@@ -14765,6 +14770,24 @@ system и закрытой ассет-базы нет — источники, в
 `.frames().animate()` листает кадры кадровым шагом движка. Скорость
 (0.25×…4×), пауза, шаг. Студии делят **одну сессию на файл**: правки одной
 видны в другой, история общая.
+
+**SpriteMesh Studio** (`sdk/tools/sprite-mesh-studio.js`,
+`sdk/ui/sprite_mesh_studio.rml`) открывает PNG или существующий
+`*.atlas.json`, показывает кадры и теги анимации, воспроизводит длительности
+кадров из атласа, позволяет вращать/масштабировать 3D preview, переключать
+текстуру и каркас, менять глубину, alpha threshold, units/pixel и pivot.
+Изменение параметров временно перестраивает preview cache; «Сохранить и Bake»
+сохраняет настройки в `re2d.spriteMesh` атласа и записывает полный cache для
+всех его кадров. CLI и GUI вызывают один native backend. В игре обычный
+`.play('walk')`/`.frame(i)` выбирает соответствующий заранее собранный mesh;
+runtime не генерирует геометрию при смене кадра. Включение по умолчанию:
+`{"re2d":{"spriteMesh":{"enabled":true,"depth":0.08,"alphaThreshold":16,"unitsPerPixel":0.03125}}}`;
+на отдельном узле можно вызвать `$("player").spriteMesh({...})`, запросить
+настройки через `$("player").spriteMesh()` или выключить `false`.
+
+Проверки: `tests/sdk/sprite_mesh_test.c`,
+`tests/agent/sdk_sprite_mesh_test.py`, `tests/js/sprite_mesh_test.mjs` и
+открытие/сохранение Studio в `tests/agent/sdk_studios_test.py`.
 
 Чего нет (честно): события клипов — спрайтовая анимация рантайма их не
 поддерживает (события есть у `$.anim` и `$.anim.player`); `pingpong` рантайм-атлас
@@ -19350,6 +19373,16 @@ const $ = createApi();          // свой экземпляр API (тесты, 
 # API ставится и БЕЗ движка (регрессия на «$ не определён»)
 build/_deps/quickjs-build/qjs tests/js/api_no_engine_test.mjs
 ```
+# SpriteMesh для обычного Sprite
+
+`$.fn.spriteMesh(config?)` подключает настройки и baked cache к выбранному
+Sprite, возвращает текущие настройки без аргумента и отключает меш при `false`.
+Кадр продолжает менять существующий `.frame()`/`.animate()` API; cache frame
+выбирается по `frame_index`, runtime геометрию не перестраивает.
+
+`$.spriteMesh.loadCache(path)` читает cache; `$.spriteMesh.draw(cache, frame,
+texture, viewport, camera)` рисует кадр в SDK preview; `$.spriteMesh.project(...)`
+вычисляет проекцию, а `$.spriteMesh.cacheInfo(cache)` возвращает счётчики и hashes.
 
 
 ---
@@ -19463,6 +19496,7 @@ $.ready(() => {
 |---|---|
 | `sheet.page(name)` | индекс страницы кадра или `-1` |
 | `sheet.pages()` | `[{ index, name, image, mipmaps, frames }]` |
+| `$.atlas.spriteInfo(spriteId)` | внутренняя мета-спрайта: страница, индекс кадра, прямоугольник и SpriteMesh defaults |
 | `sheet.images` | пути страниц в порядке индексов |
 | `sheet.verify(opts)` | то же, что `$.atlas.verify(data, opts)` для своих данных |
 
@@ -24148,6 +24182,11 @@ emission-спрайтов остаётся прежний общий лимит 
 `$.gfx._render()`: **1.57–1.59 → 1.45–1.46 мс**. Пиксельная проверка: у LOD-источника
 (радиус ×0.6) в 80 px от центра ровно фон, у полного — 22.0; при
 `radiusScale: 0` лишние не светят вовсе (`off=2`).
+## Текстура для SpriteMesh preview
+
+`$.gfx.texture(path)` загружает изображение через существующий кэш текстур и
+возвращает его дескриптор. SpriteMesh Studio использует это для PNG без атласа;
+игровой код обычно продолжает загружать спрайты через `$.atlas`.
 
 
 ---
@@ -26545,6 +26584,11 @@ python3 tests/agent/highlevel_mesh_rig_test.py
 
 Юнит-тест проверяет и то, что деформация **пишет ровно в переданный буфер** —
 это и есть обещание «без аллокаций в кадре».
+# SpriteMesh cache preview
+
+`$.mesh.drawBaked(vertices, texture)` передаёт уже запечённый список треугольников
+в существующий mesh renderer. Он не строит геометрию и не меняет cache; обычный
+SpriteMesh runtime сам выбирает baked mesh по текущему кадру спрайта.
 
 
 ---
@@ -36477,6 +36521,54 @@ $('#panel').slice(null);              // выключить
 # различаются, а возврат к центру даёт побитово тот же кадр
 python3 tests/agent/highlevel_sprite_test.py
 ```
+
+
+---
+
+## SpriteMesh — baked mesh для обычного Sprite
+
+<sub>источник: `docs/highlevel/sprite_mesh.md`</sub>
+
+# SpriteMesh — baked mesh для обычного Sprite
+
+SpriteMesh добавляет экструдированную геометрию к существующему спрайту. Он
+использует его текстуру, кадры, анимации и pivot; отдельного объекта или
+анимационной системы не создаёт.
+
+```js
+const player = $('player');
+player.spriteMesh({
+    enabled: true,
+    depth: 0.08,
+    alphaThreshold: 16,
+    unitsPerPixel: 1 / 32,
+});
+
+player.play('walk'); // обычная Sprite animation выбирает соответствующий mesh
+```
+
+Вызов без аргумента возвращает настройки, а `spriteMesh(false)` отключает
+отрисовку mesh для узла. Настройки по умолчанию можно записать в Sprite/Atlas
+asset через SpriteMesh Studio SDK tool.
+
+## Bake и cache
+
+SDK строит и сохраняет mesh для **каждого** кадра. Runtime загружает cache и при
+обычном переключении кадра выбирает соответствующий готовый mesh. Геометрия не
+перестраивается в animation update. Cache инвалидируется изменением текстуры,
+раскладки кадров, pivot, настроек или версии формата.
+
+SpriteMesh Studio открывает PNG или Atlas JSON, показывает кадры и animations,
+позволяет проигрывать animation, менять depth/alpha threshold/units per pixel,
+pivot и режим preview, затем запечь cache всех кадров вместе с настройками
+asset.
+
+## Ограничения
+
+Геометрия строится extrusion-ом непрозрачных пикселей по alpha threshold.
+Соседние opaque-пиксели объединяются без внутренних стенок; границы atlas frame
+изолированы. Cache содержит CPU mesh и загружается через существующий Re2D mesh
+renderer. Это 2D/2.5D представление обычного Sprite, а не новый renderer.
 
 
 ---

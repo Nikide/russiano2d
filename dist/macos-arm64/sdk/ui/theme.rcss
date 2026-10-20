@@ -199,6 +199,7 @@ textarea.area:focus { border-color: #ff5a3c; }
     border-top-width: 1px;
     border-color: #232b3d;
 }
+.diag-strip.diag-empty { display: none; }
 .diag { display: block; padding: 3px 0px; }
 .diag-sev { display: inline-block; width: 72px; font-size: 11px; letter-spacing: 1px; }
 .diag-code { color: #e9edf6; margin-right: 10px; font-size: 13px; }

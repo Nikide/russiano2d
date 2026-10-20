@@ -114,7 +114,7 @@ export function createStudio(app) {
         const d = { code, severity, asset: s.session ? s.session.path : null, location: null, message, details: null };
         const list = (s.session ? s.session.diagnostics : []).concat([d]);
         if (s.session) s.session.diagnostics = list;
-        doc.html('an-diag', views.diagRows(list));
+        views.diagPanel(doc, 'an-diag', list);
         return d;
     }
 
@@ -212,7 +212,7 @@ export function createStudio(app) {
         const r = await s.session.validateDraft();
         if (!panel) makePanel();
         panel.absorb(r.diagnostics, s.session.path);
-        doc.html('an-diag', views.diagRows(r.diagnostics));
+        views.diagPanel(doc, 'an-diag', r.diagnostics);
         renderReport();
         app.setStatus(r.ok ? 'проверка: ошибок нет' : 'проверка: есть ошибки', r.ok ? '' : 'fail');
         return Object.assign({ path: s.session.path, report: panel.report() }, r);
@@ -382,7 +382,7 @@ export function createStudio(app) {
         renderFields();
         renderControls();
         renderStrip();
-        doc.html('an-diag', views.diagRows(s.session ? s.session.diagnostics : []));
+        views.diagPanel(doc, 'an-diag', s.session ? s.session.diagnostics : []);
         doc.text('an-hud', escapeHtml(hudText()));
     }
 

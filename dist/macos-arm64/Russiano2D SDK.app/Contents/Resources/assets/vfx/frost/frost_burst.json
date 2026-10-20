@@ -1,0 +1,23 @@
+{
+ "particles": [
+  {
+   "count": 10,
+   "life": 0.45,
+   "size": 4,
+   "endSize": 0,
+   "color": "#9fe8ff",
+   "blend": "additive",
+   "mode": "billboard",
+   "speed": 150,
+   "spread": 60,
+   "collision": "wall"
+  }
+ ],
+ "light": {
+  "radius": 130,
+  "intensity": 1.2,
+  "color": "#9fe8ff",
+  "life": 0.1,
+  "priority": 2
+ }
+}

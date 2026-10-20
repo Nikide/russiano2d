@@ -132,6 +132,14 @@ export function diagRows(diags) {
     return html;
 }
 
+/** Общая нижняя панель студий: пустой список не занимает место в редакторе. */
+export function diagPanel(doc, id, diags) {
+    const list = Array.isArray(diags) ? diags : [];
+    doc.html(id, diagRows(list));
+    doc.cls(id, 'diag-empty', list.length === 0);
+    return list;
+}
+
 /** Сводка по открытому проекту. */
 export function projectPanel(project) {
     if (!project) return '<p class="empty">Проект не открыт. Укажите каталог проекта и нажмите «Открыть».</p>';
@@ -151,8 +159,10 @@ export function pathRows(list, emptyText) {
     for (const item of list) {
         const dir = typeof item === 'string' ? item : item.path;
         const title = typeof item === 'string' ? '' : item.title;
-        html += '<div class="row" data-key="' + escapeHtml(dir) + '"><span class="row-name">' + escapeHtml(dir) + '</span>' +
-            (title ? '<span class="row-dir">' + escapeHtml(title) + '</span>' : '') + '</div>';
+        const normalized = String(dir || '').replace(/\\/g, '/').replace(/\/+$/, '');
+        const name = title || normalized.split('/').pop() || normalized;
+        html += '<div class="row" data-key="' + escapeHtml(dir) + '"><span class="row-name">' + escapeHtml(name) + '</span>' +
+            (normalized ? '<span class="row-dir">' + escapeHtml(normalized) + '</span>' : '') + '</div>';
     }
     return html;
 }

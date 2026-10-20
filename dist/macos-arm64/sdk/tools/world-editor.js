@@ -103,7 +103,7 @@ export function createEditor(app) {
     }
 
     function renderDiag() {
-        doc.html('we-diag', views.diagRows(allDiagnostics()));
+        views.diagPanel(doc, 'we-diag', allDiagnostics());
     }
 
     function renderBuildOutput() {
@@ -184,7 +184,12 @@ export function createEditor(app) {
         for (const tool of TOOLS) {
             doc.cls(TOOL_IDS[tool], 'on', s.tool === tool);
         }
-        doc.text('we-tool-current', s.tool);
+        const toolNames = {
+            select: 'Выбор', block: 'Кисть', move: 'Перемещение', resize: 'Размер',
+            rotate: 'Поворот', vertex: 'Вершины', clip: 'Разрез', face: 'Грань',
+            entity: 'Объект', path: 'Путь',
+        };
+        doc.text('we-tool-current', toolNames[s.tool] || s.tool);
         doc.text('we-grid-value', 'Сетка ' + viewports.state.gridSize);
         doc.cls('we-grid-toggle', 'on', viewports.state.grid);
         const classes = ext.entityDefinitions();
@@ -248,6 +253,11 @@ export function createEditor(app) {
     }
 
     function renderTop() {
+        const map = session.state.map || {};
+        const hasCellWorld = (map.cells || []).length || (map.walls || []).length || (map.portals || []).length;
+        doc.style('we-map-hint', 'display', hasCellWorld ? 'flex' : 'none');
+        if (hasCellWorld) doc.text('we-map-hint-text',
+            'В этой карте геометрия задана cells/walls. Правьте её в Re2D World Studio; World Editor работает с brushes, entities и paths.');
         doc.text('we-file', esc(session.state.path || 'карта не открыта'));
         doc.setValue('we-path', session.state.path || '');
         doc.text('we-dirty', session.state.history && session.state.history.dirty() ? 'изменено' : '');
@@ -758,6 +768,33 @@ export function createEditor(app) {
     function wire() {
         if (s.wired) return;
         s.wired = true;
+        const icons = {
+            back: 'arrow_back', new: 'add_box', open: 'folder_open', save: 'save',
+            undo: 'undo', redo: 'redo', duplicate: 'content_copy', delete: 'delete',
+            validate: 'check_circle', compile: 'build', run: 'play_arrow', 'build-run': 'rocket_launch',
+            'tool-select': 'select_all', 'tool-block': 'add_box', 'tool-move': 'open_with',
+            'tool-resize': 'aspect_ratio', 'tool-rotate': 'rotate_right', 'tool-vertex': 'control_point',
+            'tool-clip': 'content_cut', 'tool-face': 'texture', 'tool-entity': 'place', 'tool-path': 'route',
+        };
+        for (const [id, name] of Object.entries(icons)) {
+            if ($.ui.hasIcon(name)) doc.text('we-icon-' + id, $.ui.icon(name));
+        }
+        const sections = [
+            ['groups', 'we-toggle-groups', 'we-groups', 'Группы объектов'],
+            ['face', 'we-toggle-face', 'we-face-settings', 'Материалы граней'],
+            ['clip', 'we-toggle-clip', 'we-clip-settings', 'Разрезать кисть'],
+            ['path', 'we-toggle-path', 'we-path-settings', 'Управление путями'],
+            ['build', 'we-toggle-build', 'we-build-settings', 'Журнал сборки'],
+        ];
+        const expanded = {};
+        for (const entry of sections) {
+            const [key, button, panel, label] = entry;
+            doc.on(button, 'click', () => {
+                expanded[key] = !expanded[key];
+                doc.cls(panel, 'open', expanded[key]);
+                doc.text(button, label + (expanded[key] ? ' −' : ' +'));
+            });
+        }
         doc.on('we-back', 'click', close);
         doc.on('we-save', 'click', () => commands.save().then((r) => { setStatus(r.ok ? 'сохранено' : 'не сохранено', !r.ok); render(); }));
         doc.on('we-undo', 'click', () => { const label = session.state.history.undo(); selection.prune(); setStatus(label ? 'отменено: ' + label : 'нечего отменять', false); render(); });
@@ -767,6 +804,10 @@ export function createEditor(app) {
             const path = String(doc.value('we-path') || '').trim();
             if (!path) { note('warning', 'SDK_WORLD_READ', 'Укажите путь .re2dmap'); render(); return; }
             openPath(path);
+        });
+        doc.on('we-open-re2d-world', 'click', () => {
+            const path = session.state.path;
+            if (path) app.openTool('re2d-world-studio', { assetAbs: path });
         });
         doc.on('we-duplicate', 'click', () => commands.duplicateSelection().then((r) => { setStatus(r.ok ? 'дублировано' : 'дублирование отклонено', !r.ok); render(); }));
         doc.on('we-delete', 'click', () => commands.deleteSelection().then((r) => { setStatus(r.ok ? 'удалено' : 'удаление отклонено', !r.ok); render(); }));

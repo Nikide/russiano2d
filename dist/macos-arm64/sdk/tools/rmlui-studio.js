@@ -292,7 +292,7 @@ function create(app) {
     function renderDiag() {
         const nat = s.native;
         const list = nat ? nat.concat(s.diagnostics.filter((d) => !nat.some((x) => x.code === d.code))) : s.diagnostics;
-        doc.html('rm-diag', views.diagRows(list));
+        views.diagPanel(doc, 'rm-diag', list);
     }
 
     function renderTop() {

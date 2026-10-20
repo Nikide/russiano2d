@@ -261,7 +261,7 @@ function createHost(app) {
 
     // --- Отрисовка интерфейса --------------------------------------------------------------------------------
     function renderDiag(list) {
-        doc.html('ds-diag', views.diagRows(list || allDiagnostics()));
+        views.diagPanel(doc, 'ds-diag', list || allDiagnostics());
     }
 
     function hud() {

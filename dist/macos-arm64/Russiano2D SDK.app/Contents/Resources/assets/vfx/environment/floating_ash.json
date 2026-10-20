@@ -1,0 +1,17 @@
+{
+ "particles": [
+  {
+   "count": 3,
+   "life": 4.0,
+   "size": 2,
+   "color": "#a09080",
+   "alpha": 0.4,
+   "blend": "additive",
+   "mode": "billboard",
+   "vx": 3,
+   "vy": -2,
+   "vh": 6,
+   "drag": 0.3
+  }
+ ]
+}
