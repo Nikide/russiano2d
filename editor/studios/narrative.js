@@ -2,7 +2,7 @@
 import { escapeHtml } from '../../sdk/lib/model.js';
 import * as M from '../../sdk/lib/vn_model.js';
 import { createHistory } from '../../sdk/lib/history.js';
-import { studioDoc, mousePx, keys as studioKeys, diag } from '../lib/studio_kit.js';
+import { studioDoc, mousePx, keys as studioKeys, diag, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
 export const meta = {
     id: 'narrative', title: 'Narrative', icon: 'chat',
@@ -481,8 +481,23 @@ export function create(host) {
     doc.on('vnm-speakers-save', 'click', saveSpeakers);
     doc.on('vnm-speakers', 'click', (id, ev, key) => { if (key) selectSpeaker(key); });
     doc.on('vnm-ch-save', 'click', saveCharacter);
-    doc.on('vnm-pick-asset', 'click', () => { s.pickTarget = 'asset'; findAssets(); });
-    doc.on('vnm-pick-voice', 'click', () => { s.pickTarget = 'voice'; findAssets(); });
+    // «…» у полей ассета/голоса: окно ОС, путь относительно проекта.
+    async function browseAsset(target) {
+        const cur = String(doc.value(target === 'voice' ? 'vnm-f-voice' : 'vnm-f-asset') || '').trim();
+        const r = await pickProjectFile($, host.root(), { title: target === 'voice' ? 'Выберите голос' : 'Выберите картинку',
+            filters: target === 'voice' ? FILTERS.audio : FILTERS.image, path: cur ? at(cur) : host.root() });
+        if (r.error) { fail('SDK_VN_PATH', r.error); return false; }
+        if (!r.rel) return false;
+        s.pickTarget = target; pickAsset(r.rel); renderAll(); return true;
+    }
+    async function browseNewScene() {
+        const r = await pickProjectFile($, host.root(), { save: true, title: 'Новая сцена', filters: FILTERS.scene, path: host.root() + '/story/new.scene' });
+        if (r.error) { fail('SDK_VN_PATH', r.error); return false; }
+        if (!r.rel) return false;
+        return newScene(/\.(scene|story)$/i.test(r.rel) ? r.rel : r.rel + '.scene');
+    }
+    doc.on('vnm-pick-asset', 'click', () => browseAsset('asset'));
+    doc.on('vnm-pick-voice', 'click', () => browseAsset('voice'));
     doc.on('vnm-asset-find', 'click', () => findAssets());
     doc.on('vnm-themes', 'click', (id, ev, key) => { if (key) selectTheme(key); });
     doc.on('vnm-theme-open', 'click', () => { if (s.themeSel) host.openWith(at(s.themeSel), 'rmlui-studio'); });
@@ -500,7 +515,7 @@ export function create(host) {
     doc.on('vnm-down', 'click', () => move(1));
     doc.on('vnm-dup', 'click', duplicate);
     doc.on('vnm-apply', 'click', applyInspector);
-    doc.on('vnm-new', 'click', () => newScene(String(doc.value('vnm-new-path') || 'story/new.scene')));
+    doc.on('vnm-new', 'click', () => browseNewScene());
     doc.on('vnm-find', 'click', () => search(doc.value('vnm-search')));
     doc.on('vnm-scenes', 'click', (id, ev, key) => { if (key) openScene(key); });
     doc.on('vnm-labels', 'click', (id, ev, key) => { const list = visible(); const i = list.findIndex((c) => c.kind === 'label' && c.text === key); if (i >= 0) select(i); });
@@ -548,7 +563,7 @@ export function create(host) {
     }
 
     const ops = { select, insert, applyInspector, commitSource, delete: del, move, duplicate, search, validate,
-        openScene, newScene, saveSpeakers, selectSpeaker, saveCharacter, findAssets, pickAsset,
+        openScene, newScene, saveSpeakers, selectSpeaker, saveCharacter, findAssets, pickAsset, browseAsset, browseNewScene,
         selectTheme, saveTheme, validateTheme, selectI18n, saveI18n,
         setSource: (text) => edit('исходник', String(text)),
         listCommands: commandRows, playScene: () => previewSource(false), playFromHere: () => previewSource(true) };

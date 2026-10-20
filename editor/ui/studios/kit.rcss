@@ -97,3 +97,4 @@ textarea.st-area {
 .st-diag { display: block; font-size: 12px; margin: 2px 0px; }
 .st-diag.error { color: #f14c4c; }
 .st-diag.warning { color: #e2b33c; }
+.st-browse { margin-left: 4px; padding: 3px 9px; }

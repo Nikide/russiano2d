@@ -11,7 +11,7 @@
 
 import * as K from '../../sdk/lib/kinds/fonts.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
-import { esc } from '../lib/studio_kit.js';
+import { esc, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
 export const meta = { id: 'fonts', title: 'Fonts', icon: 'text_fields', match: (p) => /\.fonts\.json$/i.test(p) };
 
@@ -152,7 +152,7 @@ export function create(host) {
             let html = '<span class="st-h">Шрифты файла</span>';
             html += fonts(w).length ? fonts(w).map((f, i) => '<div class="st-row" data-key="font:del:' + i + '">' + esc(f.name) + '<span class="st-sub">' + esc(String(f.path).split('/').pop()) +
                 (e.fontErrors.includes(f.name) ? ' · не загрузился' : '') + ' · убрать</span></div>').join('') : '<span class="st-note">Своих нет — работает шрифт движка.</span>';
-            html += '<span class="st-h">Файлы шрифтов проекта</span>';
+            html += '<span class="st-h">Файлы шрифтов проекта</span>' + button('font:pick', '+ Шрифт из файла…');
             if (e.files === null) html += '<span class="st-note">Читаю r2d assets…</span>';
             else if (!e.files.length) html += '<span class="st-note">В проекте нет .ttf/.otf.</span>';
             else html += e.files.map((p) => '<div class="st-row" data-key="font:add:' + esc(p) + '">+ ' + esc(p.split('/').pop()) + '<span class="st-sub">' + esc(p) + '</span></div>').join('');
@@ -172,6 +172,9 @@ export function create(host) {
             else if (key === 'sample') { w.ext.sample = String(w.doc.value('ft-sample') || ''); w.rebuild(); w.render(); }
             else if (key.startsWith('font:del:')) { const i = Number(key.slice(9)); w.edit('Убрать шрифт', (m) => { m.fonts.splice(i, 1); }); }
             else if (key.startsWith('font:add:')) addFont(w, key.slice(9));
+            else if (key === 'font:pick') pickProjectFile(w.$, w.host.root(), { title: 'Выберите шрифт', filters: FILTERS.font }).then((r) => {
+                if (r.error) w.fail('EDITOR_ASSET_FILE', r.error); else if (r.rel) addFont(w, r.rel);
+            });
         },
         preview(w) {
             const e = w.ext;

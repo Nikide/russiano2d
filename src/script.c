@@ -33,6 +33,7 @@
 #include "net.h"
 #include "payload.h"
 #include "async.h"
+#include "dialog.h"
 
 // §27: перезагрузка текстуры на месте декодирует картинку (IMG_Load_IO).
 #include <SDL3_image/SDL_image.h>
@@ -5188,6 +5189,98 @@ static JSValue r2d__js_fs_last_error(JSContext *ctx, JSValueConst this_val,
     return JS_NewString(ctx, r2d__fs_error);
 }
 
+// engine.fs.dialog(kind, { title, path, filters: [{ name, ext }], many })
+// kind: "folder" | "open" | "save". → { id } или { error }. Ответ — через dialogPoll.
+static JSValue r2d__js_fs_dialog(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue out = JS_NewObject(ctx);
+    const char *kind_s = r2d__arg_str(ctx, argc, argv, 0);
+    R2dDialogKind kind = R2D_DIALOG_OPEN_FILE;
+    bool known = false;
+    if (kind_s) {
+        if (!strcmp(kind_s, "folder")) { kind = R2D_DIALOG_FOLDER; known = true; }
+        else if (!strcmp(kind_s, "open")) { kind = R2D_DIALOG_OPEN_FILE; known = true; }
+        else if (!strcmp(kind_s, "save")) { kind = R2D_DIALOG_SAVE_FILE; known = true; }
+        JS_FreeCString(ctx, kind_s);
+    }
+    if (!known) {
+        JS_SetPropertyStr(ctx, out, "error", JS_NewString(ctx, "kind: нужен folder | open | save"));
+        return out;
+    }
+    JSValueConst opts = argc > 1 ? argv[1] : JS_UNDEFINED;
+    const char *title = NULL, *location = NULL;
+    bool many = false;
+    R2dDialogFilter filters[16];
+    const char *filter_strs[32];
+    int nfilters = 0, nstrs = 0;
+    if (JS_IsObject(opts)) {
+        JSValue v = JS_GetPropertyStr(ctx, opts, "title");
+        if (JS_IsString(v)) title = JS_ToCString(ctx, v);
+        JS_FreeValue(ctx, v);
+        v = JS_GetPropertyStr(ctx, opts, "path");
+        if (JS_IsString(v)) location = JS_ToCString(ctx, v);
+        JS_FreeValue(ctx, v);
+        v = JS_GetPropertyStr(ctx, opts, "many");
+        many = JS_IsBool(v) && JS_VALUE_GET_BOOL(v);
+        JS_FreeValue(ctx, v);
+        JSValue arr = JS_GetPropertyStr(ctx, opts, "filters");
+        if (JS_IsArray(arr)) {
+            int64_t len = 0;
+            JS_GetLength(ctx, arr, &len);
+            for (int64_t i = 0; i < len && nfilters < 16; ++i) {
+                JSValue f = JS_GetPropertyUint32(ctx, arr, (uint32_t)i);
+                JSValue n = JS_GetPropertyStr(ctx, f, "name");
+                JSValue e = JS_GetPropertyStr(ctx, f, "ext");
+                const char *ns = JS_IsString(n) ? JS_ToCString(ctx, n) : NULL;
+                const char *es = JS_IsString(e) ? JS_ToCString(ctx, e) : NULL;
+                if (es) {
+                    filters[nfilters].name = ns ? ns : es;
+                    filters[nfilters].pattern = es;
+                    nfilters++;
+                    filter_strs[nstrs++] = es;
+                    if (ns) filter_strs[nstrs++] = ns;
+                } else if (ns) {
+                    JS_FreeCString(ctx, ns);
+                }
+                JS_FreeValue(ctx, n); JS_FreeValue(ctx, e); JS_FreeValue(ctx, f);
+            }
+        }
+        JS_FreeValue(ctx, arr);
+    }
+    char err[256] = { 0 };
+    const int id = r2d_dialog_open(s && s->app ? s->app->window : NULL, kind, title, location,
+                                   filters, nfilters, many, err, (int)sizeof err);
+    for (int i = 0; i < nstrs; ++i) JS_FreeCString(ctx, filter_strs[i]);
+    if (title) JS_FreeCString(ctx, title);
+    if (location) JS_FreeCString(ctx, location);
+    if (id > 0) JS_SetPropertyStr(ctx, out, "id", JS_NewInt32(ctx, id));
+    else JS_SetPropertyStr(ctx, out, "error", JS_NewString(ctx, err[0] ? err : "диалог не открылся"));
+    return out;
+}
+
+// engine.fs.dialogPoll() → [{ id, paths: [...], error }] — готовые ответы.
+static JSValue r2d__js_fs_dialog_poll(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    JSValue arr = JS_NewArray(ctx);
+    R2dDialogResult r;
+    uint32_t n = 0;
+    while (r2d_dialog_poll(&r)) {
+        JSValue o = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, o, "id", JS_NewInt32(ctx, r.id));
+        JSValue paths = JS_NewArray(ctx);
+        for (int i = 0; i < r.count; ++i)
+            JS_SetPropertyUint32(ctx, paths, (uint32_t)i, JS_NewString(ctx, r.paths[i] ? r.paths[i] : ""));
+        JS_SetPropertyStr(ctx, o, "paths", paths);
+        JS_SetPropertyStr(ctx, o, "error", r.error[0] ? JS_NewString(ctx, r.error) : JS_NULL);
+        JS_SetPropertyUint32(ctx, arr, n++, o);
+        r2d_dialog_result_free(&r);
+    }
+    return arr;
+}
+
 static JSValue r2d__js_fs_exists(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -6759,6 +6852,9 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, fs, "exists", r2d__js_fs_exists, 1);
     r2d__set_fn(ctx, fs, "remove", r2d__js_fs_remove, 1);
     r2d__set_fn(ctx, fs, "list", r2d__js_fs_list, 1);
+    // Системные диалоги выбора папки/файла (src/dialog.h); ответ — через dialogPoll.
+    r2d__set_fn(ctx, fs, "dialog", r2d__js_fs_dialog, 2);
+    r2d__set_fn(ctx, fs, "dialogPoll", r2d__js_fs_dialog_poll, 0);
     JS_SetPropertyStr(ctx, engine, "fs", fs);
 
     // §45: асинхронный ввод-вывод и декодирование картинок. Рабочий поток

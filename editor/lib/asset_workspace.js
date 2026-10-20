@@ -1,14 +1,16 @@
 // Рабочая область ассета: UI Editor, без SDK app/host и глобальных кадровых хуков.
-import { studioDoc,esc,row,diag,uiScale,mousePx,inside,screenCamera } from './studio_kit.js';
+import { studioDoc,esc,row,diag,uiScale,mousePx,inside,screenCamera,pickProjectFile } from './studio_kit.js';
 import { createAssetDocument } from './asset_document.js';
 export const button=(id,label,on)=>'<button class="st-btn'+(on?' on':'')+'" data-key="'+esc(id)+'">'+esc(label)+'</button>';
-// Поля формы: {key,label,number?,int?,bool?,json?,options?,optional?,default?,pair?:'range'|'vec',hint?}.
+// Поля формы: {key,label,number?,int?,bool?,json?,options?,optional?,default?,pair?:'range'|'vec',hint?,file?:{filters}}.
+// file — путь к файлу проекта: рядом кнопка «…» открывает окно ОС.
 // pair — два поля: 'range' — число или [от, до]; 'vec' — [x, y].
 export function form(fields,prefix='f') {
     return fields.map(f=>'<div class="st-field"><label>'+esc(f.label||f.key)+'</label>'+
         (f.pair?'<input id="'+prefix+'-'+esc(f.key)+'-0" class="st-in" type="text"/><input id="'+prefix+'-'+esc(f.key)+'-1" class="st-in" type="text"/>':
         f.options?'<select id="'+prefix+'-'+esc(f.key)+'" class="st-in">'+(f.optional?['']:[]).concat(f.options).map(v=>'<option value="'+esc(v)+'">'+esc(v===''?'—':v)+'</option>').join('')+'</select>':
-        f.json?'<textarea id="'+prefix+'-'+esc(f.key)+'" class="st-area"></textarea>':'<input id="'+prefix+'-'+esc(f.key)+'" class="st-in" type="text"/>')+'</div>').join('');
+        f.json?'<textarea id="'+prefix+'-'+esc(f.key)+'" class="st-area"></textarea>':'<input id="'+prefix+'-'+esc(f.key)+'" class="st-in" type="text"/>')+
+        (f.file?'<button class="st-btn st-browse" data-key="browse:'+esc(prefix)+':'+esc(f.key)+'">…</button>':'')+'</div>').join('');
 }
 const num=(f,t)=>{const v=Number(t);if(!Number.isFinite(v))throw new Error((f.label||f.key)+': нужно число');return v;};
 function pairOf(f,v) {
@@ -35,7 +37,7 @@ export function createWorkspace(host,def) {
         edit(label,fn){if(!file.edit(label,fn))return false;needsPreview=true;render();return true;},
         select(i){w.selected=i;render();},
         rebuild(){needsPreview=true;},
-        render,
+        render,browse,
         fieldValues(fields,target,prefix='f'){
             for(const f of fields){
                 // Отсутствующее optional-поле показывается пустым и остаётся отсутствующим при Apply.
@@ -84,12 +86,26 @@ export function createWorkspace(host,def) {
     function action(key){try{if(def.action)def.action(w,key);}catch(e){w.fail('EDITOR_ASSET_ACTION',e.message);}}
     doc.on('aw-list','click',(_id,_ev,key)=>{if(key!==null&&key!=='')w.select(Number(key));});
     for(const id of ['aw-tools','aw-actions','aw-library','aw-bottom','aw-content'])doc.on(id,'click',(_id,_ev,key)=>{if(key!==null&&key!=='')action(key);});
-    doc.on('aw-apply','click',()=>{try{const fields=def.fields(w),patch=w.read(fields);w.edit('Свойства',data=>def.apply?def.apply(w,data,patch):w.patch(def.target(w),patch));}catch(e){w.fail('EDITOR_ASSET_FIELD',e.message);}});
-    doc.on('aw-document-apply','click',()=>{try{const patch=w.read(def.settings||[],'d');w.edit('Настройки',data=>w.patch(data,patch));}catch(e){w.fail('EDITOR_ASSET_FIELD',e.message);}});
+    function applyInspector(){try{const fields=def.fields(w),patch=w.read(fields);w.edit('Свойства',data=>def.apply?def.apply(w,data,patch):w.patch(def.target(w),patch));}catch(e){w.fail('EDITOR_ASSET_FIELD',e.message);}}
+    function applyDocument(){try{const patch=w.read(def.settings||[],'d');w.edit('Настройки',data=>w.patch(data,patch));}catch(e){w.fail('EDITOR_ASSET_FIELD',e.message);}}
+    // «…» у поля-файла: окно ОС, путь относительно проекта, сразу применить.
+    async function browse(key){
+        const [,prefix,...rest]=key.split(':'),name=rest.join(':');
+        const fields=prefix==='d'?(def.settings||[]):def.fields(w),f=fields.find(x=>x.key===name);if(!f)return;
+        const id=prefix+'-'+name,cur=String(doc.value(id)||'').trim();
+        const r=await pickProjectFile($,host.root(),{title:'Выберите файл: '+(f.label||f.key),path:cur?w.path(cur):host.root(),filters:f.file&&f.file.filters});
+        if(r.error){w.fail('EDITOR_ASSET_FILE',r.error);return;}
+        if(r.cancelled)return;
+        doc.setValue(id,r.rel);
+        if(prefix==='d')applyDocument();else applyInspector();
+    }
+    doc.on('aw-apply','click',applyInspector);
+    doc.on('aw-document-apply','click',applyDocument);
+    for(const id of ['aw-inspector','aw-document'])doc.on(id,'click',(_id,_ev,key)=>{if(key&&key.startsWith('browse:'))browse(key);});
     doc.on('aw-validate','click',validate);
     doc.on('aw-source-toggle','click',()=>{sourceMode=!sourceMode;doc.cls('aw-source-panel','st-hidden',!sourceMode);if(sourceMode)doc.setValue('aw-source',JSON.stringify(w.data,null,2));});
     doc.on('aw-source-apply','click',()=>{try{const data=JSON.parse(doc.value('aw-source'));if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('Нужен объект');w.edit('JSON',model=>{for(const k of Object.keys(model))delete model[k];Object.assign(model,data);});}catch(e){w.fail('EDITOR_ASSET_JSON',e.message);}});
-    const api={doc,state:w,ops:{edit:w.edit,select:w.select,action,validate,...(def.ops?def.ops(w):{})},
+    const api={doc,state:w,ops:{edit:w.edit,select:w.select,action,validate,browse,...(def.ops?def.ops(w):{})},
         async open(path){file.open(path);if(def.init)def.init(w);render();},
         onActive(on){active=!!on;if(!on){if(def.deactivate)def.deactivate(w);disposePreview();needsPreview=true;}else screenCamera($);},
         update(dt){if(closed||!active||!w.data)return;screenCamera($);

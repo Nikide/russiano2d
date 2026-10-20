@@ -10,7 +10,7 @@
 
 import * as K from '../../sdk/lib/kinds/particles.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
-import { esc, mousePx, inside } from '../lib/studio_kit.js';
+import { esc, mousePx, inside, FILTERS } from '../lib/studio_kit.js';
 
 export const meta = { id: 'particles', title: 'Particles', icon: 'auto_awesome', match: (p) => /\.particles\.json$/i.test(p) };
 
@@ -38,7 +38,7 @@ const SECTIONS = [
         { key: 'end_size', label: 'end_size', pair: 'range', optional: true },
         { key: 'color', label: 'color', optional: true },
         { key: 'end_color', label: 'end_color', optional: true },
-        { key: 'src', label: 'текстура', optional: true },
+        { key: 'src', label: 'текстура', optional: true, file: { filters: FILTERS.image } },
         { key: 'blend', label: 'blend', options: K.BLENDS, optional: true },
         { key: 'layer', label: 'layer', optional: true },
         { key: 'depth', label: 'depth', number: true, optional: true },

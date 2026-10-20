@@ -6,7 +6,7 @@
 
 Engine version: "1.3.2"
 
-Entries: 4121
+Entries: 4124
 
 ## $
 
@@ -1415,9 +1415,12 @@ Entries: 4121
 | `basePath` | function | `() -> any` |
 | `exists` | function | `(arg0: any) -> any` |
 | `list` | function | `(arg0: any) -> any` |
+| `pickFile` | function | `(arg0: any) -> any` |
+| `pickFolder` | function | `(arg0: any) -> any` |
 | `readJSON` | function | `(arg0: any, arg1: any) -> any` |
 | `readText` | function | `(arg0: any) -> any` |
 | `remove` | function | `(arg0: any) -> any` |
+| `saveFile` | function | `(arg0: any) -> any` |
 | `write` | function | `(arg0: any, arg1: any) -> any` |
 | `writeAtomic` | function | `(arg0: any, arg1: any) -> any` |
 | `writeJSON` | function | `(arg0: any, arg1: any) -> any` |

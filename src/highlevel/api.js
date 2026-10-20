@@ -34,7 +34,7 @@ import { installDebug } from './debug.js';
 import { installDiag, report as diagReport } from './diag.js';
 import { createLoading } from './loading.js';
 import { installGfx } from './render.js';
-import { installStore } from './store.js';
+import { installStore, tickFsDialogs } from './store.js';
 import { installAgent } from './agent.js';
 import { installWindow, tickWindow } from './window.js';
 import { tweenProps, clearNodeTweens, pauseNodeTweens, shakeNode, flashNode, sequence, wait, activeTweenCount, easeFunction, installTween, noteEffect } from './tween.js';
@@ -2468,6 +2468,7 @@ function installFrameHooks($) {
         prof('области'); tickLifecycle(dt);
         prof('экраны'); tickScreen(dt);
         prof('диалоги'); tickDialog(dt);
+        tickFsDialogs();   // ответы системных окон выбора файла/папки ($.fs.pick*)
         prof('таймлайн'); tickTimeline(game_dt);
         prof('tilemap'); tickTilemap(dt);
         prof('vfx'); tickFx(dt);

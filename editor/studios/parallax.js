@@ -11,7 +11,7 @@
 
 import * as K from '../../sdk/lib/kinds/layers.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
-import { esc, numberOf } from '../lib/studio_kit.js';
+import { esc, numberOf, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
 export const meta = { id: 'parallax', title: 'Parallax', icon: 'layers', match: (p) => /\.layers\.json$/i.test(p) };
 
@@ -101,7 +101,7 @@ export function create(host) {
         html += '</div></div><div class="px-col">';
         if (s) {
             html += '<span class="st-h first">Спрайт</span>' +
-                '<div class="st-field"><label>src</label><input id="px-src" class="st-in" type="text" value="' + esc(s.src) + '"/></div>' +
+                '<div class="st-field"><label>src</label><input id="px-src" class="st-in" type="text" value="' + esc(s.src) + '"/>' + button('sprite:src', '…') + '</div>' +
                 '<div class="st-field"><label>x, y</label><input id="px-x" class="st-in" type="text" value="' + esc(s.x) + '"/><input id="px-y" class="st-in" type="text" value="' + esc(s.y) + '"/></div>' +
                 '<div class="st-field"><label>w, h</label><input id="px-w" class="st-in" type="text" value="' + esc(s.w === undefined ? '' : s.w) + '"/><input id="px-h" class="st-in" type="text" value="' + esc(s.h === undefined ? '' : s.h) + '"/></div>' +
                 '<div class="st-btns">' + button('sprite:apply', 'Применить') + button('sprite:del', 'Удалить') + button('sprite:row', 'Ряд ×') + '<input id="px-count" class="st-in px-n" type="text" value="3"/></div>';
@@ -150,7 +150,7 @@ export function create(host) {
         tools: (w) => button('auto', 'Автопрокрутка', w.ext.auto) + button('home', 'В начало'),
         actions: () => button('layer:add', '+ Слой') + button('layer:up', 'Выше') + button('layer:down', 'Ниже') + button('layer:del', 'Удалить'),
         library(w) {
-            let html = '<span class="st-h">Картинки проекта</span>';
+            let html = '<span class="st-h">Картинки проекта</span>' + button('image:pick', '+ Спрайт из файла…');
             if (w.ext.images === null) return html + '<span class="st-note">Читаю r2d assets…</span>';
             if (!w.ext.images.length) return html + '<span class="st-note">В проекте нет картинок.</span>';
             html += '<div class="px-images">' + w.ext.images.map((p) => '<div class="st-row px-img" data-key="image:' + esc(p) + '"><img src="' + esc(w.path(p)) + '"/>' + esc(p.split('/').pop()) + '</div>').join('') + '</div>';
@@ -160,7 +160,17 @@ export function create(host) {
         selected(w) { if (w.ext.sprite >= sprites(w).length) w.ext.sprite = sprites(w).length - 1; },
         action(w, key) {
             const e = w.ext;
-            if (key === 'auto') { e.auto = !e.auto; w.render(); }
+            if (key === 'image:pick' || key === 'sprite:src') {
+                const sp = sprites(w)[e.sprite];
+                pickProjectFile(w.$, w.host.root(), { title: 'Выберите картинку', filters: FILTERS.image, path: key === 'sprite:src' && sp ? w.path(sp.src) : '' }).then((r) => {
+                    if (r.error) { w.fail('EDITOR_ASSET_FILE', r.error); return; }
+                    if (!r.rel) return;
+                    if (key === 'image:pick') { try { placeImage(w, r.rel); } catch (err) { w.fail('EDITOR_ASSET_ACTION', err.message); } return; }
+                    w.doc.setValue('px-src', r.rel);
+                    try { applySprite(w); } catch (err) { w.fail('EDITOR_ASSET_FIELD', err.message); }
+                });
+            }
+            else if (key === 'auto') { e.auto = !e.auto; w.render(); }
             else if (key === 'home') { e.panX = 0; e.panY = 0; e.t = 0; }
             else if (key === 'layer:add') addLayer(w);
             else if (key === 'layer:del') { if (layers(w).length <= 1) throw new Error('Нужен хотя бы один слой'); const i = w.selected; w.edit('Удалить слой', (m) => { m.layers.splice(i, 1); }); }

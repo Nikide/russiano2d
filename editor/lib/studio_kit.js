@@ -90,3 +90,35 @@ export function numberOf(doc, id) {
 export function row(key, html, cls) {
     return '<div class="st-row' + (cls ? ' ' + cls : '') + '" data-key="' + esc(key) + '">' + html + '</div>';
 }
+
+// --- Системные окна выбора файла ($.fs.pickFile / saveFile) ----------------
+
+export const FILTERS = {
+    image: [{ name: 'Картинки', ext: 'png;jpg;jpeg;webp;bmp;gif' }],
+    audio: [{ name: 'Звук', ext: 'ogg;wav;mp3;flac' }],
+    font: [{ name: 'Шрифты', ext: 'ttf;otf' }],
+    scene: [{ name: 'Сцена', ext: 'scene' }],
+};
+
+// Путь относительно корня проекта или null, если файл вне проекта.
+export function projectRelative(root, abs) {
+    const r = String(root || '').replace(/\/+$/, '');
+    const p = String(abs || '');
+    return r && p.startsWith(r + '/') ? p.slice(r.length + 1) : null;
+}
+
+// Окно ОС «выбрать файл проекта». → { rel } | { cancelled } | { error }.
+// Ассеты обязаны лежать в проекте: файл снаружи — понятная ошибка, не тихий путь.
+export async function pickProjectFile($, root, opts) {
+    const o = opts || {};
+    let picked;
+    try {
+        picked = await (o.save ? $.fs.saveFile : $.fs.pickFile)({ title: o.title, path: o.path || root, filters: o.filters });
+    } catch (e) {
+        return { error: (e && e.message) || String(e) };
+    }
+    if (!picked) return { cancelled: true };
+    const rel = projectRelative(root, picked);
+    if (rel === null) return { error: 'Файл вне проекта: ' + picked + '. Положите его в папку проекта (' + root + ').' };
+    return { rel };
+}

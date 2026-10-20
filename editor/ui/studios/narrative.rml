@@ -84,7 +84,7 @@
         <div id="vnm-labels" class="vnm-list"></div>
         <div class="hm-h">Сцены</div>
         <div id="vnm-scenes" class="vnm-list"></div>
-        <div class="hm-field"><input id="vnm-new-path" class="field" type="text" value="story/new.scene"/><button id="vnm-new" class="hm-btn">Новая</button></div>
+        <div class="hm-field"><button id="vnm-new" class="hm-btn">Новая сцена…</button></div>
         <div class="hm-h">Персонажи</div>
         <div id="vnm-speakers" class="vnm-list"></div>
         <div class="hm-field"><label>id</label><input id="vnm-ch-id" class="field" type="text"/></div>

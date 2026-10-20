@@ -17,9 +17,8 @@
         <div id="pm-col-open">
             <div class="pm-sec-head"><span class="pm-sec-title">Недавние проекты</span><span id="pm-recent-count" class="pm-count"></span></div>
             <div id="pm-recent"></div>
-            <div class="pm-sec-head"><span class="pm-sec-title">Открыть папку</span></div>
-            <div class="pm-openbar"><input id="pm-path" type="text" class="field" value=""/><button id="pm-open" class="btn primary">Открыть</button></div>
-            <span class="pm-hint">Папка, в которой лежит project.json. Путь абсолютный или от каталога запуска.</span>
+            <button id="pm-open" class="btn primary pm-open">Открыть проект…</button>
+            <span class="pm-hint">Выберите папку, в которой лежит project.json.</span>
             <div id="pm-error" class="pm-err"></div>
         </div>
         <div id="pm-col-new">
@@ -29,7 +28,7 @@
             <span class="pm-step">2 · Название</span>
             <input id="pm-new-name" type="text" class="field" value="Моя игра"/>
             <span class="pm-step">3 · Где создать</span>
-            <input id="pm-new-dir" type="text" class="field" value=""/>
+            <div class="pm-dirbar"><span id="pm-new-dir" class="pm-dir"></span><button id="pm-new-browse" class="btn">Изменить…</button></div>
             <div id="pm-dest" class="pm-dest"></div>
             <button id="pm-create" class="btn primary pm-create">Создать проект</button>
             <div id="pm-new-error" class="pm-err"></div>

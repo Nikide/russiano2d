@@ -13,6 +13,7 @@ import { createCodeView } from './lib/code_view.js';
 import { languageOf, escapeRml } from './lib/highlight.js';
 import { fuzzyFilter } from './lib/fuzzy.js';
 import { createStudioHost, studioFor, studioById, studiosFor } from './lib/studios.js';
+import { pickProjectFile } from './lib/studio_kit.js';
 
 const DOC = 'ui/editor.rml';
 const STATE_FILE = 'state.local.json';
@@ -157,14 +158,14 @@ export function createEditor($) {
         doc.cls('pm', 'hidden', false);
         doc.cls('app', 'hidden', true);
         doc.html('pm-logo', icon('rocket_launch'));
-        doc.text('pm-error', esc(error || ''));
+        showPMError(error);
         doc.text('pm-new-error', '');
         renderRecent();
         if (!s.pmNew) {
             // Папка по умолчанию — рядом с последним живым проектом (не во временном каталоге).
             const alive = s.recent.find((r) => !/^\/(private\/)?tmp\//.test(r.abs) && $.fs.exists(r.abs + '/project.json'));
             s.pmNew = { template: 'blank' };
-            doc.setValue('pm-new-dir', alive ? parentOf(alive.abs) : String($.fs.basePath() || '').replace(/\/+$/, ''));
+            s.pmNew.dir = alive ? parentOf(alive.abs) : String($.fs.basePath() || '').replace(/\/+$/, '');
         }
         renderTemplates();
         renderDest();
@@ -203,11 +204,12 @@ export function createEditor($) {
 
     // Итоговый путь нового проекта: <где создать>/<папка из названия>.
     function newProjectDest() {
-        const dir = absPath(doc.value('pm-new-dir'));
+        const dir = s.pmNew ? s.pmNew.dir : '';
         const slug = slugOf(doc.value('pm-new-name'));
         return { dir, slug, dest: dir && slug ? dir + '/' + slug : '' };
     }
     function renderDest() {
+        if (s.pmNew) doc.text('pm-new-dir', esc(shortPath(s.pmNew.dir || '') || 'не выбрана'));
         const d = newProjectDest();
         let text = '', bad = true;
         if (!d.slug) text = 'Введите название проекта.';
@@ -231,6 +233,30 @@ export function createEditor($) {
             return;
         }
         await openProject(dest);
+    }
+
+    // Окна ОС: открыть проект (папку с project.json) и выбрать место нового.
+    async function askFolder(title, path) {
+        try { return await $.fs.pickFolder({ title, path }); }
+        catch (e) { showPMError(e.message || String(e)); return null; }
+    }
+    function showPMError(text) { s.pmError = text || ''; doc.text('pm-error', esc(s.pmError)); }
+    async function openProjectDialog() {
+        const start = s.project ? parentOf(s.project.abs) : (s.recent[0] ? parentOf(s.recent[0].abs) : String($.fs.basePath() || ''));
+        const dir = await askFolder('Открыть проект: папка с project.json', start);
+        if (!dir) return false;
+        if (!$.fs.exists(dir + '/project.json')) {
+            if (s.project) setStatus('В «' + dir + '» нет project.json', 'err');
+            else showPMError('В папке «' + shortPath(dir) + '» нет project.json. Выберите папку проекта или создайте новый справа.');
+            return false;
+        }
+        return openProject(dir);
+    }
+    async function pickNewProjectDir() {
+        const dir = await askFolder('Где создать проект', s.pmNew && s.pmNew.dir);
+        if (!dir || !s.pmNew) return;
+        s.pmNew.dir = dir;
+        renderDest();
     }
 
     function forgetRecent(abs) {
@@ -266,6 +292,7 @@ export function createEditor($) {
 
     async function openProject(input) {
         const abs = absPath(input);
+        if (!abs) { showPM('Выберите папку проекта.'); return false; }
         const json = $.fs.readJSON(abs + '/project.json', null);
         if (!json) { showPM('В «' + abs + '» нет project.json (или он не читается).'); return false; }
         closeAllTabs(true);
@@ -603,11 +630,26 @@ export function createEditor($) {
 
     function tail(text) { return text.length > MAX_LOG ? text.slice(-MAX_LOG) : text; }
 
-    async function buildPackage() {
+    async function buildToDialog() {
+        if (!s.project) return;
+        let dir = null;
+        try { dir = await $.fs.pickFolder({ title: 'Куда собрать игру', path: s.project.abs }); }
+        catch (e) { setStatus(e.message || String(e), 'err'); return; }
+        if (dir) await buildPackage(dir);
+    }
+    // Любой файл проекта через окно ОС; файл вне проекта — понятный отказ.
+    async function openFileDialog() {
+        if (!s.project) return;
+        const r = await pickProjectFile($, s.project.abs, { title: 'Открыть файл проекта' });
+        if (r.error) { setStatus(r.error, 'err'); return; }
+        if (r.rel) openFile(r.rel);
+    }
+
+    async function buildPackage(outDir) {
         if (!s.project) return;
         if (!(await saveAll())) { setStatus('сборка остановлена: не все файлы сохранены', 'err'); return; }
         const name = (s.project.title || 'game').replace(/[^\wЀ-ӿ.-]+/g, '_');
-        const out = s.project.abs + '/dist/' + name;
+        const out = (outDir || s.project.abs + '/dist') + '/' + name;
         setStatus('сборка: validate → build…', '');
         const v = await tool(['validate', s.project.abs]);
         s.projectDiags = v.json ? (v.json.diagnostics || []).map(normalizeDiag) : [];
@@ -637,6 +679,9 @@ export function createEditor($) {
         { id: 'build', label: 'Проект: собрать игру (validate → build)', keys: 'Cmd/Ctrl+Shift+B', run: () => buildPackage() },
         { id: 'refresh', label: 'Проект: обновить дерево файлов', keys: '', run: () => refreshTree() },
         { id: 'projects', label: 'Проект: открыть другой (Project Manager)', keys: '', run: () => { closeAllTabs(true); s.project = null; showPM(); } },
+        { id: 'open-folder', label: 'Проект: открыть папку…', keys: '', run: () => openProjectDialog() },
+        { id: 'open-file', label: 'Файл: открыть с диска…', keys: '', run: () => openFileDialog() },
+        { id: 'build-to', label: 'Проект: собрать в папку…', keys: '', run: () => buildToDialog() },
         { id: 'sidebar', label: 'Вид: боковая панель', keys: 'Cmd/Ctrl+B', run: () => { s.sidebarHidden = !s.sidebarHidden; renderLayout(); } },
         { id: 'panel', label: 'Вид: нижняя панель', keys: 'Cmd/Ctrl+J', run: () => { s.bottomCollapsed = !s.bottomCollapsed; renderLayout(); } },
         { id: 'problems', label: 'Вид: Problems', keys: '', run: () => { s.bottom = 'problems'; s.bottomCollapsed = false; renderAll(); } },
@@ -936,7 +981,8 @@ export function createEditor($) {
         doc.text('find-next', icon('arrow_downward'));
         doc.text('find-close', icon('close'));
 
-        doc.on('pm-open', 'click', () => openProject(doc.value('pm-path')));
+        doc.on('pm-open', 'click', () => openProjectDialog());
+        doc.on('pm-new-browse', 'click', () => pickNewProjectDir());
         doc.on('pm-recent', 'click', (id, ev, key) => {
             if (!key) return;
             if (key.startsWith('rm:')) forgetRecent(key.slice(3));
@@ -944,7 +990,6 @@ export function createEditor($) {
         });
         doc.on('pm-templates', 'click', (id, ev, key) => { if (key && s.pmNew) { s.pmNew.template = key; renderTemplates(); } });
         doc.on('pm-new-name', 'change', () => renderDest());
-        doc.on('pm-new-dir', 'change', () => renderDest());
         doc.on('pm-create', 'click', () => createProject());
 
         doc.on('tb-search', 'click', () => openPalette('files'));
@@ -1110,7 +1155,7 @@ export function createEditor($) {
     doc.show();
     return {
         state: s, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
-        manifest, migrateProject, showPM, createProject,
+        manifest, migrateProject, showPM, createProject, openProjectDialog, pickNewProjectDir, openFileDialog,
         openPalette, closePalette, activeTab, closeTab, code, studios,
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
     };

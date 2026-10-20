@@ -311,7 +311,12 @@ scrollbarcorner { background-color: transparent; }
     border-radius: 5px; color: #6b7280; font-size: 16px; cursor: pointer;
 }
 .pm-x:hover { color: #e6e9ef; background-color: #30353f; }
-.pm-openbar { display: flex; flex-direction: row; align-items: center; }
+.pm-open { display: inline-block; margin-left: 0px; padding: 8px 16px; }
+.pm-dirbar { display: flex; flex-direction: row; align-items: center; }
+.pm-dir {
+    display: block; flex: 1 1 0; padding: 6px 10px; color: #c9cfda; background-color: #14161b; font-size: 13px;
+    border-width: 1px; border-color: #2f3440; border-radius: 5px; white-space: nowrap; overflow: hidden;
+}
 .pm-hint { display: block; font-size: 12px; color: #6b7280; margin-top: 6px; }
 .pm-step { display: block; font-size: 12px; letter-spacing: 1px; color: #8b93a3; margin: 16px 0px 8px 0px; }
 #pm-templates { display: block; }
@@ -343,3 +348,4 @@ scrollbarcorner { background-color: transparent; }
 .btn.primary { background-color: #2563eb; border-color: #3b82f6; }
 .btn.primary:hover { background-color: #3b82f6; }
 .pm-err { display: block; color: #f14c4c; margin-top: 8px; font-size: 13px; }
+#pm .pm-open, #pm .pm-create { margin-left: 0px; }

@@ -90,7 +90,69 @@ function reportRemoveFailure($, path) {
     return reportFsFailure($, path, '$.fs.remove', 'R2D_FS_REMOVE_FAILED');
 }
 
+// --- Системные диалоги выбора папки/файла ---------------------------------
+//
+// Нативный диалог отвечает асинхронно (src/dialog.h): ответы забирает
+// tickFsDialogs() в кадровом цикле api.js. Пока ничего не открыто, тик — одно
+// сравнение.
+const dialogs = new Map();   // id → { resolve, reject, many }
+
+let dialogApi = null;         // $ — ставит installStore
+
+// Отказ открыть окно: одна строка в журнале + $.debug.errors() с кодом.
+function dialogFailure($, where, message) {
+    const err = new Error(`${where}: ${message}`);
+    err.code = 'R2D_FS_DIALOG_FAILED';
+    if ($ && $.debug && typeof $.debug.reportError === 'function') {
+        $.debug.reportError(where, message, { code: err.code, subsystem: 'fs', recoverable: true });
+    } else {
+        ctx.log(`$: ${err.message} [${err.code}]`);
+    }
+    return err;
+}
+
+function openDialog($, kind, where, opts) {
+    const o = opts || {};
+    return new Promise((resolve, reject) => {
+        if (!engine.fs || typeof engine.fs.dialog !== 'function') {
+            reject(dialogFailure($, where, 'системные диалоги недоступны в этой сборке'));
+            return;
+        }
+        const filters = Array.isArray(o.filters) ? o.filters
+            .filter((f) => f && typeof f.ext === 'string' && f.ext)
+            .map((f) => ({ name: String(f.name || f.ext), ext: f.ext.replace(/[.\s]/g, '').replace(/,/g, ';') })) : [];
+        const res = engine.fs.dialog(kind, {
+            title: o.title ? String(o.title) : '',
+            path: o.path ? String(o.path) : '',
+            filters,
+            many: !!o.many,
+        });
+        if (!res || !res.id) {
+            reject(dialogFailure($, where, (res && res.error) || 'диалог не открылся'));
+            return;
+        }
+        dialogs.set(res.id, { resolve, reject, many: !!o.many, where });
+    });
+}
+
+/** Кадровый насос ответов системных диалогов (зовёт api.js). */
+export function tickFsDialogs() {
+    if (!dialogs.size || !engine.fs || typeof engine.fs.dialogPoll !== 'function') return;
+    const done = engine.fs.dialogPoll();
+    if (!done || !done.length) return;
+    for (const r of done) {
+        const d = dialogs.get(r.id);
+        if (!d) continue;
+        dialogs.delete(r.id);
+        if (r.error) { d.reject(dialogFailure(dialogApi, d.where, r.error)); continue; }
+        const paths = Array.isArray(r.paths) ? r.paths : [];
+        if (!paths.length) d.resolve(null);              // отмена
+        else d.resolve(d.many ? paths : paths[0]);
+    }
+}
+
 export function installStore($) {
+    dialogApi = $;
     const fs = {
         /** Текст файла или null, если файла нет. */
         readText(path) {
@@ -168,6 +230,28 @@ export function installStore($) {
 
         /** Абсолютный путь к чему угодно внутри каталога игры — для логов. */
         basePath() { return engine.basePath || ''; },
+
+        /**
+         * Системное окно выбора папки. Promise → абсолютный путь или null
+         * (пользователь отменил). opts: { title, path } — path: где открыть.
+         * Отказ открыть окно — reject с кодом R2D_FS_DIALOG_FAILED.
+         *
+         *   const dir = await $.fs.pickFolder({ title: 'Папка проекта' });
+         */
+        pickFolder(opts) { return openDialog($, 'folder', '$.fs.pickFolder', opts); },
+
+        /**
+         * Системное окно выбора файла. Promise → путь, массив путей при
+         * many: true, или null при отмене. opts: { title, path, many,
+         * filters: [{ name: 'Картинки', ext: 'png;jpg' }] }.
+         */
+        pickFile(opts) { return openDialog($, 'open', '$.fs.pickFile', opts); },
+
+        /**
+         * Системное окно «Сохранить как». Promise → выбранный путь или null.
+         * Сам файл не пишется: запишите его через $.fs.write. opts — как у pickFile.
+         */
+        saveFile(opts) { return openDialog($, 'save', '$.fs.saveFile', opts); },
     };
 
     // --- Файл настроек: схема, backup и восстановление ---------------------

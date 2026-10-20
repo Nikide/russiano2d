@@ -10,7 +10,7 @@
 
 import * as K from '../../sdk/lib/kinds/audio.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
-import { esc } from '../lib/studio_kit.js';
+import { esc, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
 export const meta = { id: 'audio', title: 'Audio', icon: 'graphic_eq', match: (p) => /\.audio\.json$/i.test(p) };
 
@@ -97,7 +97,7 @@ export function create(host) {
         ];
         if (e.type === 'snd') return [
             { key: '__name', label: 'Имя' },
-            { key: 'path', label: 'файл' },
+            { key: 'path', label: 'файл', file: { filters: FILTERS.audio } },
             { key: 'bus', label: 'шина', options: Object.keys(buses(w)), optional: true },
             { key: 'volume', label: 'volume 0..1', number: true, optional: true },
             { key: 'pitch', label: 'pitch', number: true, optional: true },
@@ -302,7 +302,7 @@ export function create(host) {
         tools: () => button('add:bus', '+ Шина') + button('add:snd', '+ Звук') + button('add:zone', '+ Зона') + button('del', 'Удалить'),
         library(w) {
             const e = w.ext;
-            let html = '<span class="st-h">Аудиофайлы проекта</span>';
+            let html = '<span class="st-h">Аудиофайлы проекта</span>' + button('snd:pick', '+ Звук из файла…');
             if (e.files === null) html += '<span class="st-note">Читаю r2d assets…</span>';
             else if (!e.files.length) html += '<span class="st-note">В проекте нет .ogg/.wav/.mp3/.flac.</span>';
             else html += e.files.map((p) => '<div class="st-row" data-key="file:' + esc(p) + '">+ ' + esc(p.split('/').pop()) + '<span class="st-sub">' + esc(p) + '</span></div>').join('') +
@@ -318,6 +318,9 @@ export function create(host) {
             else if (key === 'del') removeSelected(w);
             else if (key === 'stopall') { stopAll(w); w.render(); }
             else if (key.startsWith('file:')) addSound(w, key.slice(5));
+            else if (key === 'snd:pick') pickProjectFile(w.$, w.host.root(), { title: 'Выберите звук', filters: FILTERS.audio }).then((r) => {
+                if (r.error) w.fail('EDITOR_ASSET_FILE', r.error); else if (r.rel) addSound(w, r.rel);
+            });
             else if (key.startsWith('pick:')) { const [, type, ...rest] = key.split(':'); selectEntry(w, type, rest.join(':')); }
             else if (key.startsWith('play:')) play(w, key.slice(5));
             else if (key.startsWith('stop:')) stop(w, key.slice(5));

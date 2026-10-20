@@ -1,6 +1,6 @@
 import * as K from '../../sdk/lib/kinds/tilemap.js';
 import { createWorkspace,button } from '../lib/asset_workspace.js';
-import { esc } from '../lib/studio_kit.js';
+import { esc, FILTERS } from '../lib/studio_kit.js';
 export const meta={id:'tilemap',title:'Tilemap',icon:'grid_on',match:p=>/\.tilemap\.json$/i.test(p)};
 export function create(host) {
     const layer=w=>w.data.layers[w.selected];
@@ -11,7 +11,7 @@ export function create(host) {
         init(w){Object.assign(w.ext,{zoom:1,panX:0,panY:0,brush:1,tool:'brush',grid:true,page:0,stroke:null,wasDown:false,needFit:true});},
         items:w=>(w.data.layers||[]).map(l=>({label:l.name||'Слой',detail:l.data?.length+' строк'})),target:layer,
         fields:()=>[{key:'name',label:'Имя'},{key:'depth',label:'Глубина',number:true,default:0},{key:'solid',label:'Коллизия',json:true,optional:true}],
-        settings:[{key:'src',label:'Тайлсет'},{key:'tile',label:'Размер, px',number:true},{key:'cols',label:'Колонки',number:true},{key:'solid',label:'Solid IDs',json:true},{key:'terrains',label:'Террейны',json:true,optional:true},{key:'animations',label:'Анимации',json:true,optional:true},{key:'autotile',label:'Autotile',json:true,optional:true}],
+        settings:[{key:'src',label:'Тайлсет',file:{filters:FILTERS.image}},{key:'tile',label:'Размер, px',number:true},{key:'cols',label:'Колонки',number:true},{key:'solid',label:'Solid IDs',json:true},{key:'terrains',label:'Террейны',json:true,optional:true},{key:'animations',label:'Анимации',json:true,optional:true},{key:'autotile',label:'Autotile',json:true,optional:true}],
         tools:w=>['brush','erase','fill','rect','pick'].map((id,i)=>button('tool:'+id,['Кисть','Ластик','Заливка','Прямоугольник','Пипетка'][i],w.ext.tool===id)).join('')+button('fit','Вписать')+button('grid','Сетка',w.ext.grid)+button('solid','Коллизия',w.ext.solid),
         actions:()=>button('layer:add','+ Слой')+button('layer:up','Выше')+button('layer:down','Ниже')+button('layer:remove','Удалить'),
         library(w){

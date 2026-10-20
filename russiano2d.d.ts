@@ -1379,9 +1379,12 @@ interface R2D_fs {
     basePath(): any;
     exists(arg0: any): any;
     list(arg0: any): any;
+    pickFile(arg0: any): any;
+    pickFolder(arg0: any): any;
     readJSON(arg0: any, arg1: any): any;
     readText(arg0: any): any;
     remove(arg0: any): any;
+    saveFile(arg0: any): any;
     write(arg0: any, arg1: any): any;
     writeAtomic(arg0: any, arg1: any): any;
     writeJSON(arg0: any, arg1: any): any;

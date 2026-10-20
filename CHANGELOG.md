@@ -1,3 +1,12 @@
+> FS DIALOGS — системные окна выбора папки и файла (2026-10-20).
+> Новое: `$.fs.pickFolder`, `$.fs.pickFile`, `$.fs.saveFile` — Promise с путём,
+> `null` при отмене, reject `R2D_FS_DIALOG_FAILED` при отказе ОС. Нативная часть —
+> `src/dialog.c` (SDL3), ответы забирает кадровый цикл. Use case — Editor: все
+> места, где он просит путь, открывают окно ОС. Feature Freeze: use case есть,
+> существующим API не решается, спецификация и тест (`tests/js/fs_dialog_test.mjs`)
+> и документация (`docs/highlevel/store.md`) — в этом же изменении. Снимок API
+> обновлён (+3 имени, существующие не менялись).
+
 > EDITOR NARRATIVE — VN Maker на общем каркасе (2026-10-20).
 > У каждой `.scene/.story` свои документ, история и dirty; Save/Undo/Redo и
 > Problems ведёт Editor. Inspector сохраняет choice commits и image duration.
