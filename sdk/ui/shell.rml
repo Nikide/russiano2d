@@ -56,7 +56,7 @@
 
             <!-- Ассеты -->
             <div id="view-assets" class="view hidden">
-                <h2>Asset Browser</h2>
+                <h2>Файлы проекта</h2>
                 <span class="lead">Реальные файлы проекта. Тип определяется по имени, инструмент — по реестру.</span>
                 <div class="form-row">
                     <input id="asset-filter" type="text" value="" class="field"/>
