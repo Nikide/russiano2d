@@ -21,6 +21,11 @@ SDL3_mixer, RmlUi), игровая логика — JavaScript. Вся рабо�
 логика и интерфейс описываются текстом, поэтому их удобно читать, diff'ить,
 генерировать и проверять автоматически, в том числе ИИ-агентом.
 
+Базовый движок **feature-complete** после FINAL ENGINE PASS: новые
+engine-level возможности принимаются только по правилам
+[docs/FEATURE_FREEZE.md](docs/FEATURE_FREEZE.md). Следующий этап — реальная
+игра, а не бесконечное расширение движка.
+
 ## Собрать и запустить
 
 Каноническая сборка — **Xmake** (CMake остаётся только внутри сторонних
@@ -67,4 +72,5 @@ build_and_push
 | [docs/tutorial-platformer.md](docs/tutorial-platformer.md) | первый платформер шаг за шагом |
 | [docs/SDK.md](docs/SDK.md) | SDK, инструменты и World Editor |
 | [docs/VN_MAKER.md](docs/VN_MAKER.md) | Visual Novel Maker |
+| [docs/FEATURE_FREEZE.md](docs/FEATURE_FREEZE.md) | feature freeze и правила новых engine-возможностей |
 | [docs/RELEASING.md](docs/RELEASING.md) | локальный релизный процесс |

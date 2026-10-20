@@ -17,6 +17,35 @@ const PV = 'sdkpv-';
 const abs = (h, p) => (/^([A-Za-z]:[\\/]|\/)/.test(p) ? p : joinPath(projectRoot(h.app, h.session.path), p));
 const pv = (n) => (n === 'master' || n === undefined ? n : PV + n);
 
+// --- План зон акустики: отображение мир → окно и выбор зоны под точкой ------------
+/** Отображение прямоугольников зон в окно просмотра: { k, ox, oy }. */
+export function zoneMap(rect, zones) {
+    const list = zones || [];
+    if (!list.length || !rect || !(rect.w > 0)) return null;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const z of list) {
+        x0 = Math.min(x0, z.rect[0]); y0 = Math.min(y0, z.rect[1]);
+        x1 = Math.max(x1, z.rect[0] + z.rect[2]); y1 = Math.max(y1, z.rect[1] + z.rect[3]);
+    }
+    const k = Math.min(0.9, (rect.w - 40) / Math.max(1, x1 - x0), 150 / Math.max(1, y1 - y0));
+    return { k, ox: rect.x + 20 - x0 * k, oy: rect.y + rect.h - 170 - y0 * k };
+}
+
+/** Точка окна → мир (x, y) по карте из zoneMap. */
+export function zonePoint(map, x, y) {
+    return { x: (x - map.ox) / map.k, y: (y - map.oy) / map.k };
+}
+
+/** Индекс зоны под мировой точкой (сверху — последняя нарисованная) или -1. */
+export function zoneAt(zones, x, y) {
+    const list = zones || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+        const r = list[i].rect;
+        if (x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3]) return i;
+    }
+    return -1;
+}
+
 /** Выбор — строка «bus:имя», «snd:имя» или «zone:индекс». */
 function sel(h) {
     const k = h.ext.selKey;
@@ -154,12 +183,13 @@ const DEF = {
 
     mount(h) {
         h.ext.handles = {};
+        h.ext.zoneDrag = null;
         const first = Object.keys(h.model.buses || {})[0];
         h.ext.selKey = first ? 'bus:' + first : null;
         mount(h);
         h.doc.html('ds-overlay', mixerHtml(h));
     },
-    unmount(h) { unmount(h); h.doc.html('ds-overlay', ''); },
+    unmount(h) { unmount(h); h.ext.zoneDrag = null; h.doc.html('ds-overlay', ''); },
     changed(h) { mount(h); h.doc.html('ds-overlay', mixerHtml(h)); },
 
     tick(h) {
@@ -168,17 +198,50 @@ const DEF = {
         const r = h.rect();
         const zones = h.model.zones || [];
         if (!zones.length) return;
-        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-        for (const z of zones) { x0 = Math.min(x0, z.rect[0]); y0 = Math.min(y0, z.rect[1]); x1 = Math.max(x1, z.rect[0] + z.rect[2]); y1 = Math.max(y1, z.rect[1] + z.rect[3]); }
-        const k = Math.min(0.9, (r.w - 40) / Math.max(1, x1 - x0), 150 / Math.max(1, y1 - y0));
-        const ox = r.x + 20 - x0 * k, oy = r.y + r.h - 170 - y0 * k;
+        const map = zoneMap(r, zones);
+        if (!map) return;
         const s = sel(h);
         zones.forEach((z, i) => {
             const on = s && s.type === 'zone' && s.id === String(i);
-            const a = ox + z.rect[0] * k, b = oy + z.rect[1] * k, w = z.rect[2] * k, hh = z.rect[3] * k;
+            const a = map.ox + z.rect[0] * map.k, b = map.oy + z.rect[1] * map.k, w = z.rect[2] * map.k, hh = z.rect[3] * map.k;
             h.$.gfx.draw.rect(a, b, w, hh, on ? 'rgba(255,90,60,0.22)' : 'rgba(108,199,255,0.16)');
             for (const [x1_, y1_, x2_, y2_] of [[a, b, a + w, b], [a + w, b, a + w, b + hh], [a + w, b + hh, a, b + hh], [a, b + hh, a, b]]) h.$.gfx.draw.line(x1_, y1_, x2_, y2_, on ? '#ff5a3c' : '#6cc7ff', 1);
         });
+        // Мышь: ЛКМ по зоне — выбрать и двигать; числовые поля формы остаются главными.
+        const p = h.ptr, m = h.$.input.mouse();
+        const world = zonePoint(map, m.x, m.y);
+        if (p.pressed) {
+            const i = zoneAt(zones, world.x, world.y);
+            if (i >= 0) {
+                const cur = sel(h);
+                if (!(cur && cur.type === 'zone' && cur.id === String(i))) selectKey(h, 'zone:' + i);
+                const z = (h.model.zones || [])[i];
+                e.zoneDrag = { i, dx: world.x - z.rect[0], dy: world.y - z.rect[1], start: JSON.parse(JSON.stringify(z.rect)), moved: false };
+            } else e.zoneDrag = null;
+        }
+        if (p.down && e.zoneDrag) {
+            const z = (h.model.zones || [])[e.zoneDrag.i];
+            if (z) {
+                const nx = Math.round(world.x - e.zoneDrag.dx), ny = Math.round(world.y - e.zoneDrag.dy);
+                if (nx !== z.rect[0] || ny !== z.rect[1]) { z.rect[0] = nx; z.rect[1] = ny; e.zoneDrag.moved = true; }
+            }
+        }
+        if (p.released && e.zoneDrag) {
+            const d = e.zoneDrag;
+            e.zoneDrag = null;
+            if (d.moved) {
+                const z = (h.model.zones || [])[d.i];
+                if (z) {
+                    const end = JSON.parse(JSON.stringify(z.rect));
+                    z.rect = JSON.parse(JSON.stringify(d.start));
+                    h.run('перемещение зоны', (mm) => {
+                        const target = (mm.zones || [])[d.i];
+                        if (!target) throw new Error('Нет зоны ' + d.i);
+                        target.rect = end.slice();
+                    });
+                }
+            }
+        }
     },
 
     hud(h) { return 'шин ' + Object.keys(h.model.buses || {}).length + ' · играет ' + Object.keys(h.ext.handles || {}).length; },

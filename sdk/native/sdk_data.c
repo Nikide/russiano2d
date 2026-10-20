@@ -191,6 +191,68 @@ static bool solid_ok(const R2dJson *v)
     return true;
 }
 
+// Ключ таблицы переходов террейна: десятичное число 0..255 (без знака и мусора).
+static bool mask_key_ok(const char *s)
+{
+    if (!s || !s[0]) return false;
+    int value = 0;
+    for (const char *p = s; *p; ++p) {
+        if (*p < '0' || *p > '9') return false;
+        value = value * 10 + (*p - '0');
+        if (value > 255) return false;
+    }
+    return true;
+}
+
+// Набор террейна — обычный JSON: mode/base/border/solid/transitions (sdk/lib/kinds/tilemap.js).
+static bool terrain_spec_ok(const R2dJson *spec)
+{
+    if (!is_obj(spec)) return false;
+    const R2dJson *nm = field(spec, "name");
+    if (nm && !nonempty_str(nm)) return false;
+    const R2dJson *mode = field(spec, "mode");
+    if (mode && !(is_str(mode) && (strcmp(mode->string, "bit16") == 0 || strcmp(mode->string, "blob47") == 0))) return false;
+    const R2dJson *base = field(spec, "base");
+    if (base && !int_in(base, 1, 65535)) return false;
+    const R2dJson *border = field(spec, "border");
+    if (border && !is_bool(border)) return false;
+    const R2dJson *solid = field(spec, "solid");
+    if (solid && !solid_ok(solid)) return false;
+    const R2dJson *table = field(spec, "transitions") ? field(spec, "transitions") : field(spec, "tiles");
+    if (table) {
+        if (!is_obj(table)) return false;
+        for (int i = 0; i < table->count; ++i) {
+            if (!mask_key_ok(table->keys[i])) return false;
+            if (!int_in(table->items[i], 1, 65535)) return false;
+        }
+    }
+    return true;
+}
+
+// Одна запись анимации: { tile, frames: [id…], fps?, interval?, random?, offset?, layer? }.
+static bool animation_spec_ok(const R2dJson *spec)
+{
+    if (!is_obj(spec)) return false;
+    if (!int_in(field(spec, "tile"), 1, 65535)) return false;
+    const R2dJson *frames = field(spec, "frames");
+    if (!is_arr(frames) || frames->count < 1 || frames->count > 16) return false;
+    for (int i = 0; i < frames->count; ++i) if (!int_in(frames->items[i], 1, 65535)) return false;
+    const R2dJson *fps = field(spec, "fps");
+    if (fps && (!is_num(fps) || !(fps->number > 0) || fps->number > 1000)) return false;
+    const char *const ms_keys[] = { "interval", "ms", NULL };
+    for (int k = 0; ms_keys[k]; ++k) {
+        const R2dJson *v = field(spec, ms_keys[k]);
+        if (v && (!is_num(v) || v->number < 1 || v->number > 60000)) return false;
+    }
+    const R2dJson *rnd = field(spec, "random");
+    if (rnd && !is_bool(rnd)) return false;
+    const R2dJson *off = field(spec, "offset");
+    if (off && !is_num(off)) return false;
+    const R2dJson *layer = field(spec, "layer");
+    if (layer && !int_in(layer, 0, 15)) return false;
+    return true;
+}
+
 void sdk_validate_tilemap(const char *path, SdkReport *rep)
 {
     Ctx c = { rep, path, "SDK_TILEMAP" };
@@ -206,9 +268,57 @@ void sdk_validate_tilemap(const char *path, SdkReport *rep)
     if (solid && !solid_ok(solid)) emit(&c, SDK_ERROR, "_FIELD", "{\"field\":\"solid\"}", "solid — bool или массив id");
     const R2dJson *at = field(root, "autotile");
     if (at) {
-        const R2dJson *mode = field(at, "mode"), *base = field(at, "base");
-        const bool ok = is_obj(at) && is_str(mode) && (strcmp(mode->string, "bit16") == 0 || strcmp(mode->string, "blob47") == 0) && (!base || int_in(base, 1, 65535));
-        if (!ok) emit(&c, SDK_ERROR, "_AUTOTILE", "{\"field\":\"autotile\"}", "autotile: { mode, base? }");
+        bool ok = is_obj(at);
+        if (ok) {
+            const R2dJson *mode = field(at, "mode"), *terrain = field(at, "terrain"), *base = field(at, "base");
+            if (mode) {
+                if (!is_str(mode) || !(strcmp(mode->string, "bit16") == 0 || strcmp(mode->string, "blob47") == 0 || strcmp(mode->string, "terrain") == 0)) {
+                    ok = false;
+                } else if (strcmp(mode->string, "terrain") == 0 && !nonempty_str(terrain)) {
+                    ok = false;
+                }
+            }
+            if (ok && terrain && !nonempty_str(terrain)) ok = false;
+            if (ok && base && !int_in(base, 1, 65535)) ok = false;
+        }
+        if (!ok) emit(&c, SDK_ERROR, "_AUTOTILE", "{\"field\":\"autotile\"}",
+                      "autotile: { mode: \"bit16\" | \"blob47\" | \"terrain\", terrain?, base? }");
+    }
+    const R2dJson *terrains = field(root, "terrains");
+    if (terrains) {
+        if (!is_obj(terrains)) {
+            emit(&c, SDK_ERROR, "_TERRAIN", "{\"field\":\"terrains\"}", "terrains — объект «имя набора → описание»");
+        } else {
+            for (int i = 0; i < terrains->count; ++i) {
+                const char *name = terrains->keys[i];
+                if (!name || !name[0]) {
+                    emit(&c, SDK_ERROR, "_TERRAIN", "{\"field\":\"terrains\"}", "Имя набора террейна не может быть пустым");
+                    continue;
+                }
+                if (!terrain_spec_ok(terrains->items[i])) {
+                    emit(&c, SDK_ERROR, "_TERRAIN", "{\"field\":\"terrains\"}",
+                         "Набор террейна «%s»: { mode: \"bit16\" | \"blob47\", base?: 1..65535, border?: bool, solid?: bool | id[], transitions?: { маска 0..255: тайл 1..65535 } }", name);
+                }
+            }
+        }
+    }
+    const R2dJson *anims = field(root, "animations");
+    if (anims) {
+        if (!is_arr(anims)) {
+            emit(&c, SDK_ERROR, "_ANIM", "{\"field\":\"animations\"}",
+                 "animations — массив { tile, frames: [id…], fps | interval, random?, offset?, layer? }");
+        } else if (anims->count > 64) {
+            emit(&c, SDK_ERROR, "_ANIM", "{\"field\":\"animations\"}", "animations — не больше 64 записей");
+        } else {
+            for (int i = 0; i < anims->count; ++i) {
+                if (!animation_spec_ok(anims->items[i])) {
+                    char loc[64];
+                    snprintf(loc, sizeof loc, "{\"index\":%d}", i);
+                    emit(&c, SDK_ERROR, "_ANIM", loc,
+                         "animations[%d]: { tile: 1..65535, frames: массив 1..16 id 1..65535, fps?: > 0 ≤ 1000, interval?: 1..60000 мс, random?: bool }", i);
+                }
+            }
+        }
     }
     const R2dJson *layers = field(root, "layers");
     if (!is_arr(layers) || layers->count < 1 || layers->count > 16) {

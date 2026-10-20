@@ -55,6 +55,22 @@ const TABS = ['perf', 'hitch', 'physics', 'render', 'events', 'tree', 'diag',
 const VFX_ROWS = 24;           // строк списка эффектов r2dvfx (§M4)
 const SECTIONS = ['identity', 'transform', 'gameplay', 'physics', 'presentation', 'narrative'];
 
+// Поля, которые можно менять на лету. Каждое поле — ровно существующая
+// операция $ (".at/.angle/.scale/.visible/.active/.velocity/.gravity/.sensor/
+// .body"); bodyEnabled — существующая native-операция engine.setBodyEnabled,
+// другого сеттера у неё нет. Второго пути мутации DevTools не создаёт.
+const EDIT_FIELDS = ['x', 'y', 'angle', 'angleDeg', 'scale', 'scaleX', 'scaleY',
+                     'visible', 'enabled', 'velocity', 'gravity', 'gravityScale',
+                     'bodyEnabled', 'sensor', 'static', 'fixed', 'body'];
+const EDIT_FIELD_SET = new Set(EDIT_FIELDS);
+const EDIT_LABELS = {
+    x: 'позиция X', y: 'позиция Y', angle: 'угол (рад)', angleDeg: 'угол (град)',
+    scale: 'масштаб', scaleX: 'масштаб X', scaleY: 'масштаб Y',
+    visible: 'видимость', enabled: 'обработка (enabled)', velocity: 'скорость',
+    gravity: 'гравитация', gravityScale: 'gravityScale (0/1)', bodyEnabled: 'тело включено',
+    sensor: 'сенсор', static: 'static', fixed: 'fixed (static)', body: 'тип тела',
+};
+
 // ---------------------------------------------------------------------------
 // Разметка панелей. Строки вкладок объявлены здесь же — элементы существуют
 // с момента создания документа, поэтому обработчики не теряются.
@@ -72,7 +88,10 @@ body { width: 100%; height: 100%; font-family: "Open Sans"; font-size: 13px; col
 #dt-search { width: 140px; height: 24px; background-color: #203448; vertical-align: middle; }
 #dt-list { position: absolute; left: 10px; top: 58px; width: 330px; height: 380px; }
 #dt-secbar { position: absolute; left: 348px; top: 58px; }
-#dt-inspect { position: absolute; left: 348px; top: 88px; width: 402px; height: 348px; }
+#dt-inspect { position: absolute; left: 348px; top: 88px; width: 402px; height: 300px; }
+#dt-edit { position: absolute; left: 348px; top: 392px; width: 402px; }
+#dt-edit .lbl { color: #8fd8ff; }
+#dt-edit input { width: 54px; }
 #dt-foot { position: absolute; left: 10px; top: 446px; }
 #dt-status { position: absolute; left: 10px; top: 480px; width: 740px; font-size: 11px; color: #a8b8cc; }
 .dt-row { display: block; padding: 1px 6px; }
@@ -115,10 +134,18 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
     <div id="tab-presentation" class="dt-sec hidden"></div>
     <div id="tab-narrative" class="dt-sec hidden"></div>
   </div>
+  <div id="dt-edit">
+    <span class="lbl">x</span><input id="dt-edit-x" type="text"/>
+    <span class="lbl">y</span><input id="dt-edit-y" type="text"/>
+    <button id="dt-edit-apply">Apply (Enter)</button>
+    <button id="dt-edit-visible">Visible</button>
+    <button id="dt-edit-enabled">Enabled</button>
+  </div>
   <div id="dt-foot">
     <button id="dt-copy">Скопировать селектор</button>
     <button id="dt-copy-nid">Copy node ID</button>
     <button id="dt-copy-js">Copy JS</button>
+    <button id="dt-copy-override">Copy override</button>
   </div>
   <div id="dt-status"></div>
 </div>
@@ -343,6 +370,7 @@ input { width: 85px; height: 24px; background-color: #203448; vertical-align: mi
       <button id="rt-mem-baseline">Сбросить базовую линию</button>
     </div>
     <div id="rt-mem-limits" class="rt-data"></div>
+    <div id="rt-mem-resources" class="rt-data"></div>
     <div id="rt-mem-leaks" class="rt-data"></div>
   </div>
 
@@ -569,7 +597,16 @@ export function installDevTools($) {
         vfx_handle: null,
         vfx_path: null,
         vfx_note: null,
+        // §20 EDIT: история правок (undo последней), состояние строки ввода.
+        edit_history: [],
+        last_edit: null,
+        edit_shown: null,       // { uid, x, y } — что записано в поля программно
+        edit_dirty: false,      // пользователь менял поля — refresh их не затирает
     };
+
+    // Прежний тип тела до переключения static/fixed: возвращаем dynamic или
+    // kinematic, а не «всегда dynamic». Слабая карта — узлы не переживают её.
+    const prev_body_kind = new WeakMap();
 
     // Мостики к движку: без GUI (юнит-тест) они просто ничего не делают.
     function uiSetText(doc, id, text) {
@@ -938,6 +975,379 @@ export function installDevTools($) {
         return { found: true, uid: node.uid, nid: node.nid, selector: selectorOf(node), sections };
     }
 
+
+    // -----------------------------------------------------------------------
+    // §20 EDIT: безопасные правки на лету.
+    //
+    // Все мутации идут ЧЕРЕЗ существующие операции $ — те же, что видит игра:
+    // .at/.angle/.scale/.visible/.active/.velocity/.gravity/.sensor/.body.
+    // bodyEnabled — существующая native-операция engine.setBodyEnabled: у $
+    // для неё сеттера нет, поэтому это единственный путь, а не второй.
+    // Значения не пишутся в файлы и не становятся данными проекта.
+    // -----------------------------------------------------------------------
+
+    function targetNode(sel) {
+        if (sel === undefined || sel === null) {
+            return selectedNode();
+        }
+        if (typeof sel === 'number') {
+            for (const node of ctx.nodes) if (node.uid === sel && !node.removed) return node;
+            return null;
+        }
+        if (typeof sel === 'string') {
+            const found = query(sel);
+            return found.length ? found[0] : null;
+        }
+        const raw = sel && sel.nodes ? sel.nodes[0] : sel;
+        return raw && raw.tag && !raw.removed ? raw : null;
+    }
+
+    function asNumber(value) {
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+        if (typeof value === 'string' && value.trim() !== '') {
+            const n = Number(value.trim().replace(',', '.'));
+            return Number.isFinite(n) ? n : null;
+        }
+        return null;
+    }
+
+    function asBool(value) {
+        if (value === true || value === false) return value;
+        if (value === 1 || value === 0) return value === 1;
+        if (typeof value === 'string') {
+            const v = value.trim().toLowerCase();
+            if (v === 'true' || v === '1' || v === 'on' || v === 'да') return true;
+            if (v === 'false' || v === '0' || v === 'off' || v === 'нет') return false;
+        }
+        return null;
+    }
+
+    function fieldValue(node, field) {
+        if (!node) return null;
+        const sx = isNum(node.scale_x) ? node.scale_x : 1;
+        const sy = isNum(node.scale_y) ? node.scale_y : 1;
+        switch (field) {
+        case 'x': return round2(node.x);
+        case 'y': return round2(node.y);
+        case 'angle': return round2(node.angle);
+        case 'angleDeg': return round2(node.angle * 180 / Math.PI);
+        case 'scale': return round2(sx);
+        case 'scaleX': return round2(sx);
+        case 'scaleY': return round2(sy);
+        case 'visible': return node.visible !== false;
+        case 'enabled': return call(() => effectiveProcessing(node).update !== false, null);
+        case 'velocity': {
+            if (node.body < 0) return null;
+            const v = call(() => engine.getVelocity(node.body), null);
+            return v ? { x: round2(v[0]), y: round2(v[1]) } : null;
+        }
+        case 'gravity': return node.gravity_on !== false;
+        case 'gravityScale': return node.gravity_on === false ? 0 : 1;
+        case 'bodyEnabled': {
+            if (node.body < 0) return null;
+            const on = call(() => engine.bodyEnabled(node.body), null);
+            return on === null ? null : on !== false;
+        }
+        case 'sensor': return node.sensor === true;
+        case 'static': return node.body_kind === 'static';
+        case 'fixed': return node.body_kind === 'static';
+        case 'body': return node.body_kind || null;
+        default: return null;
+        }
+    }
+
+    function editableReason(node, field) {
+        if (field === 'velocity' || field === 'gravity' || field === 'gravityScale'
+            || field === 'bodyEnabled' || field === 'sensor') {
+            return node.body >= 0 ? null : 'у узла нет физического тела';
+        }
+        if (field === 'bodyEnabled' && typeof engine.setBodyEnabled !== 'function') {
+            return 'engine.setBodyEnabled недоступен в этой сборке';
+        }
+        return null;
+    }
+
+    function applyEdit(node, field, value) {
+        const before = fieldValue(node, field);
+        const why = editableReason(node, field);
+        if (why) return { ok: false, before, after: before, error: field + ': ' + why + ' (нужен <player>/<enemy>/<wall> и т.п.)' };
+        const wrapper = $(node);
+        try {
+            switch (field) {
+            case 'x': {
+                const n = asNumber(value);
+                if (n === null) return { ok: false, before, after: before, error: 'x: нужно число' };
+                wrapper.at(n, node.y);
+                break;
+            }
+            case 'y': {
+                const n = asNumber(value);
+                if (n === null) return { ok: false, before, after: before, error: 'y: нужно число' };
+                wrapper.at(node.x, n);
+                break;
+            }
+            case 'angle': {
+                const n = asNumber(value);
+                if (n === null) return { ok: false, before, after: before, error: 'angle: нужно число радиан' };
+                wrapper.angle(n);
+                break;
+            }
+            case 'angleDeg': {
+                const n = asNumber(value);
+                if (n === null) return { ok: false, before, after: before, error: 'angleDeg: нужно число градусов' };
+                wrapper.angle(n * Math.PI / 180);
+                break;
+            }
+            case 'scale': {
+                const n = asNumber(value);
+                if (n === null) return { ok: false, before, after: before, error: 'scale: нужно число' };
+                wrapper.scale(n, n);
+                break;
+            }
+            case 'scaleX': {
+                const n = asNumber(value);
+                if (n === null) return { ok: false, before, after: before, error: 'scaleX: нужно число' };
+                wrapper.scale(n, isNum(node.scale_y) ? node.scale_y : 1);
+                break;
+            }
+            case 'scaleY': {
+                const n = asNumber(value);
+                if (n === null) return { ok: false, before, after: before, error: 'scaleY: нужно число' };
+                wrapper.scale(isNum(node.scale_x) ? node.scale_x : 1, n);
+                break;
+            }
+            case 'visible': {
+                const b = asBool(value);
+                if (b === null) return { ok: false, before, after: before, error: 'visible: нужно true/false' };
+                wrapper.visible(b);
+                break;
+            }
+            case 'enabled': {
+                const b = asBool(value);
+                if (b === null) return { ok: false, before, after: before, error: 'enabled: нужно true/false' };
+                wrapper.active(b);
+                break;
+            }
+            case 'velocity': {
+                let vx = null, vy = null;
+                if (Array.isArray(value)) { vx = asNumber(value[0]); vy = asNumber(value[1]); }
+                else if (value && typeof value === 'object') { vx = asNumber(value.x); vy = asNumber(value.y); }
+                if (vx === null || vy === null) {
+                    return { ok: false, before, after: before, error: 'velocity: нужен { x, y } или [x, y]' };
+                }
+                wrapper.velocity(vx, vy);
+                break;
+            }
+            case 'gravity': {
+                const b = asBool(value);
+                if (b === null) return { ok: false, before, after: before, error: 'gravity: нужно true/false' };
+                wrapper.gravity(b);
+                break;
+            }
+            case 'gravityScale': {
+                const n = asNumber(value);
+                if (n === null || (n !== 0 && n !== 1)) {
+                    return { ok: false, before, after: before,
+                             error: 'gravityScale: $ API поддерживает только 0 или 1 (.gravity(on)); '
+                                  + 'произвольный множитель движок в JS не отдаёт' };
+                }
+                wrapper.gravity(n !== 0);
+                break;
+            }
+            case 'bodyEnabled': {
+                const b = asBool(value);
+                if (b === null) return { ok: false, before, after: before, error: 'bodyEnabled: нужно true/false' };
+                if (typeof engine.setBodyEnabled !== 'function') {
+                    return { ok: false, before, after: before,
+                             error: 'bodyEnabled: engine.setBodyEnabled недоступен в этой сборке' };
+                }
+                engine.setBodyEnabled(node.body, b);
+                break;
+            }
+            case 'sensor': {
+                const b = asBool(value);
+                if (b === null) return { ok: false, before, after: before, error: 'sensor: нужно true/false' };
+                wrapper.sensor(b);
+                break;
+            }
+            case 'static':
+            case 'fixed': {
+                const b = asBool(value);
+                if (b === null) return { ok: false, before, after: before, error: field + ': нужно true/false' };
+                if (b) {
+                    if (node.body_kind !== 'static') {
+                        prev_body_kind.set(node, node.body_kind || 'dynamic');
+                    }
+                    wrapper.body('static');
+                } else {
+                    const prev = prev_body_kind.get(node);
+                    wrapper.body(prev === 'static' ? 'dynamic' : (prev || 'dynamic'));
+                }
+                break;
+            }
+            case 'body': {
+                const kind = String(value || '').trim();
+                if (kind !== 'static' && kind !== 'dynamic' && kind !== 'kinematic') {
+                    return { ok: false, before, after: before,
+                             error: "body: ожидается 'static' | 'dynamic' | 'kinematic'" };
+                }
+                wrapper.body(kind);
+                break;
+            }
+            default:
+                return { ok: false, before, after: before, error: 'неизвестное поле: ' + field };
+            }
+        } catch (e) {
+            return { ok: false, before, after: before, error: field + ': ' + (e && e.message ? e.message : e),
+                     thrown: true, nodeId: node.nid };
+        }
+        return { ok: true, before, after: fieldValue(node, field), error: null };
+    }
+
+    function publicEdit(sel, field, value, result) {
+        const out = {
+            ok: !!result.ok,
+            selector: result.selector,
+            field: field,
+            before: result.before === undefined ? null : result.before,
+            after: result.after === undefined ? null : result.after,
+            error: result.error === undefined ? null : result.error,
+            uid: result.uid === undefined ? null : result.uid,
+            nid: result.nid === undefined ? null : result.nid,
+        };
+        return out;
+    }
+
+    function setField(sel, field, value, track) {
+        const f = String(field === undefined || field === null ? '' : field);
+        if (!EDIT_FIELD_SET.has(f)) {
+            return publicEdit(sel, f, value, {
+                ok: false, selector: typeof sel === 'string' ? sel : null,
+                before: null, after: null,
+                error: 'неизвестное поле "' + f + '"; доступны: ' + EDIT_FIELDS.join(', '),
+            });
+        }
+        const node = targetNode(sel);
+        if (!node) {
+            return publicEdit(sel, f, value, {
+                ok: false, selector: typeof sel === 'string' ? sel : null,
+                before: null, after: null,
+                error: 'сущность не найдена: ' + (typeof sel === 'string' ? sel : String(sel)),
+            });
+        }
+        const selector = selectorOf(node);
+        const r = applyEdit(node, f, value);
+        const out = publicEdit(sel, f, value, {
+            ok: r.ok, selector, before: r.before, after: r.after, error: r.error,
+            uid: node.uid, nid: node.nid,
+        });
+        if (out.ok) {
+            if (track !== false) {
+                state.edit_history.push({ uid: node.uid, field: f, before: r.before });
+                if (state.edit_history.length > 32) state.edit_history.shift();
+            }
+            state.last_edit = out;
+            call(() => $.trace && $.trace.note
+                ? $.trace.note('devtools:edit', node, { field: f, before: r.before, after: r.after })
+                : null, null);
+            if (state.doc >= 0) {
+                refresh(true);
+                status(`Правка ${selector}: ${f} ${JSON.stringify(r.before)} → ${JSON.stringify(r.after)}`);
+            }
+        } else if (r.thrown) {
+            if ($.debug && typeof $.debug.reportError === 'function') {
+                $.debug.reportError('$.devtools.set', new Error(out.error), {
+                    code: 'R2D_DEVTOOLS_EDIT', subsystem: 'devtools',
+                    recoverable: true, nodeId: node.nid,
+                });
+            } else {
+                ctx.log('$: ' + out.error);
+            }
+        }
+        return out;
+    }
+
+    function setManyFields(sel, patch) {
+        if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+            return { ok: false, selector: typeof sel === 'string' ? sel : null, results: [],
+                     applied: 0, error: '$.devtools.setMany: нужен объект { поле: значение }' };
+        }
+        const results = [];
+        let error = null;
+        for (const field of Object.keys(patch)) {
+            const r = setField(sel, field, patch[field], true);
+            results.push(r);
+            if (!r.ok && error === null) error = r.error;
+        }
+        return { ok: error === null, selector: results.length ? results[0].selector : null,
+                 results, applied: results.filter((r) => r.ok).length, error };
+    }
+
+    function undoEdit() {
+        const item = state.edit_history.pop();
+        if (!item) {
+            return { ok: false, selector: null, field: null, before: null, after: null,
+                     error: 'нечего отменять: правок DevTools ещё не было' };
+        }
+        return setField(item.uid, item.field, item.before, false);
+    }
+
+    function editFieldsData(sel) {
+        const node = targetNode(sel);
+        if (!node) {
+            return { found: false, selector: typeof sel === 'string' ? sel : state.selector,
+                     fields: [], values: {}, text: 'сущность не выбрана' };
+        }
+        const values = {};
+        const fields = EDIT_FIELDS.map((name) => {
+            const value = fieldValue(node, name);
+            values[name] = value;
+            const reason = editableReason(node, name);
+            return { name, label: EDIT_LABELS[name] || name, value,
+                     type: (name === 'visible' || name === 'enabled' || name === 'gravity'
+                            || name === 'bodyEnabled' || name === 'sensor' || name === 'static'
+                            || name === 'fixed') ? 'boolean'
+                           : (name === 'velocity' ? 'vector' : (name === 'body' ? 'string' : 'number')),
+                     settable: reason === null, reason,
+                     source: name === 'bodyEnabled' ? 'engine.setBodyEnabled'
+                             : (name === 'enabled' ? '.active()'
+                             : (name === 'gravity' || name === 'gravityScale' ? '.gravity()'
+                             : (name === 'static' || name === 'fixed' || name === 'body' ? '.body()'
+                             : '.' + (name === 'angleDeg' ? 'angle' : name) + '()'))) };
+        });
+        const text = fields.map((f) => f.name + ': ' + JSON.stringify(f.value)
+            + (f.settable ? '' : ' — ' + f.reason)).join('\n');
+        return { found: true, selector: selectorOf(node), uid: node.uid, nid: node.nid,
+                 fields, values, text };
+    }
+
+    function overrideTextFor(sel) {
+        const node = targetNode(sel);
+        if (!node) return null;
+        const selector = selectorOf(node);
+        const sel_literal = "'" + String(selector).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+        const q = '$(' + sel_literal + ')';
+        const line = [q,
+            '.at(' + round2(node.x) + ', ' + round2(node.y) + ')',
+            '.angle(' + round2(node.angle) + ')',
+            '.scale(' + round2(isNum(node.scale_x) ? node.scale_x : 1) + ', '
+                + round2(isNum(node.scale_y) ? node.scale_y : 1) + ')',
+            '.visible(' + (node.visible !== false) + ')',
+            '.active(' + (call(() => effectiveProcessing(node).update !== false, true) ? 'true' : 'false') + ')'];
+        const comments = [];
+        if (node.body >= 0) {
+            const v = call(() => engine.getVelocity(node.body), null);
+            line.push('.velocity(' + (v ? round2(v[0]) : 0) + ', ' + (v ? round2(v[1]) : 0) + ')');
+            line.push('.gravity(' + (node.gravity_on !== false) + ')');
+            line.push('.sensor(' + (node.sensor === true) + ')');
+            line.push(".body(" + JSON.stringify(node.body_kind || 'dynamic') + ")");
+            comments.push('// bodyEnabled(' + (call(() => engine.bodyEnabled(node.body) !== false, true))
+                + '): у $ нет сеттера — engine.setBodyEnabled(' + q + '.get(0).body, '
+                + (call(() => engine.bodyEnabled(node.body) !== false, true)) + ');');
+        }
+        return line.join('') + ';' + (comments.length ? '\n' + comments.join('\n') : '');
+    }
+
     function setSection(name) {
         if (SECTIONS.indexOf(name) < 0) return false;
         state.section = name;
@@ -1058,6 +1468,68 @@ export function installDevTools($) {
         if (state.doc >= 0) uiSetText(state.doc, 'dt-status', text);
     }
 
+
+    /** Синхронизировать строку правок с выбранным узлом (без затирания ввода). */
+    function syncEditRow(node) {
+        if (state.doc < 0 || !node) return;
+        // Поля заполняются при смене выбора (edit_shown сбрасывается в select()
+        // и open()) — не каждый refresh: иначе набор «12» затирался бы старым
+        // значением до Enter. Пока узел тот же, текст в полях принадлежит
+        // пользователю; после Apply edit_shown сбрасывается явно.
+        const force = !state.edit_shown || state.edit_shown.uid !== node.uid;
+        if (force) {
+            const xText = String(round2(node.x));
+            const yText = String(round2(node.y));
+            uiSetValue(state.doc, 'dt-edit-x', xText);
+            uiSetValue(state.doc, 'dt-edit-y', yText);
+            state.edit_shown = { uid: node.uid, x: xText, y: yText };
+            state.edit_dirty = false;
+        }
+        uiSetClass(state.doc, 'dt-edit-visible', 'on', node.visible !== false);
+        uiSetClass(state.doc, 'dt-edit-enabled', 'on',
+                   call(() => effectiveProcessing(node).update !== false, false));
+    }
+
+    /** Apply/Enter: пишем только реально изменённые x/y. */
+    function applyEditInputs() {
+        const node = selectedNode();
+        if (!node) { status('Правка: сначала выберите сущность'); return false; }
+        state.edit_dirty = true;
+        const xText = String(uiValue(state.doc, 'dt-edit-x') === null ? '' : uiValue(state.doc, 'dt-edit-x')).trim();
+        const yText = String(uiValue(state.doc, 'dt-edit-y') === null ? '' : uiValue(state.doc, 'dt-edit-y')).trim();
+        const nx = asNumber(xText);
+        const ny = asNumber(yText);
+        if (nx === null || ny === null) {
+            status('Правка: x и y должны быть числами (например 120.5)');
+            return false;
+        }
+        let changed = 0;
+        let last = null;
+        if (Math.abs(nx - node.x) > 1e-9) { last = setField(null, 'x', nx, true); changed += last.ok ? 1 : 0; }
+        if (Math.abs(ny - node.y) > 1e-9) { last = setField(null, 'y', ny, true); changed += last.ok ? 1 : 0; }
+        state.edit_dirty = false;
+        state.edit_shown = null;
+        if (last && !last.ok) { status('Правка не удалась: ' + last.error); return false; }
+        status(changed ? ('Правка применена: ' + selectorOf(node) + ' x/y → ' + nx + ', ' + ny)
+                       : 'Правка: значения не изменились');
+        refresh(true);
+        return true;
+    }
+
+    function toggleEditField(field) {
+        const node = selectedNode();
+        if (!node) { status('Правка: сначала выберите сущность'); return false; }
+        const value = fieldValue(node, field);
+        const r = setField(null, field, !value, true);
+        if (!r.ok) status('Правка не удалась: ' + r.error);
+        return r.ok;
+    }
+
+    function copyOverride() {
+        const text = overrideTextFor(null);
+        return copyText(text, 'override');
+    }
+
     // -----------------------------------------------------------------------
     // Обновление панели сущностей (F2).
     // -----------------------------------------------------------------------
@@ -1106,11 +1578,14 @@ export function installDevTools($) {
         state.selector = info.selector;
         state.selected_nid = info.nid;
         for (const s of SECTIONS) uiSetHtml(state.doc, 'tab-' + s, info.sections[s].html);
+        syncEditRow(selectedNode());
         return state;
     }
 
     function select(uid) {
         state.selected_uid = uid === undefined ? null : uid;
+        state.edit_shown = null;
+        state.edit_dirty = false;
         const node = selectedNode();
         state.selector = node ? selectorOf(node) : null;
         state.selected_nid = node ? node.nid : null;
@@ -1191,6 +1666,17 @@ export function installDevTools($) {
                 copyJs();
                 status(`Скопировано: ${state.last_copied ? state.last_copied.text : COPY_NONE}`);
             });
+            // §20 EDIT: минимальная строка правок. RmlUi шлёт 'change' при
+            // подтверждении ввода (Enter/уход фокуса), кнопка Apply — тот же путь.
+            engine.ui.on(state.doc, 'dt-copy-override', 'click', () => {
+                copyOverride();
+                status(`Скопировано: ${state.last_copied ? state.last_copied.text : COPY_NONE}`);
+            });
+            engine.ui.on(state.doc, 'dt-edit-apply', 'click', () => applyEditInputs());
+            engine.ui.on(state.doc, 'dt-edit-x', 'change', () => applyEditInputs());
+            engine.ui.on(state.doc, 'dt-edit-y', 'change', () => applyEditInputs());
+            engine.ui.on(state.doc, 'dt-edit-visible', 'click', () => toggleEditField('visible'));
+            engine.ui.on(state.doc, 'dt-edit-enabled', 'click', () => toggleEditField('enabled'));
             engine.ui.on(state.doc, 'dt-pick', 'click', () => setPick());
             for (const name of ['visible', 'physics', 'active', 'room']) {
                 engine.ui.on(state.doc, `dt-filter-${name}`, 'click', () => setFilter(name));
@@ -1205,6 +1691,7 @@ export function installDevTools($) {
         engine.ui.setProperty(state.doc, 'dt', 'height', h + 'px');
         engine.ui.show(state.doc);
         state.open = true;
+        state.edit_shown = null;
         setSection(state.section);
         for (const name of ['visible', 'physics', 'active', 'room']) {
             uiSetClass(state.doc, `dt-filter-${name}`, 'on', state.filters[name]);
@@ -2271,6 +2758,9 @@ export function installDevTools($) {
         memSample();
         const counters = call(() => $.debug.counters(), {}) || {};
         const limits = call(() => $.debug.limits(), {}) || {};
+        // §29 RESOURCE: только явный замер — вкладка MEM или вызов API.
+        // Пока панель закрыта, resources() не зовётся вовсе.
+        const resources = call(() => $.debug.resources(), null);
         const samples = runtime.mem.samples;
         const base = runtime.mem.baseline || (samples.length ? samples[0].counters : null);
         const first = samples.length ? samples[0] : null;
@@ -2311,7 +2801,7 @@ export function installDevTools($) {
                 ? leaks.map((l) => `растёт последние ${l.samples} замеров: ${l.key} ${l.from} → ${l.to}`).join('\n')
                 : `подозрений на утечку нет: ни один счётчик не растёт ${LEAK_RUN} замеров подряд`);
         return {
-            counters, limits, samples: samples.length, series: samples.slice(),
+            counters, limits, resources, samples: samples.length, series: samples.slice(),
             window_frames: first && last ? last.frame - first.frame : 0,
             deltas: counter_keys.reduce((acc, k) => {
                 const was = base && isNum(base[k]) ? base[k] : null;
@@ -2320,7 +2810,8 @@ export function installDevTools($) {
             }, {}),
             leaks,
             text: { counters: `кадры ${first ? first.frame : NA}…${last ? last.frame : NA} (замеров ${samples.length})\n${delta_text}`,
-                    limits: limits_text, leaks: leak_text },
+                    limits: limits_text, leaks: leak_text,
+                    resources: resources ? resources.text : 'ресурсы: N/A' },
         };
     }
 
@@ -2793,6 +3284,7 @@ export function installDevTools($) {
         const mem = memoryData();
         uiSetText(doc, 'rt-mem-counters', mem.text.counters);
         uiSetText(doc, 'rt-mem-limits', mem.text.limits);
+        uiSetText(doc, 'rt-mem-resources', mem.text.resources);
         uiSetText(doc, 'rt-mem-leaks', mem.text.leaks);
 
         // §31 CONSOLE: лог и история (строки истории созданы один раз).
@@ -3224,7 +3716,7 @@ export function installDevTools($) {
             const m = memoryData();
             return { counters: m.counters, limits: m.limits, deltas: m.deltas,
                      samples: m.samples, series: m.series, window_frames: m.window_frames,
-                     leaks: m.leaks, text: m.text };
+                     leaks: m.leaks, resources: m.resources, text: m.text };
         },
         memoryBaseline: memBaseline,
 
@@ -3291,6 +3783,45 @@ export function installDevTools($) {
 
         /** §20: данные всех секций выбранного узла (те же, что в панели). */
         inspect,
+
+        /**
+         * §20 EDIT: безопасная правка свойства выбранной/указанной сущности.
+         *
+         * `selector` — селектор $, uid или null (текущий выбор). Все поля идут
+         * через существующие операции $; `bodyEnabled` — через
+         * engine.setBodyEnabled. Возврат всегда структурный:
+         * `{ ok, selector, field, before, after, error }`.
+         *
+         * ```js
+         * $.devtools.set('#hero', 'x', 420);
+         * $.devtools.set(null, 'visible', false);       // текущий выбор
+         * $.devtools.set('#enemy', 'velocity', { x: 0, y: -300 });
+         * ```
+         */
+        set(sel, field, value) { return setField(sel, field, value, true); },
+
+        /** Несколько полей одной сущности: `{ ok, results, applied, error }`. */
+        setMany(sel, patch) { return setManyFields(sel, patch); },
+
+        /** Отменить последнюю правку DevTools (возвращает тот же структурный результат). */
+        undo() { return undoEdit(); },
+
+        /** Изменяемые поля выбранного узла и их текущие значения. */
+        editFields(sel) { return editFieldsData(sel); },
+
+        /**
+         * Готовый JS-код для вставки в игру: `$('#hero').at(...)…`.
+         * Значения — только существующие операции $; bodyEnabled остаётся
+         * комментарием, потому что у $ нет сеттера (engine.setBodyEnabled).
+         * `null` — сущность не найдена.
+         */
+        overrideText(sel) { return overrideTextFor(sel); },
+
+        /** Скопировать overrideText в буфер обмена (bool). */
+        copyOverride() { return copyOverride(); },
+
+        /** §29: ресурсы из существующих источников — те же, что на вкладке MEM. */
+        resources(opts) { return $.debug && typeof $.debug.resources === 'function' ? $.debug.resources(opts) : null; },
 
         /**
          * Narrative inspector: facts shown in the Narrative tab, independent of
@@ -3364,6 +3895,8 @@ export function installDevTools($) {
                 pick: state.pick,
                 pick_hover: state.pick_hover_uid,
                 picked: state.last_pick,
+                last_edit: state.last_edit,
+                edit_history: state.edit_history.length,
             };
         },
 

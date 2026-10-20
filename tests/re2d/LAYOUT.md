@@ -15,7 +15,9 @@ both directions (file->CMake and CMake->file).
 
 | file | proposed directory | CMake wired |
 |---|---|---|
+| `atlas_prefetch_test.c` | `sprite` | yes |
 | `atlas_test.c` | `sprite` | yes |
+| `atlas_tiled_test.c` | `sprite` | yes |
 | `audio_zone_test.c` | `core` | yes |
 | `automap_test.c` | `core` | yes |
 | `batch_test.c` | `render` | yes |
@@ -50,6 +52,7 @@ both directions (file->CMake and CMake->file).
 | `render_post_test.c` | `render` | yes |
 | `render_regression_test.c` | `render` | yes |
 | `save_test.c` | `core` | yes |
+| `scalability_test.c` | `core` | yes |
 | `secret_test.c` | `core` | yes |
 | `semantic_test.c` | `core` | yes |
 | `sky_layers_test.c` | `sky` | yes |
@@ -69,21 +72,21 @@ both directions (file->CMake and CMake->file).
 
 ## Counts
 
-- `core/`: **14**
+- `core/`: **15**
 - `world/`: **9**
 - `region/`: **2**
 - `pvs/`: **2**
 - `render/`: **11**
 - `material/`: **1**
-- `sprite/`: **1**
+- `sprite/`: **3**
 - `sky/`: **4**
 - `vfx/`: **2**
 - `streaming/`: **5**
 
-Tracked tests: **51**; CMake-wired: **51**; CMake source references: **52**.
+Tracked tests: **54**; CMake-wired: **54**; CMake source references: **54**.
 
 Untracked files (new work not yet wired) are reported as warnings, not
-as part of the compatibility contract: `atlas_tiled_test.c`.
+as part of the compatibility contract: none.
 
 ## Moving later
 

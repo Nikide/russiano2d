@@ -268,6 +268,17 @@ void          *JsEventListener::dispatch_user_ = nullptr;
 // ---------------------------------------------------------------------------
 // Структура модуля
 // ---------------------------------------------------------------------------
+// Лицо шрифта, зарегистрированное ЯВНО через engine.ui.loadFontFace: только
+// такую регистрацию можно описать метаданными (family/weight/style/path).
+// Автозагрузка assets/fonts регистрирует лица без явного семейства — RmlUi
+// выводит его из файла, а обратного API «прочитать семейство» у него нет.
+struct FontFaceRecord {
+    std::string path;
+    std::string family;
+    int         weight = 400;
+    bool        italic = false;
+};
+
 struct R2DGui {
     SDL_GPUDevice *device = nullptr;
     SDL_Window    *window = nullptr;
@@ -294,6 +305,9 @@ struct R2DGui {
     int width = 0;
     int height = 0;
     bool initialised = false;
+
+    // Явно зарегистрированные лица (engine.ui.loadFontFace / $.font.load opts).
+    std::vector<FontFaceRecord> font_faces;
 };
 
 // RmlUi отсоединил слушателя: убираем запись реестра и сообщаем скриптовому
@@ -317,6 +331,66 @@ void JsEventListener::OnDetach(Rml::Element * /*element*/)
 {
     if (gui_) NotifyDetached(gui_, callback_id_, this);
     delete this;
+}
+
+// ---------------------------------------------------------------------------
+// Шрифтовые лица: именованное семейство + начертание (§ RmlUi font-weight/style).
+//
+// Rml::LoadFontFace с family/style/weight — штатный путь RmlUi: выбранное лицо
+// потом реально резолвит RCSS font-family/font-weight/font-style. Мы только
+// передаём параметры и запоминаем метаданные для $.font.faces(); второго
+// рендерера текста и подделки bold/italic здесь нет.
+// ---------------------------------------------------------------------------
+
+bool r2d_gui_load_font_face(R2DGui *g, const char *path, const char *family, int weight, bool italic)
+{
+    if (!g || !g->initialised || !g->context) return false;
+    if (!path || !*path || !family || !*family) return false;
+    // RmlUi принимает любое определённое значение 1..1000; Auto (0) не годится
+    // для явного лица, а значения вне диапазона бессмысленны.
+    if (weight < 1 || weight > 1000) return false;
+
+    const Rml::Style::FontStyle style = italic
+        ? Rml::Style::FontStyle::Italic : Rml::Style::FontStyle::Normal;
+    const Rml::Style::FontWeight rml_weight = static_cast<Rml::Style::FontWeight>(weight);
+
+    if (!Rml::LoadFontFace(Rml::String(path), Rml::String(family), style, rml_weight)) {
+        return false;
+    }
+
+    // Повторная регистрация того же лица обновляет путь, а не плодит дубли:
+    // иначе faces() врал бы о нескольких записях одного файла.
+    for (size_t i = 0; i < g->font_faces.size(); ++i) {
+        FontFaceRecord &rec = g->font_faces[i];
+        if (rec.family == family && rec.weight == weight && rec.italic == italic) {
+            rec.path = path;
+            return true;
+        }
+    }
+    FontFaceRecord rec;
+    rec.path = path;
+    rec.family = family;
+    rec.weight = weight;
+    rec.italic = italic;
+    g->font_faces.push_back(rec);
+    return true;
+}
+
+int r2d_gui_font_face_count(const R2DGui *g)
+{
+    return g ? static_cast<int>(g->font_faces.size()) : 0;
+}
+
+bool r2d_gui_font_face_info(const R2DGui *g, int index, char *family, size_t family_cap,
+                            char *path, size_t path_cap, int *weight, bool *italic)
+{
+    if (!g || index < 0 || index >= static_cast<int>(g->font_faces.size())) return false;
+    const FontFaceRecord &rec = g->font_faces[static_cast<size_t>(index)];
+    if (family && family_cap > 0) SDL_snprintf(family, family_cap, "%s", rec.family.c_str());
+    if (path && path_cap > 0) SDL_snprintf(path, path_cap, "%s", rec.path.c_str());
+    if (weight) *weight = rec.weight;
+    if (italic) *italic = rec.italic;
+    return true;
 }
 
 // ---------------------------------------------------------------------------

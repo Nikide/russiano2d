@@ -2227,6 +2227,147 @@ function targetPoint(target) {
     return null;
 }
 
+// --- Операторы запросов: якорь .within(), предупреждения -------------------
+//
+// `.within(...).nearest()` обязан знать, от какой точки считать: цель уже
+// разобрана, но сама обёртка её не хранит. WeakMap не создаёт цикла
+// «обёртка → узел» и не мешает сборке мусора; обычное поле на обёртке не
+// поставить — конструктор закрывает объект от расширения (Object.preventExtensions).
+const wrapper_anchor = new WeakMap();
+let nearest_no_anchor_warned = false;
+let visible_no_backend_warned = false;
+let visible_no_target_warned = false;
+const inside_miss_warned = new Set();
+
+/** Точка последнего `.within(...)`, если обёртка осталась от него. */
+function anchorOf(wrapper) { return wrapper_anchor.get(wrapper) || null; }
+
+/** Перенести якорь на производную выборку (limit/inside/visibleFrom). */
+function carryAnchor(from, to) {
+    const point = wrapper_anchor.get(from);
+    if (point) wrapper_anchor.set(to, point);
+    return to;
+}
+
+/** Индекс узла в реестре: на нём держится детерминизм равных расстояний. */
+function registryRankOf(node) {
+    const i = ctx.nodes.indexOf(node);
+    return i < 0 ? Infinity : i;
+}
+
+/** Узел-цель из селектора/узла/обёртки; null — цели нет. */
+function targetNodeOf(target) {
+    if (target === null || target === undefined) return null;
+    if (typeof target === 'string') return query(target)[0] || null;
+    if (target instanceof Wrapper) return target.nodes[0] || null;
+    if (target instanceof Node) return target;
+    return null;
+}
+
+/** Предикат «центр узла в прямоугольнике»; границы включаются. */
+function boxTest(x0, y0, x1, y1) {
+    return (node) => node.x >= x0 && node.x <= x1 && node.y >= y0 && node.y <= y1;
+}
+
+/**
+ * Предикат для области узла: geometry области в локальном пространстве ТЕЛА
+ * (смещение + поворот), как её видит Box2D. Масштаб узла в native-форму не
+ * входит (он влияет на отрисовку, а не на коллайдер), поэтому здесь он тоже
+ * не учитывается — иначе `inside` расходился бы с зоной, которую видит физика.
+ *
+ * Выключенная область (`.areaOn(name, false)`) не участвует в запросах, как и
+ * в `.areaOverlap()`, поэтому даёт пустой результат, а не «геометрию».
+ */
+function areaInsideTest(owner, name) {
+    const area = areaFind(owner, name);
+    if (!area) return null;
+    const info = areaInfo(owner, area);
+    if (info.enabled !== true) return () => false;
+    const half_w = Math.abs(info.w) / 2;
+    const half_h = Math.abs(info.h) / 2;
+    const owner_angle = -numOr(owner.angle, 0);
+    const ca = Math.cos(owner_angle), sa = Math.sin(owner_angle);
+    const area_angle = -numOr(info.angle, 0);
+    const cb = Math.cos(area_angle), sb = Math.sin(area_angle);
+    return (node) => {
+        if (node.removed) return false;
+        const dx = node.x - owner.x;
+        const dy = node.y - owner.y;
+        const lx = ca * dx - sa * dy;
+        const ly = sa * dx + ca * dy;
+        const ox = lx - info.x;
+        const oy = ly - info.y;
+        const ax = cb * ox - sb * oy;
+        const ay = sb * ox + cb * oy;
+        if (info.shape === 'circle') {
+            const r = info.radius > 0 ? info.radius : Math.max(half_w, half_h);
+            return ax * ax + ay * ay <= r * r;
+        }
+        // box / capsule / polygon: для капсулы и полигона — их габаритный
+        // прямоугольник (единственная геометрия, которую отдают areaInfo/areaListOf).
+        return Math.abs(ax) <= half_w && Math.abs(ay) <= half_h;
+    };
+}
+
+/**
+ * Предикат `inside(area)`. Порядок разбора аргумента:
+ *   * узел/обёртка → их `nodeBounds` (прямоугольник на экране/в мире);
+ *   * строка → сначала ИМЯ области в живых узлах (areaListOf/areaInfo),
+ *     иначе селектор → `nodeBounds` первого узла;
+ *   * `{ x, y, w, h }` (w/h могут быть отрицательными — нормализуются);
+ *   * `{ x0, y0, x1, y1 }` — готовые границы (как у `nodeBounds`).
+ * null — аргумент не опознан; вызывающий отдаёт пустую выборку и пишет
+ * диагностику один раз на аргумент.
+ */
+function insideTestOf(area) {
+    if (area === null || area === undefined) return null;
+    if (area instanceof Node || area instanceof Wrapper) {
+        const node = area instanceof Node ? area : area.nodes[0];
+        if (!node) return null;
+        const b = nodeBounds(node);
+        return boxTest(b.x0, b.y0, b.x1, b.y1);
+    }
+    if (typeof area === 'string') {
+        for (let i = 0; i < ctx.nodes.length; i++) {
+            const owner = ctx.nodes[i];
+            if (!owner || owner.removed) continue;
+            const test = areaInsideTest(owner, area);
+            if (test) return test;
+        }
+        const zone = query(area)[0];
+        if (!zone) return null;
+        const b = nodeBounds(zone);
+        return boxTest(b.x0, b.y0, b.x1, b.y1);
+    }
+    if (typeof area === 'object') {
+        const x = Number(area.x), y = Number(area.y);
+        const w = Number(area.w !== undefined ? area.w : area.width);
+        const h = Number(area.h !== undefined ? area.h : area.height);
+        if (Number.isFinite(x) && Number.isFinite(y) &&
+            Number.isFinite(w) && Number.isFinite(h)) {
+            const x0 = Math.min(x, x + w), x1 = Math.max(x, x + w);
+            const y0 = Math.min(y, y + h), y1 = Math.max(y, y + h);
+            return boxTest(x0, y0, x1, y1);
+        }
+        const bx0 = Number(area.x0), by0 = Number(area.y0);
+        const bx1 = Number(area.x1), by1 = Number(area.y1);
+        if (Number.isFinite(bx0) && Number.isFinite(by0) &&
+            Number.isFinite(bx1) && Number.isFinite(by1)) {
+            return boxTest(Math.min(bx0, bx1), Math.min(by0, by1),
+                           Math.max(bx0, bx1), Math.max(by0, by1));
+        }
+    }
+    return null;
+}
+
+/** Ярлык аргумента для диагностики: строки — в кавычках, остальное — как есть. */
+function areaArgLabel(area) {
+    if (typeof area === 'string') return JSON.stringify(area);
+    if (area instanceof Node) return '<' + area.tag + ' ' + (area.id || '') + '>';
+    if (area instanceof Wrapper) return 'wrapper(' + area.length + ')';
+    return String(area);
+}
+
 /**
  * Узлы, чей центр не дальше `radius` от точки `(x, y)`.
  *
@@ -2322,9 +2463,195 @@ export class Wrapper {
         if (eng && typeof eng.queryCircle === 'function') {
             body_ids = eng.queryCircle(point.x, point.y, r, 0);
         }
-        return new Wrapper(withinRadius(this.nodes, point.x, point.y, r, body_ids));
+        const out = new Wrapper(withinRadius(this.nodes, point.x, point.y, r, body_ids));
+        // Якорь для `.nearest()`: `.within('#player', 1000).nearest()` считает
+        // расстояние от центра игрока, а не от первого узла выборки.
+        wrapper_anchor.set(out, { x: point.x, y: point.y });
+        return out;
+    }
+
+    /**
+     * Первые `n` узлов выборки: `$('.enemy').limit(10)`.
+     *
+     * `n <= 0`, `NaN` и нечисло дают пустую выборку; `Infinity` — всю
+     * выборку. Порядок — порядок выборки (порядок реестра), поэтому результат
+     * детерминирован и одинаков в реплеях. Это НЕ нативное ограничение запроса:
+     * лимит режется уже после фильтрации, поэтому он не ускоряет сам запрос.
+     */
+    limit(n) {
+        const count = Number(n);
+        if (!(count > 0)) return carryAnchor(this, new Wrapper([]));
+        const take = Math.min(this.nodes.length, Math.floor(count));
+        return carryAnchor(this, new Wrapper(this.nodes.slice(0, take)));
+    }
+
+    /**
+     * Ближайший узел выборки: `$('.enemy').nearest('#hero')`.
+     *
+     * Считается квадрат расстояния между ЦЕНТРАМИ. Возвращается обёртка из
+     * ОДНОГО узла (ближайшего) — явное решение: `.nearest()` отвечает на
+     * вопрос «кто ближе», а не «отсортируй всех» (для сортировки есть
+     * `.toArray()` и `.sort()` в игре). Равные расстояния разрешаются
+     * порядком РЕЕСТРА, а не порядком выборки, — tie-break стабилен.
+     *
+     * Без аргумента цель берётся из последнего `.within(...)` на этой цепочке:
+     * `$('.enemy').within('#player', 1000).nearest()`. Если якоря нет,
+     * выборка возвращается БЕЗ изменений и один раз пишется предупреждение
+     * (молча «ближайший к нулю» — неверный ответ, которого никто не заметит).
+     * Явная цель, которую не удалось разобрать, даёт пустую выборку.
+     */
+    nearest(target) {
+        let point = null;
+        const implicit = target === undefined || target === null;
+        if (implicit) {
+            point = anchorOf(this);
+            if (!point) {
+                if (!nearest_no_anchor_warned) {
+                    nearest_no_anchor_warned = true;
+                    ctx.log('$: .nearest() без цели и без предыдущего .within(...) — выборка не изменена; укажите цель: .nearest("#hero") или .within("#hero", r).nearest()');
+                }
+                return this;
+            }
+        } else {
+            point = targetPoint(target);
+            if (!point) return carryAnchor(this, new Wrapper([]));
+        }
+
+        let best = null;
+        let best_d2 = Infinity;
+        let best_rank = Infinity;
+        for (let i = 0; i < this.nodes.length; i++) {
+            const node = this.nodes[i];
+            if (!node || node.removed) continue;
+            const dx = node.x - point.x;
+            const dy = node.y - point.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 < best_d2) {
+                best = node;
+                best_d2 = d2;
+                best_rank = Infinity;   // посчитаем только если понадобится tie-break
+            } else if (d2 === best_d2) {
+                if (best_rank === Infinity) best_rank = registryRankOf(best);
+                const rank = registryRankOf(node);
+                if (rank < best_rank) { best = node; best_rank = rank; }
+            }
+        }
+        return carryAnchor(this, new Wrapper(best ? [best] : []));
+    }
+
+    /**
+     * Узлы, чей ЦЕНТР внутри области: `$('.enemy').inside('sense')`.
+     *
+     * Аргумент (единый разбор — см. `insideTestOf`):
+     *   * имя области узла (`.area('sense', {…})`) — геометрия тела, как её
+     *     видит Box2D: смещение и поворот области, без масштаба узла;
+     *     выключенная область не возвращает никого (как `.areaOverlap()`);
+     *   * селектор/узел/обёртка — `nodeBounds` (прямоугольник с учётом
+     *     масштаба и hitbox);
+     *   * `{ x, y, w, h }` — прямоугольник в мировых пикселях;
+     *   * `{ x0, y0, x1, y1 }` — готовые границы.
+     *
+     * Границы включаются. Порядок результата — порядок выборки. Пересечение
+     * ПРЯМОУГОЛЬНИКОВ узлов (старое поведение `.inside(sel)` как bool) остаётся
+     * у `.overlaps(sel)`; `.inside` больше не геттер, а оператор выборки.
+     */
+    inside(area) {
+        const test = insideTestOf(area);
+        if (!test) {
+            const label = areaArgLabel(area);
+            if (!inside_miss_warned.has(label)) {
+                inside_miss_warned.add(label);
+                ctx.log('$: .inside(' + label + ') — область, селектор или прямоугольник не найдены — пустая выборка');
+            }
+            return carryAnchor(this, new Wrapper([]));
+        }
+        const out = [];
+        for (let i = 0; i < this.nodes.length; i++) {
+            const node = this.nodes[i];
+            if (!node || node.removed) continue;
+            if (test(node)) out.push(node);
+        }
+        return carryAnchor(this, new Wrapper(out));
+    }
+
+    /**
+     * Узлы, видимые из цели по ФИЗИЧЕСКИМ препятствиям: `$('.enemy').visibleFrom('#hero')`.
+     *
+     * Луч идёт от центра цели к центру узла через `engine.raycast` — те же
+     * коллизии/маски/мир, что у `.ground()` и `$.world.raycast`, а не пиксели
+     * рендера (камера, спрайты, прозрачность и слои отрисовки результата не
+     * меняют). Собственное тело узла и тело цели луч пропускает; результат —
+     * только те, кого ничто не заслонило.
+     *
+     * opts:
+     *   * `mask` — биты слоёв, которые луч принимает (0/нет — все);
+     *   * `maxDistance` — дальше этого расстояния узел не считается видимым.
+     *
+     * Сенсоры (зоны, триггеры) лучами не считаются препятствием — это
+     * поведение нативного backend (`b2Shape_IsSensor`), отдельной опции
+     * `includeSensors` нет: подменить его честно нечем.
+     *
+     * Без `engine.raycast` (сборка без физики / юнит-тест) возвращается
+     * ПУСТАЯ выборка и один раз пишется диагностика: «всё видно» было бы
+     * выдуманным ответом. Цель-селектор, у которой нет узла, — тоже пусто.
+     */
+    visibleFrom(target, opts) {
+        const eng = engineOf();
+        if (typeof eng.raycast !== 'function') {
+            if (!visible_no_backend_warned) {
+                visible_no_backend_warned = true;
+                ctx.log('$: .visibleFrom() — engine.raycast недоступен (сборка без физики/запросов) — видимость не вычисляется, выборка пустая');
+            }
+            return carryAnchor(this, new Wrapper([]));
+        }
+        const point = targetPoint(target);
+        if (!point) {
+            if (!visible_no_target_warned) {
+                visible_no_target_warned = true;
+                ctx.log('$: .visibleFrom() — цель не найдена (селектор пуст или не похож на точку) — выборка пустая');
+            }
+            return carryAnchor(this, new Wrapper([]));
+        }
+        const target_node = targetNodeOf(target);
+        const base_ignore = [];
+        if (target_node && target_node.body >= 0) base_ignore.push(target_node.body);
+        const mask = opts && opts.mask ? (opts.mask >>> 0) : 0;
+        let max_d2 = Infinity;
+        if (opts && opts.maxDistance !== undefined) {
+            const m = Number(opts.maxDistance);
+            if (Number.isFinite(m)) {
+                if (!(m > 0)) return carryAnchor(this, new Wrapper([]));
+                max_d2 = m * m;
+            }
+        }
+
+        const out = [];
+        for (let i = 0; i < this.nodes.length; i++) {
+            const node = this.nodes[i];
+            if (!node || node.removed || node === target_node) continue;
+            const dx = node.x - point.x;
+            const dy = node.y - point.y;
+            if (dx * dx + dy * dy > max_d2) continue;
+            const ignore = base_ignore.slice();
+            if (node.body >= 0) ignore.push(node.body);
+            const hit = eng.raycast(point.x, point.y, node.x, node.y, ignore, mask);
+            if (!hit || hit.hit === false) out.push(node);
+        }
+        return carryAnchor(this, new Wrapper(out));
     }
 }
+
+// §63: .inside() раньше объявлялся через defGet() — присваивание делает метод
+// ENUMERABLE, и он попал в снимок публичного API (`$.fn.inside`). Теперь это
+// метод класса (non-enumerable, как .within()): без этой строки имя «пропало
+// бы» из снимка и api_freeze_test счёл бы это ломающим изменением. Новые
+// операторы (limit/nearest/visibleFrom) живут по правилу .within().
+Object.defineProperty(Wrapper.prototype, 'inside', {
+    value: Wrapper.prototype.inside,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+});
 
 let wrapper_proto_ready = false;
 

@@ -80,6 +80,10 @@ bool  sdk_is_dir(const char *path);
 // Каталог файла: «a/b/c.json» → «a/b». Без каталога — «.».
 void  sdk_dirname(const char *path, char *out, size_t cap);
 void  sdk_join(const char *a, const char *b, char *out, size_t cap);
+// Абсолютный путь (от cwd) для внешнего процесса: движок резолвит --game от
+// своего каталога, поэтому относительный путь пользователя надо сделать
+// абсолютным. Абсолютный путь возвращается без изменений.
+bool  sdk_abs_path(const char *path, char *out, size_t cap);
 bool  sdk_ends_with(const char *s, const char *suffix);
 // Простой glob: `*` — любая последовательность, `?` — любой символ.
 // Регистр не учитывается. Сопоставляется имя файла, а не весь путь.
@@ -232,6 +236,16 @@ bool sdk_assets_scan(const char *root, const SdkRegistry *reg, SdkAssets *out, S
 void sdk_assets_free(SdkAssets *a);
 
 // ---------------------------------------------------------------------------
+// Граф зависимостей ассетов (sdk_deps.c): манифест deps.json и служебный кэш
+// .r2d/cache/assets.json. Это не второй build system и не ассет-база: файлы
+// игры остаются обычными файлами, а runtime кэш не читает никогда.
+// ---------------------------------------------------------------------------
+// FNV-1a 64 содержимого (тот же алгоритм, что в src/payload.c и src/audio.c).
+uint64_t sdk_deps_hash64(const void *data, size_t size);
+// Путь в манифесте обязан быть относительным, без «.», «..», «//», «\» и диска.
+bool sdk_deps_path_ok(const char *rel);
+
+// ---------------------------------------------------------------------------
 // Процессы (SDL_Process: массив аргументов, без shell)
 // ---------------------------------------------------------------------------
 typedef struct SdkProcResult {
@@ -336,6 +350,7 @@ int sdk_cmd_templates(const SdkArgs *a);
 int sdk_cmd_new(const SdkArgs *a);
 int sdk_cmd_engines(const SdkArgs *a);
 
+int sdk_cmd_deps(const SdkArgs *a);
 int sdk_cmd_batch(const SdkArgs *a);
 int sdk_cmd_story(const SdkArgs *a);
 int sdk_cmd_dialog(const SdkArgs *a);
@@ -350,8 +365,14 @@ int sdk_cmd_api(const SdkArgs *a);
 int sdk_cmd_lint(const SdkArgs *a);
 int sdk_cmd_doctor(const SdkArgs *a);
 int sdk_lint_run(const char *schema_path,const char *target,SdkReport *rep,int *files);
+// Находит api.schema.json для validate/lint/doctor: явный --schema (без
+// молчаливой подмены), затем каталог проекта, cwd, каталог r2d-sdk и два
+// уровня выше него. Так установленный пакет проверяет проект из любого cwd.
+bool sdk_schema_resolve(const char *explicit_path, const char *preferred_dir,
+                        char *out, size_t cap);
 int cmd_docs_generate(const SdkArgs *a);
-void sdk_project_validate(const char *dir,SdkReport *rep);
+// project_validate берёт schema_path из --schema (NULL — искать самим).
+void sdk_project_validate(const char *dir,const char *schema_path,SdkReport *rep);
 int sdk_cmd_run(const SdkArgs *a);
 int sdk_cmd_build(const SdkArgs *a);
 

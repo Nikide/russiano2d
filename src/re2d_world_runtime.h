@@ -84,6 +84,8 @@ typedef struct R2DWorldAtlasActor {
     char *node_id;          // authored $ node id (diagnostics)
     bool last_visible;      // previous-frame visibility (visible-demand input)
     bool warned;            // visible-not-resident already reported this episode
+    int  visible_since;     // stream_frame when the atlas became visible (0 = no)
+
     bool pinned;            // explicit world.atlasPin() request
 } R2DWorldAtlasActor;
 // Frame entry kinds. RotSprite entries use native synthesis; atlas entries reuse
@@ -244,6 +246,7 @@ typedef struct R2DWorldRuntime {
     int stream_warning_head;       // next overwrite slot
     uint64_t stream_warning_seq;
     uint64_t stream_frame;         // monotonic residency frame counter
+    uint32_t atlas_warn_grace;     // frames a visible atlas may stay loading before R2D_ATLAS_NOT_RESIDENT
     int visible_atlas_blocked;     // visible atlas actors not resident this frame
     int ground_shadows_suppressed; // grounding cards skipped for blocked atlases
     // Task-15: true per-region payload residency (index packets moved by

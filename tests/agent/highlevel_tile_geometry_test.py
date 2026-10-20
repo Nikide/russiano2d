@@ -9,8 +9,9 @@
 #   * клетка x=-1 и нижняя рамка создаются внутри буфера;
 #   * visual/collision/occlusion адресуют одну клетку, повторная сборка не
 #     меняет её положение;
-#   * превышение лимита тел даёт failed result, а не молчаливую неполную
-#     коллизию (§3.1 п.12, §23).
+#   * политика 'fail' отвергает план сверх текущей ёмкости тел до создания,
+#     а 'partial' не отказывает: реестр тел растёт и создаёт весь план
+#     (§3.1 п.12, §23 — реестр тел динамический).
 #
 # Запуск (после сборки движка):
 #   python3 tests/agent/highlevel_tile_geometry_test.py
@@ -206,9 +207,14 @@ def main():
         partial_bodies = a.eval("engine.bodyCount()") - base
         print("  --   та же карта, limitPolicy partial: создано %s, тел %d"
               % (over2.get("created"), partial_bodies))
-        check(over2["ok"] is False and over2["error"] == "body-limit",
-              "partial тоже сообщает failed result (неполная коллизия)")
-        check(partial_bodies > 0, "partial оставляет то, что успело создаться")
+        check(over2["ok"] is True and over2["error"] is None,
+              "partial завершается ok: реестр тел растёт, а не отказывает")
+        check(over2["created"] == over2["planned"],
+              "partial создаёт весь план (created == planned: %s == %s)"
+              % (over2.get("created"), over2.get("planned")))
+        check(partial_bodies == over2["planned"],
+              "и все тела в мире (тел %d, план %s)"
+              % (partial_bodies, over2.get("planned")))
         a.eval("$('#over').remove(); 'ok'")
         a.step(2)
         check(a.eval("engine.bodyCount()") == base, "карта снята без утечки тел")

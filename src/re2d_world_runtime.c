@@ -418,6 +418,7 @@ bool r2d_world_regions_ensure(R2DWorldRuntime *w)
     // be re-assigned so they cannot collide with ids from the previous cache.
     if(w->atlas_count>0)w->atlas_registry_revision++;
     for(int a=0;a<w->atlas_count;a++)w->atlas_actors[a].stream_id=w->next_atlas_stream_id++;
+    w->atlas_warn_grace=30;
     w->stream_ready=r2d_world_stream_init(&w->stream,stream_capacity);
     if(w->stream_ready){
         if(w->stream_budget.resident_budget_bytes==0)w->stream_budget.resident_budget_bytes=8u*1024u*1024u;
@@ -763,6 +764,14 @@ static void runtime_stream_warning_push(R2DWorldRuntime *w,
     w->stream_warning_head=(w->stream_warning_head+1)%R2D_WORLD_STREAM_WARNING_LIMIT;
     if(w->stream_warning_count<R2D_WORLD_STREAM_WARNING_LIMIT)w->stream_warning_count++;
 }
+
+// Видимый атлас грузится асинхронно: первые кадры после появления в кадре
+// state=UNLOADED/PRELOAD — это НОРМА, а не потерянный спрайт. Диагностика
+// поднимается, только если атлас остаётся видимым и нерезидентным дольше
+// R2D_ATLAS_WARN_GRACE upload-тактов; иначе демо/тесты получали ложный
+// R2D_ATLAS_NOT_RESIDENT на первом же кадре и не могли отличить баг от
+// честной асинхронной загрузки.
+#define R2D_ATLAS_WARN_GRACE 30
 
 // One warning per visible-not-resident episode: `warned` is cleared as soon as
 // the atlas becomes RESIDENT/EVICTABLE again. Never spams per frame.
@@ -1190,11 +1199,15 @@ static bool atlas_collect(JSContext *ctx,R2DWorldRuntime *w,const R2DRe2dView *v
         bool visible=span>=0&&w->visibility.span_seen[span]&&r2d_world_sprite_visible(view,width,height,wx,py_,bottom,wsq,hsq,ortho);
         if(visible&&lod.hidden){visible=false;w->lod_hidden_atlas++;}
         actor->last_visible=visible;
-        if(visible&&w->stream_ready){
+        if(!visible){
+            actor->visible_since=0;
+        }else if(w->stream_ready){
+            if(!actor->visible_since) actor->visible_since=(int)w->stream_frame+1;
             const R2DStreamState state=atlas_stream_state(w,actor->stream_id);
             if(state==R2D_STREAM_UNLOADED||state==R2D_STREAM_PRELOAD){
                 w->visible_atlas_blocked++;
-                runtime_atlas_warn(w,a,state);
+                if((int)w->stream_frame>=actor->visible_since+(int)w->atlas_warn_grace)
+                    runtime_atlas_warn(w,a,state);
             }else actor->warned=false;
         }
         if(visible) {

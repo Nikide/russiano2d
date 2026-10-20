@@ -419,6 +419,7 @@ $.cutscene.tick
 $.debug
 $.debug._render
 $.debug.anatomy
+$.debug.budget
 $.debug.classify
 $.debug.clearErrors
 $.debug.contacts
@@ -440,6 +441,8 @@ $.debug.queryStats
 $.debug.render
 $.debug.report
 $.debug.reportError
+$.debug.resources
+$.debug.resourcesResetPeaks
 $.debug.stats
 $.debug.textures
 $.debug.toggle
@@ -463,8 +466,10 @@ $.devtools.consoleLog
 $.devtools.consoleRun
 $.devtools.copyJs
 $.devtools.copyNodeId
+$.devtools.copyOverride
 $.devtools.copyReport
 $.devtools.copySelector
+$.devtools.editFields
 $.devtools.events
 $.devtools.eventsClear
 $.devtools.eventsFilter
@@ -485,6 +490,7 @@ $.devtools.memoryBaseline
 $.devtools.narrative
 $.devtools.open
 $.devtools.openRuntime
+$.devtools.overrideText
 $.devtools.panel
 $.devtools.pause
 $.devtools.perf
@@ -499,6 +505,7 @@ $.devtools.refresh
 $.devtools.refreshRuntime
 $.devtools.render
 $.devtools.report
+$.devtools.resources
 $.devtools.runtimeOpen
 $.devtools.runtimePanel
 $.devtools.search
@@ -508,6 +515,8 @@ $.devtools.sectionName
 $.devtools.select
 $.devtools.selectBy
 $.devtools.selector
+$.devtools.set
+$.devtools.setMany
 $.devtools.step
 $.devtools.steps
 $.devtools.tab
@@ -520,6 +529,7 @@ $.devtools.timeScale
 $.devtools.timeStep
 $.devtools.toggle
 $.devtools.tree
+$.devtools.undo
 $.devtools.vfx
 $.devtools.vfxExport
 $.devtools.vfxPlay
@@ -529,6 +539,8 @@ $.devtools.vfxStop
 $.devtools.watchReset
 $.devtools.watchThreshold
 $.devtools.watches
+$.diag
+$.diag.bundle
 $.dialog
 $.dialog.action
 $.dialog.auto
@@ -638,6 +650,7 @@ $.fn.angle
 $.fn.angleTo
 $.fn.angularVelocity
 $.fn.animate
+$.fn.animations
 $.fn.append
 $.fn.appendTo
 $.fn.applyForce
@@ -925,6 +938,7 @@ $.fn.text
 $.fn.textStyle
 $.fn.theme
 $.fn.tileAnimation
+$.fn.tileAnimations
 $.fn.tileAt
 $.fn.tileLayer
 $.fn.tileOccluders
@@ -1009,6 +1023,7 @@ $.font.atlas
 $.font.default
 $.font.defaults
 $.font.define
+$.font.faces
 $.font.families
 $.font.get
 $.font.has
@@ -1028,6 +1043,7 @@ $.fs.readJSON
 $.fs.readText
 $.fs.remove
 $.fs.write
+$.fs.writeAtomic
 $.fs.writeJSON
 $.fx
 $.fx.attractor
@@ -1316,9 +1332,12 @@ $.layers.toggle
 $.loading
 $.loading.cancel
 $.loading.hide
+$.loading.job
 $.loading.label
 $.loading.progress
+$.loading.rml
 $.loading.run
+$.loading.scene
 $.loading.show
 $.loading.title
 $.loading.value
@@ -1710,7 +1729,9 @@ $.replay
 $.replay._push
 $.replay.actions
 $.replay.at
+$.replay.checkpoint
 $.replay.checkpointAt
+$.replay.checkpointNamed
 $.replay.checkpoints
 $.replay.checkpointsList
 $.replay.clear
@@ -1725,6 +1746,7 @@ $.replay.isRecording
 $.replay.length
 $.replay.load
 $.replay.mode
+$.replay.namedCheckpoints
 $.replay.play
 $.replay.position
 $.replay.record
@@ -1737,6 +1759,7 @@ $.replay.tick
 $.replay.toText
 $.replay.unknownActions
 $.replay.verify
+$.replay.verifyCheckpoint
 $.replay.verifyState
 $.resource
 $.resource.cancelAll
@@ -1829,6 +1852,7 @@ $.save.restore
 $.save.room
 $.save.run
 $.save.save
+$.save.schema
 $.save.set
 $.save.setNodeState
 $.save.slot
@@ -1860,6 +1884,7 @@ $.scene.current
 $.scene.discard
 $.scene.has
 $.scene.inScope
+$.scene.job
 $.scene.load
 $.scene.loadAsync
 $.scene.loading
@@ -2012,11 +2037,16 @@ $.store.file
 $.store.get
 $.store.has
 $.store.keys
+$.store.lastFailure
 $.store.load
+$.store.loadResult
 $.store.remove
 $.store.save
+$.store.saveResult
+$.store.schema
 $.store.set
 $.store.setAll
+$.store.stats
 $.store.stopAutoSave
 $.story
 $.story.actor
@@ -2179,14 +2209,18 @@ $.timeline.state
 $.timeline.stop
 $.tr
 $.trace
+$.trace.categories
 $.trace.clear
 $.trace.dropped
+$.trace.export
+$.trace.filter
 $.trace.hit
 $.trace.hits
 $.trace.limit = 256
 $.trace.list
 $.trace.note
 $.trace.on
+$.trace.read
 $.triggers
 $.triggers.clear
 $.triggers.count
@@ -2867,6 +2901,7 @@ $.навигация.useMesh
 $.отладка
 $.отладка._render
 $.отладка.anatomy
+$.отладка.budget
 $.отладка.classify
 $.отладка.clearErrors
 $.отладка.contacts
@@ -2888,6 +2923,8 @@ $.отладка.queryStats
 $.отладка.render
 $.отладка.report
 $.отладка.reportError
+$.отладка.resources
+$.отладка.resourcesResetPeaks
 $.отладка.stats
 $.отладка.textures
 $.отладка.toggle
@@ -2971,11 +3008,16 @@ $.сохранение.file
 $.сохранение.get
 $.сохранение.has
 $.сохранение.keys
+$.сохранение.lastFailure
 $.сохранение.load
+$.сохранение.loadResult
 $.сохранение.remove
 $.сохранение.save
+$.сохранение.saveResult
+$.сохранение.schema
 $.сохранение.set
 $.сохранение.setAll
+$.сохранение.stats
 $.сохранение.stopAutoSave
 $.сцена
 $.сцена._state
@@ -2996,6 +3038,7 @@ $.сцена.current
 $.сцена.discard
 $.сцена.has
 $.сцена.inScope
+$.сцена.job
 $.сцена.load
 $.сцена.loadAsync
 $.сцена.loading

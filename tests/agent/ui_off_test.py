@@ -18,7 +18,8 @@
 #   * снятие убирает и слушателя RmlUi: освобождённый слот достаётся новому
 #     обработчику, но клик по старому элементу его НЕ вызывает;
 #   * 300 циклов подписка→снятие → 0 ошибок; до правки падало на 256-й;
-#   * переполнение — громкая R2D_UI_LISTENER_LIMIT с числами;
+#   * пул РАСТЁТ: 256 на старте, 257-я подписка расширяет до 512
+#     (R2D_UI_LISTENER_LIMIT — только если пул не вырос: нехватка памяти);
 #   * ui_callbacks/ui_callbacks_max в $.debug.limits() честные.
 #
 # Запуск: python3 tests/agent/ui_off_test.py
@@ -163,7 +164,7 @@ def main():
               "пул вернулся к базовому числу после 300 снятий (%r → %r)"
               % (baseline, after_cycles.get("ui_callbacks")))
 
-        # --- 8. 256 живых, 257-я — громкая структурная ошибка -----------------
+        # --- 8. Пул растёт: 256 на старте, 257-я подписка — до 512 -----------
         live = js(a, "(function(){globalThis.__live=[]; globalThis.__liveIds=[];"
                      "globalThis.__liveHits=0; let thrown=null;"
                      "try{for(let i=0;i<256;i++){const fn=()=>{__liveHits++;};"
@@ -171,35 +172,44 @@ def main():
                      "if(!(id>=0))break; __liveIds.push(id);}}"
                      "catch(e){thrown=String(e&&e.message?e.message:e);}"
                      "return {ids: __liveIds.length, thrown};})()" % doc)
-        check(isinstance(live, dict) and live.get("ids") == 256,
+        check(isinstance(live, dict) and live.get("ids") == 256
+              and live.get("thrown") is None,
               "256 одновременных подписок влезают (%r)" % (live,))
         limits = js(a, "$.debug.limits()")
         check(isinstance(limits, dict)
               and limits.get("ui_callbacks") == 256
               and limits.get("ui_callbacks_max") == 256,
-              "limits: ui_callbacks=256, ui_callbacks_max=256 (%r)"
-              % (limits.get("ui_callbacks") if isinstance(limits, dict) else limits,))
-        overflow = js(a, "(function(){try{const fn=()=>{};"
-                         "%s.on('btn-a','click',fn); return 'НЕТ ОШИБКИ';}"
-                         "catch(e){return String(e&&e.message?e.message:e);}})()" % DOC)
-        check(isinstance(overflow, str) and "R2D_UI_LISTENER_LIMIT" in overflow,
-              "257-я подписка — R2D_UI_LISTENER_LIMIT, а не тихий выброс (%r)"
-              % (overflow[:160],))
-        check(isinstance(overflow, str) and "256" in overflow and "из" in overflow,
-              "в ошибке переполнения есть числа (256 из 256)")
+              "стартовая ёмкость: ui_callbacks=256, ui_callbacks_max=256 (%r)"
+              % (limits,))
+        grown = js(a, "(function(){try{globalThis.__grow=()=>{};"
+                      "const id=engine.ui.on(%d,'btn-a','click',__grow);"
+                      "return {id, thrown:null};}"
+                      "catch(e){return {id:-1, thrown:String(e&&e.message?e.message:e)};}})()"
+                      % doc)
+        check(isinstance(grown, dict) and grown.get("thrown") is None
+              and isinstance(grown.get("id"), int) and grown["id"] >= 0,
+              "257-я подписка не отказывает: пул растёт (%r)" % (grown,))
+        limits = js(a, "$.debug.limits()")
+        check(isinstance(limits, dict)
+              and limits.get("ui_callbacks") == 257
+              and limits.get("ui_callbacks_max") == 512,
+              "после 257-й: ui_callbacks=257, ui_callbacks_max=512 (%r)" % (limits,))
         dropped = js(a, "(function(){let n=0; for(const fn of __live){"
-                        "n += engine.ui.off(%d,'btn-a','click',fn);} __live=[]; return n;})()" % doc)
-        check(dropped == 256, "256 снятий вернули 256 (%r)" % (dropped,))
+                        "n += engine.ui.off(%d,'btn-a','click',fn);}"
+                        "n += engine.ui.off(%d,'btn-a','click',__grow);"
+                        "__live=[]; return n;})()" % (doc, doc))
+        check(dropped == 257, "257 снятий вернули 257 (%r)" % (dropped,))
         limits = js(a, "$.debug.limits()")
         check(isinstance(limits, dict) and limits.get("ui_callbacks") == 0,
-              "после снятия всех пул снова пуст (%r)"
-              % (limits.get("ui_callbacks") if isinstance(limits, dict) else limits,))
+              "после снятия всех пул снова пуст (%r)" % (limits,))
+        check(isinstance(limits, dict) and limits.get("ui_callbacks_max") == 512,
+              "ёмкость пула не уменьшается при снятии (ui_callbacks_max=512)")
         refill = js(a, "globalThis.__again=()=>{};"
                        "globalThis.__againId=engine.ui.on(%d,'btn-a','click',__again);"
                        "%s.on('btn-a','click',__again);"
                        "[__againId, %s.listeners().length]" % (doc, DOC, DOC))
         check(isinstance(refill, list) and isinstance(refill[0], int) and refill[0] >= 0,
-              "после 256 снятий подписка снова влезает (%r)" % (refill,))
+              "после 257 снятий подписка снова влезает (%r)" % (refill,))
         js(a, "%s.off('btn-a','click',__again)" % DOC)
 
         # --- 9. Одно предупреждение на повторную подписку ---------------------

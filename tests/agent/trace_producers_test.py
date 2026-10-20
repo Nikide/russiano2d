@@ -14,6 +14,7 @@
 #   python3 tests/agent/trace_producers_test.py
 # ===========================================================================
 
+import json
 import os
 import sys
 
@@ -93,6 +94,61 @@ def main():
         # даже когда записи вытесняются переполнением.
         check(listed + dropped == 400,
               "в кольце + вытеснено = всем записанным (%d + %d)" % (listed, dropped))
+
+        # --- 6. Чтение журнала: категории, filter/read, export ---------------
+        # В кольце сейчас только note('test') — вид игры попадает в 'other'.
+        snapshot = a.eval("$.trace.list()")
+        listed_kinds = [e["kind"] for e in snapshot]
+        check(a.eval("$.trace.filter({kind: 'test'}).length") == len(listed_kinds),
+              "filter по точному виду возвращает весь журнал test")
+        check(a.eval("$.trace.categories()") == ["other"],
+              "categories(): присутствующие категории по алфавиту (%s)"
+              % (a.eval("$.trace.categories()"),))
+        check(a.eval("$.trace.filter({category: 'other'}).length") == len(listed_kinds),
+              "filter по category=other видит записи игры")
+        check(a.eval("$.trace.filter({category: 'combat'}).length") == 0,
+              "filter по отсутствующей категории пуст")
+
+        tail = a.eval("$.trace.filter({limit: 3})")
+        check(len(tail) == 3, "limit — последние 3 записи (%d)" % len(tail))
+        check(tail[-1]["n"] == snapshot[-1]["n"],
+              "limit сохраняет порядок старый→новый (последняя запись — самая свежая)")
+        last_n = snapshot[-1]["n"]
+        check(a.eval("$.trace.filter({since: %d}).length" % last_n) == 0,
+              "since=last n не отдаёт уже прочитанное")
+        check(a.eval("$.trace.filter({since: %d}).length" % (last_n - 3)) == 3,
+              "since отдаёт только записи после курсора")
+
+        first_frame = snapshot[0]["frame"]
+        framed = a.eval("$.trace.filter({from: %d, to: %d})" % (first_frame, first_frame))
+        check(all(e["frame"] == first_frame for e in framed),
+              "from/to — кадры включительно (%d записей кадра %d)" % (len(framed), first_frame))
+
+        a.eval("$.trace.note('probe', $('<rect>', {id: 'trace_probe'}).get(0), {action: 'x'}); 'ok'")
+        selected = a.eval("$.trace.filter({selector: '#trace_probe'})")
+        check(len(selected) == 1 and selected[0]["kind"] == "probe",
+              "selector резолвится через query(sel) → nid: %s" % (len(selected),))
+
+        exported = a.eval("$.trace.export()")
+        rows = json.loads(exported)
+        check(isinstance(rows, list) and len(rows) == len(a.eval("$.trace.list()")),
+              "export json — массив всех отфильтрованных записей (%d)" % len(rows))
+        check(set(rows[0].keys()) == {"kind", "frame", "source", "target", "data"},
+              "export json: ровно kind/frame/source/target/data")
+        text_lines = a.eval("$.trace.export({format: 'text'})").split("\n")
+        check(len(text_lines) == len(rows) and all(line.startswith("frame ") for line in text_lines),
+              "export text — по строке 'frame …' на запись (%d)" % len(text_lines))
+
+        check(a.eval("$.trace.read({limit: 5}).length") == 5,
+              "read — то же чтение, что filter (limit 5)")
+        check(a.eval("$.trace.filter({category: 'nope'}).length") == 0,
+              "неизвестная категория — пусто, без исключения")
+
+        a.eval("$.trace.clear(); 'ok'")
+        check(a.eval("$.trace.filter({}).length") == 0, "clear(): filter пуст")
+        check(a.eval("$.trace.read({}).length") == 0, "clear(): read пуст")
+        check(a.eval("$.trace.categories()") == [], "clear(): categories пуст")
+        check(a.eval("$.trace.export()") == "[]", "clear(): export json — []")
 
     print()
     if FAILURES:

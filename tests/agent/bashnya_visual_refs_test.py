@@ -64,7 +64,14 @@ def main():
     if not os.path.isdir(BASHNYA):
         check(False, "BASHNYA directory missing: %s" % BASHNYA)
         return 1
-    binary = os.path.join(BASHNYA, "runtime", "russiano2d")
+    # По умолчанию — ТЕКУЩИЙ движок репозитория: визуальная регрессия должна
+    # ловить изменения нашего runtime, а не старого бандла BASHNYA (он мог
+    # содержать уже исправленные диагностические шумы). Явный override —
+    # R2D_BASHNYA_RUNTIME.
+    binary = os.environ.get("R2D_BASHNYA_RUNTIME",
+                            os.path.join(ROOT, "build", "russiano2d"))
+    if not os.path.isfile(binary):
+        binary = os.path.join(BASHNYA, "runtime", "russiano2d")
     check(os.path.isfile(binary), "BASHNYA bundled runtime exists")
     if not os.path.isfile(binary):
         return 1

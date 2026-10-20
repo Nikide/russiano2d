@@ -43,6 +43,41 @@ void r2d_gui_update(R2DGui *g, int width, int height);
 void r2d_gui_render(R2DGui *g, SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *swapchain,
                      uint32_t width, uint32_t height);
 
+// --- Шрифтовые лица ---------------------------------------------------------
+// Регистрирует файл шрифта как именованное семейство с начертанием (RmlUi
+// style/weight). Это лицо потом резолвит RCSS font-family/font-weight/
+// font-style; кастомный текстовый рендерер (src/font.c) остаётся одноатласным
+// и bold/italic не подделывает. weight — 1..1000 (400 normal, 700 bold),
+// italic — Rml::Style::FontStyle::Italic. Возвращает false без GUI/контекста,
+// при пустых path/family или если RmlUi не принял лицо.
+//
+// Без RmlUi те же имена дают честный «нет» (gui_stub.c): engine.ui.* обязан
+// существовать и возвращать неудачу, а не ломать линковку.
+#ifdef R2D_ENABLE_RMLUI
+bool r2d_gui_load_font_face(R2DGui *g, const char *path, const char *family,
+                            int weight, bool italic);
+// Метаданные явно зарегистрированных лиц (для $.font.faces()).
+int  r2d_gui_font_face_count(const R2DGui *g);
+bool r2d_gui_font_face_info(const R2DGui *g, int index, char *family, size_t family_cap,
+                            char *path, size_t path_cap, int *weight, bool *italic);
+#else
+static inline bool r2d_gui_load_font_face(R2DGui *g, const char *path,
+                                          const char *family, int weight, bool italic)
+{
+    (void)g; (void)path; (void)family; (void)weight; (void)italic;
+    return false;
+}
+static inline int r2d_gui_font_face_count(const R2DGui *g) { (void)g; return 0; }
+static inline bool r2d_gui_font_face_info(const R2DGui *g, int index, char *family,
+                                          size_t family_cap, char *path, size_t path_cap,
+                                          int *weight, bool *italic)
+{
+    (void)g; (void)index; (void)family; (void)family_cap; (void)path; (void)path_cap;
+    (void)weight; (void)italic;
+    return false;
+}
+#endif
+
 // --- Документы --------------------------------------------------------------
 // Возвращает id документа (>= 0) или -1 при ошибке.
 int  r2d_gui_load_document(R2DGui *g, const char *path);

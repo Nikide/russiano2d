@@ -2606,9 +2606,10 @@ static JSValue world_stream_config(JSContext *ctx,JSValueConst self,int argc,JSV
     int32_t upload_items=current->upload_budget_items==INT32_MAX?0:current->upload_budget_items;
     int32_t promote_items=current->promote_budget_items==INT32_MAX?0:current->promote_budget_items;
     int pin_limit=-2; // -2 = unchanged, -1 invalid sentinel
+    int32_t warn_grace=-1; // -1 = unchanged
     struct {const char *name;} keys[]={{"residentBytes"},{"residentItems"},
-        {"uploadBytes"},{"uploadItems"},{"promoteItems"},{"pinLimit"}};
-    for(int i=0;i<6;i++){
+        {"uploadBytes"},{"uploadItems"},{"promoteItems"},{"warnGrace"},{"pinLimit"}};
+    for(int i=0;i<7;i++){
         JSValue value=JS_GetPropertyStr(ctx,argv[0],keys[i].name);
         if(JS_IsException(value))return JS_EXCEPTION;
         if(JS_IsUndefined(value)){JS_FreeValue(ctx,value);continue;}
@@ -2622,11 +2623,13 @@ static JSValue world_stream_config(JSContext *ctx,JSValueConst self,int argc,JSV
         else if(i==2)upload_bytes=number;
         else if(i==3){if(number!=floor(number)||number>INT32_MAX)return JS_ThrowRangeError(ctx,"Re2D World: streamConfig uploadItems integer 0..INT32_MAX");upload_items=(int32_t)number;}
         else if(i==4){if(number!=floor(number)||number>INT32_MAX)return JS_ThrowRangeError(ctx,"Re2D World: streamConfig promoteItems integer 0..INT32_MAX");promote_items=(int32_t)number;}
+        else if(i==5){if(number!=floor(number)||number>100000)return JS_ThrowRangeError(ctx,"Re2D World: streamConfig warnGrace integer 0..100000");warn_grace=(int32_t)number;}
         else{if(number!=floor(number)||number>R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT)return JS_ThrowRangeError(ctx,"Re2D World: streamConfig pinLimit integer 0..%d",R2D_WORLD_STREAM_PIN_PATH_MAX_LIMIT);pin_limit=(int)number;}
     }
     if(!r2d_world_stream_config(w,(uint64_t)resident_bytes,resident_items,
                                 (uint64_t)upload_bytes,upload_items,promote_items))
         return JS_ThrowRangeError(ctx,"Re2D World: invalid stream configuration");
+    if(warn_grace>=0) w->atlas_warn_grace=(uint32_t)warn_grace;
     if(pin_limit!=-2&&!r2d_world_stream_set_pin_limit(w,pin_limit))
         return JS_ThrowRangeError(ctx,
             "Re2D World: pinLimit %d is invalid or lower than %d pending path pins",

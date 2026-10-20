@@ -216,7 +216,7 @@ text
 
 .overlaps('#enemy')             → bool
 .overlaps('#enemy', cb)         подписка
-.inside('#zone')
+.inside('#zone')                → выборка (центры внутри); bool — .overlaps()
 
 Здоровье / урон
 text

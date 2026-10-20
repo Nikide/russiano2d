@@ -144,9 +144,12 @@ def main(argv: list[str]) -> int:
         written.append({"file": lines[index]['file'], "node": lines[index]['node'],
                         "seconds": round(end - start, 2)})
 
+    # Только реальные сегменты: исходный файл сюда НЕ пишем. Поле "audio"
+    # ссылалось на исходник (MiniMax…wav), которого нет в поставке, и
+    # r2d-sdk validate/doctor справедливо давали R2D100. Источник — аргумент
+    # команды, а не ассет игры; рантайм это поле не читает.
     with open(os.path.join(args.out, "segments.json"), "w", encoding="utf-8") as handle:
-        json.dump({"audio": os.path.basename(args.audio), "lines": written},
-                  handle, ensure_ascii=False, indent=2)
+        json.dump({"lines": written}, handle, ensure_ascii=False, indent=2)
     print(f"\nзаписано файлов: {len(written)} в {args.out}")
     print("проверка: ./build/russiano2d --game demos --scene russi_vn")
     return 0

@@ -41,6 +41,7 @@ set(R2D_SOURCES
     async.h    async.c
     nodes.h    nodes.c
     json.h     json.c
+    fs_util.h  fs_util.c
     text.h     text.c
     font.h     font.c
     agent.h    agent.c

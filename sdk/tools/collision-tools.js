@@ -6,7 +6,8 @@
 // Это не физика: Box2D остаётся физикой R2D. Режим «Физика» создаёт из файла
 // настоящие узлы `<wall>/<trigger>/<area>` тем же `applyShape`, что вызовет игра,
 // и роняет на них шар — тела и столкновения считает движок.
-// Мышь: ЛКМ — выбрать и двигать (шаг сетки), вершины полигона тянутся, СКМ —
+// Мышь: ЛКМ — выбрать и двигать (шаг сетки), вершины полигона и ручки углов
+// box / правый край circle тянутся (w, h, radius — те же поля формата), СКМ —
 // панорама, колесо — масштаб.
 // ===========================================================================
 
@@ -29,6 +30,51 @@ function view(h) {
 const toScreen = (h, x, y) => { const v = view(h); return { x: v.cx + (x - v.x) * v.zoom, y: v.cy + (y - v.y) * v.zoom }; };
 const toWorld = (h, sx, sy) => { const v = view(h); return { x: v.x + (sx - v.cx) / v.zoom, y: v.y + (sy - v.cy) / v.zoom }; };
 const snap = (h, v) => (h.ext.snap > 0 ? Math.round(v / h.ext.snap) * h.ext.snap : v);
+
+// --- Ручки ресайза: те же поля w/h/radius, что и в числовой форме -----------------
+/** Ручки выбранной фигуры в мировых координатах: 4 угла box, правый край circle. */
+export function shapeHandles(s) {
+    if (!s) return [];
+    const kind = s.shape || 'box';
+    if (kind === 'box') {
+        return [
+            { handle: 'nw', x: s.x - s.w / 2, y: s.y - s.h / 2 },
+            { handle: 'ne', x: s.x + s.w / 2, y: s.y - s.h / 2 },
+            { handle: 'sw', x: s.x - s.w / 2, y: s.y + s.h / 2 },
+            { handle: 'se', x: s.x + s.w / 2, y: s.y + s.h / 2 },
+        ];
+    }
+    if (kind === 'circle') return [{ handle: 'r', x: s.x + s.radius, y: s.y }];
+    return [];
+}
+
+/** Ручка под точкой мира (допуск в мировых единицах) или null. */
+export function handleHit(s, x, y, tol) {
+    // Центр круга — всегда перемещение: при мелком масштабе допуск ручки не должен
+    // «съедать» клик по телу фигуры.
+    if (s && (s.shape || 'box') === 'circle' && Math.hypot(x - s.x, y - s.y) <= Math.abs(s.radius) / 2) return null;
+    for (const q of shapeHandles(s)) if (Math.hypot(q.x - x, q.y - y) <= tol) return q.handle;
+    return null;
+}
+
+/**
+ * Патч геометрии от перетаскивания ручки: противоположный угол/центр остаются на месте.
+ * w/h/radius — те же поля формата; шаг сетки тот же, что у перемещения.
+ */
+export function resizePatch(s, handle, x, y, step) {
+    const kind = s.shape || 'box';
+    const snapV = (v) => (step > 0 ? Math.round(v / step) * step : v);
+    if (kind === 'circle' && handle === 'r') {
+        return { radius: Math.max(1, snapV(Math.hypot(x - s.x, y - s.y))) };
+    }
+    if (kind !== 'box' || ['nw', 'ne', 'sw', 'se'].indexOf(handle) < 0) return null;
+    const north = handle[0] === 'n', east = handle[1] === 'e';
+    const fx = east ? s.x - s.w / 2 : s.x + s.w / 2;
+    const fy = north ? s.y + s.h / 2 : s.y - s.h / 2;
+    const w = Math.max(2, snapV(Math.abs(x - fx)));
+    const hh = Math.max(2, snapV(Math.abs(y - fy)));
+    return { x: east ? fx + w / 2 : fx - w / 2, y: north ? fy - hh / 2 : fy + hh / 2, w, h: hh };
+}
 
 function pointsText(s) { return (s.points || []).reduce((a, v, i) => a + (i % 2 ? ',' + v + ' ' : v), '').trim(); }
 
@@ -141,16 +187,18 @@ function frame(h) {
 
     const w = toWorld(h, p.x, p.y);
     if (p.pressed) {
-        // Вершина выбранного полигона важнее тела фигуры.
+        // Вершина полигона и ручки ресайза важнее тела фигуры.
         const s = cur(h);
-        let vi = -1;
+        let vi = -1, hi = null;
         if (s && (s.shape === 'polygon')) {
             for (let i = 0; i < s.points.length; i += 2) {
                 const q = toScreen(h, s.x + s.points[i], s.y + s.points[i + 1]);
                 if (Math.hypot(q.x - p.x, q.y - p.y) <= 9) { vi = i / 2; break; }
             }
         }
+        if (s && vi < 0) hi = handleHit(s, w.x, w.y, 10 / v.zoom);
         if (vi >= 0) e.drag = { mode: 'vertex', vi, start: JSON.parse(JSON.stringify(s)) };
+        else if (hi) e.drag = { mode: 'resize', handle: hi, start: JSON.parse(JSON.stringify(s)) };
         else {
             let hit = -1;
             for (let i = h.model.shapes.length - 1; i >= 0; i--) if (K.hit(h.model.shapes[i], w.x, w.y)) { hit = i; break; }
@@ -171,6 +219,12 @@ function frame(h) {
                 s.points[e.drag.vi * 2] = snap(h, w.x - s.x);
                 s.points[e.drag.vi * 2 + 1] = snap(h, w.y - s.y);
                 e.drag.moved = true;
+            } else if (e.drag.mode === 'resize') {
+                const patch = resizePatch(s, e.drag.handle, w.x, w.y, h.ext.snap);
+                if (patch) {
+                    for (const k of Object.keys(patch)) s[k] = patch[k];
+                    e.drag.moved = true;
+                }
             }
         }
     }
@@ -181,7 +235,7 @@ function frame(h) {
             const s = cur(h);
             const end = JSON.parse(JSON.stringify(s));
             Object.keys(s).forEach((k) => delete s[k]); Object.assign(s, d.start);
-            h.run(d.mode === 'move' ? 'перемещение' : 'вершина', (m) => { Object.keys(m.shapes[h.sel]).forEach((k) => delete m.shapes[h.sel][k]); Object.assign(m.shapes[h.sel], end); });
+            h.run(d.mode === 'move' ? 'перемещение' : d.mode === 'resize' ? 'размер' : 'вершина', (m) => { Object.keys(m.shapes[h.sel]).forEach((k) => delete m.shapes[h.sel][k]); Object.assign(m.shapes[h.sel], end); });
         }
     }
     e.hover = -1;
@@ -228,6 +282,11 @@ function drawShapes(h) {
             for (let k = 0; k < s.points.length; k += 2) { const q = toScreen(h, s.x + s.points[k], s.y + s.points[k + 1]); pts.push([q.x, q.y]); }
             outline(h, pts, color, width);
             if (sel) for (const q of pts) $.gfx.draw.rect(q[0] - 4, q[1] - 4, 8, 8, '#ff5a3c');
+        }
+        if (sel) for (const q of shapeHandles(s)) {
+            const c = toScreen(h, q.x, q.y);
+            $.gfx.draw.rect(c.x - 3, c.y - 3, 7, 7, '#ffffff');
+            $.gfx.draw.rect(c.x - 2, c.y - 2, 5, 5, '#ff5a3c');
         }
         if (s.oneWay) {
             const b = K.bounds(s), c = toScreen(h, (b.x0 + b.x1) / 2, b.y0);

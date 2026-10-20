@@ -187,6 +187,29 @@ bool sdk_glob_match(const char *pattern, const char *name)
     return glob_rec(pattern, name);
 }
 
+// Абсолютный путь для передачи внешнему процессу: движок резолвит --game от
+// собственного каталога, а пользователь ждёт путь от cwd. Абсолютный путь
+// возвращается как есть; относительный склеивается с текущим каталогом.
+bool sdk_abs_path(const char *path, char *out, size_t cap)
+{
+    if (!path || !path[0] || !out || cap == 0) return false;
+    const bool absolute = path[0] == '/' || path[0] == '\\'
+        || (isalpha((unsigned char)path[0]) && path[1] == ':'
+            && (path[2] == '/' || path[2] == '\\'));
+    if (absolute) {
+        snprintf(out, cap, "%s", path);
+        return true;
+    }
+    char *cwd = SDL_GetCurrentDirectory();
+    if (!cwd) {
+        snprintf(out, cap, "%s", path);
+        return false;
+    }
+    sdk_join(cwd, path, out, cap);
+    SDL_free(cwd);
+    return true;
+}
+
 const char *sdk_basename(const char *path)
 {
     const char *slash = strrchr(path, '/');
@@ -342,7 +365,7 @@ static bool takes_value(const char *flag)
         "--cell", "--cols", "--rows", "--prefix", "--duration", "--tags",
         "--root", "--game", "--fixed-dt", "--format", "--width", "--height",
         "--op", "--args", "--user-extensions", "--builtin-extensions",
-        "--offset", "--limit",
+        "--offset", "--limit", "--schema",
         NULL,
     };
     for (int i = 0; names[i]; ++i) {

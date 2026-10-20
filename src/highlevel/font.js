@@ -113,6 +113,58 @@ export function resolveFontStyle(style) {
     };
 }
 
+// ---------------------------------------------------------------------------
+// Лица RmlUi: weight/style для $.font.load
+// ---------------------------------------------------------------------------
+
+/** Веса RmlUi: любое определённое 1..1000; 400/700 — имена normal/bold. */
+export const FONT_WEIGHT_NORMAL = 400;
+export const FONT_WEIGHT_BOLD = 700;
+
+/**
+ * Разобрать opts у $.font.load: weight ('normal'|'bold'|1..1000) и style
+ * ('normal'|'italic'). Возвращает { weight, style, error }: error — строка для
+ * журнала, если опция неверна (загрузка тогда не начинается, а не «тихо
+ * подменяется» нормальным начертанием).
+ *
+ * Это ТОЛЬКО RmlUi-лицо: кастомный рендерер текста (src/font.c) одноатласный и
+ * weight/style не подделывает; $.font.load с не-400/normal грузит лицо для
+ * HTML-интерфейса.
+ */
+export function normalizeFontFaceOptions(opts) {
+    const o = opts || {};
+    let weight = FONT_WEIGHT_NORMAL;
+    if (o.weight !== undefined && o.weight !== null) {
+        const raw = o.weight;
+        if (typeof raw === 'string') {
+            const key = raw.trim().toLowerCase();
+            if (key === 'normal' || key === 'regular') weight = FONT_WEIGHT_NORMAL;
+            else if (key === 'bold') weight = FONT_WEIGHT_BOLD;
+            else {
+                const n = Number(key);
+                if (!Number.isInteger(n) || n < 1 || n > 1000) {
+                    return { weight: null, style: null,
+                             error: 'weight="' + raw + '" — ожидалось normal/bold или целое 1..1000' };
+                }
+                weight = n;
+            }
+        } else if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 1 && raw <= 1000) {
+            weight = raw;
+        } else {
+            return { weight: null, style: null,
+                     error: 'weight=' + String(raw) + ' — ожидалось normal/bold или целое 1..1000' };
+        }
+    }
+    let style = 'normal';
+    if (o.style !== undefined && o.style !== null) {
+        const key = String(o.style).trim().toLowerCase();
+        if (key === 'normal' || key === 'italic') style = key;
+        else return { weight: null, style: null,
+                      error: 'style="' + String(o.style) + '" — RmlUi знает только normal/italic' };
+    }
+    return { weight, style, error: null };
+}
+
 /** Ширина строки в пикселях. Без движка (qjs) возвращает 0 — это не ошибка. */
 /**
  * Ширина строки в пикселях: единственный правильный путь к engine.measureText.
@@ -286,22 +338,74 @@ export function installFont($) {
 
         // --- Файлы шрифтов и семейства ---------------------------------------
         /**
-         * Загрузить .ttf/.otf как семейство: `$.font.load('title', 'fonts/Bold.ttf')`.
-         * Путь — от корня игры, как у `.sprite()`. Без имени берётся имя файла.
+         * Загрузить .ttf/.otf как семейство:
+         *   `$.font.load('title', 'fonts/Bold.ttf')`
+         *   `$.font.load('title', 'fonts/Bold.ttf', { weight: 'bold' })`
+         *   `$.font.load('title', 'fonts/Italic.ttf', { weight: 600, style: 'italic' })`
+         *
+         * Путь — от корня игры, как у `.sprite()`; без имени берётся имя файла.
+         * opts: `weight` — 'normal'|'bold' или целое 1..1000, `style` —
+         * 'normal'|'italic'. Неверная опция — строка в журнал и `false`, без
+         * тихой подмены начертания.
+         *
+         * С opts по умолчанию (400/normal) поведение прежнее: файл грузится в
+         * атлас сцены (`engine.loadFont`) И, если GUI доступен, регистрируется
+         * как лицо RmlUi — теперь RCSS `font-family` видит это семейство.
+         * С не-400/normal атлас сцены НЕ трогается (он одноатласный и начертаний
+         * не умеет): регистрируется только лицо RmlUi для HTML-интерфейса.
          */
-        load(name, path) {
+        load(name, path, opts) {
             if (typeof name === 'object' && name) {
-                path = name.src || name.path || name.file;
-                name = name.name || name.family || name.id;
+                const spec = name;
+                path = spec.src || spec.path || spec.file;
+                if (opts === undefined) opts = { weight: spec.weight, style: spec.style };
+                name = spec.name || spec.family || spec.id;
             }
             if (!path) {
                 ctx.log('$.font.load: нужен путь к .ttf/.otf');
                 return false;
             }
+            const face = normalizeFontFaceOptions(opts);
+            if (face.error) {
+                ctx.log('$.font.load: ' + face.error);
+                return false;
+            }
             const family = String(name || String(path).replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, ''));
-            const ok = typeof engine.loadFont === 'function' && engine.loadFont(family, String(path));
-            if (!ok) {
-                ctx.log(`$.font.load: не удалось загрузить шрифт "${family}" из ${path}`);
+            const legacy = face.weight === FONT_WEIGHT_NORMAL && face.style === 'normal';
+
+            // Атлас сцены — прежний путь и прежний контракт возврата для
+            // load(name,path) без начертаний. Семейство не перезагружаем
+            // чужим файлом ради bold: это тихо подменило бы обычный текст.
+            let atlas_ok = false;
+            if (legacy) {
+                atlas_ok = typeof engine.loadFont === 'function' && engine.loadFont(family, String(path));
+                if (!atlas_ok) {
+                    ctx.log(`$.font.load: не удалось загрузить шрифт "${family}" из ${path}`);
+                    return false;
+                }
+            }
+
+            // RmlUi-лицо: weight/style реально уходят в Rml::LoadFontFace.
+            const ui = engine.ui;
+            const can_face = ui && typeof ui.loadFontFace === 'function';
+            const face_ok = can_face
+                ? ui.loadFontFace(String(path), family, face.weight, face.style) === true
+                : false;
+
+            if (legacy) {
+                // Старое поведение: атлас решает успех. Отсутствие GUI — не
+                // ошибка сцены, поэтому предупреждаем только если GUI есть, но
+                // лицо не принял.
+                if (can_face && !face_ok) {
+                    ctx.log(`$.font.load: атлас "${family}" загружен, но RmlUi не принял лицо`);
+                }
+                loaded.push(family);
+                return true;
+            }
+            if (!face_ok) {
+                ctx.log(can_face
+                    ? `$.font.load: RmlUi не принял лицо "${family}" (${face.weight}, ${face.style}) из ${path}`
+                    : '$.font.load: opts weight/style требуют GUI RmlUi — лицо не зарегистрировано');
                 return false;
             }
             loaded.push(family);
@@ -316,9 +420,33 @@ export function installFont($) {
             return typeof engine.fontDefault === 'function' ? engine.fontDefault() : null;
         },
 
-        /** Все семейства, известные движку. */
+        /**
+         * Явные лица RmlUi: `[{ family, weight, style, path }]`.
+         *
+         * Источник — engine.ui.fontFaces(); это лица, зарегистрированные через
+         * `$.font.load(..., { weight, style })` / engine.ui.loadFontFace.
+         * Автозагруженные assets/fonts сюда не входят: их семейство RmlUi
+         * выводит из файла и обратно не отдаёт.
+         */
+        faces() {
+            const ui = engine.ui;
+            if (!ui || typeof ui.fontFaces !== 'function') return [];
+            const list = ui.fontFaces();
+            return Array.isArray(list) ? list : [];
+        },
+
+        /**
+         * Все семейства, известные движку: атлас сцены (`engine.fontList()`)
+         * плюс семейства явных лиц RmlUi. Порядок атласа сохраняется, новые
+         * семейства дописываются без дублей. Пустой список — не ошибка.
+         */
         families() {
-            return typeof engine.fontList === 'function' ? engine.fontList() : [];
+            const base = typeof engine.fontList === 'function' ? engine.fontList() : [];
+            const out = Array.isArray(base) ? base.slice() : [];
+            for (const face of font.faces()) {
+                if (face && face.family && out.indexOf(face.family) < 0) out.push(face.family);
+            }
+            return out;
         },
 
         /** Состояние атласа глифов: `{ glyphs, atlas_w, atlas_h }`. */

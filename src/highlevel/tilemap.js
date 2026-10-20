@@ -53,7 +53,7 @@ export const NEIGHBOURS47 = [
 // Ключи, по которым fromASCII отличает opts от легенды символов.
 const OPTION_KEYS = ['src', 'tile', 'cols', 'rows', 'data', 'solid', 'layers',
                      'mapW', 'mapH', 'id', 'depth', 'legend', 'x', 'y', 'visible', 'class',
-                     'terrains', 'ysort', 'tiles', 'sources', 'origin', 'pad', 'padTile',
+                     'terrains', 'animations', 'ysort', 'tiles', 'sources', 'origin', 'pad', 'padTile',
                      'limitPolicy', 'agentSize', 'agentRadius'];
 
 /**
@@ -1182,6 +1182,10 @@ function ensureTilemap(node) {
         }
     }
 
+    // Покадровые анимации — тоже обычный JSON карты (`animations: [...]`):
+    // применяются сами при создании узла, отдельного «включить» игре не нужно.
+    if (Array.isArray(a.animations)) applyTileAnimations(tm, a.animations);
+
     syncNodeSize(tm);
     if (typeof node.on === 'function') node.on('remove', () => releaseTilemap(node));
     return tm;
@@ -1336,6 +1340,80 @@ export function normalizeTilesetAnim(spec) {
     };
 }
 
+/**
+ * Нормализует запись покадровой анимации тайла (обычный JSON карты):
+ *   { tile, frames: [id…], fps? | interval? | ms?, random?, offset?, layer? }
+ * Возвращает { tile, frames, interval, random, offset, layer } или null.
+ * Чистая функция: проверяется qjs-тестом без движка.
+ */
+export function normalizeTileAnimation(spec) {
+    if (!spec || typeof spec !== 'object') return null;
+    const tile = num(spec.tile, 0);
+    if (Math.floor(tile) !== tile || tile < 1 || tile > 65535) return null;
+    const raw = Array.isArray(spec.frames) ? spec.frames : (spec.frames === undefined ? null : [spec.frames]);
+    if (!raw || raw.length < 1 || raw.length > 16) return null;
+    const frames = [];
+    for (const value of raw) {
+        const id = num(value, 0);
+        if (Math.floor(id) !== id || id < 1 || id > 65535) return null;
+        frames.push(id);
+    }
+    // Те же границы, что у JS/C-валидатора формата: невалидную запись рантайм
+    // не применяет, а не «угадывает» её.
+    if (spec.fps !== undefined && !(typeof spec.fps === 'number' && isFinite(spec.fps) && spec.fps > 0 && spec.fps <= 1000)) return null;
+    for (const key of ['interval', 'ms']) {
+        if (spec[key] !== undefined && !(typeof spec[key] === 'number' && isFinite(spec[key]) && spec[key] >= 1 && spec[key] <= 60000)) return null;
+    }
+    if (spec.random !== undefined && typeof spec.random !== 'boolean') return null;
+    if (spec.offset !== undefined && !(typeof spec.offset === 'number' && isFinite(spec.offset))) return null;
+    if (spec.layer !== undefined && !(typeof spec.layer === 'number' && Math.floor(spec.layer) === spec.layer && spec.layer >= 0 && spec.layer <= 15)) return null;
+    const fps = num(spec.fps, 0);
+    const interval = num(spec.interval, fps > 0 ? 1000 / fps : num(spec.ms, 200));
+    return {
+        tile,
+        frames,
+        interval: Math.max(1, interval),
+        random: !!spec.random,
+        offset: num(spec.offset, 0),
+        layer: spec.layer === undefined ? -1 : spec.layer,
+    };
+}
+
+/**
+ * Применяет массив записей к слоям карты: entry.layer ограничивает один слой,
+ * без него анимация действует на все слои. Возвращает число привязок.
+ * Пустой/невалидный вход снимает прежние анимации (идемпотентно).
+ */
+export function applyTileAnimations(tm, specs) {
+    if (!tm || !Array.isArray(tm.layers)) return 0;
+    for (const layer of tm.layers) layer.anims = null;
+    const list = specs === undefined || specs === null ? [] : (Array.isArray(specs) ? specs : [specs]);
+    let count = 0;
+    for (const raw of list) {
+        const anim = normalizeTileAnimation(raw);
+        if (!anim) continue;
+        let targets = tm.layers;
+        if (anim.layer >= 0) {
+            const only = tm.layers[anim.layer];
+            if (!only) continue;
+            targets = [only];
+        }
+        for (const layer of targets) {
+            if (!layer.anims) layer.anims = { byId: Object.create(null), time: 0, count: 0 };
+            if (!layer.anims.byId[anim.tile]) layer.anims.count++;
+            layer.anims.byId[anim.tile] = anim;
+            count++;
+        }
+    }
+    return count;
+}
+
+/** Время анимации слоя: покадровые анимации тайлов идут от того же tick. */
+function tileAnimTime(layer) {
+    if (layer.anims) return layer.anims.time;
+    return layer.anim ? layer.anim.time : 0;
+}
+
 /** Индекс кадра анимации слоя: из времени и интервала (чистая функция). */
 export function tilesetFrame(time, interval, frames, random, seed) {
     if (frames <= 1 || interval <= 0) return 0;
@@ -1379,12 +1457,24 @@ function layerAnimFrames(layer) {
 function animatedTileSprite(layer, id, time) {
     const base = layerFrames(layer);
     if (!base || !base.length) return -1;
+    // Покадровая анимация конкретного id (обычный JSON карты) важнее строчной
+    // анимации листа `.tileset()`: у неё явный список кадров-тайлов.
+    const per = layer.anims && layer.anims.byId[id];
+    if (per) {
+        // interval/offset в записи — миллисекунды (docs §9.1), а время
+        // tickTilemap — секунды игры.
+        const frame = tilesetFrame(time + per.offset / 1000, per.interval / 1000, per.frames.length,
+                                   per.random, per.random ? (id * 2654435761) % 1000 : 0);
+        return spriteOr(base, per.frames[frame]);
+    }
     const anim = layer.anim;
     if (!anim || id <= 0 || id > (base.length | 0)) return spriteOr(base, id);
     if (anim.ids && anim.ids.indexOf(id) < 0) return spriteOr(base, id);
     const sprites = layerAnimFrames(layer);
     if (!sprites) return spriteOr(base, id);
-    const frame = tilesetFrame(time + anim.offset, anim.interval, anim.frames,
+    // Поля записи — миллисекунды (docs/highlevel/tilemap.md §9), время —
+    // секунды игрового tick.
+    const frame = tilesetFrame(time + anim.offset / 1000, anim.interval / 1000, anim.frames,
                                anim.random, anim.random ? (id * 2654435761) % 1000 : 0);
     const index = (id - 1) + frame * (anim.row_len || 1);
     const sprite = sprites[index];
@@ -1396,12 +1486,13 @@ function spriteOr(base, id) {
     return sprite === undefined ? -1 : sprite;
 }
 
-/** Продвигает время анимации всех слоёв карты. */
+/** Продвигает время анимации всех слоёв карты (строка листа и покадровая). */
 function tickTileAnimations(tm, dt) {
     for (let i = 0; i < tm.layers.length; ++i) {
         const layer = tm.layers[i];
-        if (!layer || !layer.anim) continue;
-        layer.anim.time += dt;
+        if (!layer) continue;
+        if (layer.anim) layer.anim.time += dt;
+        if (layer.anims) layer.anims.time += dt;
     }
 }
 
@@ -2097,8 +2188,8 @@ function drawYsortTile($, tm, tile, cam) {
     if (!layer) return false;
     const frames = layerFrames(layer);
     if (!frames || !frames.length) return false;
-    const sprite = layer.anim ? animatedTileSprite(layer, tile.id, layer.anim.time)
-                              : frames[tile.id - 1];
+    const sprite = (layer.anim || layer.anims) ? animatedTileSprite(layer, tile.id, tileAnimTime(layer))
+                                               : frames[tile.id - 1];
     if (sprite === undefined || sprite < 0) return false;
     const p = tileScreenPoint(tm, cam, tile);
     const node = tm.node;
@@ -2509,7 +2600,7 @@ export function installTilemap($) {
     // карты неотличимы от опечатки.
     TAGS.tilemap = Object.assign({}, TAGS.tilemap, {
         cols: 0, rows: 0, data: null, solid: false, layers: null, legend: null, mapW: 0, mapH: 0,
-        terrains: null, ysort: false, mergeCollisions: true, agentSize: 0, agentRadius: 0,
+        terrains: null, animations: null, ysort: false, mergeCollisions: true, agentSize: 0, agentRadius: 0,
         tiles: null, sources: null, origin: null, pad: null, padTile: null,
         limitPolicy: null, tileOccluders: false,
     });
@@ -2574,6 +2665,52 @@ export function installTilemap($) {
             time: layer.anim.time,
         };
     }, null);
+
+    /**
+     * Покадровая анимация конкретных тайлов — обычный JSON карты:
+     *
+     *   animations: [{ tile: 12, frames: [12, 13, 14], fps: 8 }]
+     *
+     * Кадры — явные id тайлов, а не строки листа (это отличает её от
+     * `.tileset({ frames, fps })`). Время идёт из того же tickTilemap, поэтому
+     * `$.time.pause()` её останавливает, а `--fixed-dt` делает воспроизводимой.
+     * Массив применяется сам при создании узла; метод нужен для правки на ходу.
+     * `.animations(null)` выключает, без аргумента — просто снимает.
+     */
+    def('animations', function (spec) {
+        for (const node of this.nodes) {
+            const tm = ensureTilemap(node);
+            applyTileAnimations(tm, spec === undefined ? null : spec);
+            if (Array.isArray(spec)) node.attrs.animations = spec;
+            else delete node.attrs.animations;
+        }
+        return this;
+    });
+
+    /** Применённые покадровые анимации: [{ tile, frames, interval, fps, random, offset, layer }]. */
+    defGet('tileAnimations', function (node, layerIndex) {
+        const tm = ensureTilemap(node);
+        const from = layerIndex === undefined ? 0 : layerIndex | 0;
+        const to = layerIndex === undefined ? tm.layers.length - 1 : from;
+        const out = [];
+        for (let li = from; li <= to && li < tm.layers.length; ++li) {
+            const layer = tm.layers[li];
+            if (!layer || !layer.anims) continue;
+            for (const key of Object.keys(layer.anims.byId)) {
+                const a = layer.anims.byId[key];
+                out.push({
+                    tile: a.tile,
+                    frames: a.frames.slice(),
+                    interval: a.interval,
+                    fps: Math.round(1000 / a.interval * 1000) / 1000,
+                    random: a.random,
+                    offset: a.offset,
+                    layer: li,
+                });
+            }
+        }
+        return out;
+    }, []);
 
     defGet('tileAt', function (node, x, y, layerIndex) {
         const tm = ensureTilemap(node);
@@ -2999,7 +3136,7 @@ export function installTilemap($) {
             // выбирает кадр в JS (animatedTileSprite) — прежним путём. Слой с
             // visual region другого размера/источника идёт JS-путём: у него
             // спрайты не одной сетки, и батч по клеткам не подходит.
-            if (!layer.anim && !layer.custom_visual) {
+            if (!layer.anim && !layer.anims && !layer.custom_visual) {
                 const G = tile_params;
                 G[0] = x0; G[1] = y0; G[2] = x1; G[3] = y1; G[4] = layer.w;
                 G[5] = ox; G[6] = oy; G[7] = tile_w; G[8] = tile_h;
@@ -3012,8 +3149,8 @@ export function installTilemap($) {
                 for (let tx = x0; tx <= x1; tx++) {
                     const id = layer.data[row + tx];
                     if (id <= 0) continue;                 // id 0 и <0 — пусто
-                    const sprite = layer.anim
-                        ? animatedTileSprite(layer, id, layer.anim.time)
+                    const sprite = (layer.anim || layer.anims)
+                        ? animatedTileSprite(layer, id, tileAnimTime(layer))
                         : frames[id - 1];
                     if (sprite === undefined || sprite < 0) continue;
                     let dw = tile_w, dh = tile_h;
@@ -3495,11 +3632,15 @@ export function tickTilemap(dt) {
         return;
     }
 
+    // Анимация идёт ИГРОВЫМ временем (пауза/масштаб), а пересборка данных —
+    // сырым dt кадра: правки должны применяться и на паузе. Если модуль
+    // времени ещё не поставлен (qjs-тесты, ранние вызовы) — берём dt.
+    const anim_dt = ctx.time && typeof ctx.time.delta === 'function' ? ctx.time.delta() : dt;
     const stale = [];
     for (let i = 0; i < maps.length; i++) ensureTilemap(maps[i]);
     for (const [node, tm] of STATES) {
         if (node.removed || !node.in_registry) { stale.push(node); continue; }
-        tickTileAnimations(tm, dt);
+        tickTileAnimations(tm, anim_dt);
         if (tm.dirty) rebuildTilemap(tm);
     }
     // Узлы, удалённые до первого tick, снимаем здесь (destroy() не всегда

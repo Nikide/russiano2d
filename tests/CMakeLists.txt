@@ -970,6 +970,31 @@ if(R2D_SANITIZE_FLAGS_AVAILABLE)
     target_link_options(r2d_re2d_scalability_test PRIVATE -fsanitize=address,undefined)
 endif()
 
+# --- Атомарная запись файлов (P0: save/settings) ---------------------------
+# Временный файл в том же каталоге + fsync + rename. Без SDL: проверяется
+# примитив, на котором стоят $.save/$.store.
+add_executable(r2d_fs_atomic_test "${CMAKE_SOURCE_DIR}/tests/fs/atomic_write_test.c"
+                                  "${CMAKE_SOURCE_DIR}/src/fs_util.c")
+target_include_directories(r2d_fs_atomic_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_fs_atomic_test PRIVATE ${R2D_WIN_LIBS} r2d_unity)
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_fs_atomic_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_fs_atomic_test PRIVATE -fsanitize=address,undefined)
+endif()
+
+# --- C-формат реплея: заголовок (content ID) и checkpoints ------------------
+# Запись/чтение настоящего файла плюс FNV-хэш канонических файлов проекта.
+# Ни окна, ни GPU, ни симуляции: app-ввод подменён заглушками в тесте.
+add_executable(r2d_replay_checkpoint_test "${CMAKE_SOURCE_DIR}/tests/replay/replay_checkpoint_test.c"
+                                          "${CMAKE_SOURCE_DIR}/src/replay.c"
+                                          "${CMAKE_SOURCE_DIR}/src/json.c")
+target_include_directories(r2d_replay_checkpoint_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+target_link_libraries(r2d_replay_checkpoint_test PRIVATE SDL3::SDL3 ${R2D_WIN_LIBS} r2d_unity)
+if(R2D_SANITIZE_FLAGS_AVAILABLE)
+    target_compile_options(r2d_replay_checkpoint_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_replay_checkpoint_test PRIVATE -fsanitize=address,undefined)
+endif()
+
 # --- P0-H: CTest для каждой Unity-цели и всех JS-наборов --------------------
 # Цели перечисляются автоматически по имени r2d_*_test; EXR-тест требует
 # аргумент-файл и зарегистрирован отдельно. `r2d_check` (корневой CMakeLists)

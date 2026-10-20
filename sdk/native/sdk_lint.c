@@ -401,6 +401,40 @@ static void walk_js(const char *path, SdkReport *rep, int *files)
     SDL_EnumerateDirectory(path, enumerate_cb, &w);
 }
 
+// Где искать api.schema.json. Явный --schema — приказ: если файла нет,
+// подстановка запрещена (молчаливый fallback запрещён правилами проекта).
+// Иначе — каталог проекта, cwd, каталог r2d-sdk и два уровня выше: в пакете
+// схема лежит рядом с r2d-sdk, в checkout — в корне репозитория (build/../).
+bool sdk_schema_resolve(const char *explicit_path, const char *preferred_dir,
+                        char *out, size_t cap)
+{
+    if (explicit_path && explicit_path[0]) {
+        snprintf(out, cap, "%s", explicit_path);
+        return sdk_file_exists(explicit_path);
+    }
+    char candidate[2048];
+    if (preferred_dir && preferred_dir[0] && sdk_is_dir(preferred_dir)) {
+        sdk_join(preferred_dir, "api.schema.json", candidate, sizeof candidate);
+        if (sdk_file_exists(candidate)) { snprintf(out, cap, "%s", candidate); return true; }
+    }
+    if (sdk_file_exists("api.schema.json")) {
+        snprintf(out, cap, "%s", "api.schema.json");
+        return true;
+    }
+    // exe_dir для r2d-sdk — build/ (checkout) или корень пакета; C-тесты лежат
+    // глубже (build/sdk/native), поэтому проверяем и три уровня.
+    static const char *const relative[] = {
+        "api.schema.json", "../api.schema.json", "../../api.schema.json",
+        "../../../api.schema.json",
+    };
+    for (size_t i = 0; i < sizeof relative / sizeof relative[0]; ++i) {
+        sdk_join(sdk_exe_dir(), relative[i], candidate, sizeof candidate);
+        if (sdk_file_exists(candidate)) { snprintf(out, cap, "%s", candidate); return true; }
+    }
+    snprintf(out, cap, "%s", "api.schema.json");
+    return false;
+}
+
 // Shared by `validate`: lint all JS under target, schema from --schema or root.
 int sdk_lint_run(const char *schema_path, const char *target, SdkReport *rep, int *files)
 {
@@ -430,11 +464,19 @@ int sdk_lint_run(const char *schema_path, const char *target, SdkReport *rep, in
 
 int sdk_cmd_lint(const SdkArgs *a)
 {
-    const char *schema_path = sdk_arg_value(a, "--schema");
-    if (!schema_path || !schema_path[0]) schema_path = "api.schema.json";
+    const char *explicit_path = sdk_arg_value(a, "--schema");
+    const char *target = sdk_arg_positional(a, 0);
+    char schema_path[2048];
+    if (!sdk_schema_resolve(explicit_path, target && sdk_is_dir(target) ? target : NULL,
+                            schema_path, sizeof schema_path)
+        && explicit_path && explicit_path[0]) {
+        // Явный --schema отсутствует: sdk_lint_run напечатает структурную
+        // диагностику с этим же путём — подменять его нельзя.
+        snprintf(schema_path, sizeof schema_path, "%s", explicit_path);
+    }
     SdkReport rep; sdk_report_init(&rep);
     int files = 0;
-    const int result = sdk_lint_run(schema_path, sdk_arg_positional(a, 0), &rep, &files);
+    const int result = sdk_lint_run(schema_path, target, &rep, &files);
     R2dSb out; r2d_sb_init(&out);
     r2d_sb_printf(&out, "{\"ok\":%s,\"files\":%d,", rep.errors ? "false" : "true", files);
     sdk_report_put(&rep, &out);

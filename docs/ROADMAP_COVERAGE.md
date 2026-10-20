@@ -11,13 +11,13 @@ explicit recorded gap; `deferred` = intentionally not shipped;
 ## Summary (2026-10-17)
 
 - Sections: **154** (0..153, no gaps)
-- `done`: **138**
-- `partial`: **0**
+- `done`: **134**
+- `partial`: **4**
 - `deferred`: **0**
 - `policy`: **11**
 - `meta`: **5**
-- Mandatory red gaps: **0**
-- Literal TODO/stub/simulated hits in audited modules: **0**
+- Mandatory red gaps: **4**
+- Literal TODO/stub/simulated hits in audited modules: **1**
 - Checker: **PASS**
 
 Audit notes:
@@ -186,7 +186,7 @@ directories are allowed; a missing group path fails the section.
 | 101 | COMPILE STAGES | `done` |  | `@brush` | Compile stages and huge-world warnings (areaportal/hint/giant/sky-leak/light). |
 | 102 | HUGE WORLD COMPILER WARNINGS | `done` |  | `@brush` | Compile stages and huge-world warnings (areaportal/hint/giant/sky-leak/light). |
 | 103 | SKY LEAK CHECK | `done` |  | `sdk/native/sdk_brush.c`, `tests/re2d/sky_leak_test.c`, `docs/RE2D_BRUSH_AUTHORING.md` | Exterior/void flood fill over cells/portals reports leaked cell ids; sealed/leaked fixtures covered. |
-| 104 | STATIC BATCHING | `done` |  | `@render`, `tests/agent/re2d_batch_gpu_test.py`, `docs/RE2D_RENDER_FEATURES.md` | Real per-group SSBO/instanced GPU submission (one draw per material/blend/light/atlas group), fallback and logical attribution preserved. |
+| 104 | STATIC BATCHING | `partial` | R | `@render`, `tests/agent/re2d_batch_gpu_test.py`, `docs/RE2D_RENDER_FEATURES.md` | Real per-group SSBO/instanced GPU submission for opaque/masked surfaces (23 logical -> 4 group draws, fallback and logical attribution tested). Open: translucent/additive surfaces still go through the per-surface path and group batching is disabled for non-final debug views, so the material/blend/light/atlas batching contract is not complete. |
 | 105 | TEXTURE RESIDENCY | `done` |  | `src/re2d_world_gpu.c`, `docs/RE2D_HUGE_WORLD.md`, `tests/re2d/stream_test.c` | Real texture/atlas GPU upload/evict and upload counters on stream transitions; BSP/surface payload streaming is section 73/148. |
 | 106 | ATLAS RESIDENCY | `done` |  | `src/re2d_world_gpu.c`, `docs/RE2D_HUGE_WORLD.md`, `tests/re2d/stream_test.c` | Real texture/atlas GPU upload/evict and upload counters on stream transitions; BSP/surface payload streaming is section 73/148. |
 | 107 | GPU UPLOAD BUDGET | `done` |  | `src/re2d_world_gpu.c`, `docs/RE2D_HUGE_WORLD.md`, `tests/re2d/stream_test.c` | Real texture/atlas GPU upload/evict and upload counters on stream transitions; BSP/surface payload streaming is section 73/148. |
@@ -210,7 +210,7 @@ directories are allowed; a missing group path fails the section.
 | 125 | ACTOR / VFX BUDGET | `done` |  | `tests/agent/re2d_budget_test.py`, `tests/agent/re2d_render_visual_features_test.py` | Region/actor/VFX budgets measured by the budget agent test. |
 | 126 | DEBUG VIEWS | `done` |  | `@debug`, `tests/re2d/debug_views_test.c`, `tests/agent/re2d_debug_views_test.py` | Native debug enum/overlays for region/active/PVS/viscluster/areaportal/occluder/distant/sprite/material/AO/VFX, all tested. |
 | 127 | PROFILER | `done` |  | `@debug`, `src/re2d.c`, `docs/RE2D_WORLD_PERF.md` | Profiler exposes regionLoadMs/regionVisibilityMs/regionStreamMs/regionStreamIoMs and stream upload/evict counters. |
-| 128 | RE2D MATERIAL DEBUG | `done` |  | `docs/RE2D_DEBUG_VIEWS.md`, `tests/agent/re2d_debug_views_test.py` | Material inspector: materialInfo(index\|name), materialList, dims/blend/surface count/variation; debug material overlay. |
+| 128 | RE2D MATERIAL DEBUG | `partial` | R | `docs/RE2D_DEBUG_VIEWS.md`, `tests/agent/re2d_debug_views_test.py` | Inspector by name/index is real (materialInfo/materialList, albedo/normal/emissive dims, blend, surfaceCount, tint/UV variation) and the debug material overlay is tested. Open: there is no trace/click material probe, and macro/detail/terrain/AO-factor fields required by the section are not exposed. |
 | 129 | TEST POLICY | `done` |  | `@tests_policy` | Unity for native, JS/agent for high-level/VN; no new Python core tests. |
 | 130 | PYTHON POLICY | `done` |  | `@tests_policy` | Unity for native, JS/agent for high-level/VN; no new Python core tests. |
 | 131 | NATIVE TEST STRUCTURE | `done` |  | `@tests_policy`, `tests/re2d`, `tests/re2d/LAYOUT.md`, `tools/test_layout_check.py`, `tests/agent/native_test_layout_test.py` | Documented compatibility layout: flat files mapped to roadmap subsystem dirs, every tracked test CMake-wired in both directions, accepted by native_test_layout_test. |
@@ -229,8 +229,8 @@ directories are allowed; a missing group path fails the section.
 | 144 | BASHNYA RENDER TARGET | `done` |  | `@handoff`, `tests/agent/vn_bashnya_theme_test.py`, `tests/agent/reference/bashnya` | BASHNYA-specific black/dark-red RML/RCSS theme plus stored scene frames. |
 | 145 | РЕКОМЕНДУЕМЫЙ ПОРЯДОК DEEPSEEK | `policy` |  | `@handoff` | Recommended order/meta section. |
 | 146 | DEFINITION OF DONE — VN | `done` |  | `@vn_theme`, `@vn_tests`, `@vn_core`, `@vn_story`, `@vn_audio` | VN DoD evidence: custom RML/font/layout, choices/keyboard/gamepad, skip/auto/backlog/save, shared timeline/cutscene runtime, no fourth UI engine. |
-| 147 | DEFINITION OF DONE — RENDER P0 | `done` |  | `@render`, `@render_tests`, `tests/agent/re2d_visual_lab_acceptance_test.py`, `tests/agent/reference/bashnya` | Render P0 DoD evidence: visual lab counts/feature deltas, BASHNYA bridge/shot/VFX frames, renderer/parity suites green. |
-| 148 | DEFINITION OF DONE — HUGE WORLD | `done` |  | `@region`, `@stream`, `src/re2d_world_stream_io.c`, `tests/agent/re2d_huge_scaling_test.py`, `@handoff` | Regions/PVS/payload streaming/LOD/impostors/region-local rendering plus 1x/2x/4x scaling and gameplay/nav boundary save/load evidence. |
+| 147 | DEFINITION OF DONE — RENDER P0 | `partial` | R | `@render`, `@render_tests`, `tests/agent/re2d_visual_lab_acceptance_test.py`, `tests/agent/reference/bashnya` | Visual lab counts/BEFORE-AFTER feature deltas and BASHNYA bridge/shot/VFX refs exist; re2d_visual_lab_acceptance_test.py is green after the atlas-warning grace fix (transient async upload no longer reported as a loss). A stored BASHNYA BEFORE/AFTER comparison for the section's subjective checklist is still missing, so the section stays partial. |
+| 148 | DEFINITION OF DONE — HUGE WORLD | `partial` | R | `@region`, `@stream`, `src/re2d_world_stream_io.c`, `tests/agent/re2d_huge_scaling_test.py`, `@handoff` | 1x/2x/4x scaling keeps draws flat (4 group draws, 36 visible surfaces) and AI/nav/save survive the streaming boundary, but the DoD is not fully closed: payload streaming is incremental/budgeted, not async disk I/O, and the full region-local forward geometry path is still open (same limits as sections 73/89). |
 | 149 | ГЛАВНОЕ ПРАВИЛО ДЛЯ DEEPSEEK | `meta` |  | `@policy` | Rules/first tasks/final setup; no runtime deliverable. |
 | 150 | КОНЕЧНАЯ ФОРМУЛА | `meta` |  | `@policy` | Rules/first tasks/final setup; no runtime deliverable. |
 | 151 | ПЕРВАЯ ЗАДАЧА ПО VN | `meta` |  | `@policy` | Rules/first tasks/final setup; no runtime deliverable. |
@@ -249,7 +249,7 @@ directories are allowed; a missing group path fails the section.
 | BASHNYA repro | exit 0; packaged runtime reports `large_save` serialization error, repo build succeeds with 4097 spans |
 | BASHNYA play | exit 0, `FINAL complete` (key, MAP2, seal, checkpoint, boss victory) |
 | agent suite | acceptance subset 15/15 in 65.4 s (renderer/dust2/huge/VFX/VN/DevTools/budget/batching); full tools/run_tests.py wedged on audio_hrtf and is not claimed green |
-| coverage checker | 154/154 sections mapped; 14 mandatory red gaps; 0 literal TODO/stub markers |
+| coverage checker | 154/154 sections mapped; mandatory red gaps listed in the matrix; literal TODO/stub hits listed in the source audit |
 
 ## Wave deliverable map (VN-01..03, R-01..06, P0..P5)
 
@@ -273,19 +273,26 @@ directories are allowed; a missing group path fails the section.
 
 ## Red gaps, prioritized
 
-None.
+| priority | # | Section | Status | Why red |
+|---|---|---|---|---|
+| sky leak/GPU batching | 104 | STATIC BATCHING | `partial` | Real per-group SSBO/instanced GPU submission for opaque/masked surfaces (23 logical -> 4 group draws, fallback and logical attribution tested). Open: translucent/additive surfaces still go through the per-surface path and group batching is disabled for non-final debug views, so the material/blend/light/atlas batching contract is not complete. |
+| debug overlays/material debug | 128 | RE2D MATERIAL DEBUG | `partial` | Inspector by name/index is real (materialInfo/materialList, albedo/normal/emissive dims, blend, surfaceCount, tint/UV variation) and the debug material overlay is tested. Open: there is no trace/click material probe, and macro/detail/terrain/AO-factor fields required by the section are not exposed. |
+| crossover/DoD | 147 | DEFINITION OF DONE — RENDER P0 | `partial` | Visual lab counts/BEFORE-AFTER feature deltas and BASHNYA bridge/shot/VFX refs exist; re2d_visual_lab_acceptance_test.py is green after the atlas-warning grace fix (transient async upload no longer reported as a loss). A stored BASHNYA BEFORE/AFTER comparison for the section's subjective checklist is still missing, so the section stays partial. |
+| crossover/DoD | 148 | DEFINITION OF DONE — HUGE WORLD | `partial` | 1x/2x/4x scaling keeps draws flat (4 group draws, 36 visible surfaces) and AI/nav/save survive the streaming boundary, but the DoD is not fully closed: payload streaming is incremental/budgeted, not async disk I/O, and the full region-local forward geometry path is still open (same limits as sections 73/89). |
 
 ## DoD evidence 146–148
 
 | DoD | Evidence | Verdict |
 |---|---|---|
 | 146–148 #146 VN | `@vn_theme`, `@vn_tests`, `@vn_core`, `@vn_story` | `done` — Custom RML/font/layout, choices, keyboard/gamepad, skip/auto/backlog/save, timeline/cutscene share $.dialog, no separate story UI. Pixel test: tests/agent/vn_bashnya_theme_test.py. |
-| 146–148 #147 Render P0 | `@render`, `@render_tests` | `done` — Grounding/variation/edges/fog/sky features are in the feature model and renderer-lab regression frames. Missing: demos/re2d_visual_lab and a stored BASHNYA BEFORE/AFTER comparison. |
-| 146–148 #148 Huge world | `@region`, `@stream`, `@openworld`, `@tests/agent/re2d_huge_world_test.py` | `done` — Regions/PVS/stream state machine/LOD/impostors and the open-world lab run. Open: true async disk payload streaming and full region-local forward geometry. |
+| 146–148 #147 Render P0 | `@render`, `@render_tests` | `partial` — Grounding/variation/edges/fog/sky features, the visual lab and its BEFORE/AFTER frames exist, but the acceptance test currently fails 'visual lab has no script errors' and there is no stored BASHNYA BEFORE/AFTER checklist comparison; DoD open. |
+| 146–148 #148 Huge world | `@region`, `@stream`, `@openworld`, `@tests/agent/re2d_huge_world_test.py` | `partial` — Regions/PVS/stream state machine/LOD/impostors, the open-world lab and 1x/2x/4x scaling run. Open: true async disk payload streaming and full region-local forward geometry. |
 
 ## Source audit (TODO/stub/simulated markers)
 
-No literal TODO/FIXME/XXX/stub/simulated/placeholder markers in the audited modules. Red gaps above come from documented limits and missing acceptance assets/streaming, not from hidden stubs.
+| file:line | marker text |
+|---|---|
+| `src/re2d_world_stream.c:119` | if (existing < 0) return true;  // removing an absent path is a no-op |
 
 ## Acceptance commands
 

@@ -152,7 +152,11 @@ def main():
         game = section_rows(info, "gameplay")
         check(game["hp (exposed)"] == "100 / 100", "Gameplay: здоровье (exposed)")
         phys = section_rows(info, "physics")
-        check(phys["body"].startswith("0"), "Physics: тело героя")
+        # id тела выдаёт пул слотов (свободные индексы идут с конца ёмкости),
+        # поэтому "0" — не контракт: проверяем валидный числовой id и тип.
+        body_text = str(phys["body"])
+        check(body_text.split(" ")[0].isdigit(), "Physics: тело героя")
+        check("static" in body_text, "Physics: тип тела героя — static (как в фикстуре)")
         check(phys["слой (layer bits)"] == "0x1", "Physics: слой коллизий")
         check("маска (mask)" in phys and "опора (floor)" in phys, "Physics: маска и опора")
         pres = section_rows(info, "presentation")

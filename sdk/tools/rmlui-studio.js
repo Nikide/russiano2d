@@ -17,6 +17,25 @@ import { err, warn, parseNum } from '../lib/kit.js';
 
 export const standalone = true;
 
+/**
+ * Элемент под точкой предпросмотра: настоящая геометрия RmlUi (layoutRect), а не
+ * угадывание по разметке. Выбирается самый глубокий элемент; из соседей — верхний.
+ * Элементы без id адресовать нельзя, поэтому они не участвуют.
+ */
+export function pickNodeIndex(nodes, x, y, layoutRect) {
+    let best = -1, bestDepth = -1;
+    for (const n of nodes || []) {
+        const id = M.attr(n, 'id');
+        if (!id) continue;
+        let r = null;
+        try { r = layoutRect(id); } catch (e) { r = null; }
+        if (!r || !(r.w > 0) || !(r.h > 0)) continue;
+        if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
+        if (n.depth >= bestDepth) { best = n.index; bestDepth = n.depth; }
+    }
+    return best;
+}
+
 const DOC = 'sdk/ui/rmlui_studio.rml';
 const DRAFT = '.r2d-draft-';
 const BODY_ID = 'r2d-pv-root';
@@ -251,7 +270,7 @@ function create(app) {
 
     function renderProps() {
         const n = node();
-        if (!n) { doc.html('rm-props', '<h4>СВОЙСТВА</h4><p class="empty">Выберите элемент в дереве.</p>'); return; }
+        if (!n) { doc.html('rm-props', '<h4>СВОЙСТВА</h4><p class="empty">Выберите элемент в дереве или кликните по нему в предпросмотре (выбираются элементы с id).</p>'); return; }
         const others = n.attrs.filter((a) => a.name !== 'id' && a.name !== 'class').map((a) => a.name + (a.bare ? '' : '=' + a.value)).join('\n');
         const f = (id, label, v) => '<div class="field-row"><label>' + label + '</label><input id="' + id + '" type="text" value="' + escapeHtml(v) + '" class="field"/></div>';
         let html = '<h4>СВОЙСТВА — ' + escapeHtml(M.label(n)) + '</h4>' + f('rp-id', 'id', M.attr(n, 'id') || '') + f('rp-class', 'class', M.attr(n, 'class') || '');
@@ -391,6 +410,13 @@ function create(app) {
                 m.rml = M.setAttrs(m.rml, cur.nodes[index], patch);
             });
         },
+        /** Выбор элемента кликом по предпросмотру — та же операция у человека и агента. */
+        pickAt(x, y) {
+            if (!s.preview || !s.parsed) return -1;
+            const i = pickNodeIndex(s.parsed.nodes, x, y, (id) => s.preview.layoutRect(id));
+            if (i >= 0) select(i);
+            return i;
+        },
         selectSheet(i) { s.activeSheet = Math.max(0, Math.min(s.sheets.length - 1, i)); renderSheets(); return s.activeSheet; },
         select,
         undo() { const l = s.history && s.history.undo(); if (l) { s.native = null; reparse(); clampSel(); refresh(); renderAll(); } return l; },
@@ -490,6 +516,11 @@ function create(app) {
     $.update(() => {
         if (!s.active) return;
         keys();
+        // Клик по окну предпросмотра выбирает элемент в дереве: hit-test по настоящему layoutRect.
+        if (s.preview && $.input.mousePressed('left')) {
+            const m = $.input.mouse(), vr = rect();
+            if (m.x >= vr.x && m.x < vr.x + vr.w && m.y >= vr.y && m.y < vr.y + vr.h) ops.pickAt(m.x, m.y);
+        }
         // Окно просмотра может менять размер вместе с окном SDK — предпросмотр следует за ним.
         const r = rect();
         const key = [Math.round(r.x), Math.round(r.y), Math.round(r.w), Math.round(r.h)].join(',');
@@ -506,7 +537,8 @@ function create(app) {
                 active: s.active, file: s.path, virtual: s.virtual, elements: s.parsed ? s.parsed.nodes.length : 0, selected: s.sel,
                 selectedLabel: node() ? M.label(node()) : null, sheets: s.sheets.map((x) => x.href), activeSheet: s.activeSheet,
                 dirty: s.history ? s.history.dirty() : false, canUndo: s.history ? s.history.canUndo() : false, canRedo: s.history ? s.history.canRedo() : false,
-                preview: !!s.preview, previewOk: s.previewOk, errors: sum.errors, warnings: sum.warnings, codes: s.diagnostics.map((d) => d.code),
+                preview: !!s.preview, previewOk: s.previewOk, clickSelect: true, pickable: s.parsed ? s.parsed.nodes.filter((n) => !!M.attr(n, 'id')).length : 0,
+                errors: sum.errors, warnings: sum.warnings, codes: s.diagnostics.map((d) => d.code),
                 panel: panel ? panel.snapshot() : null,
                 report: panel ? panel.report() : null,
             };

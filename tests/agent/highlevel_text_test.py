@@ -91,6 +91,81 @@ def main():
         a.eval("$('#world').font('hud')")
         check(a.eval("$('#world').font()") == "hud", ".font() ставит семейство узлу")
 
+        # --- Лица RmlUi: weight/style реально выбирают face ------------------
+        # В assets/fonts нет Bold/Italic-файлов, поэтому одно и то же имя
+        # семейства получает три РАЗНЫХ файла как разные лица. Если RmlUi
+        # действительно резолвит font-weight/font-style, ширина одинаковой
+        # строки у 400/700/italic будет разной (метрики разных шрифтов).
+        check(a.eval("typeof engine.ui.loadFontFace") == "function",
+              "engine.ui.loadFontFace есть (RmlUi face binding)")
+        check(a.eval("typeof engine.ui.fontFaces") == "function",
+              "engine.ui.fontFaces есть (метаданные лиц)")
+        check(a.eval("$.font.load('ProbeFont', 'assets/fonts/LatoLatin-Regular.ttf', { weight: 400 })") is True,
+              "$.font.load: нормальное лицо 400")
+        check(a.eval("$.font.load('ProbeFont', 'assets/fonts/NotoSans-Regular.ttf', { weight: 700 })") is True,
+              "$.font.load: жирное лицо 700")
+        check(a.eval("$.font.load('ProbeFont', 'assets/fonts/OpenSans-Regular.ttf', { weight: 400, style: 'italic' })") is True,
+              "$.font.load: курсивное лицо 400 italic")
+
+        faces = a.eval("$.font.faces()") or []
+        probe = [f for f in faces if f.get("family") == "ProbeFont"]
+        check(len(probe) == 3, "faces(): три явных лица ProbeFont (%d)" % len(probe))
+        check({(f["weight"], f["style"]) for f in probe} == {(400, "normal"), (700, "normal"), (400, "italic")},
+              "faces(): weight/style каждого лица: %s" % (probe,))
+        check(all(f.get("path") for f in probe), "faces(): у каждого лица есть path")
+        check(a.eval("$.font.families().includes('ProbeFont')"),
+              "families(): явное лицо RmlUi видно в списке семейств")
+
+        check(a.eval("$.font.load('ProbeBad', 'assets/fonts/NotoSans-Regular.ttf', { weight: 'fat' })") is False,
+              "неверный weight — false, без загрузки")
+        check(a.eval("$.font.faces().every(f => f.family !== 'ProbeBad')"),
+              "отвергнутое лицо не попало в faces()")
+
+        doc = a.eval(
+            "engine.ui.loadMarkup('font-faces', '<rml><head></head><body>"
+            "<div id=\"w400\">A quick brown fox</div>"
+            "<div id=\"w700\">A quick brown fox</div>"
+            "<div id=\"italic\">A quick brown fox</div>"
+            "<div id=\"textbox\">BOX</div>"
+            "</body></rml>')")
+        check(isinstance(doc, int) and doc >= 0, "RmlUi-документ для проверки лиц создан (%r)" % (doc,))
+        if isinstance(doc, int) and doc >= 0:
+            a.eval(
+                "engine.ui.setProperty(%d,'w400','font-family','ProbeFont');"
+                "engine.ui.setProperty(%d,'w400','font-size','24px');"
+                "engine.ui.setProperty(%d,'w400','font-weight','400');"
+                "engine.ui.setProperty(%d,'w400','font-style','normal');"
+                "engine.ui.setProperty(%d,'w700','font-family','ProbeFont');"
+                "engine.ui.setProperty(%d,'w700','font-size','24px');"
+                "engine.ui.setProperty(%d,'w700','font-weight','700');"
+                "engine.ui.setProperty(%d,'w700','font-style','normal');"
+                "engine.ui.setProperty(%d,'italic','font-family','ProbeFont');"
+                "engine.ui.setProperty(%d,'italic','font-size','24px');"
+                "engine.ui.setProperty(%d,'italic','font-weight','400');"
+                "engine.ui.setProperty(%d,'italic','font-style','italic');"
+                "engine.ui.setProperty(%d,'textbox','display','block');"
+                "engine.ui.setProperty(%d,'textbox','width','120px');"
+                "engine.ui.setProperty(%d,'textbox','height','40px');"
+                "engine.ui.setProperty(%d,'textbox','background-color','#ffffff');"
+                "engine.ui.show(%d); 1"
+                % ((doc,) * 17))
+            a.step(4)
+            w400 = a.eval("engine.ui.layoutRect(%d,'w400').w" % doc)
+            w700 = a.eval("engine.ui.layoutRect(%d,'w700').w" % doc)
+            wital = a.eval("engine.ui.layoutRect(%d,'italic').w" % doc)
+            check(isinstance(w400, (int, float)) and w400 > 0,
+                  "RCSS text с family/weight/style имеет ширину (%.1f)" % w400)
+            check(abs(w700 - w400) > 4,
+                  "font-weight:700 выбрал ДРУГОЕ лицо: ширина %.1f != %.1f" % (w700, w400))
+            check(abs(wital - w400) > 4,
+                  "font-style:italic выбрал ДРУГОЕ лицо: ширина %.1f != %.1f" % (wital, w400))
+            check(a.eval("engine.ui.getText(%d,'w400')" % doc) == "A quick brown fox",
+                  "текст элемента читается (лицо не сломало разметку)")
+            box = a.eval("engine.ui.layoutRect(%d,'textbox')" % doc) or {}
+            check(abs(box.get("w", 0) - 120) < 2 and abs(box.get("h", 0) - 40) < 2,
+                  "rect рядом с лицом держит размеры: %s" % (box,))
+            a.eval("engine.ui.unload(%d); 1" % doc)
+
         # --- Текст переживает кадры и смену сцены ----------------------------
         for _ in range(10):
             a.step(1)

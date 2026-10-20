@@ -267,6 +267,43 @@ def main():
         check(rc == 0 and out["type"] == "tilemap", "r2d-sdk validate: tilemap без ошибок")
         text = open(p_tm, encoding="utf-8").read()
         check('"data": [\n' in text and "\n        [0, 0, 5," in text.replace("      [", "        [") or '[0, 0, 5, 5' in text, "канонический вид: строка тайлов на одной строке файла (git diff)")
+
+        # Террейн и покадровая анимация — те же обычные поля JSON, а не второй формат.
+        a.eval("$.sdkApp.studios['tilemap-studio'].select(0); 1")
+        a.eval(f"{T}.setTerrain('grass', {{mode:'blob47', base:'1', solid:'1', transitions:'0:33, 255:40'}}); 1")
+        a.eval(f"{T}.paintTerrain('grass'); {T}.paint(1, 1, 1); 1")
+        a.eval(f"{T}.setAnimation({{tile:'5', frames:'5, 9', fps:'10', random:'0', layer:'0'}}); 1")
+        a.step(4)
+        s = st(a, "tilemap-studio")
+        check(s["autotile"] == "terrain" and s["terrains"] == 1 and s["animations"] == 1,
+              "Tilemap: террейн и покадровая анимация заданы в модели (%r)" % s)
+        click_el(a, DS, "ds-save")
+        wait_idle(a)
+        doc = json.load(open(p_tm, encoding="utf-8"))
+        check(doc["terrains"]["grass"]["mode"] == "blob47" and doc["terrains"]["grass"]["transitions"]["255"] == 40,
+              "террейн сохранён обычным JSON (mode/transitions)")
+        check(doc["animations"][0]["tile"] == 5 and doc["animations"][0]["frames"] == [5, 9] and doc["animations"][0]["layer"] == 0,
+              "анимация сохранена обычным JSON (tile/frames/layer)")
+        check(doc["autotile"] == {"mode": "terrain", "terrain": "grass"}, "autotile переключён на terrain")
+        rc, out = cli("validate", p_tm)
+        check(rc == 0 and out["type"] == "tilemap" and out["errors"] == 0, "r2d-sdk validate: террейн и анимация без ошибок")
+
+        bad = os.path.join(PROJ, "bad-data.tilemap.json")
+        with open(bad, "w", encoding="utf-8") as f:
+            json.dump({"version": 1, "tile": 16, "src": "", "terrains": {"grass": {"base": 0}},
+                       "animations": [{"tile": 0, "frames": [0]}], "layers": [{"data": [[1]]}]}, f)
+        rc, out = cli("validate", bad)
+        codes = {d["code"] for d in out["diagnostics"]}
+        check(rc != 0 and "SDK_TILEMAP_TERRAIN" in codes and "SDK_TILEMAP_ANIM" in codes,
+              "r2d-sdk validate: TERRAIN и ANIM диагностика (C)")
+        # Тот же файл — через живую JS-модель студии: наборы кодов обязаны совпасть.
+        a.eval(f"$.sdkApp.studios['tilemap-studio'].openFile({json.dumps(bad)}).then(() => 1)")
+        a.step(8)
+        js_codes = set(json.loads(a.eval(
+            "JSON.stringify($.sdkApp.studios['tilemap-studio'].session.diagnostics.map(d => d.code))")))
+        check(js_codes == codes,
+              "паритет JS-модели и C для террейна/анимации: JS %s, C %s" % (sorted(js_codes), sorted(codes)))
+        os.remove(bad)
         close_studio(a)
         check(a.eval("$('tilemap').length") == 0, "закрытие студии убрало узлы предпросмотра")
 
@@ -275,6 +312,18 @@ def main():
             g.step(10)
             check(g.eval("$('tilemap').length") == 1, "игра: $('<tilemap>', $.fs.readJSON(файл)) создаёт карту")
             check(g.eval("$('tilemap').first().tileAt(2, 2)") == 5, "игра читает тайл, нарисованный в студии")
+            check(g.eval("$('tilemap').first().tileAnimations().length") == 1,
+                  "игра: покадровая анимация из файла применилась сама")
+            saved_terrain = json.loads(g.eval("JSON.stringify($('tilemap').first().terrainData())"))
+            check(saved_terrain.get("grass", {}).get("mode") == "blob47",
+                  "игра: террейн загружен из обычного JSON")
+            # autotile — документированный вызов игры (как в docs/highlevel/tilemap.md):
+            # данные террейна уже в файле, применение — существующий .autotile().
+            g.eval("const f=$.fs.readJSON('level.tilemap.json');"
+                   "$('tilemap').first().autotile(f.autotile); 1")
+            g.step(2)
+            check(g.eval("$('tilemap').first().tileAt(1, 1)") != 1,
+                  "игра: autotile mode terrain перерисовал клетку набора")
 
         # --- Particle Studio --------------------------------------------------------------------------------------------------------------
         p_pt = os.path.join(PROJ, "fire.particles.json")

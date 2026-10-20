@@ -39,19 +39,19 @@
 прогон `python3 tools/run_tests.py` — **79/79 ok, 0 fail, 0 skip** (283.8 с) на
 ту дату; `tests/js/*_test.mjs` — 79 наборов зелёные; `tests/doc_claims_test.py` и
 `tests/doc_coverage_test.py` пройдены; тесты гейта — 16/16. Инвентаризация ниже.
-Текущий размер наборов (сверка 2026-10-11): **125** агентских тестов и **94**
-юнит-набора `tests/js`.
+Текущий размер наборов (сверка 2026-10-20): **317** агентских тестов и **120**
+юнит-наборов `tests/js`; CTest — **194** цели (Unity + JS + SDK), все зелёные.
 
 | Пункт | Есть | Где |
 |---|---|---|
 | Сборка | да | `build-xmake/<platform>/**/release/russiano2d` собирается Xmake |
-| Тесты | да | `python3 tools/run_tests.py` (79 агентских на дату фазы, сейчас 125), `tests/js/*_test.mjs` (79, сейчас 94) |
+| Тесты | да | `python3 tools/run_tests.py` (79 агентских на дату фазы, сейчас 317), `tests/js/*_test.mjs` (79, сейчас 120) |
 | Стражи доков | да | `tests/doc_claims_test.py`, `tests/doc_coverage_test.py` |
 | Инвентаризация `$` | да | [TASKS.md](TASKS.md), [HIGH_LEVEL_API.md](HIGH_LEVEL_API.md) |
 | Агентский протокол | да | [AGENT_API.md](AGENT_API.md), `src/agent.c` |
 | RmlUi | да | `src/gui.cpp`, низкоуровневый GUI (`engine.gui*`) |
 | Замеры | частично | `$.debug.profile()`, `tools/bench_highlevel.py`, `--stats` |
-| **CI прогоняет сборку/тесты** | **настроен** | [.github/workflows/ci.yml](../.github/workflows/ci.yml) — сборка + Unity-тесты (`ctest`); [build_and_push](../../build_and_push) — локальная сборка всех платформ, тег и релизы |
+| **CI прогоняет сборку/тесты** | **настроен** | [.github/workflows/ci.yml](../.github/workflows/ci.yml) — сборка + Unity-тесты (`ctest`); [build_and_push](../build_and_push) — локальная сборка всех платформ, тег и релизы |
 
 ---
 
@@ -98,7 +98,7 @@ $('.enemy').within('#hero', 500);
 разработки; затем — отдельные операторы (`nearest`, `inside`, `visibleFrom`,
 `limit`) там, где существующие средства движка делают их осмысленными.
 
-**Состояние: диагностика реализована (2026-10-07), операторы — нет.**
+**Состояние: диагностика и операторы реализованы (2026-10-20).**
 
 * `engine.queryStats()` → `{ calls, candidates, results, ms, cap, truncated }` —
   только факты о последнем `engine.queryCircle`
@@ -110,7 +110,13 @@ $('.enemy').within('#hero', 500);
   (`profile.h:41-48`, `script.c:358-391`);
 * `$.debug.limits()` отдаёт лимиты и занятость таблиц
   (`debug.js:67-71`);
-* операторов `nearest` / `inside` / `visibleFrom` / `limit` пока нет.
+* операторы `limit(n)`, `nearest(target?)`, `inside(area)`,
+  `visibleFrom(target, { mask, maxDistance })` — цепочные, детерминированные,
+  поверх существующих `engine.queryCircle`/`engine.raycast`/областей; якорь
+  `.within(target)` работает для `.nearest()` ([highlevel/core.md](highlevel/core.md)
+  §3). `.inside` — оператор выборки; прежняя bool-проверка прямоугольников
+  осталась у `.overlaps(sel)` — это задокументированная миграция, а не
+  молчаливая смена поведения.
 
 ---
 
@@ -149,7 +155,7 @@ $('.enemy').within('#hero', 500);
 Добавить опциональную инструментацию для разработки: `trace`, `profile`.
 Инструментация обязана быть отключаемой.
 
-**Состояние: команда `profile` реализована (2026-10-07), `trace` — нет.**
+**Состояние: `profile` и `$.trace` реализованы (2026-10-20).**
 
 * **`profile`** — `{"cmd":"profile","sel":".enemy","x":100,"y":100,"radius":500}`
   → `{sel, count, bodies, query:{native, candidates, results, ms, cap, truncated},
@@ -163,8 +169,13 @@ $('.enemy').within('#hero', 500);
 * есть `engine.profile()`, `engine.limits()`, `engine.depthInfo()`,
   `engine.fontStats()`, `engine.renderInfo()`
   (`script.c:3959`, `:4039`);
-* команды `trace` нет; единой трассировки событий (кто кого ударил, кто умер)
-  тоже нет — это следующий шаг фазы.
+* `$.trace` — кольцевой журнал на 256 записей, opt-in (`on(true)`), события
+  боя (`attack/damage/death/combat:filter`), сцены, сигналов, звука, ввода и
+  контактов, цепочка `$.trace.hit(id)`, потери переполнения и очистка
+  ([highlevel/replay.md](highlevel/replay.md), [DEVTOOLS.md](DEVTOOLS.md) §2);
+  вкладка EVENTS показывает журнал, фильтр по виду, паузу и снимок.
+  Агент читает тот же журнал командой `eval` (`$.trace.list()`), отдельного
+  второго журнала для агента нет.
 
 ---
 
@@ -173,7 +184,7 @@ $('.enemy').within('#hero', 500);
 Строить запись/воспроизведение на существующих опорах: `--fixed-dt`, `--seed`,
 агентский ввод. Использовать в автотестах.
 
-**Состояние: CLI и формат реализованы (2026-10-07); чекпоинтов нет.**
+**Состояние: CLI, формат, checkpoints и state hash реализованы.**
 
 * **`--record <файл>` / `--replay <файл>`** — запись ввода кадра и
   воспроизведение через виртуальный ввод (`main.c`,
@@ -183,9 +194,14 @@ $('.enemy').within('#hero', 500);
 * есть JS-подсистема `$.replay` (запись ввода по кадрам, JSON, лимит
   36 000 кадров, `verify`, `compareReplays`) —
   `replay.js`, [highlevel/replay.md](highlevel/replay.md);
-* **нет** чекпоинтов (утверждений о состоянии на кадре) и хеша мира, нет
-  команд реплея в агентском протоколе: сценарий разыгрывается командами
-  `key`/`step`, а состояние сверяет игра.
+* **есть** state hash по детерминированным gameplay-данным
+  (`hashOfValues`/`gameplaySnapshot`: RNG, позиции, HP, счётчики; без
+  указателей, GPU-хэндлов и таймингов), политика `checkpoints({ every })`,
+  именованные checkpoints `checkpoint('after_boss', { frame })`,
+  `verifyState`/`verifyCheckpoint` и `divergence()` с кадром, ожидаемым и
+  фактическим hash и diff полей ([highlevel/replay.md](highlevel/replay.md));
+* команд реплея в агентском протоколе нет: сценарий разыгрывается командами
+  `key`/`step`, состояние сверяет игра.
 
 ---
 
@@ -246,7 +262,7 @@ $('.enemy').within('#hero', 500);
 transform/physics/state → копирование селектора
 ```
 
-**Состояние: первый срез сделан (2026-10-07), `$.devtools`.**
+**Состояние: DevTools собран и расширен (2026-10-20), `$.devtools`.**
 
 * панель — **RmlUi-документ, собранный кодом** (`engine.ui.loadMarkup`), без
   `.rml` в игре и без ImGui: закон UI соблюдён
@@ -258,9 +274,13 @@ transform/physics/state → копирование селектора
   перерисовывается);
 * данные — из той же инспекции, что у агента (`$.agent.nodes('*')`): второй
   реализации поиска нет ([DEVTOOLS.md](DEVTOOLS.md) §7);
-* **осталось**: правки значений и экспорт, picking из мира, панели
-  WORLD/EVENTS/PHYSICS/BSP/NAV/AUDIO/RENDER/PERF, таймлайн событий,
-  визуализация коллизий/BSP/навигации;
+* **сделано**: picking из мира (`pickMode/pickAt`), правки x/y и
+  visible/enabled в F2 и `$.devtools.set` для документированных полей,
+  панели PERF/HITCH/PHYSICS/RENDER/EVENTS/TREE/DIAG/AUDIO/INPUT/ASSETS/
+  MEMORY/CONSOLE/STEP/WATCH/VFX, журнал `$.trace`, ресурсы/бюджеты,
+  `$.diag.bundle`;
+* **осталось** (не блокирует игру): отдельные визуализации BSP/NAV как
+  инструмент, файловый Export override, правки остальных полей через API;
 * проверки: `tests/js/devtools_test.mjs` (3 набора без GUI) и
   `tests/agent/devtools_test.py` (в движке: открытие, F2, выбор, обновление).
 

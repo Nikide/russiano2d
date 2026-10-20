@@ -309,7 +309,7 @@ int sdk_cmd_validate(const SdkArgs *a)
     const bool project_mode = sdk_is_dir(path);
     const char *type = "project";
     if (project_mode) {
-        sdk_project_validate(path, &rep);
+        sdk_project_validate(path, sdk_arg_value(a, "--schema"), &rep);
     } else {
         type = sdk_validate_file(path, sdk_arg_value(a, "--type"), &rep);
     }
@@ -402,10 +402,15 @@ int sdk_cmd_run(const SdkArgs *a)
         sdk_report_free(&rep);
         return rc;
     }
+    // Движок резолвит относительный --game от собственного каталога, поэтому
+    // пользовательский путь делаем абсолютным от cwd (абсолютный не меняется).
+    char game_abs[2048];
+    const char *game_arg = dir;
+    if (sdk_abs_path(dir, game_abs, sizeof game_abs)) game_arg = game_abs;
     const char *eargv[24];
     int n = 0;
     eargv[n++] = "--game";
-    eargv[n++] = dir;
+    eargv[n++] = game_arg;
     const char *scene = sdk_arg_value(a, "--scene");
     if (scene) { eargv[n++] = "--scene"; eargv[n++] = scene; }
     const char *frames = sdk_arg_value(a, "--frames");
@@ -434,11 +439,15 @@ int sdk_cmd_build(const SdkArgs *a)
     char out_dir[1536];
     sdk_dirname(out_path, out_dir, sizeof out_dir);
     if (out_dir[0] && !sdk_is_dir(out_dir)) SDL_CreateDirectory(out_dir);
+    // Тот же аргумент для движка: путь проекта абсолютный (см. sdk_cmd_run).
+    char project_abs[2048];
+    const char *project_arg = dir;
+    if (sdk_abs_path(dir, project_abs, sizeof project_abs)) project_arg = project_abs;
     const char *eargv[16];
     int n = 0;
     eargv[n++] = "build";
     eargv[n++] = "--project";
-    eargv[n++] = dir;
+    eargv[n++] = project_arg;
     eargv[n++] = "--entry";
     const char *entry = sdk_arg_value(a, "--entry");
     eargv[n++] = entry ? entry : "main.js";

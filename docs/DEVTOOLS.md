@@ -10,9 +10,9 @@ DevTools — это **инспектор и отладчик**. Это **не** 
 DevTools ничего не «сохраняет как проект» и не становится источником истины.
 
 Статус: **панели собраны и покрыты тестами** — 15 вкладок диагностики (F1),
-инспектор сущности (F2), picking, детектор hitch и 81 метод `$.devtools`.
-Что именно есть, а чего ещё нет — §9. Справка по API —
-[highlevel/devtools.md](highlevel/devtools.md).
+инспектор сущности (F2), picking, детектор hitch, безопасные правки на лету
+(§6) и 89 методов `$.devtools`. Что именно есть, а чего ещё нет — §9.
+Справка по API — [highlevel/devtools.md](highlevel/devtools.md).
 
 ---
 
@@ -44,7 +44,11 @@ DevTools ничего не «сохраняет как проект» и не с
   Экспорт отчёта (§39) — внутри вкладки `diag` (отдельной вкладки REPORT нет).
 * **F2 — инспектор сущности** (`$.devtools.open()`, `$.devtools.toggle()`):
   список → выбор → секции `Identity / Transform / Gameplay / Physics /
-  Presentation`, поиск, фильтры, picking, копирование селектора/ID/JS.
+  Presentation`, поиск, фильтры, picking, копирование селектора/ID/JS/override.
+  Внизу — минимальная строка правок: `x`, `y` (Apply/Enter), переключатели
+  **Visible** и **Enabled**. Остальные поля — через `$.devtools.set` (§6).
+  Вкладка MEM показывает ещё и таблицу ресурсов `$.debug.resources()`
+  (`docs/highlevel/debug.md`).
 
 Панелей WORLD, BSP, NAV как отдельных вкладок нет: их данные доступны
 оверлеями подсистем (§4) и в инспекторе.
@@ -70,8 +74,11 @@ Presentation  видимость, альфа, слой, спрайт, ui/aria
 отдаёт `$.devtools.inspect(sel)`; выборка списка с поиском и фильтрами —
 `$.devtools.list()`, состояние панели — `$.devtools.panel()`.
 
-Значения в панели **только читаются**. Правки на лету и «Export override» —
-см. §9 («чего ещё нет»).
+Значения в панели читаются; **явные** правки — через строку F2
+(`x`/`y`/Visible/Enabled) или `$.devtools.set(selector, field, value)` (§6).
+Правка живёт только в текущем мире: она не пишется в файлы, не становится
+данными проекта и не «сохраняет проект». Готовый код для переноса правки в
+игру даёт `$.devtools.overrideText(sel)` / кнопка **Copy override**.
 
 ---
 
@@ -130,10 +137,28 @@ Export override
 $('#guard').at(420, 120);
 ```
 
-Сейчас реализованы копирования (`Copy selector` / `Copy node ID` / `Copy JS`,
-`Copy report`); правок значений и `Export override` нет — панель читает мир,
-кроме явных действий (mute/solo шины, стоп канала, пауза и масштаб времени,
-шаг кадра, очистка журналов и захватов).
+Реализованы:
+
+* **Copy selector / Copy node ID / Copy JS / Copy override** — «Copy override»
+  копирует `overrideText`: `$('#hero').at(…).angle(…).scale(…)…`;
+* **явные правки на лету** — `$.devtools.set(selector, field, value)`
+  (`x`, `y`, `angle`, `angleDeg`, `scale`, `scaleX`, `scaleY`, `visible`,
+  `enabled`, `velocity`, `gravity`, `gravityScale` 0/1, `bodyEnabled`,
+  `sensor`, `static`, `fixed`, `body`). Каждая правка — **существующая
+  операция** `$`: `.at/.angle/.scale/.visible/.active/.velocity/.gravity/
+  .sensor/.body`; `bodyEnabled` — существующий `engine.setBodyEnabled`.
+  Возврат структурный: `{ ok, selector, field, before, after, error }`.
+  Второго пути мутации нет, World/Scene/Prefab не переписываются;
+* `$.devtools.setMany(sel, {…})`, `$.devtools.undo()` (откат последней правки),
+  `$.devtools.editFields()` — список полей и текущих значений,
+  `$.devtools.overrideText(sel)` — paste-ready JS;
+* прочие явные действия — mute/solo шины, стоп канала, пауза и масштаб времени,
+  шаг кадра, очистка журналов и захватов.
+
+Чего по-прежнему нет: **Export override в файл** (только готовый текст в
+буфер) и записи проекта — это вне философии R2D (§1). Произвольный
+`gravityScale` не поддерживается: `$` отдаёт только `.gravity(on)` (0/1),
+поэтому DevTools честно отклоняет иные значения, а не подменяет их.
 
 ---
 
@@ -169,13 +194,16 @@ DevTools умеет:
 * инспекторы подсистем — ✅ (PHYS, RENDER, EVENTS, AUDIO, INPUT, ASSETS, MEM);
 * picking из мира с копированием селектора — ✅ (`pickMode`, `pickAt`);
 * только RmlUi для обычного интерфейса — ✅ (ImGui не используется);
-* работу, не превращаясь в источник истины — ✅ (панель читает; правок нет).
+* явные безопасные правки, не превращаясь в источник истины — ✅ (`set`,
+  `setMany`, `undo`; только существующие операции `$`, без записи в проект);
+* ресурсы и бюджеты — ✅ (`$.debug.resources()`, `$.debug.budget()`, MEM);
+* диагностический пакет — ✅ (`$.diag.bundle()`, `docs/highlevel/diag.md`).
 
 ---
 
 ## 9. Что уже есть в движке
 
-`$.devtools` — **81 публичное имя** на 0.1.34 (полный список и семантика —
+`$.devtools` — **89 публичных имён** на этой сборке (полный список и семантика —
 [highlevel/devtools.md](highlevel/devtools.md)), 15 вкладок F1, инспектор F2,
 детектор hitch (`engine.hitch.*`, вкладка HITCH), picking, экспорт отчёта (§39)
 и консоль команд (§31). Всё видимое в панели доступно как JSON; тесты вкладок
@@ -197,12 +225,18 @@ DevTools умеет:
 | `tests/agent/devtools_backend_test.py` | данные бэкенда: формы, свет, `renderInfo()` |
 | `tests/agent/sdk_runtime_ui_test.py` | панель F1 целиком, гравитация, перезапуск скриптов |
 | `tests/js/devtools_test.mjs` | логика панели без GUI (qjs) |
+| `tests/js/devtools_edit_test.mjs` | правки `set/setMany/undo/editFields/overrideText` без GUI |
+| `tests/js/resources_test.mjs` | `$.debug.resources()/budget()`: basis, пик, warn once |
+| `tests/js/diag_bundle_test.mjs` | `$.diag.bundle()`: файлы, traversal, отказ записи |
 | `tests/agent/tilemap_debug_test.py`, `anim_debug_test.py`, `camera_debug_test.py`, `light_debug_test.py` | оверлеи подсистем (§4) |
 | `tests/agent/debug_diagnostics_test.py`, `highlevel_perf_test.py` | профиль, история кадра, перцентили |
 
 **Чего ещё нет** (осознанно, а не «потеряно»):
 
-* правок значений на лету и их экспорта (value / JS / override) — см. §6;
+* экспорта override в файл (есть готовая строка JS `overrideText` в буфере);
+* UI-полей для всех редактируемых свойств: в F2 только `x`/`y` и
+  Visible/Enabled, остальное — API `set` (сделано так, чтобы не строить
+  второй инспектор и не размножать обработчики RmlUi);
 * отдельных панелей WORLD / BSP / NAV и визуализации этих подсистем как
   инструмента;
 * редактора сцены и записи проекта — это вне философии R2D (§1).

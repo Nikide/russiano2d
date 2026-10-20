@@ -1,4 +1,69 @@
-> Чанк: SDK Extensions + Universal World Editor (2026-10-19).
+> FINAL ENGINE PASS — follow-up (2026-10-20, без тега/релиза).
+> (1) **Tilemap**: редактор террейнов и анимации тайлов в SDK (RmlUi), обычный
+> JSON `terrains`/`autotile.mode='terrain'`/`animations`; валидация JS↔C
+> parity; рантайм применяет данные сам (кадр тайла в обычном и Y-sort пути,
+> время из `$.time.delta()`, pause/timescale/fixed-dt работают). Методы
+> `$.fn.animations`/`.tileAnimations`.
+> (2) **Font**: RmlUi-лица с weight/style — `engine.ui.loadFontFace`,
+> `$.font.load(name,path,{weight,style})`, `$.font.faces()`; RCSS
+> `font-weight/font-style` реально выбирает лицо. Кастомный `$.gfx.text`
+> остаётся одноатласным и bold/italic не подделывает.
+> (3) **C-формат реплея**: `content` (fnv1a64 канонических файлов или
+> `--replay-content`) и реальные native-checkpoints тел Box2D
+> (`--checkpoint frame[:name]`, `--checkpoints strict|off`); strict-расхождение
+> — stderr с expected/actual и exit 3. Старые записи читаются.
+> (4) **Re2D диагностика**: видимый атлас, ещё грузящийся первые 30 upload-
+> тактов, больше не даёт ложный `R2D_ATLAS_NOT_RESIDENT`; реальная
+> нерезидентность по-прежнему диагностируется. Порог настраивается
+> `world.streamConfig({warnGrace: N})` (0 — сразу; по умолчанию 30).
+> (5) **Тесты/доки**: приведены к факту ui_off (пул растёт с 256), joints
+> (slot-pool ids), tilemap partial (пул тел растёт), roadmap coverage
+> (104/128/147/148 = partial с причинами, 4 red). Новые Unity/qjs тесты
+> (fs atomic, replay checkpoints, SDK deps/schema, tilemap terrain/anim, font
+> weight). API freeze 3254 имени, schema/d.ts/API reference перегенерированы.
+> > FINAL ENGINE PASS (2026-10-20, база v1.3.0; тег/релиз НЕ создавались).
+> (1) **Persistence**: `$.save.schema`/`$.store.schema` — игровая версия
+> данных, миграции k→k+1 на копии с сохранением неизвестных полей, defaults,
+> validate, структурные R2D_SAVE_SCHEMA_*; сейв «из будущего» не перезаписывается;
+> `$.store` получил saveResult/loadResult/lastFailure/stats и .bak-recovery.
+> Атомарная замена файла — новый нативный `engine.fs.writeAtomic`
+> (temp рядом + fsync + rename, src/fs_util.c) и `$.fs.writeAtomic`; при старой
+> сборке без биндинга — честный fallback temp+backup с `atomic:false`.
+> (2) **Async loading**: `$.scene.job` — handle загрузчика с on/off/emit
+> (`progress/done/activated/error/cancel`), ratio/completed/total/current,
+> cancel без публикации полусозданного мира; `$.loading.scene` — экран + job;
+> свой RmlUi-экран `$.loading.rml`/`show({rml,rcss})` через существующий `$.ui.doc`.
+> Приобретение и активация сцены разделены.
+> (3) **Physics events**: `sensor:enter`/`sensor:leave` через существующий
+> dispatchContacts (begin/end Box2D), `collide/separate/hit/stay` сохранены;
+> payload с self/other/area/owner и честными null для отсутствующих point/normal.
+> (4) **Replay**: именованные checkpoints `$.replay.checkpoint('after_boss',{frame,hash?})`,
+> state hash по gameplay-данным, verifyCheckpoint/divergence с кадром, именем,
+> expected/actual и diff полей; round-trip в toText/load.
+> (5) **Trace**: `$.trace.filter/read` (category/kind/selector/from/to/since/limit),
+> `categories()`, `export()` (json/text); исправлена нумерация кольца — n снова
+> строго монотонен после переполнения (курсор since).
+> (6) **DevTools**: `$.devtools.set/setMany/undo/editFields/overrideText` (x/y,
+> angle, scale, visible/enabled, документированные physics-поля) через те же
+> операции узла; F2 правит x/y и visible/enabled; `$.debug.resources/budget`
+> с честными basis exact/estimated/cpu-side-only/unknown; `$.diag.bundle` пишет
+> diagnostics/<timestamp>/ без сети и path traversal.
+> (7) **Query**: `limit`, `nearest` (якорь `.within`), `inside`, `visibleFrom`
+> поверх engine.queryCircle/raycast/областей. Миграция: `.inside(sel)` теперь
+> оператор выборки, прежняя bool-проверка — `.overlaps(sel)`; docs обновлены.
+> (8) **SDK**: `r2d-sdk deps` — граф зависимостей авторских ассетов и
+> инкрементальная проверка (deps.json + .r2d/cache/assets.json, рантайм не
+> читает); curve-graph Particle Studio, click-to-select RmlUi Studio,
+> drag-resize коллизий и drag зон акустики. Проверена macOS-поставка вне
+> checkout; дефекты поставки (версия SDK/пакета, validate вне cwd, relative run,
+> R2D100) закрываются отдельно.
+> (9) **Тесты/доки**: новые qjs-наборы (save schema, loading job, contacts,
+> query ops, trace filter, devtools edit, resources, diag bundle, replay
+> checkpoint, studio curves), Unity-тест атомарной записи и SDK deps; снимок
+> api_freeze обновлён осознанно (3251 имя), schema/d.ts/API reference
+> перегенерированы. Не сделано и не заявлено: tilemap terrain/tile animation
+> editor, font kerning (ограничение движка), installed-прогон Linux/Windows.
+> > Чанк: SDK Extensions + Universal World Editor (2026-10-19).
 > (1) **Расширения SDK**: native discovery built-in/user/project, manifest schema,
 > namespaced ids, sdk_api=1, merged effective registry, CLI `extension`/`tool`
 > (list/info/validate/run/install/uninstall), JS contribution host; контракт —

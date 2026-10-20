@@ -39,6 +39,7 @@ set(R2D_SDK_SOURCES
     "${CMAKE_SOURCE_DIR}/src/bsp.c"
     sdk_data.c
     sdk_manifest.c
+    sdk_deps.c
     sdk_batch.c
     sdk_agent.c
     sdk_cmds.c
@@ -169,3 +170,23 @@ if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
     target_link_options(r2d_sdk_world_edit_test PRIVATE -fsanitize=address,undefined)
 endif()
 add_test(NAME r2d_sdk_world_edit_test COMMAND r2d_sdk_world_edit_test)
+
+# Граф зависимостей ассетов (docs/SDK.md §4): манифест deps.json, служебный
+# кэш .r2d/cache/assets.json, инкрементальное устаревание по содержимому.
+add_executable(r2d_sdk_deps_test "${CMAKE_SOURCE_DIR}/tests/sdk/deps_test.c")
+target_link_libraries(r2d_sdk_deps_test PRIVATE r2d_sdk_core r2d_unity)
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_sdk_deps_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_sdk_deps_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_sdk_deps_test COMMAND r2d_sdk_deps_test)
+
+# Пути SDK: api.schema.json из любого cwd (в т.ч. в установленном пакете) и
+# абсолютный путь проекта для внешнего процесса (run/build).
+add_executable(r2d_sdk_schema_path_test "${CMAKE_SOURCE_DIR}/tests/sdk/schema_path_test.c")
+target_link_libraries(r2d_sdk_schema_path_test PRIVATE r2d_sdk_core r2d_unity)
+if(NOT MSVC AND NOT CMAKE_CROSSCOMPILING)
+    target_compile_options(r2d_sdk_schema_path_test PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(r2d_sdk_schema_path_test PRIVATE -fsanitize=address,undefined)
+endif()
+add_test(NAME r2d_sdk_schema_path_test COMMAND r2d_sdk_schema_path_test)

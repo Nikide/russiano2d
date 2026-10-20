@@ -167,3 +167,87 @@ export function parseRampText(text, key) {
     }
     return out;
 }
+
+// --- Граф кривых Particle Studio ---------------------------------------------------------
+// Правка рампы точки графа — чистая логика над тем же форматом (без UI и движка):
+// точки возвращаются новым массивом, поля стопа — color/alpha/size, как у рантайма.
+export const RAMP_FIELDS = { color: 'color_ramp', alpha: 'alpha_ramp', size: 'size_ramp' };
+
+export function rampDefaultValue(kind) { return kind === 'color' ? '#ffffff' : kind === 'alpha' ? 1 : 10; }
+
+function clampT(t) {
+    const n = Number(t);
+    return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.5;
+}
+
+function clampValue(kind, value) {
+    const n = Number(value);
+    if (kind === 'alpha') return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0.5;
+    return Number.isFinite(n) ? Math.max(0, n) : 10;
+}
+
+/** Диапазон значений для оси Y графа: alpha всегда 0..1, size — от 0 до максимума точек. */
+export function rampRange(ramp, kind) {
+    if (kind !== 'size') return [0, 1];
+    let max = 0;
+    for (const p of ramp || []) max = Math.max(max, Number(stopValue(p, kind)) || 0);
+    return [0, Math.max(1, Math.ceil(max * 1.15))];
+}
+
+/** Индекс точки, ближайшей по t (выбор кликом); пусто → -1. */
+export function nearestRampPoint(ramp, t) {
+    let best = -1, dist = Infinity;
+    (ramp || []).forEach((p, i) => { const d = Math.abs(p.t - clampT(t)); if (d < dist) { best = i; dist = d; } });
+    return best;
+}
+
+/** Вставить точку (t сортируется) → { points, index } или null, если точек уже 32. */
+export function addRampPoint(ramp, kind, t, value) {
+    const points = (ramp || []).map((p) => Object.assign({}, p));
+    if (points.length >= 32) return null;
+    const at = clampT(t);
+    const stop = kind === 'color' ? { t: at, color: colorOk(value) ? value : rampDefaultValue('color') }
+        : kind === 'alpha' ? { t: at, alpha: clampValue('alpha', value) }
+        : { t: at, size: clampValue('size', value) };
+    points.push(stop);
+    points.sort((a, b) => a.t - b.t);
+    return { points, index: points.indexOf(stop) };
+}
+
+/** Удалить точку (последнюю не удаляем: рампа из 1..32 точек) или null. */
+export function removeRampPoint(ramp, index) {
+    if (!ramp || index < 0 || index >= ramp.length || ramp.length <= 1) return null;
+    const points = ramp.map((p) => Object.assign({}, p));
+    points.splice(index, 1);
+    return points;
+}
+
+/** Сдвинуть точку: t зажимается соседями, значение — диапазоном поля. */
+export function moveRampPoint(ramp, kind, index, t, value) {
+    if (!ramp || index < 0 || index >= ramp.length) return null;
+    const points = ramp.map((p) => Object.assign({}, p));
+    const lo = index > 0 ? points[index - 1].t : 0;
+    const hi = index < points.length - 1 ? points[index + 1].t : 1;
+    points[index].t = Math.max(lo, Math.min(hi, clampT(t)));
+    if (kind !== 'color') points[index][kind === 'alpha' ? 'alpha' : 'size'] = clampValue(kind, value);
+    return points;
+}
+
+/** Значение кривой в t (линейная интерполяция, alpha/size); color → null. */
+export function sampleRamp(ramp, kind, t) {
+    const points = ramp || [];
+    if (!points.length || kind === 'color') return null;
+    const at = clampT(t);
+    if (at <= points[0].t) return Number(stopValue(points[0], kind));
+    const last = points[points.length - 1];
+    if (at >= last.t) return Number(stopValue(last, kind));
+    for (let i = 1; i < points.length; i++) {
+        const a = points[i - 1], b = points[i];
+        if (at <= b.t) {
+            const span = b.t - a.t;
+            const k = span > 0 ? (at - a.t) / span : 0;
+            return Number(stopValue(a, kind)) + (Number(stopValue(b, kind)) - Number(stopValue(a, kind))) * k;
+        }
+    }
+    return Number(stopValue(last, kind));
+}

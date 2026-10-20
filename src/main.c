@@ -109,6 +109,9 @@ static void r2d__print_usage(const char *exe)
         "  --seed <N>         зерно случайных чисел для $.random (по умолчанию 12345)\n"
         "  --record <файл>    записать ввод в файл (.r2replay), см. docs/RECORD_REPLAY.md\n"
         "  --replay <файл>    воспроизвести записанный ввод вместо настоящего\n"
+        "  --checkpoint <кадр>[:<имя>]  записать checkpoint нативного состояния на кадре (engine.frame)\n"
+        "  --checkpoints strict|off     сверять checkpoints при --replay (по умолчанию strict)\n"
+        "  --replay-content <id>        явный content ID игры вместо автохэша её файлов\n"
         "\n"
         "  --help             эта справка\n"
         "  --version          версия движка и выход\n"
@@ -193,12 +196,67 @@ typedef struct FrameContext {
     double stats_last;
     bool   auto_shot_taken;   // снимок по --screenshot уже сделан
     R2DReplay *replay;        // --record / --replay (может быть NULL)
+    bool   replay_diverged;   // checkpoint разошёлся: процесс вернёт код 3
     // Лимиты из командной строки: в нативном режиме их проверяет while в
     // main(), в веб-режиме — кадровый колбэк Emscripten (он же завершает
     // приложение: бесконечного цикла в браузере быть не может).
     long   frame_limit;
     double seconds_limit;
 } FrameContext;
+
+// Нативный gameplay-state для checkpoints реплея: ровно то, чем владеет C.
+// Входят номер кадра, живые физические тела (id слота, позиция, угол,
+// линейная и угловая скорость). JS-состояние узлов сюда не попадает — C его
+// не видит; для него в игре есть $.replay v2 (docs/highlevel/replay.md).
+static uint64_t r2d__native_state_hash(const FrameContext *fc)
+{
+    uint64_t hash = r2d_replay_hash_begin();
+    const R2DApp *app = fc->app;
+    const R2DPhysics *p = fc->physics;
+
+    hash = r2d_replay_hash_u32(hash, (uint32_t)app->frame);
+    hash = r2d_replay_hash_u32(hash, r2d_physics_live_count(p));
+
+    // Обход dense-списка живых слотов: порядок зависит только от истории
+    // create/destroy, то есть воспроизводится вместе с симуляцией.
+    const uint32_t bodies = r2d_slot_pool_count(&p->body_pool);
+    for (uint32_t i = 0; i < bodies; ++i) {
+        const uint32_t slot = r2d_slot_pool_dense_at(&p->body_pool, i);
+        hash = r2d_replay_hash_u32(hash, slot);
+        hash = r2d_replay_hash_f32(hash, p->transforms[slot * 3 + 0]);
+        hash = r2d_replay_hash_f32(hash, p->transforms[slot * 3 + 1]);
+        hash = r2d_replay_hash_f32(hash, p->transforms[slot * 3 + 2]);
+
+        float vx = 0.0f, vy = 0.0f;
+        r2d_physics_get_velocity(p, (int)slot, &vx, &vy);
+        hash = r2d_replay_hash_f32(hash, vx);
+        hash = r2d_replay_hash_f32(hash, vy);
+        hash = r2d_replay_hash_f32(hash, r2d_physics_get_angular_velocity(p, (int)slot));
+    }
+    return hash;
+}
+
+// Content ID игры: автохэш её канонических файлов или явный --replay-content.
+// 0-байтный ID означает «не посчитан»: в заголовок он не пишется, и это
+// честно видно как отсутствие поля, а не как «версия 0».
+static void r2d__content_id(const char *game, char *out, size_t out_size,
+                            uint32_t *files, uint64_t *bytes)
+{
+    if (!out || out_size == 0) return;
+    out[0] = '\0';
+    char err[256];
+    uint32_t count = 0;
+    uint64_t total = 0;
+    const uint64_t hash = r2d_replay_content_hash(game, &count, &total, err, sizeof err);
+    if (hash == 0) {
+        R2D_WARN("%s", err);
+        return;
+    }
+    char hex[17];
+    SDL_snprintf(out, out_size, "fnv1a64:%s", r2d_replay_hash_hex(hash, hex, sizeof hex));
+    if (files) *files = count;
+    if (bytes) *bytes = total;
+}
 
 // shot_path != NULL — снять кадр в PNG (использует агент и --screenshot).
 static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
@@ -267,6 +325,24 @@ static bool r2d__run_frame(FrameContext *fc, const char *shot_path)
     r2d_prof_begin(R2D_PROF_UPDATE);
     r2d_script_call_update(fc->script, app->dt);
     r2d_prof_end(R2D_PROF_UPDATE);
+
+    // --- Checkpoints реплея -------------------------------------------------
+    // Hash нативного состояния считается только на назначенных кадрах: без
+    // --checkpoint при записи и без строк check в файле это ноль работы.
+    if (fc->replay && r2d_replay_checkpoint_due(fc->replay, (int)app->frame)) {
+        R2DReplayCheck check;
+        const uint64_t state = r2d__native_state_hash(fc);
+        if (r2d_replay_check(fc->replay, (int)app->frame, state, &check) ==
+            R2D_REPLAY_CHECK_DIVERGED) {
+            char expected[17], actual[17];
+            R2D_WARN("replay: checkpoint \"%s\" на кадре %d разошёлся: "
+                     "ожидался %s, получен %s",
+                     check.name, check.frame,
+                     r2d_replay_hash_hex(check.expected, expected, sizeof expected),
+                     r2d_replay_hash_hex(check.actual, actual, sizeof actual));
+            fc->replay_diverged = true;
+        }
+    }
 
     r2d_render_begin_frame(fc->renderer, app->width, app->height);
     // Атлас глифов, дорисованный в прошлом кадре, уезжает в GPU до того, как
@@ -569,6 +645,15 @@ static void r2d__shutdown(FrameContext *fc)
 #endif
     r2d_script_call_exit(fc->script);
     r2d_script_shutdown(fc->script);
+    if (fc->replay) {
+        const int total = r2d_replay_checkpoint_count(fc->replay);
+        const int checked = r2d_replay_checkpoint_checked(fc->replay);
+        if (total > checked) {
+            R2D_LOG("replay: %d из %d checkpoint'ов %s — сессия закончилась раньше",
+                    total - checked, total,
+                    r2d_replay_recording(fc->replay) ? "не записано" : "не проверено");
+        }
+    }
     r2d_replay_destroy(fc->replay);
 #ifdef R2D_ENABLE_RMLUI
     r2d_gui_destroy(fc->gui);
@@ -678,6 +763,10 @@ int main(int argc, char **argv)
     long   opt_frame_limit = 0;
     const char *opt_record = NULL;     // --record: файл записи ввода
     const char *opt_replay = NULL;     // --replay: файл воспроизведения
+    const char *opt_replay_content = NULL;  // --replay-content: явный content ID
+    bool opt_checkpoints = true;       // --checkpoints strict|off при --replay
+    R2DReplayCheckpoint opt_checks[64];     // --checkpoint (повторяемый)
+    int  opt_check_count = 0;
     bool opt_dump_api = false;         // --dump-api: metadata публичного $ API
 
     for (int i = 1; i < argc; ++i) {
@@ -709,6 +798,31 @@ int main(int argc, char **argv)
             opt_record = argv[++i];
         } else if (SDL_strcmp(argv[i], "--replay") == 0 && i + 1 < argc) {
             opt_replay = argv[++i];
+        } else if (SDL_strcmp(argv[i], "--replay-content") == 0 && i + 1 < argc) {
+            opt_replay_content = argv[++i];
+        } else if (SDL_strcmp(argv[i], "--checkpoints") == 0 && i + 1 < argc) {
+            const char *mode = argv[++i];
+            if (SDL_strcmp(mode, "off") == 0) opt_checkpoints = false;
+            else if (SDL_strcmp(mode, "strict") == 0) opt_checkpoints = true;
+            else R2D_WARN("--checkpoints: ожидается strict|off, получено %s", mode);
+        } else if (SDL_strcmp(argv[i], "--checkpoint") == 0 && i + 1 < argc) {
+            char spec[128];
+            SDL_strlcpy(spec, argv[++i], sizeof spec);
+            char *colon = SDL_strchr(spec, ':');
+            if (colon) *colon = '\0';
+            const int frame = SDL_atoi(spec);
+            if (frame <= 0) {
+                R2D_WARN("--checkpoint: нужен номер кадра > 0, получено %s", spec);
+            } else if (opt_check_count >= (int)(sizeof opt_checks / sizeof opt_checks[0])) {
+                R2D_WARN("--checkpoint: больше %d не поддерживается",
+                         (int)(sizeof opt_checks / sizeof opt_checks[0]));
+            } else {
+                R2DReplayCheckpoint *cp = &opt_checks[opt_check_count++];
+                SDL_zero(*cp);
+                cp->frame = frame;
+                if (colon && colon[1]) SDL_strlcpy(cp->name, colon + 1, sizeof cp->name);
+                else SDL_snprintf(cp->name, sizeof cp->name, "frame-%d", frame);
+            }
         } else if (SDL_strcmp(argv[i], "--dump-api") == 0) {
             opt_dump_api = true;
             opt_headless = true;
@@ -874,14 +988,55 @@ int main(int argc, char **argv)
         opt_record = NULL;
     }
     if (opt_replay) {
-        replay = r2d_replay_play(opt_replay, replay_err, sizeof replay_err);
-        if (replay) R2D_LOG("replay: %d кадров ввода из %s", r2d_replay_frames(replay), opt_replay);
-        else R2D_WARN("%s", replay_err);
+        replay = r2d_replay_play(opt_replay, opt_checkpoints, replay_err, sizeof replay_err);
+        if (replay) {
+            const R2DReplayHeader *rh = r2d_replay_header(replay);
+            R2D_LOG("replay: %d кадров ввода из %s (checkpoints: %d, сверка %s)",
+                    r2d_replay_frames(replay), opt_replay,
+                    r2d_replay_checkpoint_count(replay),
+                    opt_checkpoints ? "strict" : "off");
+
+            // Content ID: сверяем идентичность контента, записанную при
+            // record, с текущей. Явный --replay-content перекрывает автохэш
+            // (нужен для собранных игр, где каталога проекта уже нет).
+            char current_content[96] = "";
+            if (opt_replay_content) {
+                SDL_strlcpy(current_content, opt_replay_content, sizeof current_content);
+            } else if (!has_payload) {
+                r2d__content_id(opt_game, current_content, sizeof current_content, NULL, NULL);
+            }
+            if (!rh->content[0]) {
+                R2D_LOG("replay: content в записи не указан (старый файл) — сверку пропускаю");
+            } else if (!current_content[0]) {
+                R2D_LOG("replay: content сейчас не посчитан — сверку пропускаю");
+            } else if (SDL_strcmp(rh->content, current_content) != 0) {
+                // Не отказ: игру могли поправить осознанно. Но молчать нельзя —
+                // расхождение объясняет будущую divergence.
+                R2D_WARN("replay: content игры изменился (в записи %s, сейчас %s)",
+                         rh->content, current_content);
+            }
+        } else R2D_WARN("%s", replay_err);
     } else if (opt_record) {
-        replay = r2d_replay_record(opt_record, R2D_VERSION_STRING, opt_game, &app,
-                                   opt_seed, replay_err, sizeof replay_err);
-        if (replay) R2D_LOG("record: ввод пишется в %s", opt_record);
-        else R2D_WARN("%s", replay_err);
+        R2DReplayHeader header;
+        SDL_zero(header);
+        header.format = R2D_REPLAY_FORMAT;
+        SDL_strlcpy(header.version, R2D_VERSION_STRING, sizeof header.version);
+        SDL_strlcpy(header.game, opt_game ? opt_game : "", sizeof header.game);
+        header.fixed_dt = (double)app.fixed_dt;
+        header.seed = opt_seed;
+        if (opt_replay_content) {
+            SDL_strlcpy(header.content, opt_replay_content, sizeof header.content);
+        } else if (!has_payload) {
+            r2d__content_id(opt_game, header.content, sizeof header.content,
+                            &header.content_files, &header.content_bytes);
+        }
+        replay = r2d_replay_record(opt_record, &header, opt_checks, opt_check_count,
+                                   replay_err, sizeof replay_err);
+        if (replay) {
+            R2D_LOG("record: ввод пишется в %s (content %s, checkpoints %d)",
+                    opt_record, header.content[0] ? header.content : "н/д",
+                    opt_check_count);
+        } else R2D_WARN("%s", replay_err);
     }
     fc.replay = replay;
 
@@ -941,6 +1096,15 @@ int main(int argc, char **argv)
 
         r2d_script_call_exit(&script);
         r2d_agent_destroy(agent);
+        if (replay) {
+            const int total = r2d_replay_checkpoint_count(replay);
+            const int checked = r2d_replay_checkpoint_checked(replay);
+            if (total > checked) {
+                R2D_LOG("replay: %d из %d checkpoint'ов %s — сессия закончилась раньше",
+                        total - checked, total,
+                        r2d_replay_recording(replay) ? "не записано" : "не проверено");
+            }
+        }
         r2d_replay_destroy(replay);
         SDL_WaitForGPUIdle(app.device);
         r2d_prof_gpu_shutdown();   // после WaitForGPUIdle: fence'ы уже сигнальны
@@ -956,7 +1120,9 @@ int main(int argc, char **argv)
         r2d_audio_shutdown(&audio);
         r2d_app_shutdown(&app);
         r2d_payload_shutdown();   // в обычном режиме это делается ниже
-        return 0;
+        // 3 — checkpoint разошёлся (--checkpoints strict). Это контракт для CI:
+        // расхождение не должно выглядеть как успешное воспроизведение.
+        return fc.replay_diverged ? 3 : 0;
     }
 
     // --- Обычный режим ------------------------------------------------------
@@ -981,6 +1147,8 @@ int main(int argc, char **argv)
 
     // --- Завершение ---------------------------------------------------------
     r2d__shutdown(&fc);
-    return 0;
+    // 3 — checkpoint разошёлся (--checkpoints strict): код возврата отличает
+    // «воспроизведение сошлось» от «дошло до конца, но мир другой».
+    return fc.replay_diverged ? 3 : 0;
 #endif
 }

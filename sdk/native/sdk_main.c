@@ -44,6 +44,7 @@ static const Command k_commands[] = {
     { "world-edit",    sdk_cmd_world_edit,    "Re2D World: операция правки *.re2dmap (brush.*/face.*/world.set), тот же backend для GUI и агента" },
     { "extension",     sdk_cmd_extension,      "расширения SDK: list|info|validate [path] (built-in/user/project discovery)" },
     { "tool",          sdk_cmd_tool,           "SDK-tools: list|info|validate|run|install|uninstall" },
+    { "deps",  sdk_cmd_deps,  "Граф зависимостей ассетов: deps <проект|deps.json> [--check|--record] [--json]" },
     { "batch", sdk_cmd_batch, "Пакетная validation: JSON manifest и сводный report" },
     { "story", sdk_cmd_story, "VN: validate story/*.scene (labels, goto, speakers, assets, i18n)" },
     { "dialog", sdk_cmd_dialog, "VN: validate dialog RML/RCSS (semantic roles, fonts)" },

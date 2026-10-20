@@ -496,7 +496,7 @@ function worldWrapper($, native) {
                     if (typeof options !== 'object' || options === null || Array.isArray(options))
                         throw new TypeError('Re2D World: streamConfig expects an options object');
                     for (const key of Object.keys(options))
-                        if (!['residentBytes','residentItems','uploadBytes','uploadItems','promoteItems','pinLimit'].includes(key))
+                        if (!['residentBytes','residentItems','uploadBytes','uploadItems','promoteItems','warnGrace','pinLimit'].includes(key))
                             throw new TypeError(`Re2D World: streamConfig unknown option "${key}"`);
                     native.streamConfig(options);
                     return this;

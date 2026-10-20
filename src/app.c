@@ -45,9 +45,14 @@ static void r2d__pick_base_path(R2DApp *app)
         SDL_free(cwd);
     }
 
-    // SDL_GetBasePath() возвращает строку, которую нужно освободить SDL_free().
+    // SDL_GetBasePath() возвращает const char*, ВЛАДЕЛЬЦЕМ которого является
+    // SDL (документация SDL_filesystem.h: строка живёт до SDL_Quit). Раньше
+    // здесь стояло base_path_owned = true, и r2d_app_shutdown освобождал её
+    // через SDL_free: SDL_QuitFilesystem освобождал тот же указатель второй
+    // раз — SIGABRT (POINTER_BEING_FREED_WAS_NOT_ALLOCATED) при выходе, если
+    // cwd не содержит game/main.js. Строка заимствованная, не своя.
     app->base_path = SDL_GetBasePath();
-    app->base_path_owned = app->base_path != NULL;
+    app->base_path_owned = false;
 }
 
 // --- Растущие текстовые буферы (§29) ---------------------------------------

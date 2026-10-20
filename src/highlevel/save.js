@@ -16,7 +16,9 @@
 //   1) версия обязательна, старые версии доезжают через migrateSave();
 //   2) наружу — только JSON-совместимые данные (функции и циклы срезает
 //      sanitize() из prefab.js);
-//   3) слот — это имя файла: slot-<имя>.json; слотов может быть сколько угодно.
+//   3) слот — это имя файла: slot-<имя>.json; слотов может быть сколько угодно;
+//   4) игровая схема — отдельное целое поле `schema` (см. $.save.schema):
+//      SAVE_VERSION отвечает за формат модуля, schema — за данные игры.
 //
 // Чистые функции (слоты, версии, миграции, метаданные) экспортируются наружу:
 // их проверяет qjs-харнесс без движка (tests/js/save_test.mjs). К engine
@@ -68,6 +70,318 @@ function num(value, fallback) {
 
 function plainObject(value) {
     return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+// ---------------------------------------------------------------------------
+// Игровая схема документа (чистые функции)
+//
+// SAVE_VERSION — версия ФОРМАТА модуля. Игра может объявить свою версию своих
+// данных в том же файле: целое поле `schema` верхнего уровня. Отсутствие поля —
+// это legacy-схема 0 (документ писался до появления схемы). Схема и формат
+// независимы: формат отвечает за то, как модуль читает слот, схема — за то,
+// что игра делает со своими полями между своими версиями.
+//
+//   $.save.schema({
+//       version: 2,
+//       migrate: {                      // 0→1→2, строго по одному шагу
+//           0: (doc) => { doc.namespaces.run.data.gold = 0; return doc; },
+//           1: (doc) => { ...; return doc; },
+//       },
+//       defaults: { namespaces: { run: { data: { gold: 0 } } } },
+//       validate: (doc) => doc.namespaces.run.data.gold >= 0,
+//   });
+// ---------------------------------------------------------------------------
+
+/** Схема документа без поля `schema` — старый (legacy) формат. */
+export const SAVE_SCHEMA_LEGACY = 0;
+
+/** Коды отказов схемы — общие для $.save и $.store (один контракт). */
+export const SAVE_SCHEMA_FUTURE = 'R2D_SAVE_SCHEMA_FUTURE';
+export const SAVE_SCHEMA_MIGRATION = 'R2D_SAVE_SCHEMA_MIGRATION';
+export const SAVE_SCHEMA_DEFAULTS = 'R2D_SAVE_SCHEMA_DEFAULTS';
+export const SAVE_SCHEMA_INVALID = 'R2D_SAVE_SCHEMA_INVALID';
+
+/**
+ * Поля, которые принадлежат самому формату: схема их не считает «данными
+ * игры», и они не уезжают в `extra`. Всё остальное в документе — игровое.
+ */
+export const SAVE_RESERVED_FIELDS = [
+    'format', 'version', 'schema', 'saved_at', 'saved_frame', 'time', 'scene',
+    'namespaces', 'store', 'world', 'speeds', 'node_state', 'content', 'meta',
+    'migrated_from', 'extra',
+];
+
+/** Действующая схема $.save или null, если игра её не объявляла. */
+let schema_config = null;
+
+/** Текущая схема сохранений (0 — схема не объявлена = legacy). */
+export function currentSaveSchema() {
+    return schema_config ? schema_config.version : SAVE_SCHEMA_LEGACY;
+}
+
+/** Глубокая копия JSON-совместимого значения (объекты и массивы). */
+export function deepCopy(value) {
+    if (Array.isArray(value)) return value.map((item) => deepCopy(item));
+    if (plainObject(value)) {
+        const out = {};
+        for (const key of Object.keys(value)) out[key] = deepCopy(value[key]);
+        return out;
+    }
+    return value;
+}
+
+/**
+ * Дополнить объект значениями по умолчанию — глубоко и НЕ разрушая.
+ *
+ * Уже существующее значение (включая falsy: 0, '', false) не перезаписывается;
+ * вложенные объекты дополняются рекурсивно; массив по умолчанию кладётся
+ * только целиком (сливать массивы «по индексу» — это уже не defaults).
+ * Возвращает тот же target (для цепочки и для applySchemaMigrations).
+ */
+export function deepDefaults(target, defaults) {
+    const dst = plainObject(target) ? target : {};
+    const src = plainObject(defaults) ? defaults : {};
+    for (const key of Object.keys(src)) {
+        if (!Object.prototype.hasOwnProperty.call(dst, key)) {
+            dst[key] = deepCopy(src[key]);
+            continue;
+        }
+        if (plainObject(dst[key]) && plainObject(src[key])) deepDefaults(dst[key], src[key]);
+    }
+    return dst;
+}
+
+/** Номер схемы документа (целое из поля `schema`) или null — поля нет. */
+export function schemaOf(raw) {
+    const src = plainObject(raw) ? raw : null;
+    if (!src || !Object.prototype.hasOwnProperty.call(src, 'schema')) return null;
+    const value = src.schema;
+    if (typeof value !== 'number' || !isFinite(value)) return null;
+    return Math.floor(value);
+}
+
+/**
+ * Нормализация конфигурации схемы. Возвращает
+ * `{ version, migrate, defaults, validate, errors }` или null (схема выключена).
+ * Некорректные поля не проглатываются: причина копится в `errors`, её печатает
+ * вызывающий (§17: никаких молчаливых fallback'ов).
+ */
+export function normalizeSchemaConfig(cfg, warn) {
+    const say = typeof warn === 'function' ? warn : () => {};
+    if (cfg === undefined || cfg === null || cfg === false) return null;
+    const errors = [];
+    if (!plainObject(cfg)) {
+        say('нужен объект { version, migrate, defaults, validate }');
+        return null;
+    }
+    let version = num(cfg.version, 0);
+    version = Math.floor(version);
+    if (!(version >= 0)) {
+        errors.push(`version "${cfg.version}" — не номер схемы, беру 0`);
+        version = 0;
+    }
+    const migrate = {};
+    if (cfg.migrate !== undefined && cfg.migrate !== null) {
+        if (!plainObject(cfg.migrate)) {
+            errors.push('migrate — объект { шаг: функция }');
+        } else {
+            for (const key of Object.keys(cfg.migrate)) {
+                const step = Number(key);
+                if (!isFinite(step) || Math.floor(step) !== step || step < 0
+                    || String(step) !== String(key).trim()) {
+                    errors.push(`ключ миграции "${key}" — не номер шага`);
+                    continue;
+                }
+                if (typeof cfg.migrate[key] !== 'function') {
+                    errors.push(`миграция ${key} — не функция`);
+                    continue;
+                }
+                migrate[step] = cfg.migrate[key];
+            }
+        }
+    }
+    let defaults = cfg.defaults === undefined ? null : cfg.defaults;
+    if (defaults !== null && typeof defaults !== 'function' && !plainObject(defaults)) {
+        errors.push('defaults — объект или функция, возвращающая объект');
+        defaults = null;
+    }
+    let validate = cfg.validate === undefined || cfg.validate === null ? null : cfg.validate;
+    if (validate !== null && typeof validate !== 'function') {
+        errors.push('validate — функция');
+        validate = null;
+    }
+    return { version, migrate, defaults, validate, errors };
+}
+
+/** Итог проверки схемы: null — прошла, иначе `{ code, message }`. */
+function schemaVerdict(value) {
+    if (value === true || value === undefined) return null;
+    if (typeof value === 'string') {
+        return { code: null, message: value.trim() || 'проверка схемы не прошла (validate вернул пустую строку)' };
+    }
+    if (plainObject(value)) {
+        if (value.ok === true) return null;
+        return {
+            code: typeof value.code === 'string' && value.code ? value.code : null,
+            message: typeof value.message === 'string' && value.message
+                ? value.message : 'проверка схемы не прошла (validate вернул { ok: false })',
+        };
+    }
+    return { code: null, message: 'проверка схемы не прошла (validate должен вернуть true или бросить)' };
+}
+
+/**
+ * Прогнать документ через игровую схему: проверить «из будущего», применить
+ * миграции по одному шагу на глубокой копии, дополнить defaults и проверить.
+ *
+ *   const r = applySchemaMigrations(doc, {
+ *       version: 2,
+ *       migrate: { 1: (d) => { d.namespaces.run.data.hp = 100; return d; } },
+ *       defaults: { namespaces: { run: { data: { gold: 0 } } } },
+ *       validate: (d) => !!d.namespaces,
+ *   });
+ *   if (!r.ok) console.log(r.code, r.stage, r.message);
+ *
+ * Ничего не бросает и не трогает входной объект (миграции работают на копии).
+ * Ошибки структурные: `{ ok:false, code, stage, message, schema, current }`,
+ * stage — `schema` (документ из будущего), `migration`, `defaults`, `validate`.
+ */
+export function applySchemaMigrations(raw, schema) {
+    const cfg = schema || null;
+    const current = cfg ? cfg.version : SAVE_SCHEMA_LEGACY;
+    const out = {
+        ok: false, data: null, code: null, stage: null, message: null,
+        schema: null, current, from: null, applied: [],
+    };
+    if (!plainObject(raw)) {
+        out.code = SAVE_SCHEMA_INVALID;
+        out.stage = 'schema';
+        out.message = 'схема сохранения применяется к объекту JSON, а не к '
+            + (Array.isArray(raw) ? 'массиву' : typeof raw);
+        return out;
+    }
+    const explicit = schemaOf(raw);
+    // Документ без поля "schema" — legacy 0. Если игра объявила migrate[0],
+    // он и есть первый шаг; иначе старый документ считается уже текущим:
+    // придумывать миграцию, которой игра не написала, нельзя.
+    const from = explicit !== null ? explicit : (cfg && cfg.migrate[0] ? SAVE_SCHEMA_LEGACY : current);
+    out.from = from;
+    out.schema = from;
+    if (from > current) {
+        out.code = SAVE_SCHEMA_FUTURE;
+        out.stage = 'schema';
+        out.message = `схема сохранения ${from} новее поддерживаемой (${current})`;
+        return out;
+    }
+
+    // Без схемы и без миграций документ не переписываем вовсе (round-trip
+    // остаётся прежним); иначе всё идёт на глубокой копии.
+    let doc = cfg ? deepCopy(raw) : raw;
+    if (cfg) doc.schema = from;
+
+    for (let step = from; step < current; ++step) {
+        const fn = cfg && cfg.migrate ? cfg.migrate[step] : null;
+        if (typeof fn !== 'function') {
+            out.code = SAVE_SCHEMA_MIGRATION;
+            out.stage = 'migration';
+            out.message = `нет миграции схемы ${step} → ${step + 1}`;
+            return out;
+        }
+        let next;
+        try {
+            next = fn(doc);
+        } catch (e) {
+            out.code = SAVE_SCHEMA_MIGRATION;
+            out.stage = 'migration';
+            out.message = `миграция схемы ${step} → ${step + 1} упала: `
+                + (e && e.message ? e.message : String(e));
+            return out;
+        }
+        if (next === undefined || next === null) next = doc;
+        if (!plainObject(next)) {
+            out.code = SAVE_SCHEMA_MIGRATION;
+            out.stage = 'migration';
+            out.message = `миграция схемы ${step} → ${step + 1} вернула не объект`;
+            return out;
+        }
+        doc = next;
+        doc.schema = step + 1;
+        out.applied.push({ from: step, to: step + 1 });
+    }
+
+    if (cfg && cfg.defaults !== null && cfg.defaults !== undefined) {
+        let fill = cfg.defaults;
+        if (typeof fill === 'function') {
+            try {
+                fill = fill(doc);
+            } catch (e) {
+                out.code = SAVE_SCHEMA_DEFAULTS;
+                out.stage = 'defaults';
+                out.message = 'defaults() упали: ' + (e && e.message ? e.message : String(e));
+                return out;
+            }
+        }
+        if (fill !== null && fill !== undefined) {
+            if (!plainObject(fill)) {
+                out.code = SAVE_SCHEMA_DEFAULTS;
+                out.stage = 'defaults';
+                out.message = 'defaults — объект или функция, вернувшая объект';
+                return out;
+            }
+            deepDefaults(doc, fill);
+        }
+    }
+
+    if (cfg && typeof cfg.validate === 'function') {
+        let verdict;
+        try {
+            verdict = cfg.validate(doc);
+        } catch (e) {
+            out.code = SAVE_SCHEMA_INVALID;
+            out.stage = 'validate';
+            out.message = 'проверка схемы упала: ' + (e && e.message ? e.message : String(e));
+            return out;
+        }
+        const failure = schemaVerdict(verdict);
+        if (failure) {
+            out.code = failure.code || SAVE_SCHEMA_INVALID;
+            out.stage = 'validate';
+            out.message = failure.message;
+            return out;
+        }
+    }
+
+    if (cfg) doc.schema = current;
+    out.ok = true;
+    out.data = doc;
+    out.schema = current;
+    return out;
+}
+
+/**
+ * Поля документа, которые модуль не знает: они принадлежат игре и обязаны
+ * пережить load → save. Возвращаются без функций и циклов (как разделы слота).
+ */
+export function saveExtras(raw) {
+    const src = plainObject(raw) ? raw : {};
+    const out = {};
+    for (const key of Object.keys(src)) {
+        if (SAVE_RESERVED_FIELDS.indexOf(key) >= 0) continue;
+        const value = sanitize(src[key], new Set());
+        if (value !== undefined) out[key] = value;
+    }
+    return out;
+}
+
+/** `data` + неизвестные поля игры в `extra` (чтобы wireSave их вернул). */
+function withExtras(source, data) {
+    const extras = saveExtras(source);
+    const known = plainObject(data.extra) ? sanitizeObject(data.extra) : {};
+    const merged = Object.assign({}, known, extras);
+    if (!Object.keys(merged).length) return data;
+    const out = data === source ? Object.assign({}, data) : data;
+    out.extra = merged;
+    return out;
 }
 
 /** Копия объекта без функций и циклов — используется для разделов слота. */
@@ -158,6 +472,10 @@ export function makeSave(raw) {
         content: sanitizeObject(src.content),
         meta: sanitizeObject(src.meta),
     };
+    // Неизвестные поля документа (данные игры) не теряются при load → save.
+    if (plainObject(src.extra) && Object.keys(src.extra).length) {
+        out.extra = sanitizeObject(src.extra);
+    }
     if (src.migrated_from !== undefined) out.migrated_from = Math.floor(num(src.migrated_from, 0));
     return out;
 }
@@ -172,15 +490,24 @@ export function wireSave(raw) {
     const out = {
         format: data.format,
         version: data.version,
-        saved_at: data.saved_at,
-        saved_frame: data.saved_frame,
-        time: data.time,
-        scene: data.scene,
-        namespaces: data.namespaces,
     };
+    // Схема игры — целое поле верхнего уровня. Пишется только когда игра её
+    // объявила ($.save.schema): у файлов без поля "schema" схема — legacy 0.
+    if (schema_config) out.schema = schema_config.version;
+    out.saved_at = data.saved_at;
+    out.saved_frame = data.saved_frame;
+    out.time = data.time;
+    out.scene = data.scene;
+    out.namespaces = data.namespaces;
     if (Object.keys(data.content).length) out.content = data.content;
     if (Object.keys(data.meta).length) out.meta = data.meta;
     if (data.migrated_from !== undefined) out.migrated_from = data.migrated_from;
+    // Неизвестные поля игры — в конец документа, зарезервированные не трогаем.
+    if (plainObject(data.extra)) {
+        for (const key of Object.keys(data.extra)) {
+            if (!Object.prototype.hasOwnProperty.call(out, key)) out[key] = data.extra[key];
+        }
+    }
     return out;
 }
 
@@ -264,7 +591,7 @@ export function migrateSave(raw) {
         || plainObject(raw.namespaces);
     const store = structured
         ? (plainObject(raw.store) ? raw.store : (plainObject(raw.data) ? raw.data : {}))
-        : raw;
+        : rawStoreData(raw);
     const world = structured
         ? (Array.isArray(raw.world) ? raw.world : (Array.isArray(raw.nodes) ? raw.nodes : null))
         : null;
@@ -291,6 +618,26 @@ export function migrateSave(raw) {
 }
 
 /**
+ * «Сырой» объект без полей формата — это данные $.store. Поле `schema` в нём
+ * служебное (игровая схема файла), в данные прохождения оно не попадает.
+ */
+function rawStoreData(raw) {
+    const out = Object.assign({}, raw);
+    delete out.schema;
+    return out;
+}
+
+/** Это документ сохранения (а не «сырые» данные $.store)? Нужно для extras. */
+function looksStructured(raw) {
+    return plainObject(raw) && (raw.format === SAVE_FORMAT
+        || typeof raw.version === 'number'
+        || Array.isArray(raw.world)
+        || plainObject(raw.namespaces)
+        || plainObject(raw.store)
+        || plainObject(raw.data));
+}
+
+/**
  * Строка JSON → сохранение. Битый JSON и версия «из будущего» — это ошибка с
  * понятным текстом, а не исключение: строку приносят из $.http, из буфера
  * обмена и из файла, и ронять из-за неё кадр нельзя.
@@ -310,16 +657,33 @@ export function parseSaveJson(text) {
     if (!plainObject(raw)) {
         return { ok: false, data: null, raw: null, error: 'в сохранении ожидался объект JSON' };
     }
-    const data = migrateSave(raw);
+    // Игровая схема — ДО формата модуля: миграции игры работают с документом
+    // файла и не зависят от SAVE_VERSION/migrateSave.
+    const applied = applySchemaMigrations(raw, schema_config);
+    if (!applied.ok) {
+        return {
+            ok: false, data: null, raw, error: applied.message,
+            code: applied.code, stage: applied.stage,
+            schema: applied.schema, current: applied.current,
+        };
+    }
+    const data = migrateSave(applied.data);
     if (!data) {
         return {
             ok: false, data: null, raw,
             error: 'версия сохранения ' + raw.version + ' новее поддерживаемой (' + SAVE_VERSION + ')',
         };
     }
+    // Неизвестные поля документа (данные игры) обязаны пережить load → save.
+    // У «сырых» данных $.store весь объект — и есть данные, отдельных extras нет.
+    const with_extra = looksStructured(applied.data) ? withExtras(applied.data, data) : data;
     // raw нужен отдельно: saveInfo() должен видеть исходную версию файла,
     // иначе старый слот выглядел бы как только что записанный.
-    return { ok: true, data, raw, error: null };
+    return {
+        ok: true, data: with_extra, raw, error: null,
+        schema: applied.schema, current: applied.current,
+        migrated: applied.applied.length > 0,
+    };
 }
 
 /** Глубина-первый обход данных узлов — в том же порядке, что и nodeToData(). */
@@ -388,6 +752,9 @@ export function saveInfo(raw, extra) {
         version: version === null ? SAVE_VERSION : version,
         current: SAVE_VERSION,
         legacy: version !== null && version < SAVE_VERSION,
+        // Игровая схема: в файле её может не быть — тогда legacy 0.
+        schema: schemaOf(source) === null ? SAVE_SCHEMA_LEGACY : schemaOf(source),
+        schema_current: currentSaveSchema(),
         saved_at: data.saved_at,
         saved_frame: data.saved_frame,
         time: data.time,
@@ -408,6 +775,9 @@ export function saveInfo(raw, extra) {
 // ---------------------------------------------------------------------------
 
 export function installSave($) {
+    // Схема игры объявляется после установки модуля; повторная установка
+    // (другой $, тесты) начинает с «схемы нет», а не с чужой настройки.
+    schema_config = null;
     const state = {
         slot: DEFAULT_SLOT,
         dir: DEFAULT_DIR,
@@ -427,6 +797,7 @@ export function installSave($) {
         rejected_future: 0,    // отказов перезаписать слот из будущего
         rollbacks: 0,          // откатанных restore (ошибка до commit)
         restores: 0,           // успешных транзакционных восстановлений
+        schema_migrations: 0,  // документов, прогнанных через миграции схемы
         committed_nodes: 0,    // узлов в последнем commit
         behavior_loads: 0,     // вызовов фабрик поведения при restore
         last_failure: null,    // структура последнего отказа (для машины)
@@ -740,6 +1111,35 @@ export function installSave($) {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Замена ЦЕЛЕВОГО файла: атомарно через $.fs.writeAtomic (temp + fsync +
+     * rename в ядре), если сборка знает биндинг; иначе — обычной записью
+     * (тогда temp+backup+verify — единственная защита, см. save.md §2.3).
+     */
+    function writeFileAtomic(path, text) {
+        const f = fs();
+        if (!f) {
+            fail('$.save: нет $.fs — модуль store.js не установлен');
+            return false;
+        }
+        if (typeof f.writeAtomic === 'function') {
+            if (!f.writeAtomic(path, text)) {
+                fail(`$.save: не удалось записать "${path}" — проверьте права на каталог`);
+                return false;
+            }
+            return true;
+        }
+        return writeFile(path, text);
+    }
+
+    /** Знает ли сборка атомарную замену (для stats()/тестов и docs). */
+    function atomicWrites() {
+        const f = fs();
+        if (!f || typeof f.writeAtomic !== 'function') return false;
+        // $.fs.writeAtomic есть всегда (fallback), атомарность даёт биндинг.
+        return !!(engine && engine.fs && typeof engine.fs.writeAtomic === 'function');
     }
 
     function sceneName() {
@@ -1463,9 +1863,18 @@ export function installSave($) {
         return { text, parsed, raw: parsed.raw };
     }
 
+    /** Счётчик схемы: документ, прошедший миграции, — факт для stats(). */
+    function noteSchema(parsed) {
+        if (!parsed) return;
+        if (parsed.migrated === true) state.schema_migrations++;
+    }
+
     /**
      * Чтение слота: основной файл, при повреждении — копия `.bak`. Так
      * прерванная запись не уничтожает последний корректный слот.
+     *
+     * Документ схемы «из будущего» — НЕ повреждение: backup не подставляем,
+     * файл не трогаем, отказ структурный (R2D_SAVE_SCHEMA_FUTURE).
      */
     function payloadOf(slot) {
         const name = normalizeSlot(slot);
@@ -1473,13 +1882,22 @@ export function installSave($) {
         const main = readSlotFile(path);
         if (main.parsed && main.parsed.ok) {
             state.last_error = null;
+            noteSchema(main.parsed);
             return main.parsed.data;
+        }
+        if (main.parsed && main.parsed.code === SAVE_SCHEMA_FUTURE) {
+            failWith('schema', `$.save: слот "${name}" — ${main.parsed.error}`, {
+                code: SAVE_SCHEMA_FUTURE, slot: name, path,
+                details: { schema: main.parsed.schema, current: main.parsed.current },
+            });
+            return null;
         }
         if (main.text === null) {
             // Основного файла нет — возможно, осталась только копия.
             const bak = readSlotFile(path + BAK_SUFFIX);
             if (bak.parsed && bak.parsed.ok) {
                 state.recovered++;
+                noteSchema(bak.parsed);
                 state.last_error = `$.save: слот "${name}" восстановлен из копии ${path}${BAK_SUFFIX}`;
                 ctx.log(state.last_error);
                 return bak.parsed.data;
@@ -1491,11 +1909,20 @@ export function installSave($) {
         const bak = readSlotFile(path + BAK_SUFFIX);
         if (bak.parsed && bak.parsed.ok) {
             state.recovered++;
+            noteSchema(bak.parsed);
             state.last_error = `$.save: слот "${name}" повреждён (${broken}); взят backup`;
             ctx.log(state.last_error);
             return bak.parsed.data;
         }
-        failWith('read', `$.save: слот "${name}" (${path}) — ${broken}`, { slot: name, path });
+        // Стадия отказа — та, что назвала схема (migration/defaults/validate),
+        // иначе read: игре/агенту не приходится угадывать по тексту.
+        failWith(main.parsed && main.parsed.stage ? main.parsed.stage : 'read',
+            `$.save: слот "${name}" (${path}) — ${broken}`, {
+                slot: name, path,
+                code: main.parsed && main.parsed.code ? main.parsed.code : null,
+                details: main.parsed && main.parsed.stage
+                    ? { schema: main.parsed.schema, current: main.parsed.current } : null,
+            });
         return null;
     }
 
@@ -1508,10 +1935,16 @@ export function installSave($) {
                 state.last_error = `$.save: слот "${name}" не найден (${path})`;
                 return null;
             }
-            failWith('info', `$.save: слот "${name}" (${path}) — ${main.parsed.error}`, { slot: name, path });
+            failWith('info', `$.save: слот "${name}" (${path}) — ${main.parsed.error}`, {
+                slot: name, path,
+                code: main.parsed && main.parsed.code ? main.parsed.code : null,
+                details: main.parsed && main.parsed.stage
+                    ? { schema: main.parsed.schema, current: main.parsed.current } : null,
+            });
             return null;
         }
         state.last_error = null;
+        noteSchema(main.parsed);
         // saveInfo() получает СЫРОЙ объект файла: если отдать мигрированный,
         // слот из старой версии выглядел бы как записанный текущей.
         return saveInfo(main.parsed.raw, {
@@ -1520,17 +1953,25 @@ export function installSave($) {
     }
 
     /**
-     * Проверка «этот слот нельзя затирать»: в файле версия новее нашей.
-     * Слот будущей версии отклоняется БЕЗ перезаписи (§14).
+     * Проверка «этот слот нельзя затирать»: в файле версия формата или схема
+     * игры новее наших. Такой слот отклоняется БЕЗ перезаписи (§14).
+     * Возвращает `{ kind:'version', version }`, `{ kind:'schema', schema, current }`
+     * или null.
      */
     function futureSlot(path) {
         const cur = readSlotFile(path);
         if (cur.text === null) return null;
         if (cur.parsed && cur.parsed.ok) return null;              // корректный старый/текущий
         const raw = cur.raw;
-        if (plainObject(raw) && typeof raw.version === 'number' && isFinite(raw.version)
+        if (!plainObject(raw)) return null;
+        if (typeof raw.version === 'number' && isFinite(raw.version)
             && Math.floor(raw.version) > SAVE_VERSION) {
-            return Math.floor(raw.version);
+            return { kind: 'version', version: Math.floor(raw.version) };
+        }
+        const schema = schemaOf(raw);
+        const current = currentSaveSchema();
+        if (schema !== null && schema > current) {
+            return { kind: 'schema', schema, current };
         }
         return null;
     }
@@ -1545,15 +1986,24 @@ export function installSave($) {
         const path = slotPath(state.dir, name);
         const out = { ok: false, stage: 'write', temp: false, backup: false, path, slot: name };
 
-        // 0. Слот из будущего не перезаписываем вообще.
+        // 0. Слот из будущего (версия формата ИЛИ схема игры) не перезаписываем.
         const future = futureSlot(path);
         if (future !== null && o.force !== true) {
             state.rejected_future++;
             out.stage = 'future';
-            out.version = future;
-            failWith('future', `$.save: слот "${name}" записан версией ${future} `
+            if (future.kind === 'schema') {
+                failWith('future', `$.save: слот "${name}" записан схемой ${future.schema} `
+                    + `(поддерживается до ${future.current}) — не перезаписываю`,
+                    { code: SAVE_SCHEMA_FUTURE, slot: name, path, version: null,
+                      details: { schema: future.schema, current: future.current },
+                      fatal: o.fatal === true });
+                return out;
+            }
+            out.version = future.version;
+            failWith('future', `$.save: слот "${name}" записан версией ${future.version} `
                 + `(поддерживается до ${SAVE_VERSION}) — не перезаписываю`,
-                { slot: name, path, version: future, details: { future, current: SAVE_VERSION },
+                { slot: name, path, version: future.version,
+                  details: { future: future.version, current: SAVE_VERSION },
                   fatal: o.fatal === true });
             return out;
         }
@@ -1595,8 +2045,10 @@ export function installSave($) {
             }
         }
 
-        // 3. Перезапись основного файла и проверка чтением.
-        if (!writeFile(path, text)) {
+        // 3. Замена основного файла: атомарно через writeAtomic, если сборка
+        // знает биндинг, иначе обычной записью (temp+backup — защита). Затем
+        // проверка чтением.
+        if (!writeFileAtomic(path, text)) {
             // Не смогли — слот остался прежним, временный и копия не мешают.
             out.stage = 'replace';
             failWith('replace', `$.save: не удалось записать "${path}" — слот оставлен прежним`,
@@ -1606,7 +2058,7 @@ export function installSave($) {
         const after = readSlotFile(path);
         if (!after.parsed || !after.parsed.ok || after.text !== text) {
             out.stage = 'verify';
-            const restored = out.backup && writeFile(path, existing.text);
+            const restored = out.backup && writeFileAtomic(path, existing.text);
             failWith('verify', `$.save: слот "${name}" не прошёл проверку после записи`
                 + (restored ? ' — восстановлен backup' : ''),
                 { slot: name, path, fatal: o.fatal === true });
@@ -1655,6 +2107,44 @@ export function installSave($) {
         /** Версия формата, в которой пишет модуль. */
         version() { return SAVE_VERSION; },
 
+        /**
+         * Игровая схема документа сохранения — один контракт с $.store.schema.
+         *
+         *   $.save.schema({
+         *       version: 2,
+         *       migrate: { 1: (doc) => { …; return doc; } },  // 0→1→2, по шагу
+         *       defaults: { namespaces: { run: { data: { gold: 0 } } } },
+         *       validate: (doc) => doc.namespaces.run.data.gold >= 0,
+         *   });
+         *
+         * Без аргумента — что объявлено. `schema(null)` выключает схему.
+         * Схема пишется в файл целым полем `schema`; у файлов без него схема —
+         * legacy 0. Документ схемы новее текущей не читается и не
+         * перезаписывается (R2D_SAVE_SCHEMA_FUTURE).
+         */
+        schema(cfg) {
+            if (cfg === undefined) {
+                const c = schema_config;
+                return {
+                    version: c ? c.version : SAVE_SCHEMA_LEGACY,
+                    legacy: SAVE_SCHEMA_LEGACY,
+                    migrations: c ? Object.keys(c.migrate).map(Number).sort((a, b) => a - b) : [],
+                    defaults: !!(c && c.defaults !== null && c.defaults !== undefined),
+                    validate: !!(c && typeof c.validate === 'function'),
+                    errors: c ? c.errors.slice() : [],
+                };
+            }
+            const normalized = normalizeSchemaConfig(cfg, (message) => {
+                ctx.log('$.save.schema: ' + message);
+            });
+            schema_config = normalized;
+            if (normalized) {
+                for (const message of normalized.errors) ctx.log('$.save.schema: ' + message);
+                state.last_error = null;
+            }
+            return save;
+        },
+
         // --- Снимок без диска ----------------------------------------------
         snapshot(opts) { return snapshot(opts); },
         /** Данные $.store снимком (для «сохранить только инвентарь»). */
@@ -1689,11 +2179,27 @@ export function installSave($) {
          * Ошибка до commit не трогает рабочее состояние.
          */
         restore(payload, opts) {
-            const data = migrateSave(payload);
+            // Схема игры — до формата модуля: старый снимок приезжает тем же
+            // путём, что и файл (миграции/defaults/validate).
+            const applied = applySchemaMigrations(payload, schema_config);
+            if (!applied.ok) {
+                failWith('schema', '$.save.restore: ' + applied.message, {
+                    code: applied.code,
+                    details: { schema: applied.schema, current: applied.current },
+                });
+                return {
+                    ok: false, stage: 'schema', code: applied.code, nodes: 0, applied: 0,
+                    missing: [], providers: [], content: [],
+                    reason: '$.save.restore: ' + applied.message,
+                };
+            }
+            if (applied.applied.length) state.schema_migrations++;
+            const data = migrateSave(applied.data);
             if (!data) {
                 return {
-                    ok: false, stage: 'schema', nodes: 0, applied: 0, missing: [],
-                    providers: [], content: [], reason: '$.save.restore: не понял снимок',
+                    ok: false, stage: 'schema', code: 'R2D_SAVE_FUTURE', nodes: 0, applied: 0,
+                    missing: [], providers: [], content: [],
+                    reason: '$.save.restore: не понял снимок',
                 };
             }
             return restoreTransactional(data, opts);
@@ -1850,13 +2356,27 @@ export function installSave($) {
         /** Данные слота без применения (объект снимка) или null. */
         read(slot) { return payloadOf(slot === undefined ? state.slot : slot); },
 
-        /** Записать готовый снимок (объект из snapshot()) в слот. */
+        /**
+         * Записать готовый снимок (объект из snapshot()) в слот. Снимок идёт
+         * через ту же схему, что и загрузка: migrate/defaults/validate, а в
+         * файл попадает текущая схема. Неизвестные поля игры сохраняются.
+         */
         write(payload, slot, opts) {
             const target = slot === undefined ? state.slot : normalizeSlot(slot);
-            if (!migrateSave(payload)) {
+            const applied = applySchemaMigrations(payload, schema_config);
+            if (!applied.ok) {
+                return failWith('schema', '$.save.write: ' + applied.message, {
+                    code: applied.code, slot: target,
+                    details: { schema: applied.schema, current: applied.current },
+                });
+            }
+            if (applied.applied.length) state.schema_migrations++;
+            const data = looksStructured(applied.data)
+                ? withExtras(applied.data, applied.data) : applied.data;
+            if (!migrateSave(data)) {
                 return fail('$.save: write() ждёт снимок (объект из $.save.snapshot()); строку пишите через import()');
             }
-            return writeSlotText(target, serializeSave(payload), opts).ok;
+            return writeSlotText(target, serializeSave(data), opts).ok;
         },
 
         /**
@@ -1892,7 +2412,7 @@ export function installSave($) {
             if (!bak.parsed || !bak.parsed.ok || bak.text === null) {
                 return failWith('recover', `$.save: у слота "${name}" нет корректного backup`, { slot: name, path });
             }
-            if (!writeFile(path, bak.text)) return false;
+            if (!writeFileAtomic(path, bak.text)) return false;
             state.recovered++;
             state.last_error = null;
             return true;
@@ -2024,12 +2544,15 @@ export function installSave($) {
                 dir: state.dir,
                 path: slotPath(state.dir, state.slot),
                 version: SAVE_VERSION,
+                schema: currentSaveSchema(),
+                schema_migrations: state.schema_migrations,
                 namespace: state.ns,
                 saves: state.saves,
                 loads: state.loads,
                 restores: state.restores,
                 rollbacks: state.rollbacks,
                 temp_writes: state.temp_writes,
+                atomic: atomicWrites(),
                 backups: state.backups,
                 recovered: state.recovered,
                 rejected_future: state.rejected_future,

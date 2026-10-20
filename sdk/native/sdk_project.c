@@ -99,7 +99,7 @@ static SDL_EnumerationResult project_cb(void *user, const char *dir, const char 
     return SDL_ENUM_CONTINUE;
 }
 
-void sdk_project_validate(const char *dir, SdkReport *rep)
+void sdk_project_validate(const char *dir, const char *schema_path, SdkReport *rep)
 {
     char project[2048];
     snprintf(project, sizeof project, "%s/project.json", dir);
@@ -116,7 +116,20 @@ void sdk_project_validate(const char *dir, SdkReport *rep)
                  "нет main.js — проект не запустится");
     }
     int files = 0;
-    sdk_lint_run("api.schema.json", dir, rep, &files);
+    // Схема ищется от проекта/cwd/каталога r2d-sdk: validate обязан работать из
+    // любого каталога в установленном пакете. Явный --schema не подменяется.
+    char schema[2048];
+    if (sdk_schema_resolve(schema_path, dir, schema, sizeof schema)) {
+        sdk_lint_run(schema, dir, rep, &files);
+    } else if (schema_path && schema_path[0]) {
+        sdk_diag(rep, SDK_ERROR, "SDK_LINT_SCHEMA", schema_path, NULL, NULL,
+                 "файл схемы из --schema не найден: %s", schema_path);
+    } else {
+        sdk_diag(rep, SDK_ERROR, "SDK_LINT_SCHEMA", schema, NULL,
+                 "{\"searched\":[\"<project>/api.schema.json\",\"api.schema.json\",\"<r2d-sdk>/api.schema.json\"]}",
+                 "api.schema.json не найден: проверены каталог проекта «%s», cwd и каталог r2d-sdk (%s); укажите --schema",
+                 dir, sdk_exe_dir());
+    }
     PV pv = { dir, rep, 0 };
     SDL_EnumerateDirectory(dir, project_cb, &pv);
 }

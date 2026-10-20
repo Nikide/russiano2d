@@ -142,6 +142,11 @@ export function createReplay(header, hooks) {
     let check_max = MAX_CHECKPOINTS;
     let check_truncated = false;
     const checks = [];              // [{ tick, hash, l: [labels], v: [values] }]
+    // §27: именованные checkpoints — те же hash/снимок, но с именем сценария
+    // ("after_boss"), а не только номером кадра. Политика every их не
+    // заменяет: имя читает тест/баг-репорт/агент, а не арифметика кадра.
+    const named_checks = [];        // [{ name, tick, hash, l, v }]
+    const named_pending = [];       // [{ name, tick, expected }] — ещё не снятые
     let divergence = null;          // первое расхождение при проигрывании
 
     function log(message) {
@@ -236,11 +241,111 @@ export function createReplay(header, hooks) {
         return entry;
     }
 
+    /** Снять именованный checkpoint на tick, если он запрошен. */
+    function noteNamed(tick) {
+        if (!named_pending.length || typeof h.stateSnapshot !== 'function') return null;
+        const t = Math.floor(num(tick, lastFrame));
+        let last = null;
+        for (let i = named_pending.length - 1; i >= 0; --i) {
+            const p = named_pending[i];
+            if (p.tick !== t) continue;
+            named_pending.splice(i, 1);
+            if (named_checks.length >= check_max) { check_truncated = true; continue; }
+            const snap = h.stateSnapshot();
+            if (!snap || !Array.isArray(snap.values)) continue;
+            const entry = {
+                name: p.name,
+                tick: t,
+                hash: hashOfValues(snap.values),
+                l: Array.isArray(snap.labels) ? snap.labels.slice() : [],
+                v: snap.values.slice(),
+            };
+            // Ожидаемый hash известен заранее (CI/баг-репорт): расхождение —
+            // такой же факт, как при проигрывании, и обязано быть видно.
+            if (p.expected !== undefined && p.expected !== null && entry.hash !== p.expected) {
+                divergence = divergence || divergenceOf(t, p.expected, entry.hash, entry, p.name);
+            }
+            named_checks.push(entry);
+            last = entry;
+        }
+        return last;
+    }
+
+    /** Запись расхождения: общий вид для periodic и named checkpoints. */
+    function divergenceOf(t, expected, actual, rec, name, fields, ids) {
+        return {
+            ok: false,
+            tick: t,
+            checkpoint: name || null,
+            expected,
+            actual,
+            fields: Array.isArray(fields) ? fields : [],
+            ids: Array.isArray(ids) ? ids : [],
+            versions: {
+                schema: REPLAY_SCHEMA,
+                replay: REPLAY_VERSION,
+                engine: head.engine,
+                rng: head.streams ? { algorithm: head.streams.algorithm, version: head.streams.version } : null,
+            },
+            content: head.content,
+        };
+    }
+
+    /** Сравнить текущее состояние с именованным checkpoint. */
+    function verifyNamed(tick) {
+        if (typeof h.stateSnapshot !== 'function') return null;
+        const t = Math.floor(num(tick, lastFrame));
+        let rec = null;
+        for (const c of named_checks) if (c.tick === t) { rec = c; break; }
+        if (!rec) return null;
+        const snap = h.stateSnapshot();
+        if (!snap || !Array.isArray(snap.values)) return null;
+        const actual = hashOfValues(snap.values);
+        if (actual === rec.hash) return { ok: true, tick: t, hash: actual, checkpoint: rec.name };
+        const d = divergenceOf(t, rec.hash, actual, rec, rec.name);
+        // Поля берём из РАЗНИЦЫ: у periodic-проверки для этого есть снимок
+        // прошлого состояния; здесь он тоже есть — rec.v + текущие labels.
+        d.fields = [];
+        d.ids = [];
+        const actualMap = new Map();
+        for (let i = 0; i < snap.values.length; i++) {
+            const label = Array.isArray(snap.labels) ? snap.labels[i] : ('#' + i);
+            actualMap.set(String(label), snap.values[i]);
+        }
+        for (let i = 0; i < rec.l.length; i++) {
+            const label = String(rec.l[i]);
+            const want = rec.v[i];
+            const got = actualMap.get(label);
+            actualMap.delete(label);
+            if (got === undefined || got !== want) {
+                if (d.fields.length >= MAX_DIVERGENCE_FIELDS) continue;
+                d.fields.push({ field: label, expected: want, actual: got === undefined ? null : got });
+                const id = label.split('.')[0];
+                if (d.ids.indexOf(id) < 0) d.ids.push(id);
+            }
+        }
+        if (d.fields.length < MAX_DIVERGENCE_FIELDS) {
+            for (const [label, got] of actualMap) {
+                d.fields.push({ field: label, expected: null, actual: got });
+                const id = label.split('.')[0];
+                if (d.ids.indexOf(id) < 0) d.ids.push(id);
+                if (d.fields.length >= MAX_DIVERGENCE_FIELDS) break;
+            }
+        }
+        divergence = divergence || d;
+        return d;
+    }
+
     /** Сравнить текущее состояние с записанным на этом tick. */
     function verifyAt(tick) {
         if (divergence) return divergence;              // первое расхождение важнее
-        if (!checks.length || typeof h.stateSnapshot !== 'function') return null;
+        if (typeof h.stateSnapshot !== 'function') return null;
         const t = Math.floor(num(tick, lastFrame));
+        // Именованный checkpoint на этом кадре проверяется до periodic: его
+        // ожидаемый hash мог быть задан явно (CI), и расхождение важнее.
+        const named = verifyNamed(tick);
+        if (named && named.ok === false) return named;
+        if (!checks.length) return named;
         let rec = null;
         for (const c of checks) if (c.tick === t) { rec = c; break; }
         if (!rec) return null;
@@ -299,6 +404,8 @@ export function createReplay(header, hooks) {
             head = normalizeReplayHead(Object.assign({}, header || {}, extra || {}));
             frames.length = 0;
             checks.length = 0;
+            named_checks.length = 0;
+            named_pending.length = 0;
             check_truncated = false;
             divergence = null;
             unknown_actions = 0;
@@ -333,7 +440,9 @@ export function createReplay(header, hooks) {
                 return false;
             }
             const ok = push(value, f);
-            noteState(tick === undefined ? f : tick);
+            const t = tick === undefined ? f : tick;
+            noteState(t);
+            noteNamed(t);
             return ok;
         },
 
@@ -350,7 +459,9 @@ export function createReplay(header, hooks) {
             // Checkpoint считается по УСЛОВНОМУ tick (номер кадра от начала
             // записи): в новом процессе номер кадра снова с нуля, и проверка
             // обязана совпасть с той же точкой прогона.
-            noteState(tick === undefined ? f : tick);
+            const t = tick === undefined ? f : tick;
+            noteState(t);
+            noteNamed(t);
             return ok;
         },
 
@@ -391,6 +502,18 @@ export function createReplay(header, hooks) {
             for (const c of (Array.isArray(obj.checks) ? obj.checks : [])) {
                 if (!c || c.tick === undefined) continue;
                 checks.push({
+                    tick: Math.floor(num(c.tick, 0)),
+                    hash: c.hash,
+                    l: Array.isArray(c.l) ? c.l.slice() : [],
+                    v: Array.isArray(c.v) ? c.v.slice() : [],
+                });
+            }
+            named_checks.length = 0;
+            named_pending.length = 0;
+            for (const c of (Array.isArray(obj.named) ? obj.named : [])) {
+                if (!c || !c.name || c.tick === undefined) continue;
+                named_checks.push({
+                    name: String(c.name),
                     tick: Math.floor(num(c.tick, 0)),
                     hash: c.hash,
                     l: Array.isArray(c.l) ? c.l.slice() : [],
@@ -480,9 +603,81 @@ export function createReplay(header, hooks) {
         /** Записанные checkpoints (копия: tick и hash). */
         checkpointsList() { return checks.map((c) => ({ tick: c.tick, hash: c.hash })); },
 
+        /**
+         * Именованный checkpoint: `$.replay.checkpoint('after_boss', { frame: 4200 })`.
+         * При записи он снимается на указанном tick; при проигрывании
+         * проверяется автоматически. opts.hash — ожидаемый hash для CI.
+         * Возвращает replay (цепочка), о проблеме сообщает в журнал.
+         */
+        checkpoint(name, opts) {
+            const n = String(name === undefined || name === null ? '' : name).trim();
+            if (!n) { log('$.replay.checkpoint: нужно имя checkpoint'); return replay; }
+            const o = plainObject(opts) ? opts : {};
+            const current = typeof ctx.engineFrame === 'function' ? ctx.engineFrame()
+                : (lastFrame < 0 ? 0 : lastFrame);
+            const raw = o.frame !== undefined ? o.frame : (o.tick !== undefined ? o.tick : current);
+            const tick = Math.floor(num(raw, 0));
+            const expected = o.hash === undefined ? null : o.hash;
+            if (named_checks.some((c) => c.name === n)) return replay;   // не дублируем
+            if (tick < lastFrame) {
+                log('$.replay.checkpoint("' + n + '"): кадр ' + tick + ' уже позади (' + lastFrame + ')');
+                return replay;
+            }
+            if (mode === 'recording') {
+                named_pending.push({ name: n, tick, expected });
+                if (tick === lastFrame) noteNamed(tick);   // тот же кадр — снимаем сразу
+                return replay;
+            }
+            // Вне записи имя всё равно полезно: снимок текущего состояния.
+            if (typeof h.stateSnapshot === 'function') {
+                const snap = h.stateSnapshot();
+                if (snap && Array.isArray(snap.values)) {
+                    const entry = {
+                        name: n, tick,
+                        hash: hashOfValues(snap.values),
+                        l: Array.isArray(snap.labels) ? snap.labels.slice() : [],
+                        v: snap.values.slice(),
+                    };
+                    named_checks.push(entry);
+                    if (expected !== null && expected !== entry.hash) {
+                        divergence = divergence || divergenceOf(tick, expected, entry.hash, entry, n);
+                    }
+                    return replay;
+                }
+            }
+            named_pending.push({ name: n, tick, expected });
+            return replay;
+        },
+
+        /** Список именованных checkpoints: [{ name, tick, hash }]. */
+        namedCheckpoints() {
+            return named_checks.map((c) => ({ name: c.name, tick: c.tick, hash: c.hash }));
+        },
+
+        /** Именованный checkpoint целиком (для тестов/диагностики). */
+        checkpointNamed(name) {
+            const n = String(name === undefined || name === null ? '' : name);
+            for (const c of named_checks) {
+                if (c.name === n) return { name: c.name, tick: c.tick, hash: c.hash,
+                                           labels: c.l.slice(), values: c.v.slice() };
+            }
+            return null;
+        },
+
+        /** Проверить текущее состояние против именованного checkpoint. */
+        verifyCheckpoint(name) {
+            const c = replay.checkpointNamed(name);
+            if (!c) return { ok: false, checkpoint: name, error: 'checkpoint не найден' };
+            return verifyNamed(c.tick);
+        },
+
         /** Checkpoint целиком, с метками и значениями — для тестов и отладки. */
         checkpointAt(tick) {
             const t = Math.floor(Number(tick) || 0);
+            for (const c of named_checks) {
+                if (c.tick === t) return { name: c.name, tick: c.tick, hash: c.hash,
+                                           labels: c.l.slice(), values: c.v.slice() };
+            }
             for (const c of checks) {
                 if (c.tick === t) return { tick: c.tick, hash: c.hash, labels: c.l.slice(), values: c.v.slice() };
             }
@@ -519,12 +714,17 @@ export function createReplay(header, hooks) {
         /** Текст для файла: компактный JSON с заголовком и checkpoints. */
         toText() {
             const headOut = Object.assign({}, head, { frames: frames.length,
-                checkpoints: { every: check_every, count: checks.length, truncated: check_truncated } });
-            return JSON.stringify({
+                checkpoints: { every: check_every, count: checks.length, truncated: check_truncated,
+                               named: named_checks.length } });
+            const out = {
                 header: headOut,
                 frames: frames.map((x) => [x.f, x.d]),
                 checks: checks.map((c) => ({ tick: c.tick, hash: c.hash, l: c.l, v: c.v })),
-            });
+            };
+            if (named_checks.length) {
+                out.named = named_checks.map((c) => ({ name: c.name, tick: c.tick, hash: c.hash, l: c.l, v: c.v }));
+            }
+            return JSON.stringify(out);
         },
 
         /** Сколько байт займёт текст (прикидка для сохранения). */
@@ -533,6 +733,8 @@ export function createReplay(header, hooks) {
         clear() {
             frames.length = 0;
             checks.length = 0;
+            named_checks.length = 0;
+            named_pending.length = 0;
             cursor = 0;
             dropped = 0;
             unknown_actions = 0;

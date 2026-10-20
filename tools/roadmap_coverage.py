@@ -44,7 +44,7 @@ ACCEPTANCE = {
     "BASHNYA repro": "exit 0; packaged runtime reports `large_save` serialization error, repo build succeeds with 4097 spans",
     "BASHNYA play": "exit 0, `FINAL complete` (key, MAP2, seal, checkpoint, boss victory)",
     "agent suite": "acceptance subset 15/15 in 65.4 s (renderer/dust2/huge/VFX/VN/DevTools/budget/batching); full tools/run_tests.py wedged on audio_hrtf and is not claimed green",
-    "coverage checker": "154/154 sections mapped; 14 mandatory red gaps; 0 literal TODO/stub markers",
+    "coverage checker": "154/154 sections mapped; mandatory red gaps listed in the matrix; literal TODO/stub hits listed in the source audit",
 }
 
 # Top-level titles parsed from the roadmap (checked-in copy for portable CI).
@@ -291,8 +291,8 @@ add(range(101, 103), "done", ["brush"],
     "Compile stages and huge-world warnings (areaportal/hint/giant/sky-leak/light).")
 add([103], "done", ["sdk/native/sdk_brush.c", "tests/re2d/sky_leak_test.c", "docs/RE2D_BRUSH_AUTHORING.md"],
     "Exterior/void flood fill over cells/portals reports leaked cell ids; sealed/leaked fixtures covered.")
-add([104], "done", ["render", "tests/agent/re2d_batch_gpu_test.py", "docs/RE2D_RENDER_FEATURES.md"],
-    "Real per-group SSBO/instanced GPU submission (one draw per material/blend/light/atlas group), fallback and logical attribution preserved.")
+add([104], "partial", ["render", "tests/agent/re2d_batch_gpu_test.py", "docs/RE2D_RENDER_FEATURES.md"],
+    "Real per-group SSBO/instanced GPU submission for opaque/masked surfaces (23 logical -> 4 group draws, fallback and logical attribution tested). Open: translucent/additive surfaces still go through the per-surface path and group batching is disabled for non-final debug views, so the material/blend/light/atlas batching contract is not complete.")
 add([105, 106, 107], "done", ["src/re2d_world_gpu.c", "docs/RE2D_HUGE_WORLD.md",
                               "tests/re2d/stream_test.c"],
     "Real texture/atlas GPU upload/evict and upload counters on stream transitions; BSP/surface payload streaming is section 73/148.")
@@ -317,8 +317,8 @@ add([126], "done", ["debug", "tests/re2d/debug_views_test.c", "tests/agent/re2d_
     "Native debug enum/overlays for region/active/PVS/viscluster/areaportal/occluder/distant/sprite/material/AO/VFX, all tested.")
 add([127], "done", ["debug", "src/re2d.c", "docs/RE2D_WORLD_PERF.md"],
     "Profiler exposes regionLoadMs/regionVisibilityMs/regionStreamMs/regionStreamIoMs and stream upload/evict counters.")
-add([128], "done", ["docs/RE2D_DEBUG_VIEWS.md", "tests/agent/re2d_debug_views_test.py"],
-    "Material inspector: materialInfo(index|name), materialList, dims/blend/surface count/variation; debug material overlay.")
+add([128], "partial", ["docs/RE2D_DEBUG_VIEWS.md", "tests/agent/re2d_debug_views_test.py"],
+    "Inspector by name/index is real (materialInfo/materialList, albedo/normal/emissive dims, blend, surfaceCount, tint/UV variation) and the debug material overlay is tested. Open: there is no trace/click material probe, and macro/detail/terrain/AO-factor fields required by the section are not exposed.")
 add([129, 130], "done", ["tests_policy"],
     "Unity for native, JS/agent for high-level/VN; no new Python core tests.")
 add([131], "done", ["tests_policy", "tests/re2d", "tests/re2d/LAYOUT.md",
@@ -352,10 +352,10 @@ add([144], "done", ["handoff", "tests/agent/vn_bashnya_theme_test.py", "tests/ag
 add([145], "policy", ["handoff"], "Recommended order/meta section.")
 add([146], "done", ["vn_theme", "vn_tests", "vn_core", "vn_story", "vn_audio"],
     "VN DoD evidence: custom RML/font/layout, choices/keyboard/gamepad, skip/auto/backlog/save, shared timeline/cutscene runtime, no fourth UI engine.")
-add([147], "done", ["render", "render_tests", "tests/agent/re2d_visual_lab_acceptance_test.py", "tests/agent/reference/bashnya"],
-    "Render P0 DoD evidence: visual lab counts/feature deltas, BASHNYA bridge/shot/VFX frames, renderer/parity suites green.")
-add([148], "done", ["region", "stream", "src/re2d_world_stream_io.c", "tests/agent/re2d_huge_scaling_test.py", "handoff"],
-    "Regions/PVS/payload streaming/LOD/impostors/region-local rendering plus 1x/2x/4x scaling and gameplay/nav boundary save/load evidence.")
+add([147], "partial", ["render", "render_tests", "tests/agent/re2d_visual_lab_acceptance_test.py", "tests/agent/reference/bashnya"],
+    "Visual lab counts/BEFORE-AFTER feature deltas and BASHNYA bridge/shot/VFX refs exist; re2d_visual_lab_acceptance_test.py is green after the atlas-warning grace fix (transient async upload no longer reported as a loss). A stored BASHNYA BEFORE/AFTER comparison for the section's subjective checklist is still missing, so the section stays partial.")
+add([148], "partial", ["region", "stream", "src/re2d_world_stream_io.c", "tests/agent/re2d_huge_scaling_test.py", "handoff"],
+    "1x/2x/4x scaling keeps draws flat (4 group draws, 36 visible surfaces) and AI/nav/save survive the streaming boundary, but the DoD is not fully closed: payload streaming is incremental/budgeted, not async disk I/O, and the full region-local forward geometry path is still open (same limits as sections 73/89).")
 add([149, 150, 151, 152, 153], "meta", ["policy"],
     "Rules/first tasks/final setup; no runtime deliverable.")
 
@@ -597,12 +597,13 @@ def render_doc(report):
               "timeline/cutscene share $.dialog, no separate story UI. Pixel test: "
               "tests/agent/vn_bashnya_theme_test.py."),
         147: ("Render P0", ["@render", "@render_tests"],
-              "Grounding/variation/edges/fog/sky features are in the feature model and "
-              "renderer-lab regression frames. Missing: demos/re2d_visual_lab and a stored "
-              "BASHNYA BEFORE/AFTER comparison."),
+              "Grounding/variation/edges/fog/sky features, the visual lab and its BEFORE/AFTER "
+              "frames exist, but the acceptance test currently fails 'visual lab has no script "
+              "errors' and there is no stored BASHNYA BEFORE/AFTER checklist comparison; DoD open."),
         148: ("Huge world", ["@region", "@stream", "@openworld", "@tests/agent/re2d_huge_world_test.py"],
-              "Regions/PVS/stream state machine/LOD/impostors and the open-world lab run. "
-              "Open: true async disk payload streaming and full region-local forward geometry."),
+              "Regions/PVS/stream state machine/LOD/impostors, the open-world lab and 1x/2x/4x "
+              "scaling run. Open: true async disk payload streaming and full region-local forward "
+              "geometry."),
     }
     lines.append("| DoD | Evidence | Verdict |")
     lines.append("|---|---|---|")

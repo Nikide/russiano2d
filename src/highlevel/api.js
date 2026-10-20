@@ -2293,10 +2293,10 @@ function installNodeMethods($) {
         const node = this.nodes[0];
         return !!node && other.some((o) => o !== node && boundsOverlap(node, o));
     });
-    defGet('inside', function (node, sel) {
-        const zone = query(sel)[0];
-        return !!zone && boundsOverlap(node, zone);
-    }, false);
+    // .inside(...) — оператор ВЫБОРКИ в ядре (Wrapper.inside, core.js):
+    // обёртка узлов, чей ЦЕНТР внутри области/селектора/прямоугольника.
+    // Старая проверка «прямоугольники пересеклись» (bool) осталась у
+    // .overlaps(sel) выше — одно имя не отвечает на два разных вопроса.
 }
 
 // ---------------------------------------------------------------------------
@@ -2742,20 +2742,34 @@ let trace_head = 0;
 let trace_count = 0;
 let trace_on = false;
 let trace_dropped = 0;
+// Сквозной номер записи. Раньше n считался как trace_count + dropped — после
+// переполнения кольца это давало ПОВТОРЫ (count уже 256, dropped ещё 0/1):
+// агентский курсор since переставал быть строго монотонным и «не читал»
+// новые записи. Номер — отдельный счётчик, не производная от размера кольца.
+let trace_seq = 0;
 
 /** Записать запись в журнал. Дёшево: объект строится только при включении. */
 function noteTrace(kind, a, b, extra) {
     const entry = {
-        n: trace_count + trace_dropped,
+        n: ++trace_seq,
         kind,
         frame: ctx.time && typeof ctx.time.frame === 'function' ? ctx.time.frame() : -1,
         source: a ? a.nid : null,
         target: b ? b.nid : null,
         data: extra === undefined ? null : extra,
     };
-    if (trace_count >= TRACE_LIMIT) { trace_dropped++; trace_head = (trace_head + 1) % TRACE_LIMIT; }
-    trace_ring[(trace_head + trace_count) % TRACE_LIMIT] = entry;
-    if (trace_count < TRACE_LIMIT) trace_count++; else trace_count = TRACE_LIMIT;
+    if (trace_count >= TRACE_LIMIT) {
+        // Кольцо полно: старейшая запись (head) вытесняется, новая встаёт в
+        // освободившийся слот ПЕРЕД head. Прежняя формула писала в
+        // (head+count)%LIMIT после сдвига head, из-за чего новая запись
+        // оказывалась первой в list(), а порядок n ломался.
+        trace_dropped++;
+        trace_head = (trace_head + 1) % TRACE_LIMIT;
+        trace_ring[(trace_head + TRACE_LIMIT - 1) % TRACE_LIMIT] = entry;
+    } else {
+        trace_ring[(trace_head + trace_count) % TRACE_LIMIT] = entry;
+        trace_count++;
+    }
 }
 
 /**
@@ -2800,6 +2814,211 @@ function traceSnapshot() {
     return out;
 }
 
+// --- Чтение журнала: категории, фильтр, экспорт (§8) -----------------------
+//
+// Второй подсистемы нет: filter/read/export — это ЧТЕНИЕ того же кольца,
+// которое наполняют noteTrace() и боевые/контактные/звуковые/вводные
+// производители. Таблица kind -> category одна; её же читают DevTools и агент.
+
+/** Категории журнала: ровно те виды, которые уже пишутся (без новых событий). */
+const TRACE_CATEGORIES = ['audio', 'combat', 'contact', 'devtools', 'input', 'other', 'scene', 'signal'];
+
+/**
+ * Категория записи по её виду. `signal:<имя>`/sensor-события/devtools:* —
+ * подсемейства, а не отдельные категории. Неизвестный вид честно попадает в
+ * `other`, чтобы фильтр не терял записи игры.
+ */
+export function traceCategoryOf(kind) {
+    const k = kind === undefined || kind === null ? '' : String(kind);
+    if (k === 'attack' || k === 'damage' || k === 'death' || k === 'hit' || k === 'combat:filter') return 'combat';
+    if (k === 'collide' || k === 'separate' || k === 'stay' ||
+        k === 'sensor' || k.startsWith('sensor:')) return 'contact';
+    if (k === 'audio') return 'audio';
+    if (k === 'input') return 'input';
+    if (k === 'scene' || k.startsWith('scene:')) return 'scene';
+    if (k === 'devtools' || k.startsWith('devtools:')) return 'devtools';
+    if (k === 'signal' || k.startsWith('signal:')) return 'signal';
+    return 'other';
+}
+
+const trace_unknown_category_warned = new Set();
+let trace_json_failed = false;
+const trace_bad_format_warned = new Set();
+
+/** Число из опции фильтра; null — опция не задана. */
+function traceOptNumber(value) {
+    if (value === undefined || value === null) return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+}
+
+/** Ключи data, по которым селектор тоже считается попаданием (стабильные nid). */
+const TRACE_DATA_ID_KEYS = ['source', 'target', 'node', 'owner', 'self', 'other', 'attacker', 'victim'];
+
+function traceEntryMatchesSelector(entry, wanted) {
+    if (entry.source !== null && entry.source !== undefined && wanted.has(String(entry.source))) return true;
+    if (entry.target !== null && entry.target !== undefined && wanted.has(String(entry.target))) return true;
+    const d = entry.data;
+    if (d && typeof d === 'object') {
+        for (let i = 0; i < TRACE_DATA_ID_KEYS.length; i++) {
+            const v = d[TRACE_DATA_ID_KEYS[i]];
+            if (v !== null && v !== undefined && wanted.has(String(v))) return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Отфильтровать записи журнала (чистая часть `$.trace.filter/read`).
+ *
+ * opts: category, kind, selector, from, to, limit, since.
+ *   * from/to — кадры включительно;
+ *   * since  — только записи с номером n БОЛЬШЕ указанного (курсор для агента);
+ *   * limit  — ПОСЛЕДНИЕ N записей (самые свежие), порядок остаётся старый→новый;
+ *   * selector — селектор `$`, совпадение по source/target и стабильным id в data.
+ *
+ * Неизвестная категория/селектор — пусто и одна честная строка в журнал.
+ */
+export function filterTraceEntries(entries, opts) {
+    const list = entries || [];
+    const o = opts || {};
+    const category = o.category === undefined || o.category === null ? null : String(o.category);
+    if (category !== null && TRACE_CATEGORIES.indexOf(category) < 0) {
+        if (!trace_unknown_category_warned.has(category)) {
+            trace_unknown_category_warned.add(category);
+            ctx.log('$: .trace.filter — неизвестная категория "' + category + '"; доступны: ' + TRACE_CATEGORIES.join(', '));
+        }
+        return [];
+    }
+    let wanted = null;
+    if (o.selector !== undefined && o.selector !== null) {
+        if (typeof o.selector !== 'string') {
+            ctx.log('$: .trace.filter — selector должен быть строкой-селектором $');
+            return [];
+        }
+        const nodes = query(o.selector);
+        if (nodes.length === 0) return [];
+        wanted = new Set();
+        for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            if (node && node.nid !== undefined && node.nid !== null) wanted.add(String(node.nid));
+        }
+        if (wanted.size === 0) return [];
+    }
+
+    const kind = o.kind === undefined || o.kind === null ? null : String(o.kind);
+    const from = traceOptNumber(o.from);
+    const to = traceOptNumber(o.to);
+    const since = traceOptNumber(o.since);
+
+    const out = [];
+    for (let i = 0; i < list.length; i++) {
+        const entry = list[i];
+        if (!entry) continue;
+        if (since !== null && !(Number(entry.n) > since)) continue;
+        if (from !== null && !(Number(entry.frame) >= from)) continue;
+        if (to !== null && !(Number(entry.frame) <= to)) continue;
+        if (kind !== null && String(entry.kind) !== kind) continue;
+        if (category !== null && traceCategoryOf(entry.kind) !== category) continue;
+        if (wanted !== null && !traceEntryMatchesSelector(entry, wanted)) continue;
+        out.push(entry);
+    }
+
+    if (o.limit !== undefined && o.limit !== null) {
+        const raw = Number(o.limit);
+        if (!(raw > 0)) return [];
+        const take = Math.floor(raw);
+        if (out.length > take) return out.slice(out.length - take);
+    }
+    return out;
+}
+
+/** Короткая полезная нагрузка для текстового экспорта: имя/действие, иначе JSON. */
+function tracePayloadText(data) {
+    if (data === null || data === undefined) return '';
+    if (typeof data !== 'object') return String(data);
+    const keys = ['name', 'weapon', 'action', 'text'];
+    for (let i = 0; i < keys.length; i++) {
+        const v = data[keys[i]];
+        if (typeof v === 'string' && v !== '') return v;
+        if (typeof v === 'number') return String(v);
+    }
+    try { return JSON.stringify(data); } catch (e) { return '<data>'; }
+}
+
+/**
+ * Сериализовать записи журнала (чистая часть `$.trace.export`).
+ *
+ * format 'json' (по умолчанию) — массив `{kind, frame, source, target, data}`;
+ * format 'text' — строки `frame <frame> <#id|nid|-> <kind> <payload>`.
+ * Файлов не пишет: вызывающий (игра/DevTools) сохраняет строку через `$.fs`.
+ * labelOf — необязательный резолвер nid -> отображаемое имя (для text).
+ */
+export function formatTraceEntries(entries, opts, labelOf) {
+    const list = entries || [];
+    const o = opts || {};
+    const format = o.format === undefined || o.format === null ? 'json' : String(o.format).toLowerCase();
+    if (format === 'json') {
+        const rows = [];
+        for (let i = 0; i < list.length; i++) {
+            const e = list[i];
+            rows.push({
+                kind: e.kind,
+                frame: e.frame,
+                source: e.source === undefined ? null : e.source,
+                target: e.target === undefined ? null : e.target,
+                data: e.data === undefined ? null : e.data,
+            });
+        }
+        try {
+            return JSON.stringify(rows);
+        } catch (e) {
+            // data игры может содержать цикл: не роняем экспорт и диагностику,
+            // но и не подсовываем выдуманные записи.
+            if (!trace_json_failed) {
+                trace_json_failed = true;
+                ctx.log('$: .trace.export — data содержит цикл/несериализуема; JSON не построен');
+            }
+            return '[]';
+        }
+    }
+    if (format === 'text') {
+        const label = typeof labelOf === 'function'
+            ? labelOf
+            : (nid) => (nid === null || nid === undefined ? '-' : String(nid));
+        const lines = [];
+        for (let i = 0; i < list.length; i++) {
+            const e = list[i];
+            const who = e.source !== null && e.source !== undefined
+                ? label(e.source)
+                : (e.target !== null && e.target !== undefined ? label(e.target) : '-');
+            const payload = tracePayloadText(e.data);
+            lines.push('frame ' + e.frame + ' ' + who + ' ' + e.kind + (payload === '' ? '' : ' ' + payload));
+        }
+        return lines.join('\n');
+    }
+    if (!trace_bad_format_warned.has(format)) {
+        trace_bad_format_warned.add(format);
+        ctx.log('$: .trace.export — неизвестный формат "' + format + '"; доступны: json, text');
+    }
+    return '';
+}
+
+/** Резолвер nid -> `#id` (или `<tag>`/nid) для текстового экспорта. */
+function traceNidLabelResolver() {
+    const by_nid = new Map();
+    for (let i = 0; i < ctx.nodes.length; i++) {
+        const node = ctx.nodes[i];
+        if (node && node.nid !== undefined && node.nid !== null) by_nid.set(String(node.nid), node);
+    }
+    return (nid) => {
+        const node = by_nid.get(String(nid));
+        if (!node) return nid === null || nid === undefined ? '-' : String(nid);
+        if (node.id) return '#' + node.id;
+        return node.tag ? '<' + node.tag + '>' : String(nid);
+    };
+}
+
 function installTrace($) {
     $.trace = {
         /**
@@ -2816,7 +3035,7 @@ function installTrace($) {
         /** Сколько записей вытеснено переполнением кольца. */
         dropped() { return trace_dropped; },
         /** Очистить журнал и счётчик потерь. */
-        clear() { trace_count = 0; trace_head = 0; trace_dropped = 0; trace_ring.length = 0; trace_ring.length = TRACE_LIMIT; },
+        clear() { trace_count = 0; trace_head = 0; trace_dropped = 0; trace_seq = 0; trace_ring.length = 0; trace_ring.length = TRACE_LIMIT; },
         /**
          * Цепочка по hit ID (§28): источник → контакт → решение фильтра →
          * результат урона.
@@ -2848,6 +3067,55 @@ function installTrace($) {
             if (!trace_on) return false;
             noteTrace(String(kind), node || null, null, data === undefined ? null : data);
             return true;
+        },
+
+        /**
+         * Категории, реально присутствующие в журнале, по алфавиту:
+         * `['audio','combat','contact','input',…]`.
+         *
+         * Категории не выдумываются и не перечисляются заранее: пустой журнал —
+         * пустой список. Соответствие kind → category — `traceCategoryOf`,
+         * оно же используется фильтром и DevTools.
+         */
+        categories() {
+            const present = new Set();
+            const list = traceSnapshot();
+            for (let i = 0; i < list.length; i++) present.add(traceCategoryOf(list[i].kind));
+            return [...present].sort();
+        },
+
+        /**
+         * Прочитать журнал с фильтром: массив записей в порядке старый → новый.
+         *
+         * opts: `{ category, kind, selector, from, to, limit, since }`
+         *   * `category` — combat/contact/audio/input/scene/signal/devtools/other;
+         *   * `kind` — точное имя вида (‘attack’, ‘collide’, ‘audio’, …);
+         *   * `selector` — селектор `$`, совпадение по source/target и id в data;
+         *   * `from`/`to` — кадры включительно;
+         *   * `since` — только записи с `n > since` (курсор опроса);
+         *   * `limit` — ПОСЛЕДНИЕ N записей (самые свежие), порядок сохраняется.
+         *
+         * Журнал opt-in: пока запись не включали (или после `clear()`), массив
+         * пуст. `on(false)` не стирает уже записанное — читать можно, как и
+         * `list()`. Ошибок не бросает: неизвестная категория/пустой селектор
+         * дают пустой массив и одну строку в журнал.
+         */
+        filter(opts) { return filterTraceEntries(traceSnapshot(), opts); },
+
+        /** То же, что `filter`: имя для агента/DevTools-чтения (второго протокола нет). */
+        read(opts) { return filterTraceEntries(traceSnapshot(), opts); },
+
+        /**
+         * Экспорт отфильтрованного журнала строкой:
+         *   * `format:'json'` (по умолчанию) — массив `{kind,frame,source,target,data}`;
+         *   * `format:'text'` — строки `frame <frame> <#id|nid|-> <kind> <payload>`.
+         *
+         * Фильтр — те же opts, что у `filter/read`. Файлов не пишет: игре и
+         * DevTools нужно сохранить строку через `$.fs.write`/`$.fs.append`.
+         */
+        export(opts) {
+            const list = filterTraceEntries(traceSnapshot(), opts);
+            return formatTraceEntries(list, opts, traceNidLabelResolver());
         },
         limit: TRACE_LIMIT,
     };
@@ -3520,7 +3788,16 @@ function bodyGenerationOf(body) {
     return eng.bodyGeneration(body);
 }
 
-function dispatchContacts() {
+/**
+ * Одно событие контакта узлу: узел мог быть удалён обработчиком ПРЕДЫДУЩЕГО
+ * события этого же контакта (или предыдущего в списке) — мёртвому не шлём.
+ */
+function emitContactEvent(node, event_name, view) {
+    if (!node || node.removed) return;
+    try { node.emit(event_name, view); } catch (e) { reportError(`событие ${event_name}`, e); }
+}
+
+export function dispatchContacts() {
     if (typeof engineOf().contacts !== 'function') return;
     const list = engineOf().contacts();
     if (!list || list.length === 0) return;
@@ -3589,6 +3866,16 @@ function dispatchContacts() {
         // к моменту чтения `self/selfArea/selfOwner` в объекте уже лежали
         // значения ПРОТИВНИКА. Шесть §7-полей (areaA/areaB/roleA/roleB/ownerA/
         // ownerB) остаются общими и стабильными: это факт контакта, а не сторона.
+        // Сенсорные события — те же begin/end, но своё имя: игра не обязана
+        // разбирать `e.sensor` в каждом collide. Порядок: сначала обычное
+        // событие (совместимость), затем sensor:enter/sensor:leave с тем же
+        // набором полей view плюс sensor:true. begin/end приходят из Box2D один раз
+        // на вход/выход, отдельного состояния и дедупликации здесь нет.
+        const sensor_name = c.sensor === true
+            ? (c.kind === 'begin' ? 'sensor:enter'
+               : (c.kind === 'end' ? 'sensor:leave' : null))
+            : null;
+
         if (na) {
             const view_a = Object.assign({}, info, {
                 self: wrapOne(na),
@@ -3600,9 +3887,15 @@ function dispatchContacts() {
                 selfOwner: info.ownerA || wrapOne(na),
                 otherOwner: info.ownerB || (nb ? wrapOne(nb) : null),
             });
-            try { na.emit(name, view_a); } catch (e) { reportError(`событие ${name}`, e); }
+            emitContactEvent(na, name, view_a);
+            // Обработчик collide мог удалить участника (в том числе себя) —
+            // мёртвому узлу sensor-событие уже не принадлежит.
+            if (sensor_name && !na.removed) {
+                emitContactEvent(na, sensor_name,
+                                 Object.assign({}, view_a, { sensor: true }));
+            }
         }
-        if (nb) {
+        if (nb && !nb.removed) {
             const view_b = Object.assign({}, info, {
                 self: wrapOne(nb),
                 other: na ? wrapOne(na) : null,
@@ -3613,7 +3906,11 @@ function dispatchContacts() {
                 selfOwner: info.ownerB || wrapOne(nb),
                 otherOwner: info.ownerA || (na ? wrapOne(na) : null),
             });
-            try { nb.emit(name, view_b); } catch (e) { reportError(`событие ${name}`, e); }
+            emitContactEvent(nb, name, view_b);
+            if (sensor_name && !nb.removed) {
+                emitContactEvent(nb, sensor_name,
+                                 Object.assign({}, view_b, { sensor: true }));
+            }
         }
     }
 }

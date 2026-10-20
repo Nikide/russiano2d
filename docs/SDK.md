@@ -135,6 +135,7 @@ Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `co
 | `world-info <f.re2dmap>` | legacy alias `world info` |
 | `story validate <каталог|файл> [--assets-root dir]` | VN: `*.scene` → duplicate labels, unknown goto, unreachable branches, goto cycles, speakers/expressions (`speakers.json`), assets, theme, i18n keys |
 | `dialog validate <file.rml>` | VN: `<rml>` root, semantic `data-dialog-role` (root/text/choices), balanced tags, linked RCSS, `@font-face` files |
+| `deps <проект\|deps.json> [--check\|--record] [--json]` | граф зависимостей ассетов: что устарело по содержимому, служебный кэш `.r2d/cache/assets.json` (§4.1) |
 | `batch <manifest.batch.json> [--output report.json]` | пакетная проверка (`validate`), ошибки отдельных jobs не прерывают пакет |
 | `agent <session.agent.json> [--engine путь] [--output report.json]` | нативный клиент исходного агентского протокола движка |
 | `templates [--root sdk/templates]` | шаблоны проектов (`sdk/templates/<id>/template.json`): имя, описание, число файлов |
@@ -143,7 +144,91 @@ Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `co
 | `run <каталог> [--scene s] [--frames N] [--headless] [--engine путь]` | запуск игры движком |
 | `build <каталог> --out f [--entry main.js] [--encrypt\|--no-encrypt]` | сборка в один файл (`russiano2d build`); каталог результата создаётся |
 
+`validate <проект>` и `lint` ищут `api.schema.json` в таком порядке:
+явный `--schema`, каталог проекта, cwd, каталог `r2d-sdk` и два уровня выше него.
+Поэтому установленный пакет проверяет проект из любого каталога, а явный
+`--schema` не подменяется: нет файла — структурная `SDK_LINT_SCHEMA` с этим
+путём. `run` и `build` передают движку абсолютный путь проекта: относительный
+путь считается от cwd (движок резолвит `--game` от своего базового каталога,
+поэтому раньше относительный запуск из пакета искал игру рядом с бинарником).
+
 Явный `--engine` не подменяется молча: нет файла → `SDK_ENGINE_NOT_FOUND`.
+
+### 4.1. Граф зависимостей ассетов
+
+`r2d-sdk deps <проект|deps.json> [--check|--record] [--json]` отвечает, что
+устарело, и **ничего не собирает сам**: бейкер остаётся тем инструментом,
+который пишет выходы (`atlas-grid`, импортёр проекта и т. п.). Второго build
+system и закрытой ассет-базы нет — источники, выходы и манифест остаются
+обычными файлами, игра запускается без SDK.
+
+Манифест `deps.json` (рядом с `project.json`; `--project dir` переопределяет
+корень, от которого считаются пути и кэш):
+
+```json
+{ "version": 1, "nodes": [
+  { "source": "art/hero.png",
+    "deps": ["art/palette.json"],
+    "outputs": ["build/hero.atlas.json"],
+    "baker": "atlas-grid",
+    "version": 1,
+    "options": { "cell": "32x32" } }
+] }
+```
+
+* `source` — вход узла (файл); `deps` — файлы, которые бейкер читает кроме
+  источника; `outputs` — сгенерированные файлы; `baker` + `version` +
+  `options` — identity повара (любой JSON в `options`).
+* `deps` может ссылаться на `source` **или** на `outputs` другого узла: тогда
+  устаревание идёт по графу. Смена источника помечает устаревшими только его
+  зависимых (транзитивно); независимые узлы остаются `up_to_date`.
+* Истина — **содержимое**: FNV-1a 64 источника/зависимостей/выходов (тот же
+  алгоритм, что в движке). `mtime` пишется в кэш справочно и сам по себе
+  устаревания не вызывает. Пропавший выход — stale (`output_missing`),
+  изменённый вручную — `output_changed`; правка `baker`/`version`/`options` —
+  `baker_changed`/`version_changed`/`options_changed`.
+* Пути в манифесте — только относительные, без `.`, `..`, `//`, `\\` и диска:
+  иначе `SDK_DEPS_PATH`; для существующих файлов дополнительно сверяется
+  реальный путь (симлинк не выводит за каталог проекта).
+* Цикл зависимостей — `SDK_DEPS_CYCLE`, отсутствующий источник/зависимость —
+  `SDK_DEPS_SOURCE_MISSING`/`SDK_DEPS_DEP_MISSING`; это ошибки, а не stale.
+
+Кэш `.r2d/cache/assets.json` — **служебный**: в git не нужен, runtime его не
+читает никогда, Asset Browser его не показывает (каталоги с `.` пропускаются).
+Он хранит по узлу: путь источника, хеш содержимого, `mtime`, размер, список
+`deps`/`outputs` с их хешами, `baker`, `baker_version` и `options`; сверху —
+`version` и версия `r2d-sdk`. Потеря или порча кэша — предупреждение
+`SDK_DEPS_CACHE` и «все узлы stale» (`not_recorded`), а не молчаливая
+пересборка. Устаревшую версию кэша SDK тоже не толкует молча.
+
+Режимы: `--check` (по умолчанию) только читает; `--record` пишет снимок
+текущего состояния (после успешного бейка) атомарно и только когда нет ошибок —
+иначе кэш не создаётся; `--json` добавляет `nodes` с состоянием каждого узла.
+Ответ — один JSON-объект:
+
+```json
+{"ok":false,"version":1,"mode":"check","manifest":"…/deps.json",
+ "project":"…","cache":"…/.r2d/cache/assets.json",
+ "nodes_total":3,"up_to_date":2,"stale_count":1,
+ "stale":[{"source":"art/hero.png","outputs":["build/hero.atlas.json"],
+           "deps":["art/palette.json"],"reason":"source_changed",
+           "reasons":["source_changed"]}],
+ "recorded":false,"errors":0,"warnings":0,"infos":0,
+ "diagnostics":[]}
+```
+
+Коды выхода: `0` — всё актуально (или запись удалась), `1` — есть stale или
+ошибки данных, `2` — неверное использование. В режиме записи
+`up_to_date`/`stale` относятся к записанному снимку, а сколько узлов изменилось
+до записи — в `stale_before_record`. Коды диагностики: `SDK_DEPS_MANIFEST`,
+`_VERSION`, `_NODES`, `_NODE`, `_PATH`, `_DUPLICATE`, `_DUPLICATE_OUTPUT`,
+`_SOURCE_MISSING`, `_DEP_MISSING`, `_CYCLE`, `_CACHE`, `_CACHE_WRITE`,
+`_EMPTY`, `_MEMORY`.
+
+Проект без `deps.json` — структурная ошибка `SDK_DEPS_MANIFEST`, а не «всё
+актуально». Проверка: `tests/sdk/deps_test.c` (`r2d_sdk_deps_test`) — запись,
+`up_to_date`, устаревание только зависимых (включая транзитивное), отсутствующая
+зависимость, стабильность хеша/кэша и запрет выхода за каталог проекта.
 
 ## 5. Classic 2D: Sprite Studio и Animation Studio
 
@@ -264,11 +349,23 @@ SDK native tests, CLI, batch manifest, паритет команд агента 
 | 3 Студии данных Classic 2D | IMPLEMENTED | sdk_studios_test, sdk_data_parity_test |
 | 4 Automation / Batch | IMPLEMENTED | sdk_automation_test, CI manifest и workflow |
 
+Инкрементальная сборка ассетов — `r2d-sdk deps` (§4.1): манифест
+`deps.json`, служебный кэш `.r2d/cache/assets.json`, устаревание по содержимому;
+проверка — `tests/sdk/deps_test.c` / `r2d_sdk_deps_test`.
+
 Это закрытие перечисленных вертикальных срезов. Все компоненты реестра
 открываются (Re2D World Studio — §9; Tilemap, Particle, Collision/Physics,
-Parallax, Font/Text, Audio, Input, RmlUi Studio, DevTools — §11–§14). Не реализованы:
-graph editor кривых, выбор элемента кликом в предпросмотре RmlUi Studio, drag-ресайз
-фигур коллизии и drag зон акустики (числовые поля есть). ImGui удалён; весь UI и runtime диагностика — RmlUi.
+Parallax, Font/Text, Audio, Input, RmlUi Studio, DevTools — §11–§14).
+Полировка §15: Particle Studio правит рампы графом RmlUi (`pp-graph`: точки
+тянутся, добавляются и удаляются; JSON тот же `color_ramp`/`alpha_ramp`/
+`size_ramp`, числовые поля остаются запасным путём); RmlUi Studio выбирает
+элемент кликом в предпросмотре по настоящему `layoutRect` (`ops.pickAt`, только
+элементы с `id`); Collision Tools тянет ручки углов box и правый край circle
+(`w`/`h`/`radius`); Audio Tools двигает существующие зоны акустики мышью
+(числовые поля главные). Чистая логика правок — `tests/js/sdk_studio_curves_test.mjs`.
+Террейны и покадровая анимация тайлов правятся в Tilemap Studio (§11) теми же
+обычными полями JSON. Не реализован кернинг Font Tools (ограничение движка).
+ImGui удалён; весь UI и runtime диагностика — RmlUi.
 
 ## 9. Re2D World Studio
 
@@ -375,6 +472,19 @@ xmake build -y
 JOBS=4 ./run_sdk.sh --build         # пересобрать и открыть
 ```
 
+### 10.1. Проверка поставки (macOS arm64, 2026-10-20)
+
+Пакет пересобран из текущего дерева штатным инструментом, без тега и
+публикации: `python3 tools/release.py --platform macos-arm64 --skip-tests
+--skip-tag --force --yes`. Распакованный архив проверен **вне checkout**:
+`VERSION` 1.3.0, контрольные суммы 465/465, `tools/ci_package_check.py` — OK;
+`r2d-sdk version` = 1.3.0 и команда `deps` в списке; `validate` проекта по
+абсолютному пути из `/tmp` (и с `--schema` перед позиционным), `deps
+--record/--check`, `build` и `run` с относительным каталогом, `doctor` в корне
+поставки — все проверки true. Известное ограничение движка: запуск из
+каталога без `game/main.js` завершается SIGABRT после лимита `--frames`
+(backtrace и причина — `SDK_IMPLEMENTATION_GAPS.md`, п. 1).
+
 ## 11. Студии данных Classic 2D
 
 Семь студий работают на одном хосте (`sdk/lib/studio_host.js`, страница
@@ -395,7 +505,7 @@ JOBS=4 ./run_sdk.sh --build         # пересобрать и открыть
 
 | Инструмент | Файл | Игра читает так | Предпросмотр (настоящий рантайм) |
 |---|---|---|---|
-| Tilemap Studio | `*.tilemap.json` | `$('<tilemap>', $.fs.readJSON(f)).at(x, y).appendTo($.world)` | узел `<tilemap>` с теми же параметрами, `autotile`, палитра тайлсета |
+| Tilemap Studio | `*.tilemap.json` | `$('<tilemap>', $.fs.readJSON(f)).at(x, y).appendTo($.world)` | узел `<tilemap>` с теми же параметрами, `autotile`/террейн, покадровая анимация, палитра тайлсета |
 | Particle Studio | `*.particles.json` | `$('<particles>', $.fs.readJSON(f)).at(x, y)…` | узел `<particles>`, пресеты `$.particles.preset` |
 | Collision / Physics Tools | `*.collision.json` | `for (const s of f.shapes) applyShape($('<' + (s.tag \|\| 'wall') + '>').at(s.x, s.y), s)…` | настоящие `<wall>/<trigger>/<area>`, Box2D, шары |
 | Parallax Tools | `*.layers.json` | `$.layers.create(l)` и спрайты в слой | настоящие слои `$.layers`, камера |
@@ -408,11 +518,16 @@ JOBS=4 ./run_sdk.sh --build         # пересобрать и открыть
 складывает в attrs). Подробности форматов и диагностики:
 
 * **tilemap**: `tile` (1..512), `src`, `cols`, `solid` (bool или id), `autotile`
-  (`bit16`/`blob47`), `layers[{ name, depth, solid, data[][] }]` (до 16 слоёв, ряды одной
-  длины, id 0..65535). Инструменты: кисть, ластик, заливка, область; ПКМ — пипетка, СКМ —
-  панорама, колесо — масштаб; мазок — один шаг undo. Режим «id» рисует цветные клетки, когда
-  тайлсет не нужен. Коды `SDK_TILEMAP_*`: `FIELD, NO_SRC, AUTOTILE, LAYERS, LAYER, DATA, SHAPE,
-  SIZE, TILE_ID, EMPTY_LAYER, DUPLICATE_NAME`.
+  (`bit16`/`blob47`/`terrain` + `terrain`), `terrains{ имя → { mode, base, border, solid,
+  transitions } }`, `animations[{ tile, frames[id], fps | interval, random, offset, layer }]`,
+  `layers[{ name, depth, solid, data[][] }]` (до 16 слоёв, ряды одной длины, id 0..65535).
+  Инструменты: кисть, ластик, заливка, область; ПКМ — пипетка, СКМ — панорама, колесо —
+  масштаб; мазок — один шаг undo. «ТЕРРЕЙН» задаёт наборы и кнопкой «Красить» включает
+  `mode: "terrain"`; «АНИМАЦИЯ ТАЙЛОВ» задаёт кадры явными id, fps и слой. Предпросмотр —
+  настоящий `<tilemap>`, анимация идёт из `tickTilemap` (пауза/fixed-dt действуют). Режим
+  «id» рисует цветные клетки, когда тайлсет не нужен. Коды `SDK_TILEMAP_*`: `FIELD, NO_SRC,
+  AUTOTILE, TERRAIN, ANIM, LAYERS, LAYER, DATA, SHAPE, SIZE, TILE_ID, EMPTY_LAYER,
+  DUPLICATE_NAME`.
 * **particles**: все параметры `docs/highlevel/particles.md` §2. Стопы рамп принимают `value` и
   именованное поле так же, как рантайм (в пресетах `{ t, value }`). Неизвестное поле — предупреждение
   `UNKNOWN_FIELD` (рантайм кладёт его в attrs). Коды: `FIELD, RANGE, RAMP, COLOR, SUBEMITTER, CAP`.
@@ -436,12 +551,12 @@ JOBS=4 ./run_sdk.sh --build         # пересобрать и открыть
 
 Предпросмотр берёт ресурсы по путям от корня проекта (открытый проект или каталог файла); имена
 в рантайме SDK получают префикс `sdkpv-` и убираются при закрытии студии. Ограничения (честно):
-у Audio нет редактирования зон мышью и записи звука; у Collision нет drag-ресайза; у Tilemap нет
-редактора террейнов и анимации тайлов (есть автотайл); Font Tools не подбирает кернинг и не
-умеет жирный/курсив стилем — это ограничение движка (`docs/highlevel/font.md` §6).
+у Audio нет редактирования зон мышью и записи звука; у Collision нет drag-ресайза; Font Tools не
+подбирает кернинг и не умеет жирный/курсив стилем — это ограничение движка
+(`docs/highlevel/font.md` §6).
 
 API для агента: `$.sdkApp.studios['tilemap-studio'].ops` (`paint`, `fillRect`, `fillAt`, `setMap`,
-`addLayer`, …), аналогично `particle-studio`, `collision-tools`, `parallax-tools`, `font-tools`,
+`setTerrain`, `paintTerrain`, `removeTerrain`, `setAnimation`, `removeAnimation`, `addLayer`, …), аналогично `particle-studio`, `collision-tools`, `parallax-tools`, `font-tools`,
 `audio-tools`, `input-tools`; общее — `$.sdkApp.studios['<id>'].undo/redo/save/validate/select`
 (методы самой студии, не её `ops`), снимок —
 `state.sdk.studios.<id>`.

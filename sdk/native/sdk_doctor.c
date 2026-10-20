@@ -52,6 +52,13 @@ int sdk_cmd_doctor(const SdkArgs *a)
 {
     const char *project = sdk_arg_value(a, "--project");
     if (!project || !project[0]) project = "game";
+    // Схема — от --schema или рядом с r2d-sdk/проектом: doctor в установленном
+    // пакете запускают из любого каталога.
+    const char *explicit_schema = sdk_arg_value(a, "--schema");
+    char schema[2048];
+    if (!sdk_schema_resolve(explicit_schema, project, schema, sizeof schema)) {
+        snprintf(schema, sizeof schema, "%s", "api.schema.json");
+    }
     SdkReport rep; sdk_report_init(&rep);
     Check checks[16]; int n = 0;
 
@@ -65,8 +72,9 @@ int sdk_cmd_doctor(const SdkArgs *a)
         root ? r2d_json_size(r2d_json_get(root, "names")) : 0);
 
     if (root) {
-        add(checks, &n, "schema", schema_matches(root, "api.schema.json"),
-            "api.schema.json %s", schema_matches(root, "api.schema.json") ? "up to date" : "STALE (api generate)");
+        const bool schema_ok = schema_matches(root, schema);
+        add(checks, &n, "schema", schema_ok,
+            "%s %s", schema, schema_ok ? "up to date" : "STALE (api generate)");
         R2dSb sb; r2d_sb_init(&sb);
         sdk_api_dts_text(root, &sb);
         const bool dts_ok = file_equals("russiano2d.d.ts", sb.data, sb.len);
@@ -83,7 +91,9 @@ int sdk_cmd_doctor(const SdkArgs *a)
     }
 
     SdkReport project_rep; sdk_report_init(&project_rep);
-    sdk_project_validate(project, &project_rep);
+    // В project_validate передаём именно --schema (NULL — пусть ищет сам):
+    // иначе при отсутствии схемы диагностика ссылалась бы на несуществующий ключ.
+    sdk_project_validate(project, explicit_schema, &project_rep);
     add(checks, &n, "project", project_rep.errors == 0,
         "%s: errors=%d warnings=%d", project, project_rep.errors, project_rep.warnings);
     for (int i = 0; i < project_rep.count; ++i) {
@@ -94,7 +104,7 @@ int sdk_cmd_doctor(const SdkArgs *a)
     // second report is enough for the check, but agents need exact diagnostics.
     int lint_files = 0;
     SdkReport lint_rep; sdk_report_init(&lint_rep);
-    sdk_lint_run("api.schema.json", project, &lint_rep, &lint_files);
+    sdk_lint_run(schema, project, &lint_rep, &lint_files);
     add(checks, &n, "lint", lint_rep.errors == 0, "%s: files=%d errors=%d", project, lint_files, lint_rep.errors);
 
     R2dSb out; r2d_sb_init(&out);

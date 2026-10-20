@@ -20,6 +20,7 @@
 // ===========================================================================
 
 import { ctx, wrapOne } from './core.js';
+import { engine } from './native.js';
 
 /** Кольцо записей: диагностика не растёт вместе с длительностью запуска (§28). */
 const LIMIT = 128;
@@ -201,6 +202,304 @@ export function clear() {
     next_seq = 1;
 }
 
+
+// ---------------------------------------------------------------------------
+// Диагностический пакет ($.diag.bundle).
+//
+// Пишет diagnostics/<timestamp>/ рядом с игрой через $.fs: паспорт сборки,
+// сцену, seed/fixed dt, счётчики/пределы/ресурсы, журнал ошибок, хвост
+// консоли DevTools, недавние события $.trace и заголовок реплея.
+//
+// Границы, за которые модуль не выходит:
+//   * только существующие источники — ничего не измеряет сам;
+//   * путь проверяется: абсолютные пути, "..", "~", двоеточия и разделители
+//     внутри сегментов отклоняются, а не «исправляются молча»;
+//   * никакой сети/телеметрии; размер ограничен кольцами источников;
+//   * автосборки на fatal-ошибке нет: bundle зовут явно (безопасного хука,
+//     который не рискует рекурсией и потерей исходной ошибки, в движке нет).
+// ---------------------------------------------------------------------------
+
+const BUNDLE_DEFAULT_DIR = 'diagnostics';
+const BUNDLE_DIR_MAX_SEGMENTS = 4;
+const BUNDLE_TRACE_LIMIT = 128;
+const BUNDLE_ERROR_LIMIT = 128;
+const BUNDLE_LOG_LIMIT = 64;
+
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+function defaultTimestamp() {
+    const d = new Date();
+    return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate())
+        + '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+}
+
+/** Относительный каталог: сегменты [A-Za-z0-9._-], без "..", без абсолютных путей. */
+function safeBundleDir(value) {
+    if (value === undefined || value === null || value === '') return BUNDLE_DEFAULT_DIR;
+    if (typeof value !== 'string') return null;
+    const s = value.replace(/\\/g, '/').trim();
+    if (!s || s.charAt(0) === '/' || /^[A-Za-z]:/.test(s) || s.indexOf('~') === 0) return null;
+    const parts = s.split('/');
+    if (parts.length > BUNDLE_DIR_MAX_SEGMENTS) return null;
+    const out = [];
+    for (const part of parts) {
+        if (!part || part === '.' || part === '..') return null;
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(part)) return null;
+        out.push(part);
+    }
+    return out.join('/');
+}
+
+function safeTimestamp(value) {
+    if (value === undefined || value === null || value === '') return defaultTimestamp();
+    const s = (typeof value === 'number') ? String(value) : String(value).trim();
+    if (!/^[A-Za-z0-9._-]{1,64}$/.test(s)) return null;
+    if (s === '.' || s === '..' || s.charAt(0) === '.') return null;
+    return s;
+}
+
+function limitOf(value, fallback, max) {
+    const n = Math.floor(Number(value));
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.min(n, max);
+}
+
+/** JSON без исключений и без циклов: функции выпадают, ссылки помечаются. */
+function safeJSON(value, pretty) {
+    const seen = [];
+    try {
+        return JSON.stringify(value, (key, v) => {
+            const t = typeof v;
+            if (t === 'function') return undefined;
+            if (t === 'bigint') return String(v);
+            if (v && t === 'object') {
+                if (seen.indexOf(v) >= 0) return '[circular]';
+                seen.push(v);
+            }
+            return v;
+        }, pretty ? 2 : 0);
+    } catch (e) {
+        try { return JSON.stringify(String(value)); } catch (e2) { return '"[unserializable]"'; }
+    }
+}
+
+function safeCall(fn, fallback) {
+    try { return fn(); } catch (e) { return fallback; }
+}
+
+function bundleEngineInfo($) {
+    const e = engine || {};
+    const caps = ($.agent && typeof $.agent.capabilities === 'function')
+        ? safeCall(() => $.agent.capabilities(), null) : null;
+    const identity = ($.replay && typeof $.replay.identity === 'function')
+        ? safeCall(() => $.replay.identity(), null) : null;
+    const version = typeof e.version === 'string' ? e.version
+        : ($.version && typeof $.version === 'function' ? safeCall(() => $.version(), null) : null);
+    const build = e.buildId !== undefined ? e.buildId
+        : (e.build !== undefined ? e.build : (identity ? identity.build : null));
+    return {
+        version,
+        build,
+        platform: typeof e.platform === 'string' ? e.platform
+            : (caps && typeof caps.platform === 'string' ? caps.platform : null),
+        arch: typeof e.arch === 'string' ? e.arch : null,
+        gpu: typeof e.gpu === 'string' ? e.gpu
+            : (caps && typeof caps.gpu === 'string' ? caps.gpu : null),
+        backend: typeof e.backend === 'string' ? e.backend : null,
+        renderer: {
+            info: (typeof e.renderInfo === 'function' ? safeCall(() => e.renderInfo(), null) : null),
+            depth: (typeof e.depthInfo === 'function' ? safeCall(() => e.depthInfo(), null) : null),
+            sprite_filter: (typeof e.spriteFilter === 'function' ? safeCall(() => e.spriteFilter(), null) : null),
+        },
+        // null — честное «движок этих данных в JS не отдаёт», а не подстановка.
+        note: 'platform/gpu приходят из C только в ответе агента; без него — null',
+    };
+}
+
+function bundleSceneInfo($) {
+    const e = engine || {};
+    const scene = ($.scene && typeof $.scene.current === 'function')
+        ? safeCall(() => $.scene.current(), null)
+        : (ctx.scene && typeof ctx.scene.current === 'function' ? safeCall(() => ctx.scene.current(), null) : null);
+    return {
+        scene,
+        seed: Number.isFinite(Number(e.seed)) ? Number(e.seed) : null,
+        fixed_dt: Number.isFinite(Number(e.fixedDt)) ? Number(e.fixedDt) : null,
+        frame: Number.isFinite(Number(e.frame)) ? Number(e.frame) : null,
+        time: Number.isFinite(Number(e.time)) ? Number(e.time) : null,
+        dt: Number.isFinite(Number(e.dt)) ? Number(e.dt) : null,
+        size: { width: Number.isFinite(Number(e.width)) ? Number(e.width) : null,
+                height: Number.isFinite(Number(e.height)) ? Number(e.height) : null },
+    };
+}
+
+function bundleTraceInfo($, limit) {
+    const api = $.trace;
+    if (!api || typeof api.list !== 'function') {
+        return { available: false, on: false, dropped: null, total: 0, rows: [],
+                 note: '$.trace не установлен' };
+    }
+    const all = safeCall(() => api.list(), []) || [];
+    return {
+        available: true,
+        on: safeCall(() => api.on(), null),
+        dropped: safeCall(() => api.dropped(), null),
+        limit: typeof api.limit === 'function' ? safeCall(() => api.limit(), null) : api.limit,
+        total: all.length,
+        rows: all.slice(-limit).map((r) => ({
+            n: r.n, kind: r.kind, frame: r.frame,
+            source: r.source === undefined ? null : r.source,
+            target: r.target === undefined ? null : r.target,
+            data: r.data === undefined ? null : r.data,
+        })),
+    };
+}
+
+function bundleReplayInfo($) {
+    const r = $.replay;
+    if (!r || typeof r.mode !== 'function') return { available: false, note: '$.replay не установлен' };
+    return {
+        available: true,
+        mode: safeCall(() => r.mode(), null),
+        length: safeCall(() => r.length(), null),
+        position: safeCall(() => r.position(), null),
+        dropped: safeCall(() => r.dropped(), null),
+        header: safeCall(() => r.header(), null),
+        checkpoints: typeof r.checkpointsList === 'function'
+            ? safeCall(() => r.checkpointsList(), []) : null,
+        named: typeof r.namedCheckpoints === 'function'
+            ? safeCall(() => r.namedCheckpoints(), []) : null,
+    };
+}
+
+function bundleLog($, limit) {
+    const dev = ctx.devtools;
+    const rows = (dev && typeof dev.consoleLog === 'function')
+        ? safeCall(() => dev.consoleLog(), []) : [];
+    if (!rows || !rows.length) {
+        return {
+            available: false,
+            source: 'DevTools console',
+            lines: [],
+            note: 'движок не хранит лог stderr в JS; хвост появится, если панель DevTools писала команды. '
+                + 'Структурные ошибки — в log/errors.json',
+        };
+    }
+    return { available: true, source: 'DevTools console', lines: rows.slice(-limit),
+             note: 'это лог консоли DevTools ($.console/панель), а не перехват stderr' };
+}
+
+function bundleREADME(path, files) {
+    return [
+        'R2D diagnostic bundle',
+        '====================',
+        '',
+        'Создан явным вызовом $.diag.bundle() — без сети и телеметрии.',
+        'Каталог: ' + path,
+        'Файлы:',
+        ...files.map((f) => '  - ' + f),
+        '',
+        'Что внутри:',
+        '  engine.json  — версия/сборка/платформа/GPU (что движок отдаёт в JS),',
+        '                 сцена, seed, fixed dt, кадр/время, реплей.',
+        '  stats.json   — $.debug.stats()/limits()/counters() и $.debug.resources().',
+        '  trace.json   — хвост $.trace.list() (если журнал включён).',
+        '  replay.json  — режим/заголовок/checkpoints $.replay (если установлен).',
+        '  log.txt      — структурные ошибки $.debug.errors() и хвост консоли DevTools.',
+        '',
+        'Ограничения (честно):',
+        '  * platform/gpu/arch = null, если движок не передал их в JS;',
+        '  * текст stderr не перехватывается — движок не хранит его в JS;',
+        '  * размер ограничен кольцами источников, снимков экрана нет;',
+        '  * путь проверен: абсолютные пути и ".." отклоняются.',
+        '',
+        'Сгенерировано: ' + new Date().toString(),
+    ].join('\n') + '\n';
+}
+
+/**
+ * Записать диагностический пакет. Возврат всегда структурный:
+ * { ok, path, files, error }.
+ */
+export function writeBundle($, opts) {
+    const o = (opts && typeof opts === 'object' && !Array.isArray(opts)) ? opts : {};
+    const dir = safeBundleDir(o.dir);
+    if (dir === null) {
+        return { ok: false, path: null, files: [],
+                 error: '$.diag.bundle: недопустимый opts.dir — нужен относительный каталог '
+                      + 'из сегментов [A-Za-z0-9._-], без "..", "~" и абсолютных путей' };
+    }
+    const stamp = safeTimestamp(o.timestamp);
+    if (stamp === null) {
+        return { ok: false, path: null, files: [],
+                 error: '$.diag.bundle: недопустимый opts.timestamp — [A-Za-z0-9._-]{1,64}, '
+                      + 'без "..","/", ":" и ведущей точки' };
+    }
+    const fs_api = ($ && ($.fs || ctx.fs)) || null;
+    if (!fs_api || typeof fs_api.write !== 'function') {
+        return { ok: false, path: null, files: [],
+                 error: '$.diag.bundle: нет $.fs.write — модуль store.js не установлен' };
+    }
+    const path = dir + '/' + stamp;
+    const trace_limit = limitOf(o.trace, BUNDLE_TRACE_LIMIT, 512);
+    const error_limit = limitOf(o.errors, BUNDLE_ERROR_LIMIT, 512);
+    const log_limit = limitOf(o.log, BUNDLE_LOG_LIMIT, 256);
+    const files = [];
+    const errors = [];
+    const write = (name, text) => {
+        const rel = path + '/' + name;
+        let ok = false;
+        try { ok = fs_api.write(rel, text); } catch (e) { errors.push(rel + ': ' + (e && e.message ? e.message : e)); return; }
+        if (ok) files.push(rel);
+        else errors.push('не удалось записать ' + rel + (typeof fs_api.lastError === 'function'
+            ? ': ' + (safeCall(() => fs_api.lastError(), '') || 'причина не сообщена') : ''));
+    };
+
+    const scene = bundleSceneInfo($);
+    const engine_info = bundleEngineInfo($);
+    const stats = {
+        stats: safeCall(() => $.debug && $.debug.stats(), null),
+        counters: safeCall(() => $.debug && $.debug.counters(), null),
+        limits: safeCall(() => $.debug && $.debug.limits(), null),
+        resources: safeCall(() => $.debug && $.debug.resources && $.debug.resources(), null),
+    };
+    // resources — большой объект с top; в stats.json он уместен, но текст
+    // панели не дублируем: JSON и есть машиночитаемая форма.
+    const trace = bundleTraceInfo($, trace_limit);
+    const replay = bundleReplayInfo($);
+    const log = bundleLog($, log_limit);
+    const errs = ($.debug && typeof $.debug.errors === 'function')
+        ? (safeCall(() => $.debug.errors(), []) || []) : [];
+    const log_text = [
+        '# Структурные ошибки ($.debug.errors), последние ' + Math.min(errs.length, error_limit),
+        ...errs.slice(-error_limit).map((e) => '[' + e.code + '] ' + e.operation + ': ' + e.message
+            + (e.recoverable === false ? ' [fatal]' : '')
+            + (e.source ? ' (' + e.source.file + ':' + e.source.line + ')' : '')),
+        '',
+        '# Консоль DevTools (' + (log.available ? 'есть' : 'пусто') + ')',
+        ...log.lines,
+    ].join('\n') + '\n';
+
+    const engine_json = {
+        generated_at: new Date().toISOString(),
+        engine: engine_info,
+        scene,
+        stats: { fps: stats.stats ? stats.stats.fps : null, frame: scene.frame, time: scene.time },
+        replay,
+    };
+    write('engine.json', safeJSON(engine_json, true) + '\n');
+    write('stats.json', safeJSON(stats, true) + '\n');
+    write('trace.json', safeJSON(trace, true) + '\n');
+    write('replay.json', safeJSON(replay, true) + '\n');
+    write('log.txt', log_text);
+    // README последним: в нём список уже записанных файлов.
+    write('README.txt', bundleREADME(path, files.concat([path + '/README.txt'])));
+    if (errors.length) {
+        return { ok: false, path, files, error: errors.join('; ') };
+    }
+    return { ok: true, path, files, error: null };
+}
+
 export function installDiag($) {
     // `$.debug.errors()` — записи, `$.debug.report()` — сводка. Первым
     // аргументом можно передать код/подсистему/узел для фильтра.
@@ -339,6 +638,18 @@ export function installDiag($) {
      */
     debug.reportError = function (where, error, opts) {
         return report(where, error, opts);
+    };
+
+    // §17/§29: диагностический пакет. Только явный вызов: автосборка на fatal
+    // не ставится (см. комментарий к writeBundle) — исходная ошибка важнее.
+    $.diag = {
+        /**
+         * Записать diagnostics/<timestamp>/ через $.fs. Возврат:
+         * { ok, path, files, error }. Путь относительный и проверен.
+         *
+         * opts: dir, timestamp, trace (сколько событий), errors, log.
+         */
+        bundle(opts) { return writeBundle($, opts); },
     };
     return $;
 }

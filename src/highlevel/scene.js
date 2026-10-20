@@ -565,9 +565,155 @@ function progressSummary(handle, label) {
 }
 
 /**
+ * Нормализованный прогресс задания (0..1, счётчики, текущий шаг).
+ *
+ * `progress()` handle'а исторически отдаёт «сырые» числа ресурсов/шагов
+ * (`bytes_*`, `jobs_*`). Игре нужна одна доля 0..1 и счётчики, поэтому
+ * задание ДОБАВЛЯЕТ к тому же объекту `ratio`/`fraction`/`completed`/
+ * `total`/`current` — старые поля остаются на месте (совместимость).
+ */
+function jobFields(p, state) {
+    const bytes_total = Math.max(0, Number(p.bytes_total) || 0);
+    const bytes_done = Math.max(0, Math.min(bytes_total, Number(p.bytes_done) || 0));
+    const jobs_total = Math.max(0, Number(p.jobs_total) || 0);
+    const jobs_done = Math.max(0, Math.min(jobs_total, Number(p.jobs_done) || 0));
+    const bytes_known = p.bytes_known === true && bytes_total > 0;
+    let ratio = 0;
+    let total = 0;
+    let completed = 0;
+    if (bytes_known && jobs_total > 0) {
+        // Ресурсы и шаги — две половины одной загрузки: без весов полоса
+        // падала бы с 100% (байты кончились) до 0% (начались шаги).
+        const b = bytes_done / bytes_total;
+        const j = jobs_done / jobs_total;
+        ratio = b * 0.5 + j * 0.5;
+        total = bytes_total + jobs_total;
+        completed = Math.round(b * 0.5 * bytes_total + j * 0.5 * jobs_total);
+    } else if (bytes_known) {
+        ratio = bytes_done / bytes_total;
+        total = bytes_total;
+        completed = bytes_done;
+    } else if (jobs_total > 0) {
+        ratio = jobs_done / jobs_total;
+        total = jobs_total;
+        completed = jobs_done;
+    }
+    if (state === 'ready') {
+        ratio = 1;
+        if (total > 0) completed = total;
+    }
+    ratio = Math.max(0, Math.min(1, ratio));
+    const names = Array.isArray(p.names) ? p.names : [];
+    const at = names.length ? Math.min(jobs_done, names.length - 1) : -1;
+    const current = p.label ? String(p.label)
+        : (at >= 0 ? String(names[at]) : (p.stage ? String(p.stage) : null));
+    return {
+        ratio, fraction: ratio, total, completed, current,
+        resource: at >= 0 ? String(names[at]) : null,
+    };
+}
+
+/**
+ * Крошечный эмиттер на handle загрузки: `on/off/emit`, без глобальной шины
+ * (AGENTS.md: своего event bus в движке не заводим — это методы одного job).
+ * Поздняя подписка на уже случившееся событие срабатывает сразу, как у
+ * `$.resource.request`.
+ */
+function attachEmitter(handle) {
+    const listeners = {};
+    const call = (fn, payload) => {
+        try { fn(payload, handle); }
+        catch (e) { ctx.log(`$: ошибка в обработчике job.on: ${e}`); }
+    };
+    const emit = (event, payload) => {
+        const list = listeners[event];
+        if (!list) return 0;
+        const copy = list.slice();
+        for (const fn of copy) call(fn, payload);
+        return copy.length;
+    };
+    handle.on = (event, fn) => {
+        if (typeof fn !== 'function') return handle;
+        const key = String(event);
+        (listeners[key] = listeners[key] || []).push(fn);
+        if (key === 'done' && handle.state === 'ready') call(fn, handle);
+        else if (key === 'error' && handle.state === 'failed') call(fn, handle.error);
+        else if (key === 'cancel' && handle.state === 'cancelled') call(fn, handle);
+        else if (key === 'activated' && handle.activated && handle.activated()) call(fn, handle);
+        return handle;
+    };
+    handle.off = (event, fn) => {
+        const list = listeners[String(event)];
+        if (!list) return handle;
+        if (fn === undefined) { list.length = 0; return handle; }
+        for (let i = list.length - 1; i >= 0; --i) if (list[i] === fn) list.splice(i, 1);
+        return handle;
+    };
+    handle.emit = (event, payload) => { emit(event, payload); return handle; };
+    handle.listeners = (event) => (listeners[String(event)] || []).slice();
+    handle.listenerCount = (event) => (listeners[String(event)] || []).length;
+    return emit;
+}
+
+/**
+ * Задание без асинхронной работы: ресурсов и шагов нет, сцена переключается
+ * сразу. Возвращается тот же набор методов, что у настоящего job, — вызывающий
+ * код не должен различать «было что грузить» и «нечего грузить».
+ */
+function makeIdleJob(name) {
+    const handle = {
+        name: String(name),
+        ok: true,
+        state: 'ready',
+        error: null,
+        scope: null,
+        request: null,
+        owns_request: false,
+        steps_done: 0,
+        cancelled: false,
+        acquired: true,
+        progress() {
+            const raw = {
+                state: 'ready', stage: 'done', label: '',
+                bytes_done: 0, bytes_total: 0, bytes_known: false,
+                jobs_done: 1, jobs_total: 1, estimated: false,
+                cancelled: false, failed: false, names: [],
+            };
+            return Object.assign(raw, jobFields(raw, 'ready'));
+        },
+        errorInfo() { return null; },
+        done() { return true; },
+        cancel() { return false; },
+        ratio() { return this.progress().ratio; },
+        fraction() { return this.ratio(); },
+        completed() { return this.progress().completed; },
+        total() { return this.progress().total; },
+        stage() { return 'done'; },
+        current() { return null; },
+        isAcquired() { return true; },
+        activated() { return state.current_name === this.name; },
+    };
+    const emit = attachEmitter(handle);
+    // Работы нет, но активация всё равно отложена на границу кадра: следим
+    // за ней насосом, чтобы 'activated' прозвучал и экран загрузки погас.
+    const api = ctx.$;
+    if (api && typeof api.update === 'function') {
+        let stopped = false;
+        api.update(() => {
+            if (stopped) return;
+            if (state.current_name !== handle.name) return;
+            stopped = true;
+            emit('activated', handle);
+        });
+    }
+    return handle;
+}
+
+/**
  * Загрузчик: ресурсы ($.resource) и шаги ($.task), публикующие мир только при
- * совпадении generation. Один путь для `loadAsync()` и `change({loading})`.
- * Возвращает handle (`progress/cancel/done`) или null, если работы нет.
+ * совпадении generation. Один путь для `loadAsync()`, `$.scene.job()` и
+ * `change({loading})`. Возвращает handle (job: progress/cancel/done/on/off)
+ * или null, если работы нет.
  */
 function startLoader(name, o, token, hooks) {
     const h = hooks || {};
@@ -606,29 +752,56 @@ function startLoader(name, o, token, hooks) {
         owns_request: false,
         steps_done: 0,
         cancelled: false,
-        /** Прогресс ресурсов (или null, если ресурсов нет). */
+        // Приобретение (ресурсы + шаги) и активация (публикация мира) —
+        // разные факты: acquired ставится до неё, activated() считает по
+        // фактической текущей сцене.
+        acquired: false,
+        /**
+         * Прогресс: «сырые» поля ресурсов/шагов ПЛЮС нормализованные
+         * `ratio/fraction/total/completed/current` (см. jobFields).
+         */
         progress() {
             const jobs_done = Math.min(units_total, doneUnits(Math.min(this.steps_done, steps.length - 1)));
-            if (this.request && typeof this.request.progress === 'function') {
-                const p = this.request.progress();
-                p.steps_total = units_total;
-                p.steps_done = jobs_done;
-                p.jobs_total = units_total;
-                p.jobs_done = jobs_done;
-                if (current_label) p.label = current_label;
-                return p;
-            }
-            return {
-                state: this.state, stage: current_label || (steps.length ? 'apply' : 'done'),
-                label: current_label,
-                bytes_done: 0, bytes_total: 0, bytes_known: false,
-                jobs_done, jobs_total: units_total,
-                estimated: true, cancelled: this.cancelled,
-                failed: this.state === 'failed', names: [],
-            };
+            const raw = (() => {
+                if (this.request && typeof this.request.progress === 'function') {
+                    const p = this.request.progress();
+                    p.steps_total = units_total;
+                    p.steps_done = jobs_done;
+                    // Шагов нет — не затираем реальные счётчики запроса
+                    // (иначе закешированные/preloaded ассеты «исчезали» бы из total).
+                    if (units_total > 0) {
+                        p.jobs_total = units_total;
+                        p.jobs_done = jobs_done;
+                    }
+                    if (current_label) p.label = current_label;
+                    return p;
+                }
+                return {
+                    state: this.state, stage: current_label || (steps.length ? 'apply' : 'done'),
+                    label: current_label,
+                    bytes_done: 0, bytes_total: 0, bytes_known: false,
+                    jobs_done, jobs_total: units_total,
+                    estimated: true, cancelled: this.cancelled,
+                    failed: this.state === 'failed', names: [],
+                };
+            })();
+            return Object.assign(raw, jobFields(raw, this.state));
         },
         errorInfo() { return this.error; },
         done() { return this.state === 'ready' || this.state === 'failed' || this.state === 'cancelled'; },
+        /** Доля загрузки 0..1 (нормализованная; `progress().ratio`). */
+        ratio() { return this.progress().ratio; },
+        fraction() { return this.ratio(); },
+        /** Сколько единиц работы сделано и сколько всего. */
+        completed() { return this.progress().completed; },
+        total() { return this.progress().total; },
+        /** Стадия/шаг/ресурс, который идёт сейчас. */
+        stage() { return this.progress().stage || null; },
+        current() { return this.progress().current; },
+        /** Приобретение завершено (активация может быть ещё впереди). */
+        isAcquired() { return this.acquired === true; },
+        /** Мир этой сцены уже опубликован (`$.scene.current() === name`). */
+        activated() { return state.current_name === this.name; },
         /** Отмена: запрос, scope и публикация сцены отменяются. */
         cancel(reason) {
             if (this.done()) return false;
@@ -642,10 +815,15 @@ function startLoader(name, o, token, hooks) {
             loader.close({ immediate: true, reason: reason || 'загрузка отменена' });
             if (loading && typeof loading.watched === 'function'
                 && loading.watched() === this.request) loading.hide();
+            emit('cancel', this);
             if (typeof h.onCancelled === 'function') h.onCancelled(this);
             return true;
         },
     };
+
+    // События задания: progress (каждый кадр), acquired/done, error, cancel,
+    // activated. Это методы ОДНОГО handle, а не глобальная шина.
+    const emit = attachEmitter(handle);
 
     const cleanup = () => {
         if (state.loader_scope === loader) state.loader_scope = null;
@@ -674,13 +852,21 @@ function startLoader(name, o, token, hooks) {
             code: handle.error.code, assetPath: handle.error.path,
             operation: handle.name, stage: handle.error.stage,
         });
+        emit('error', handle.error);
         if (typeof h.onFailed === 'function') h.onFailed(handle.error, handle);
     };
 
     const finished = () => {
         if (state.generation !== token) return;      // переход уже другой
         handle.state = 'ready';
+        handle.acquired = true;
         cleanup();
+        // Приобретение закончено. Активация (публикация мира сцены) —
+        // отдельный шаг: onReady только ставит её в очередь, поэтому 'done'
+        // честно означает «ресурсы и шаги готовы», а 'activated' — «мир уже
+        // сменился». Экран загрузки гасится по activated, а не по done.
+        emit('acquired', handle);
+        emit('done', handle);
         if (typeof h.onReady === 'function') h.onReady(handle);
     };
 
@@ -762,6 +948,7 @@ function startLoader(name, o, token, hooks) {
             handle.cancelled = true;
             if (state.generation === token) state.generation++;
             cleanup();
+            emit('cancel', handle);
             if (typeof h.onCancelled === 'function') h.onCancelled(handle);
         });
         if (req.done && req.done()) {
@@ -781,6 +968,27 @@ function startLoader(name, o, token, hooks) {
     } else {
         beginSteps();
     }
+
+    // Кадровый насос задания: 'progress' каждый кадр (пока есть подписчики),
+    // 'activated' — когда мир этой сцены реально опубликован. Активация
+    // отдельна от приобретения: она идёт машиной сцен на границе кадра.
+    let pump_done = false;
+    let activated_emitted = false;
+    const pump = () => {
+        if (pump_done) return;
+        if (!activated_emitted && state.current_name === handle.name) {
+            activated_emitted = true;
+            emit('activated', handle);
+        }
+        if (handle.state === 'loading' && typeof handle.listenerCount === 'function'
+            && handle.listenerCount('progress') > 0) {
+            emit('progress', handle.progress());
+        }
+        if (handle.state === 'failed' || handle.state === 'cancelled') pump_done = true;
+        else if (handle.state === 'ready' && (activated_emitted
+            || (state.to_name && state.to_name !== handle.name))) pump_done = true;
+    };
+    if (api && typeof api.update === 'function') api.update(pump);
     return handle;
 }
 
@@ -1062,6 +1270,63 @@ export function installScene($) {
             if (!handle) return scene.load(name, o);
             state.async_handle = handle;
             return scene;
+        },
+
+        /**
+         * §45: асинхронная загрузка сцены, ВОЗВРАЩАЮЩАЯ job (handle).
+         *
+         * Это тот же `startLoader`, что у `loadAsync`/`change({loading})`:
+         * второго загрузчика нет. `loadAsync` возвращает `$.scene` для цепочки,
+         * `job` — handle для прогресса и событий.
+         *
+         *   const job = $.scene.job('level2', { resources: [...], steps: [...] });
+         *   job.on('progress', (p) => bar(p.ratio));      // каждый кадр
+         *   job.on('done',     () => console.log('acquired'));  // ресурсы+шаги
+         *   job.on('activated', () => console.log('мир сменён')); // отдельный шаг
+         *   job.on('error', (e) => console.log(e.code));
+         *   job.on('cancel', () => console.log('отменено'));
+         *
+         * Поля: `state` ('loading'|'ready'|'failed'|'cancelled'),
+         * `progress()` (сырые поля + `ratio/fraction/total/completed/current`),
+         * `ratio()/fraction()/completed()/total()/stage()/current()`,
+         * `error`, `done()`, `cancel(reason?)`, `acquired`, `activated()`,
+         * `on/off/emit`.
+         *
+         * Активация отдельна от приобретения: `done` — ресурсы и шаги готовы,
+         * `activated` — мир этой сцены уже текущий. Отмена до активации мир не
+         * публикует (guard поколения); повторные job не копят подписки: насос
+         * останавливается на завершении.
+         *
+         * `opts.screen` (по умолчанию true) — держать ли встроенный экран
+         * загрузки. `$.loading.scene()` передаёт `screen:false`: экран держит
+         * $.loading, чтобы не было двух экранов.
+         */
+        job(name, opts) {
+            const o = normalizeChangeOptions(Object.assign({ transition: 'fade' }, opts || {}));
+            const token = ++state.generation;
+            const publish = Object.assign({}, o);
+            delete publish.steps;
+            delete publish.resources;
+            delete publish.loading;
+            delete publish.progress;
+            delete publish.screen;
+            const handle = startLoader(name, o, token, {
+                screen: o.screen !== false,
+                onReady: () => {
+                    if (state.generation !== token) return;
+                    // Приобретение готово; активация — отдельный шаг машины
+                    // сцен: load() отложен до границы кадра и сверяет generation.
+                    scene.load(name, publish);
+                },
+            });
+            if (!handle) {
+                if (state.generation === token) scene.load(name, publish);
+                const idle = makeIdleJob(name);
+                state.async_handle = idle;
+                return idle;
+            }
+            state.async_handle = handle;
+            return handle;
         },
 
         /**

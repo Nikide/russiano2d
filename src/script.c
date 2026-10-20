@@ -39,6 +39,7 @@
 #include "r2d.h"
 #include "text.h"
 #include "font.h"
+#include "fs_util.h"
 
 #ifdef R2D_EMBED_SCRIPTS
 #include "embed.h"
@@ -3064,6 +3065,71 @@ static JSValue r2d__js_ui_layout_rect(JSContext *ctx, JSValueConst this_val,
     return result;
 }
 
+// engine.ui.loadFontFace(path, family, weight, style) → bool.
+//
+// Регистрирует файл как ЯВНОЕ лицо RmlUi: RCSS font-family/font-weight/
+// font-style после этого резолвит его. weight — 1..1000 (400 normal, 700 bold),
+// style — 'normal'|'italic'. Это только RmlUi; кастомный текстовый рендерер
+// (engine.loadFont) по-прежнему один атлас и начертаний не подделывает.
+static JSValue r2d__js_ui_load_font_face(JSContext *ctx, JSValueConst this_val,
+                                         int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *path = r2d__arg_str(ctx, argc, argv, 0);
+    const char *family = r2d__arg_str(ctx, argc, argv, 1);
+    const int weight = r2d__arg_int(ctx, argc, argv, 2, 400);
+    const char *style = r2d__arg_str(ctx, argc, argv, 3);
+
+    bool italic = false;
+    bool style_ok = true;
+    if (style) {
+        if (SDL_strcasecmp(style, "italic") == 0) italic = true;
+        else if (SDL_strcasecmp(style, "normal") != 0) style_ok = false;
+    }
+    const bool ok = style_ok && s && s->gui && path && family &&
+                    r2d_gui_load_font_face(s->gui, path, family, weight, italic);
+
+    if (path) JS_FreeCString(ctx, path);
+    if (family) JS_FreeCString(ctx, family);
+    if (style) JS_FreeCString(ctx, style);
+    return JS_NewBool(ctx, ok);
+}
+
+// engine.ui.fontFaces() → [{ family, weight, style, path }] — метаданные лиц,
+// зарегистрированных через loadFontFace. Автозагруженные assets/fonts сюда не
+// попадают: RmlUi выводит их семейство из файла и обратно его не отдаёт.
+static JSValue r2d__js_ui_font_faces(JSContext *ctx, JSValueConst this_val,
+                                     int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2D_UNUSED(argc);
+    R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue out = JS_NewArray(ctx);
+    if (!s || !s->gui) return out;
+
+    const int count = r2d_gui_font_face_count(s->gui);
+    uint32_t written = 0;
+    for (int i = 0; i < count; i++) {
+        char family[128];
+        char path[2048];
+        int weight = 400;
+        bool italic = false;
+        if (!r2d_gui_font_face_info(s->gui, i, family, sizeof family,
+                                    path, sizeof path, &weight, &italic)) {
+            continue;
+        }
+        JSValue face = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, face, "family", JS_NewString(ctx, family));
+        JS_SetPropertyStr(ctx, face, "weight", JS_NewInt32(ctx, weight));
+        JS_SetPropertyStr(ctx, face, "style", JS_NewString(ctx, italic ? "italic" : "normal"));
+        JS_SetPropertyStr(ctx, face, "path", JS_NewString(ctx, path));
+        JS_SetPropertyUint32(ctx, out, written++, face);
+    }
+    return out;
+}
+
 // --- Пул обработчиков UI (§27) ---------------------------------------------
 // Массив JSValue растёт с проверкой переполнения. Стартовая ёмкость 256
 // сохранена для совместимости с диагностикой, но это не потолок.
@@ -4954,6 +5020,26 @@ static void r2d__fs_note_failure(const char *action, const char *code,
                  action, full, reason, extra ? extra : "", code);
 }
 
+// Каталог назначения может не существовать — создаём (SDL_SaveFile сам этого
+// не делает), иначе сохранение молча ломается. dir_error — необязательное
+// пояснение для отказа: пустая строка, если каталог есть/создан.
+static void r2d__fs_ensure_parent(const char *full, char *dir_error, size_t dir_error_size)
+{
+    if (dir_error && dir_error_size) dir_error[0] = '\0';
+    char dir[4096];
+    SDL_snprintf(dir, sizeof dir, "%s", full);
+    char *slash = SDL_strrchr(dir, '/');
+    if (!slash) return;
+    *slash = '\0';
+    if (!dir[0] || SDL_CreateDirectory(dir)) return;
+    // Каталога нет и создать его нечем (например, родитель только для
+    // чтения) — это и есть причина будущего ENOENT, называем её сразу.
+    SDL_PathInfo info;
+    if (!(SDL_GetPathInfo(dir, &info) && info.type == SDL_PATHTYPE_DIRECTORY) && dir_error) {
+        SDL_snprintf(dir_error, dir_error_size, "; каталог \"%s\" не создан", dir);
+    }
+}
+
 static JSValue r2d__js_fs_write(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     R2D_UNUSED(this_val);
@@ -4970,24 +5056,8 @@ static JSValue r2d__js_fs_write(JSContext *ctx, JSValueConst this_val, int argc,
     r2d_app_resolve_path(s->app, full, sizeof full, path);
     JS_FreeCString(ctx, path);
 
-    // Каталог назначения может не существовать — создаём (SDL_SaveFile сам
-    // этого не делает), иначе сохранение молча ломается.
     char dir_error[320];
-    dir_error[0] = '\0';
-    char dir[4096];
-    SDL_snprintf(dir, sizeof dir, "%s", full);
-    char *slash = SDL_strrchr(dir, '/');
-    if (slash) {
-        *slash = '\0';
-        if (dir[0] && !SDL_CreateDirectory(dir)) {
-            // Каталога нет и создать его нечем (например, родитель только для
-            // чтения) — это и есть причина будущего ENOENT, называем её сразу.
-            SDL_PathInfo info;
-            if (!(SDL_GetPathInfo(dir, &info) && info.type == SDL_PATHTYPE_DIRECTORY)) {
-                SDL_snprintf(dir_error, sizeof dir_error, "; каталог \"%s\" не создан", dir);
-            }
-        }
-    }
+    r2d__fs_ensure_parent(full, dir_error, sizeof dir_error);
 
     errno = 0;
     const size_t len = text ? SDL_strlen(text) : 0;
@@ -5000,6 +5070,45 @@ static JSValue r2d__js_fs_write(JSContext *ctx, JSValueConst this_val, int argc,
         // знает и относительный путь игры, и куда писать диагностику. Здесь
         // причина только собирается — иначе на один отказ вышло бы две строки.
         r2d__fs_note_failure("записать", "R2D_FS_WRITE_FAILED", full, err, dir_error);
+    } else {
+        r2d__fs_error[0] = '\0';
+    }
+    return ok ? JS_TRUE : JS_FALSE;
+}
+
+// engine.fs.writeAtomic(path, text) — та же запись, но видимая атомарно:
+// данные уходят во временный файл рядом с целевым, fsync, затем rename.
+// Обрыв процесса посреди записи оставляет либо старый файл, либо новый, но не
+// половину. $.save/$.store используют этот путь, когда биндинг есть.
+static JSValue r2d__js_fs_write_atomic(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *path = r2d__arg_str(ctx, argc, argv, 0);
+    const char *text = r2d__arg_str(ctx, argc, argv, 1);
+    if (!path || !s) {
+        if (path) JS_FreeCString(ctx, path);
+        if (text) JS_FreeCString(ctx, text);
+        return JS_FALSE;
+    }
+
+    char full[4096];
+    r2d_app_resolve_path(s->app, full, sizeof full, path);
+    JS_FreeCString(ctx, path);
+
+    char dir_error[320];
+    r2d__fs_ensure_parent(full, dir_error, sizeof dir_error);
+
+    const size_t len = text ? SDL_strlen(text) : 0;
+    char reason[512];
+    reason[0] = '\0';
+    const bool ok = r2d_fs_write_atomic(full, text ? text : "", len,
+                                        reason, sizeof reason);
+    if (text) JS_FreeCString(ctx, text);
+    if (!ok) {
+        SDL_snprintf(r2d__fs_error, sizeof r2d__fs_error,
+                     "не удалось атомарно записать \"%s\": %s%s (код R2D_FS_WRITE_FAILED)",
+                     full, reason[0] ? reason : "причина не сообщена", dir_error);
     } else {
         r2d__fs_error[0] = '\0';
     }
@@ -6437,6 +6546,9 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, ui, "rect", r2d__js_ui_rect, 2);
     r2d__set_fn(ctx, ui, "layoutRect", r2d__js_ui_layout_rect, 2);
     r2d__set_fn(ctx, ui, "click", r2d__js_ui_click, 2);
+    // Явные шрифтовые лица RmlUi (RCSS font-weight/font-style) и их метаданные.
+    r2d__set_fn(ctx, ui, "loadFontFace", r2d__js_ui_load_font_face, 4);
+    r2d__set_fn(ctx, ui, "fontFaces", r2d__js_ui_font_faces, 0);
 
     // Иконки Material Design: встроены в бинарник, доступны по имени.
     r2d__set_fn(ctx, ui, "icon", r2d__js_ui_icon, 1);
@@ -6570,6 +6682,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     JSValue fs = JS_NewObject(ctx);
     r2d__set_fn(ctx, fs, "readText", r2d__js_fs_read_text, 1);
     r2d__set_fn(ctx, fs, "write", r2d__js_fs_write, 2);
+    r2d__set_fn(ctx, fs, "writeAtomic", r2d__js_fs_write_atomic, 2);
     // Причина последнего отказа записи: `$.fs`/`$.store` печатают её одной
     // строкой — раньше отказ записи не был виден вообще (отчёт BASHNYA A5).
     r2d__set_fn(ctx, fs, "lastError", r2d__js_fs_last_error, 0);

@@ -44,16 +44,23 @@ def main():
         a.step(10)
         check(len(set(ids.values())) == 5, "все пять — разные суставы")
 
-        check(a.eval("$.world.jointAlive(0)") is True, "сустав жив")
-        check(a.eval("$.world.joint(0)") is not None, "описание сустава читается")
+        # Пул слотов выдаёт id с конца (0-я ёмкость — 64 → первые id 63..59),
+        # поэтому адресуем суставы по id из карты, а не по «0»/«4».
+        check(a.eval(f"$.world.jointAlive({ids['revolute']})") is True,
+              "сустав revolute жив по id из слотового пула")
+        check(a.eval("$.world.jointCount()") == 5, "счётчик суставов — 5")
+        check(all(a.eval(f"$.world.jointAlive({jid})") for jid in ids.values()),
+              "все пять суставов живы")
 
         # Уничтожение освобождает слот и уменьшает счётчик.
-        check(a.eval("$.world.destroyJoint(4)") is not False, "сустав уничтожен")
-        check(a.eval("$.world.jointAlive(4)") is False, "он больше не жив")
+        check(a.eval(f"$.world.destroyJoint({ids['wheel']})") is not False,
+              "wheel уничтожен")
+        check(a.eval(f"$.world.jointAlive({ids['wheel']})") is False,
+              "он больше не жив")
         check(a.eval("$.world.jointCount()") == 4, "счётчик уменьшился")
 
         # Ось у prismatic: тело едет по оси X и почти не смещается по Y.
-        a.eval("$.world.destroyJoint(3)")
+        a.eval(f"$.world.destroyJoint({ids['prismatic']})")
         a.eval("$('#slider').velocity(0, 0)")
         jid = a.eval("$.world.joint('#rail', '#slider', "
                      "{ type: 'prismatic', axis: [1, 0], "
