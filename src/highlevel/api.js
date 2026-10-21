@@ -2505,7 +2505,8 @@ function installFrameHooks($) {
             for (let i = 0; i < subs.length; i++) {
                 const sub = subs[i];
                 if (sub.off || sub.node.removed) continue;
-                try { sub.fn(dt, $(sub.node), $); } catch (e) { reportError('$.updateFor', e); }
+                // Обёртка узла создаётся один раз на подписку, а не на каждый кадр.
+                try { sub.fn(dt, sub.w || (sub.w = $(sub.node)), $); } catch (e) { reportError('$.updateFor', e); }
                 if (!sub.off && !sub.node.removed) subs[w++] = sub;
             }
             subs.length = w;   // добавленные во время прохода тоже пройдены и сжаты
