@@ -395,6 +395,28 @@ static void validate_manifest(SnipPkg *p, SdkReport *rep, bool check_dirname)
         }
     }
 
+    // Миграции значений: { from, to, rename{старый: новый}, remove[], defaults{} } — данные, не код.
+    const R2dJson *migs = r2d_json_get(m, "migrations");
+    if (migs && migs->type != R2D_JSON_ARR) diag(rep, SDK_ERROR, "SNIP146", mp, p->id, "migrations", "migrations: массив");
+    for (int i = 0; i < r2d_json_size(migs); ++i) {
+        const R2dJson *g = r2d_json_at(migs, i);
+        if (!semver_ok(jstr(g, "from")) || !semver_ok(jstr(g, "to")))
+            diag(rep, SDK_ERROR, "SNIP146", mp, p->id, "migrations", "migrations[%d]: from/to — semver", i);
+        const R2dJson *ren = r2d_json_get(g, "rename");
+        for (int k = 0; k < r2d_json_size(ren); ++k)
+            if (ren->items[k]->type != R2D_JSON_STR || !pkg_field(p, ren->items[k]->string))
+                diag(rep, SDK_ERROR, "SNIP146", mp, p->id, "migrations", "migrations[%d].rename.%s: новое имя должно быть полем пакета", i, ren->keys[k]);
+        const R2dJson *defs = r2d_json_get(g, "defaults");
+        for (int k = 0; k < r2d_json_size(defs); ++k) {
+            const R2dJson *f = pkg_field(p, defs->keys[k]);
+            char why[160];
+            if (!f) diag(rep, SDK_ERROR, "SNIP146", mp, p->id, "migrations", "migrations[%d].defaults.%s: нет такого поля", i, defs->keys[k]);
+            else if (!value_ok(f, defs->items[k], why, sizeof why)) diag(rep, SDK_ERROR, "SNIP146", mp, p->id, "migrations", "migrations[%d].defaults.%s: %s", i, defs->keys[k], why);
+        }
+    }
+    if (r2d_json_size(migs) && strcmp(r2d_json_str(r2d_json_get(r2d_json_at(migs, r2d_json_size(migs) - 1), "to"), ""), p->version))
+        diag(rep, SDK_ERROR, "SNIP146", mp, p->id, "migrations", "последняя миграция должна вести к version %s", p->version);
+
     // Примеры и тесты пакета: файлы обязаны существовать; тест — values по схеме.
     static const char *const lists[] = { "examples", "tests" };
     for (int l = 0; l < 2; ++l) {
@@ -1967,7 +1989,41 @@ static int cmd_update(const SdkArgs *a, const char *dir)
             sdk_put_kv_str(&changes, "instance", jstr(inst, "id")); r2d_sb_putc(&changes, ',');
             sdk_put_kv_str(&changes, "from", ver ? ver : ""); r2d_sb_putc(&changes, ',');
             sdk_put_kv_str(&changes, "to", p->version);
-            r2d_sb_puts(&changes, ",\"dropped_fields\":[");
+            // Декларативные миграции значений: цепочка from→to из manifest.migrations.
+            r2d_sb_puts(&changes, ",\"steps\":[");
+            {
+                char cur[32];
+                snprintf(cur, sizeof cur, "%s", ver ? ver : "");
+                const R2dJson *migs = r2d_json_get(p->m, "migrations");
+                R2dJson *vals = jensure(inst, "values", "{}");
+                int guard = 0, ns = 0;
+                while (strcmp(cur, p->version) && guard++ < 64) {
+                    const R2dJson *m = NULL;
+                    for (int k = 0; k < r2d_json_size(migs) && !m; ++k)
+                        if (!strcmp(r2d_json_str(r2d_json_get(r2d_json_at(migs, k), "from"), ""), cur)) m = r2d_json_at(migs, k);
+                    if (!m) break;
+                    const R2dJson *ren = r2d_json_get(m, "rename");
+                    for (int k = 0; k < r2d_json_size(ren); ++k) {
+                        R2dJson *old = jobj_find(vals, ren->keys[k]);
+                        const char *to = r2d_json_str(ren->items[k], NULL);
+                        if (!old || !to) continue;
+                        R2dSb cp; r2d_sb_init(&cp); sdk_json_put_compact(&cp, old);
+                        jobj_put(vals, to, jnew(cp.data)); r2d_sb_free(&cp);
+                        jobj_drop(vals, ren->keys[k]);
+                    }
+                    const R2dJson *rm = r2d_json_get(m, "remove");
+                    for (int k = 0; k < r2d_json_size(rm); ++k) jobj_drop(vals, r2d_json_str(r2d_json_at(rm, k), ""));
+                    const R2dJson *defs = r2d_json_get(m, "defaults");
+                    for (int k = 0; k < r2d_json_size(defs); ++k)
+                        if (!jobj_find(vals, defs->keys[k])) { R2dSb cp; r2d_sb_init(&cp); sdk_json_put_compact(&cp, defs->items[k]); jobj_put(vals, defs->keys[k], jnew(cp.data)); r2d_sb_free(&cp); }
+                    if (ns++) r2d_sb_putc(&changes, ',');
+                    r2d_sb_printf(&changes, "\"%s→%s\"", cur, r2d_json_str(r2d_json_get(m, "to"), "?"));
+                    snprintf(cur, sizeof cur, "%s", r2d_json_str(r2d_json_get(m, "to"), ""));
+                }
+                if (strcmp(cur, p->version) && r2d_json_size(migs))
+                    diag(&edit, SDK_ERROR, "SNIP146", p->manifest_path, p->id, "migrations", "%s: нет цепочки миграций %s → %s", jstr(inst, "id"), ver ? ver : "?", p->version);
+            }
+            r2d_sb_puts(&changes, "],\"dropped_fields\":[");
             const R2dJson *values = r2d_json_get(inst, "values");
             int nd = 0;
             for (int k = 0; k < r2d_json_size(values); ++k)
