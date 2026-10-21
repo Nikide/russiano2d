@@ -147,10 +147,11 @@ export function createSnippetsPanel($, doc, host) {
         inst.disabled ? 'включено: ' + inst.id : 'отключено: ' + inst.id);
 
     /** Новый объект из Editor: editor.graph (origin: graph); узел создаёт generated JS. */
-    async function createEntity(id, tag) {
+    async function createEntity(id, tag, opts) {
         id = String(id || '').trim(); tag = String(tag || '').trim() || id;
         if (!id) { host.setStatus('укажите id объекта', 'err'); return false; }
-        const ok = await run(['snippet', 'entity', host.root(), '--id', id, '--tag', tag, '--x', '200', '--y', '200', '--w', '32', '--h', '32'],
+        const o = Object.assign({ x: 200, y: 200, w: 32, h: 32, body: 'dynamic' }, opts || {});
+        const ok = await run(['snippet', 'entity', host.root(), '--id', id, '--tag', tag, '--x', String(o.x), '--y', String(o.y), '--w', String(o.w), '--h', String(o.h), '--body', o.body],
             'объект #' + id + ' создан', (j) => { if (j.written) { st.owner = 'object:' + id; st.open = null; } });
         return ok;
     }

@@ -2090,14 +2090,12 @@ static int cmd_entity(const SdkArgs *a, const char *dir)
         } else if (found >= 0) {
             diag(&rep, SDK_ERROR, "SNIP065", "", NULL, key, "сущность %s уже есть в графе", key);
         } else {
-            // Область: первый world графа; без неё — world:main от Editor.
-            const char *area = NULL;
-            for (int i = 0; i < areas->count && !area; ++i)
-                if (!strcmp(r2d_json_str(r2d_json_get(areas->items[i], "type"), ""), "world")) area = jstr(areas->items[i], "key");
-            if (!area) {
-                jarr_push(areas, jnew("{\"key\": \"world:main\", \"type\": \"world\", \"label\": \"World\", \"runtime_root\": \"$.world\", \"origin\": \"graph\"}"));
-                area = "world:main";
-            }
+            // Область Editor — своя запись origin graph: области кода пересобирает
+            // индексатор, и ссылка на них повисла бы после правки JS (R2D205).
+            const char *area = "world:editor";
+            bool have = false;
+            for (int i = 0; i < areas->count && !have; ++i) have = !strcmp(r2d_json_str(r2d_json_get(areas->items[i], "key"), ""), area);
+            if (!have) jarr_push(areas, jnew("{\"key\": \"world:editor\", \"type\": \"world\", \"label\": \"World (Editor)\", \"runtime_root\": \"$.world\", \"origin\": \"graph\"}"));
             const char *body = sdk_arg_value(a, "--body");
             if (body && strcmp(body, "dynamic") && strcmp(body, "static") && strcmp(body, "kinematic") && strcmp(body, "none")) {
                 diag(&rep, SDK_ERROR, "SNIP025", "", NULL, "body", "body: dynamic | static | kinematic | none");
