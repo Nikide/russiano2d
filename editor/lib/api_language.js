@@ -297,3 +297,167 @@ export function javascriptDocumentSymbols(lines) {
     }
     return out;
 }
+
+// --- подсказка параметров вызова ------------------------------------------------
+
+const CALL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'typeof', 'await', 'with', 'else', 'do']);
+
+/** Ближайший незакрытый вызов `f(` перед концом текста: { callee, argIndex } либо null. */
+export function callContext(sourcePrefix) {
+    const src = String(sourcePrefix || '').slice(-4000);
+    const stack = [];
+    let quote = '', i = 0;
+    while (i < src.length) {
+        const ch = src[i], next = src[i + 1];
+        if (quote) {
+            if (ch === '\\') i++;
+            else if (ch === quote) quote = '';
+            i++; continue;
+        }
+        if (ch === '/' && next === '/') { const e = src.indexOf('\n', i); if (e < 0) return null; i = e; continue; }
+        if (ch === '/' && next === '*') { const e = src.indexOf('*/', i + 2); if (e < 0) return null; i = e + 2; continue; }
+        if (ch === '"' || ch === "'" || ch === '`') { quote = ch; i++; continue; }
+        if (ch === '(') {
+            const m = /([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*$/.exec(src.slice(Math.max(0, i - 120), i));
+            stack.push({ type: '(', callee: m ? m[1].replace(/\s+/g, '') : '', index: 0 });
+        } else if (ch === '[' || ch === '{') stack.push({ type: ch });
+        else if (ch === ')' || ch === ']' || ch === '}') stack.pop();
+        else if (ch === ',' && stack.length && stack[stack.length - 1].type === '(') stack[stack.length - 1].index++;
+        i++;
+    }
+    if (quote) return null;
+    for (let k = stack.length - 1; k >= 0; k--) {
+        if (stack[k].type !== '(') continue;
+        const f = stack[k];
+        if (!f.callee || CALL_KEYWORDS.has(f.callee.split('.').pop()) && !f.callee.includes('.')) return null;
+        // Для вложенных литералов индекс аргумента берётся у самого вызова.
+        return { callee: f.callee, argIndex: f.index };
+    }
+    return null;
+}
+
+function splitTopLevel(text) {
+    const parts = [];
+    let depth = 0, cur = '';
+    for (const ch of text) {
+        if ('([{<'.includes(ch)) depth++;
+        else if (')]}>'.includes(ch)) depth = Math.max(0, depth - 1);
+        if (ch === ',' && depth === 0) { parts.push(cur.trim()); cur = ''; } else cur += ch;
+    }
+    if (cur.trim()) parts.push(cur.trim());
+    return parts;
+}
+
+/** Разбор сигнатуры "(a: T, b?: U): R" в { params, ret }. */
+export function parseSignature(signature) {
+    const text = String(signature || '');
+    if (text[0] !== '(') return null;
+    let depth = 0, end = -1;
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '(') depth++;
+        else if (text[i] === ')') { depth--; if (!depth) { end = i; break; } }
+    }
+    if (end < 0) return null;
+    const ret = text.slice(end + 1).replace(/^\s*(?::|→|=>)\s*/, '').trim();
+    return { params: splitTopLevel(text.slice(1, end)), ret };
+}
+
+function localSignature(source, name) {
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const patterns = [
+        new RegExp('function\\s*\\*?\\s*' + esc + '\\s*\\(([^)]*)\\)'),
+        new RegExp('(?:const|let|var)\\s+' + esc + '\\s*=\\s*(?:async\\s*)?\\(([^)]*)\\)\\s*=>'),
+        new RegExp('(?:const|let|var)\\s+' + esc + '\\s*=\\s*(?:async\\s*)?function\\s*\\*?\\s*\\(([^)]*)\\)'),
+        new RegExp('^\\s*(?:async\\s+|static\\s+)*' + esc + '\\s*\\(([^)]*)\\)\\s*\\{', 'm'),
+    ];
+    for (const re of patterns) {
+        const m = re.exec(source);
+        if (m) return { params: splitTopLevel(m[1]), ret: '', doc: '' };
+    }
+    return null;
+}
+
+/**
+ * Данные для подсказки параметров: { name, parts, active, doc, ret } либо null.
+ * Источники по порядку: функция из этого файла, документированный `$` API
+ * (включая методы узла), стандартные JS-функции.
+ */
+export function paramHintFor(source, offset, apiSymbols, catalog) {
+    const ctx = callContext(String(source || '').slice(0, offset));
+    if (!ctx) return null;
+    const callee = ctx.callee, member = callee.split('.').pop();
+    let info = null;
+    if (!callee.includes('.')) {
+        const found = localSignature(source, callee);
+        if (found) info = found;
+    }
+    if (!info) {
+        let path = callee.startsWith('$.') ? callee : '';
+        if (!path) {
+            const m = /^([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/.exec(callee);
+            if (m && declaredNodeAlias(String(source).slice(0, offset), m[1])) path = '$.fn.' + m[2];
+        }
+        const symbol = path && (apiSymbols || []).find((s) => s.path === path);
+        if (symbol) {
+            const meta = symbol.metadata || {};
+            const args = Array.isArray(meta.args) ? meta.args : null;
+            if (args) info = { params: args.map((a) => (a.name || 'arg') + (a.optional ? '?' : '') + (a.type ? ': ' + a.type : '')), ret: meta.returns || '', doc: meta.description || '' };
+            else {
+                const parsed = parseSignature(meta.signature);
+                if (parsed) info = { params: parsed.params, ret: parsed.ret, doc: meta.description || '' };
+            }
+        }
+    }
+    if (!info) {
+        const book = catalog || JS_BUILTIN_CATALOG;
+        const pool = [...book.globals];
+        for (const t of Object.values(book.types || {})) pool.push(...(t.static || []));
+        const item = pool.find((x) => x.path === callee) || (!callee.includes('.') ? pool.find((x) => x.name === callee) : null);
+        const parsed = item && parseSignature(item.signature);
+        if (parsed) info = { params: parsed.params, ret: parsed.ret, doc: item.description || '' };
+    }
+    if (!info) return null;
+    const active = info.params.length ? Math.min(ctx.argIndex, info.params.length - 1) : -1;
+    return { name: member, parts: info.params, active, doc: info.doc, ret: info.ret };
+}
+
+// --- сниппеты ---------------------------------------------------------------------
+
+// `$0` — куда поставить каретку; отступ строк добавляется по строке вставки.
+export const SNIPPETS = [
+    { prefix: 'fn', body: 'function $0() {\n\t\n}', doc: 'function' },
+    { prefix: 'arrow', body: 'const $0 = () => {\n\t\n};', doc: 'стрелочная функция' },
+    { prefix: 'for', body: 'for (let i = 0; i < $0; i++) {\n\t\n}', doc: 'цикл for' },
+    { prefix: 'forof', body: 'for (const $0 of ) {\n\t\n}', doc: 'цикл for…of' },
+    { prefix: 'if', body: 'if ($0) {\n\t\n}', doc: 'условие' },
+    { prefix: 'ife', body: 'if ($0) {\n\t\n} else {\n\t\n}', doc: 'if / else' },
+    { prefix: 'sw', body: 'switch ($0) {\n\tcase 1:\n\t\tbreak;\n\tdefault:\n\t\tbreak;\n}', doc: 'switch' },
+    { prefix: 'log', body: 'console.log($0);', doc: 'console.log' },
+    { prefix: 'try', body: 'try {\n\t$0\n} catch (e) {\n\t\n}', doc: 'try / catch' },
+    { prefix: 'node', body: "$('<$0>')", doc: 'новый узел $(\'<тег>\')' },
+    { prefix: 'ready', body: '$.ready(() => {\n\t$0\n});', doc: '$.ready — старт игры' },
+];
+
+export function snippetItems(member, limit) {
+    const q = String(member || '').toLowerCase();
+    if (q.length < 2) return [];
+    return SNIPPETS.filter((s) => s.prefix.startsWith(q) && s.prefix !== q + '!').slice(0, limit || 4).map((s) => ({
+        name: s.prefix, path: 'snippet.' + s.prefix, snippet: s.body,
+        metadata: { kind: 'snippet', signature: 'сниппет', description: s.doc },
+    }));
+}
+
+/** Объявления в этом файле (функции, классы, const/let/var) как элементы автодополнения. */
+export function localSymbolItems(lines, member, limit) {
+    const q = String(member || '').toLowerCase();
+    if (!q) return [];
+    const seen = new Set();
+    const out = [];
+    for (const s of javascriptDocumentSymbols(lines)) {
+        if (seen.has(s.name) || !s.name.toLowerCase().startsWith(q) || s.name === member) continue;
+        seen.add(s.name);
+        out.push({ name: s.name, path: 'local.' + s.name, metadata: { kind: 'local', signature: s.kind, description: 'объявлено в файле, строка ' + (s.line + 1) } });
+        if (out.length >= (limit || 6)) break;
+    }
+    return out;
+}

@@ -34,7 +34,7 @@ scrollbarcorner { background-color: transparent; }
 .hidden { display: none; }
 /* Правила с #id специфичнее .hidden — скрываемым блокам нужен свой селектор. */
 #pm.hidden, #app.hidden, #palette.hidden, #findbar.hidden, #code.hidden, #pane.hidden, #welcome.hidden,
-#sidebar.hidden, #side-search.hidden, #caret.hidden, #code-switch.hidden, #code-vscroll.hidden, #code-completion.hidden, #api-hover.hidden,
+#sidebar.hidden, #side-search.hidden, #caret.hidden, #code-sticky.hidden, #param-hint.hidden, #code-menu.hidden, #replace-row.hidden, #code-switch.hidden, #code-vscroll.hidden, #code-completion.hidden, #api-hover.hidden,
 #close-confirm.hidden, #file-conflict.hidden, #file-conflict-reload.hidden, #gp.hidden, #gp-results.hidden, #gp-warn.hidden, #gp-empty.hidden { display: none; }
 .icon { font-size: 18px; }
 .muted { color: #8b93a3; }
@@ -150,12 +150,12 @@ scrollbarcorner { background-color: transparent; }
     overflow: hidden; cursor: text;
 }
 #code-gutter {
-    display: block; position: absolute; left: 0px; top: 0px; bottom: 0px; width: 56px;
+    display: block; position: absolute; left: 0px; top: 24px; bottom: 0px; width: 56px;
     color: #4b5263; text-align: right; background-color: #14161b;
 }
-#code-text { display: block; position: absolute; left: 64px; top: 0px; right: 0px; bottom: 0px; overflow: hidden; }
+#code-text { display: block; position: absolute; left: 64px; top: 24px; right: 92px; bottom: 0px; overflow: hidden; }
 .ln { display: block; position: absolute; left: 0px; right: 8px; height: 20px; line-height: 20px; }
-.fold-toggle { display: block; position: absolute; left: 0px; width: 14px; height: 20px; color: #8992a2; text-align: center; cursor: pointer; }
+.fold-toggle { display: block; font-size: 16px; position: absolute; left: 0px; width: 14px; height: 20px; color: #8992a2; text-align: center; cursor: pointer; }
 .fold-toggle:hover { color: #e6e9ef; }
 .fold-placeholder { margin-left: 8px; color: #8992a2; font-style: italic; }
 .ln.cur { color: #c3c9d4; }
@@ -167,6 +167,8 @@ scrollbarcorner { background-color: transparent; }
 }
 .cur-line { display: block; position: absolute; left: 0px; right: 0px; height: 20px; background-color: #1c1f26; }
 .sel-rect { display: block; position: absolute; height: 20px; background-color: #264f78; }
+.occ-rect { display: block; position: absolute; height: 20px; background-color: #2b3040; }
+.indent-guide { display: block; position: absolute; width: 1px; height: 20px; background-color: #2a2e38; }
 .find-rect { display: block; position: absolute; height: 20px; background-color: #5a4a1a; }
 .bracket-match { display: block; position: absolute; height: 20px; box-sizing: border-box; border-width: 1px; border-color: #7b8497; background-color: #2a303b; }
 .diag-line { display: block; position: absolute; height: 2px; background-color: #f14c4c; }
@@ -177,8 +179,56 @@ scrollbarcorner { background-color: transparent; }
 #ime-preview.hidden { display: none; }
 #code-measure { display: block; position: absolute; left: -9000px; top: 0px; white-space: pre; }
 #code-vscroll {
-    display: block; position: absolute; right: 2px; width: 6px; border-radius: 3px; background-color: #3a404c;
+    display: block; position: absolute; right: 94px; width: 8px; border-radius: 4px; background-color: #3a404c; opacity: 0.7;
 }
+#code-vscroll:hover { background-color: #5a6272; }
+#code-map { display: block; position: absolute; right: 0px; top: 24px; bottom: 0px; width: 90px; background-color: #171a20; border-left: 1px #232830; overflow: hidden; }
+#code-map-lines { display: block; position: absolute; left: 0px; top: 0px; right: 0px; bottom: 0px; }
+#code-map-slider { display: block; position: absolute; left: 0px; right: 0px; background-color: #4a5160; opacity: 0.28; }
+.mm-l { display: block; position: absolute; height: 2px; background-color: #566072; }
+.mm-c { display: block; position: absolute; height: 2px; background-color: #3c6a3c; }
+.mm-m { display: block; position: absolute; right: 0px; width: 4px; height: 3px; }
+.mm-e { background-color: #f14c4c; }
+.mm-w { background-color: #e2b33c; }
+.mm-f { background-color: #d7ba7d; }
+.mm-s { background-color: #4f8cff; }
+#crumbs {
+    display: block; position: absolute; left: 0px; top: 0px; right: 0px; height: 24px; line-height: 24px; padding-left: 12px;
+    font-family: Open Sans; font-size: 12px; color: #8b93a3; background-color: #14161b; border-bottom: 1px #20242c; overflow: hidden; white-space: nowrap;
+}
+.crumb { display: inline-block; cursor: pointer; }
+.crumb:hover { color: #e6e9ef; }
+.crumb-sep { display: inline-block; color: #4b5263; margin: 0px 2px; font-size: 14px; }
+#code-sticky { display: block; position: absolute; z-index: 4; left: 0px; top: 24px; right: 92px; background-color: #14161b; border-bottom: 1px #2f3540; overflow: hidden; }
+.sticky-row { display: block; position: absolute; left: 0px; right: 0px; height: 20px; cursor: pointer; }
+.sticky-row:hover { background-color: #1c1f26; }
+.sticky-ln { display: block; position: absolute; left: 0px; width: 48px; height: 20px; line-height: 20px; text-align: right; color: #4b5263; }
+.sticky-code { display: block; position: absolute; left: 64px; right: 0px; height: 20px; line-height: 20px; overflow: hidden; white-space: nowrap; color: #d7dce6; }
+.gm { display: block; position: absolute; right: 0px; width: 3px; height: 20px; }
+.gm-add { background-color: #2ea043; }
+.gm-mod { background-color: #3b82f6; }
+.gm-del { height: 2px; width: 10px; background-color: #f14c4c; }
+.xcaret { display: block; position: absolute; width: 2px; height: 18px; background-color: #e6e9ef; }
+#carets-extra.blink .xcaret { background-color: transparent; }
+.tk-b0 { color: #ffd700; }
+.tk-b1 { color: #da70d6; }
+.tk-b2 { color: #179fff; }
+.tk-ws { color: #3a404c; }
+#param-hint {
+    display: block; position: absolute; z-index: 25; max-width: 560px; box-sizing: border-box; padding: 5px 10px;
+    background-color: #20242b; border-width: 1px; border-color: #536071; border-radius: 5px; font-family: Roboto Mono; font-size: 12px; color: #c9ced8; white-space: nowrap;
+}
+#param-hint .ph-active { color: #ffffff; font-weight: bold; }
+#param-hint .ph-doc { display: block; margin-top: 3px; font-family: Open Sans; color: #8b93a3; white-space: normal; }
+#code-menu {
+    display: block; position: absolute; z-index: 40; width: 250px; padding: 4px 0px; box-sizing: border-box;
+    background-color: #23272f; border-width: 1px; border-color: #3a414e; border-radius: 6px; font-family: Open Sans; font-size: 13px;
+}
+.cm-item { display: flex; flex-direction: row; justify-content: space-between; height: 26px; line-height: 26px; padding: 0px 12px; color: #d7dce6; cursor: pointer; }
+.cm-item:hover { background-color: #264f78; }
+.cm-item.off { color: #5d6573; }
+.cm-keys { display: block; color: #8b93a3; font-size: 12px; }
+.cm-sep { display: block; height: 1px; margin: 4px 0px; background-color: #343a46; }
 #code-completion {
     display: block; position: absolute; z-index: 20; width: 640px; max-height: 416px; overflow: hidden;
     box-sizing: border-box; background-color: #20242b; border-width: 1px; border-color: #454c58; border-radius: 5px;
@@ -215,12 +265,18 @@ scrollbarcorner { background-color: transparent; }
 
 /* Поиск внутри файла */
 #findbar {
-    display: flex; flex-direction: row; align-items: center; position: absolute; top: 6px; right: 18px;
+    display: flex; flex-direction: column; position: absolute; z-index: 6; top: 30px; right: 110px;
     padding: 5px 8px; background-color: #23272f; border-width: 1px; border-color: #343a46; border-radius: 6px;
     font-family: Open Sans;
 }
+.fb-row { display: flex; flex-direction: row; align-items: center; margin-bottom: 2px; }
 #findbar input { width: 200px; margin-right: 6px; }
-#find-count { display: inline-block; width: 70px; color: #8b93a3; font-size: 12px; }
+#find-count { display: inline-block; width: 70px; margin-left: 4px; color: #8b93a3; font-size: 12px; }
+#find-count.bad { color: #f14c4c; }
+.fb-opt { display: block; width: 24px; height: 22px; line-height: 22px; margin-right: 3px; text-align: center; border-radius: 4px; color: #aab2c0; font-size: 12px; cursor: pointer; }
+.fb-opt.wide { width: 70px; margin-right: 6px; background-color: #2d333d; }
+.fb-opt:hover { background-color: #343a46; }
+.fb-opt.on { color: #ffffff; background-color: #264f78; }
 
 /* --- Просмотр изображения и прочие вкладки ---------------------------------- */
 .pane { display: block; position: absolute; left: 0px; top: 0px; right: 0px; bottom: 0px; overflow: auto; padding: 18px; }
@@ -478,7 +534,7 @@ scrollbarcorner { background-color: transparent; }
 .gp-open { display: inline-block; flex: 0 0 auto; font-size: 1.3em; color: #8b93a3; }
 
 /* project.json как текст: переключатель «Настройки | JSON» */
-#code-switch { display: flex; flex-direction: row; position: absolute; z-index: 5; top: 8px; right: 22px; padding: 2px; background-color: #1b1e24; border-width: 1px; border-color: #343a46; border-radius: 6px; font-family: Open Sans; }
+#code-switch { display: flex; flex-direction: row; position: absolute; z-index: 5; top: 30px; right: 110px; padding: 2px; background-color: #1b1e24; border-width: 1px; border-color: #343a46; border-radius: 6px; font-family: Open Sans; }
 .cs-btn { display: inline-block; padding: 3px 10px; font-size: 12px; color: #9aa2b1; border-radius: 4px; cursor: pointer; }
 .cs-btn:hover { color: #ffffff; }
 .cs-btn.on { color: #ffffff; background-color: #1f3a5f; cursor: default; }

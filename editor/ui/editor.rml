@@ -66,25 +66,41 @@
             <div id="host">
                 <div id="welcome" class="welcome"></div>
                 <div id="code" class="hidden">
+                    <div id="crumbs"></div>
                     <div id="code-gutter"></div>
                     <div id="code-text">
                         <div id="code-under"></div>
                         <div id="code-lines"></div>
                         <div id="ime-preview" class="hidden"></div>
+                        <div id="carets-extra"></div>
                         <div id="caret"></div>
                     </div>
+                    <div id="code-sticky" class="hidden"></div>
                     <div id="code-vscroll"></div>
+                    <div id="code-map"><div id="code-map-lines"></div><div id="code-map-slider"></div></div>
                     <span id="code-measure">MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM</span>
                     <div id="findbar" class="hidden">
-                        <input id="find-input" type="text" class="field" value=""/>
-                        <span id="find-count"></span>
-                        <span id="find-prev" class="tb-btn icon"></span>
-                        <span id="find-next" class="tb-btn icon"></span>
-                        <span id="find-close" class="tb-btn icon"></span>
+                        <div class="fb-row">
+                            <input id="find-input" type="text" class="field" value=""/>
+                            <span id="find-case" class="fb-opt" title="Учитывать регистр (Alt+C)">Aa</span>
+                            <span id="find-word" class="fb-opt" title="Слово целиком (Alt+W)">ab</span>
+                            <span id="find-regex" class="fb-opt" title="Регулярное выражение (Alt+R)">.*</span>
+                            <span id="find-count"></span>
+                            <span id="find-prev" class="tb-btn icon"></span>
+                            <span id="find-next" class="tb-btn icon"></span>
+                            <span id="find-close" class="tb-btn icon"></span>
+                        </div>
+                        <div id="replace-row" class="fb-row hidden">
+                            <input id="replace-input" type="text" class="field" value=""/>
+                            <span id="replace-one" class="fb-opt wide" title="Заменить (Enter)">Заменить</span>
+                            <span id="replace-all" class="fb-opt wide" title="Заменить все (Cmd/Ctrl+Alt+Enter)">Все</span>
+                        </div>
                     </div>
                     <div id="code-switch" class="hidden"><span id="cs-settings" class="cs-btn">Настройки</span><span id="cs-json" class="cs-btn on">JSON</span></div>
                     <div id="code-completion" class="hidden"></div>
                     <div id="api-hover" class="hidden"></div>
+                    <div id="param-hint" class="hidden"></div>
+                    <div id="code-menu" class="hidden"></div>
                 </div>
                 <div id="pane" class="pane hidden"></div>
             </div>

@@ -260,6 +260,43 @@ export function lineStates(lines, lang) {
     return states;
 }
 
+// Глубина вложенности скобок на начало каждой строки (для цветных пар).
+export function lineDepths(lines, lang) {
+    const depths = new Array(lines.length);
+    if (lang !== 'js' && lang !== 'json' && lang !== 'css') { depths.fill(0); return depths; }
+    let st = null, depth = 0;
+    for (let i = 0; i < lines.length; i++) {
+        depths[i] = depth;
+        const row = tokenizeLine(lines[i], lang, st);
+        st = row.state;
+        for (const t of row.tokens) {
+            if (t.cls === 'tk-str' || t.cls === 'tk-com') continue;
+            for (const ch of t.text) {
+                if (ch === '(' || ch === '[' || ch === '{') depth++;
+                else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1);
+            }
+        }
+    }
+    return depths;
+}
+
+// Раскрашивает скобки по уровню вложенности (3 цвета по кругу): разбивает пунктуацию на символы.
+export function colorBrackets(tokens, startDepth) {
+    let depth = startDepth;
+    const out = [];
+    for (const t of tokens) {
+        if (t.cls !== 'tk-punct' || !/[()[\]{}]/.test(t.text)) { out.push(t); continue; }
+        let run = '';
+        for (const ch of t.text) {
+            if ('([{'.includes(ch)) { if (run) out.push({ cls: t.cls, text: run }); run = ''; out.push({ cls: 'tk-b' + (depth % 3), text: ch }); depth++; }
+            else if (')]}'.includes(ch)) { if (run) out.push({ cls: t.cls, text: run }); run = ''; depth = Math.max(0, depth - 1); out.push({ cls: 'tk-b' + (depth % 3), text: ch }); }
+            else run += ch;
+        }
+        if (run) out.push({ cls: t.cls, text: run });
+    }
+    return out;
+}
+
 /** Matching delimiters outside strings and comments, keyed by `line:column`. */
 export function bracketPairs(lines, lang) {
     const pairs = new Map();

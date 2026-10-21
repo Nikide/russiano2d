@@ -8,7 +8,7 @@
 // редактирует обычные файлы проекта.
 // ===========================================================================
 
-import { createCodeModel } from './lib/code_model.js';
+import { createCodeModel, splitLines } from './lib/code_model.js';
 import { createCodeView } from './lib/code_view.js';
 import { publicApiSymbols, javascriptSymbolAt, javascriptDocumentSymbols, nodeApiPathAt } from './lib/api_language.js';
 import { languageOf, escapeRml } from './lib/highlight.js';
@@ -86,6 +86,7 @@ export function createEditor($) {
         projectDiags: [], extensionDiags: [], agentDiags: [], agentReport: null, closeRequest: null, fileConflict: null,
         bottom: 'problems', bottomCollapsed: false, sidebarHidden: false,
         side: 'project',
+        memory: new Map(),      // состояние вида закрытых файлов: каретка, прокрутка, свёрнутые блоки
         focus: 'none',          // 'code' | 'palette' | 'find' | 'search' | 'none'
         palette: null,          // { mode, items, list, sel, query }
         run: null,              // { handle, running, exit, output, polledAt }
@@ -382,7 +383,7 @@ export function createEditor($) {
         const text = $.fs.readText(full('project.json'));
         for (const t of s.tabs) {
             if (t.path !== 'project.json') continue;
-            if (t.model && !t.model.dirty && typeof text === 'string') { t.model.setText(text); t.diskText = text; }
+            if (t.model && !t.model.dirty && typeof text === 'string') { t.model.setText(text); t.diskText = text; if (activeTab() === t) code.setBase(text); }
             else if (t.kind === 'studio' && t.inst && t.inst.reload) t.inst.reload();
         }
     }
@@ -597,6 +598,78 @@ export function createEditor($) {
         doc.focus('search-input');
     }
 
+    // --- навигация по символам ---------------------------------------------------------
+
+    // Объявление слова: сначала этот файл, затем остальные .js проекта (открытые — по буферу).
+    function findDefinition(word, tab) {
+        const caretLine = tab.model.caret.line;
+        const own = javascriptDocumentSymbols(tab.model.lines).filter((x) => x.name === word);
+        if (own.length) {
+            const before = own.filter((x) => x.line <= caretLine);
+            const sym = before.length ? before[before.length - 1] : own[0];
+            return { path: tab.path, line: sym.line + 1, col: sym.col + 1 };
+        }
+        for (const e of s.entries) {
+            if (!/\.m?js$/.test(e.path) || e.path === tab.path) continue;
+            const open = s.tabs.find((t) => t.path === e.path && t.model);
+            const text = open ? null : $.fs.readText(full(e.path));
+            if (!open && (typeof text !== 'string' || !text.includes(word))) continue;
+            const sym = javascriptDocumentSymbols(open ? open.model.lines : splitLines(text)).find((x) => x.name === word);
+            if (sym) return { path: e.path, line: sym.line + 1, col: sym.col + 1 };
+        }
+        return null;
+    }
+
+    function gotoDefinitionAt(pos) {
+        const t = activeTab();
+        if (!t || !t.model || t.lang !== 'js') return false;
+        const w = t.model.wordAt(pos || t.model.caret);
+        if (!w) { setStatus('поставьте каретку на имя', 'err'); return false; }
+        const def = findDefinition(w.text, t);
+        if (!def) {
+            // Само объявление или встроенное имя — показываем все использования.
+            if (w.text.length >= 2) showProjectSearch(w.text);
+            setStatus('определение «' + w.text + '» не найдено в проекте: показаны вхождения', 'err');
+            return false;
+        }
+        if (def.path === t.path && def.line - 1 === w.line && def.col - 1 === w.from) { findWordInProject(); return true; }
+        openFile(def.path, def.line, def.col);
+        focusCode();
+        return true;
+    }
+
+    function renameSymbol() {
+        const t = activeTab();
+        if (!t || !t.model) return;
+        const w = t.model.wordAt(t.model.caret);
+        if (!w) { setStatus('поставьте каретку на имя', 'err'); return; }
+        openPalette('rename');
+        doc.setValue('palette-input', w.text);
+        s.palette.rename = w.text;
+        s.palette.query = null;
+        filterPalette();
+    }
+
+    function applyRename(from, to) {
+        const t = activeTab();
+        if (!t || !t.model) return;
+        if (!/^[A-Za-z_$Ѐ-ӿ][\w$Ѐ-ӿ]*$/.test(to)) { setStatus('«' + to + '» не годится как имя', 'err'); return; }
+        const n = t.model.replaceAll(from, to, { caseSensitive: true, wholeWord: true });
+        changed();
+        code.invalidate();
+        setStatus('переименовано вхождений: ' + n + ' (в этом файле, без анализа областей видимости)', n ? 'ok' : 'err');
+    }
+
+    function formatDocument() {
+        const t = activeTab();
+        if (!t || !t.model) return false;
+        const ok = t.model.format(t.lang);
+        changed();
+        code.invalidate();
+        setStatus(ok ? 'отступы выровнены' : 'форматирование ничего не изменило', ok ? 'ok' : 'err');
+        return ok;
+    }
+
     function findWordInProject() {
         const t = activeTab();
         if (!t || !t.model) return false;
@@ -639,7 +712,7 @@ export function createEditor($) {
         if (!tab) {
             const asStudio = as && as !== 'code' ? studioById(as) : null;
             const kind = as === 'code' ? 'code' : asStudio ? 'studio' : kindOf(relPath);
-            tab = { id: relPath, path: relPath, kind, scrollTop: 0 };
+            tab = { id: relPath, path: relPath, kind, scrollTop: 0, viewState: s.memory.get(relPath) || null };
             if (kind === 'code') {
                 const text = $.fs.readText(full(relPath));
                 if (text === null || text === undefined) { setStatus('не удалось прочитать ' + relPath, 'err'); return null; }
@@ -682,7 +755,7 @@ export function createEditor($) {
 
     function activate(id, pushHistory) {
         const prev = activeTab();
-        if (prev && prev.model) prev.scrollTop = code.state.scrollTop;
+        if (prev && prev.model) { prev.scrollTop = code.state.scrollTop; prev.viewState = code.getViewState(); }
         if (prev && prev.kind === 'studio' && prev.id !== id) studios.setActive(prev, false);
         s.active = id;
         const tab = activeTab();
@@ -695,7 +768,10 @@ export function createEditor($) {
         }
         if (tab && tab.model) {
             code.setModel(tab.model, tab.lang);
-            code.state.scrollTop = tab.scrollTop || 0;
+            code.setBase(tab.diskText);
+            code.setFilePath(tab.path);
+            if (tab.viewState) code.restoreViewState(tab.viewState);
+            else code.state.scrollTop = tab.scrollTop || 0;
             code.setDiagnostics(s.diags.get(tab.path) || []);
             code.setFind('');
         }
@@ -734,6 +810,7 @@ export function createEditor($) {
         if (!tab || typeof conflict.diskText !== 'string') return false;
         tab.model.setText(conflict.diskText);
         tab.diskText = conflict.diskText;
+        if (activeTab() === tab) code.setBase(tab.diskText);
         s.fileConflict = null;
         if (s.closeRequest === tab.id) s.closeRequest = null;
         renderAll();
@@ -792,6 +869,8 @@ export function createEditor($) {
         }
         if (s.closeRequest === id) s.closeRequest = null;
         if (s.fileConflict && s.fileConflict.tabId === id) s.fileConflict = null;
+        if (tab.model && tab.id === s.active) tab.viewState = code.getViewState();
+        if (tab.model && tab.viewState) s.memory.set(tab.path, tab.viewState);
         if (tab.kind === 'studio') studios.close(tab);
         s.tabs.splice(i, 1);
         s.history = s.history.filter((h) => h !== id);
@@ -835,11 +914,14 @@ export function createEditor($) {
                 return false;
             }
         }
+        // Отступ пробелами запрещён: при сохранении код приводится к табам.
+        if (tab.lang === 'js' || tab.lang === 'css' || tab.lang === 'markup') { if (tab.model.normalizeForSave() && activeTab() === tab) code.invalidate(); }
         if(!tab.model.dirty && !(options && options.overwrite))return true;
         const text = tab.model.text();
         const ok=$.fs.write(full(tab.path),text);
         if(!ok){setStatus('не удалось записать '+tab.path,'err');return false;}
         tab.diskText = text;
+        if (activeTab() === tab) code.setBase(text);
         tab.model.markSaved();
         if(tab.lang==='js')await lintFile(tab);
         else if(tab.lang==='json')await validateJsonText(tab);
@@ -1109,7 +1191,13 @@ export function createEditor($) {
         { id: 'save', label: 'Файл: сохранить', keys: 'Cmd/Ctrl+S', run: () => save() },
         { id: 'saveAll', label: 'Файл: сохранить все', keys: 'Cmd/Ctrl+Shift+S', run: () => saveAll() },
         { id: 'close', label: 'Файл: закрыть вкладку', keys: 'Cmd/Ctrl+W', run: () => s.active && closeTab(s.active) },
-        { id: 'find', label: 'Правка: найти в файле', keys: 'Cmd/Ctrl+F', run: () => openFind() },
+        { id: 'gotoDefinition', label: 'Код: перейти к определению', keys: 'F12', run: () => gotoDefinitionAt() },
+        { id: 'rename', label: 'Код: переименовать символ в файле', keys: 'F2', run: () => renameSymbol() },
+        { id: 'format', label: 'Код: выровнять отступы документа', keys: 'Shift+Alt+F', run: () => formatDocument() },
+        { id: 'whitespace', label: 'Вид: показать/скрыть пробелы и табы', keys: '', run: () => { code.setOption('whitespace', !code.getOption('whitespace')); } },
+        { id: 'sticky', label: 'Вид: закреплённые строки блоков', keys: '', run: () => { code.setOption('sticky', !code.getOption('sticky')); } },
+        { id: 'find', label: 'Правка: найти в файле', keys: 'Cmd/Ctrl+F', run: () => openFind(false) },
+        { id: 'replace', label: 'Правка: заменить в файле', keys: 'Cmd/Ctrl+H', run: () => openFind(true) },
         { id: 'find-word-project', label: 'Поиск: найти слово под кареткой в проекте', keys: 'Shift+F12', run: () => findWordInProject() },
         { id: 'gotoLine', label: 'Правка: перейти к строке…', keys: 'Cmd/Ctrl+G', run: () => openPalette('line') },
         { id: 'undo', label: 'Правка: отменить', keys: 'Cmd/Ctrl+Z', run: () => { const t = activeTab(); if (t && t.inst) studios.undo(t); else if (t && t.model && t.model.undo()) changed(); } },
@@ -1155,7 +1243,7 @@ export function createEditor($) {
                     ? javascriptDocumentSymbols(t.model.lines).map((symbol) => ({ label: symbol.label, detail: symbol.detail, symbol }))
                     : [];
             })()
-            : mode === 'line' ? []
+            : mode === 'line' || mode === 'rename' ? []
             : s.entries.map((e) => ({ label: e.path, detail: e.type, path: e.path }));
         s.palette = { mode, items, list: [], sel: 0, query: null };
         doc.setValue('palette-input', mode === 'commands' ? '>' : mode === 'line' ? ':' : '');
@@ -1184,7 +1272,10 @@ export function createEditor($) {
         // Префиксы как в VS Code: «>» — команды, «:» — строка.
         if (q.startsWith('>') && p.mode !== 'commands') { s.palette.mode = 'commands'; p.items = openAsCommands().concat(COMMANDS.map((c) => ({ label: c.label, detail: c.keys, cmd: c }))); }
         if (p.mode === 'commands') q = q.replace(/^>\s*/, '');
-        if (q.startsWith(':') || p.mode === 'line') {
+        if (p.mode === 'rename') {
+            const name = q.trim();
+            p.list = [{ item: { label: name && name !== p.rename ? 'Переименовать «' + p.rename + '» → «' + name + '» в файле' : 'Введите новое имя для «' + (p.rename || '') + '»', rename: name && name !== p.rename ? { from: p.rename, to: name } : null }, match: { hits: [] } }];
+        } else if (q.startsWith(':') || p.mode === 'line') {
             p.mode = 'line';
             const n = parseInt(q.replace(/^:/, ''), 10);
             const t = activeTab();
@@ -1218,18 +1309,23 @@ export function createEditor($) {
         if (!r) return;
         if (r.item.cmd) r.item.cmd.run();
         else if (r.item.path) openFile(r.item.path);
+        else if (r.item.rename) applyRename(r.item.rename.from, r.item.rename.to);
         else if (r.item.symbol) { const t = activeTab(); if (t && t.model) { t.model.goto(r.item.symbol.line + 1, r.item.symbol.col + 1); code.ensureCaretVisible(); focusCode(); } }
         else if (typeof r.item.line === 'number') { const t = activeTab(); if (t && t.model) { t.model.goto(r.item.line, 1); code.ensureCaretVisible(); focusCode(); } }
     }
 
     // --- поиск в файле ------------------------------------------------------------
 
-    function openFind() {
+    function openFind(withReplace) {
         const t = activeTab();
         if (!t || !t.model) return;
         const sel = t.model.selectedText();
-        if (sel && !/\n/.test(sel)) doc.setValue('find-input', sel);
+        const seed = sel && !/\n/.test(sel) ? sel : (t.model.wordAt(t.model.caret) || {}).text;
+        if (seed) doc.setValue('find-input', seed);
         doc.cls('findbar', 'hidden', false);
+        doc.cls('replace-row', 'hidden', !(withReplace === true || s.findReplace));
+        s.findReplace = withReplace === true || !!s.findReplace;
+        s.findField = 'find-input';
         doc.focus('find-input');
         s.focus = 'find';
         s.findQuery = null;
@@ -1237,15 +1333,48 @@ export function createEditor($) {
     function closeFind() {
         doc.cls('findbar', 'hidden', true);
         doc.focus('find-input', false);
+        doc.focus('replace-input', false);
         code.setFind('');
         focusCode();
+    }
+    function findQueryText() { return String(doc.value('find-input') || ''); }
+    function findOpts() { return code.findOptions(); }
+    function updateFindCount(r) {
+        const t = activeTab();
+        const err = t && t.model ? t.model.findError : '';
+        const q = findQueryText();
+        doc.cls('find-count', 'bad', !!err || (!!q && !code.state.find.hits.length));
+        doc.text('find-count', err ? 'ошибка' : !q ? '' : r ? (r.index + 1) + ' из ' + r.total
+            : code.state.find.hits.length ? code.state.find.hits.length + ' совп.' : 'нет');
     }
     function findStep(backwards) {
         const t = activeTab();
         if (!t || !t.model) return;
-        const q = String(doc.value('find-input') || '');
-        const r = t.model.findNext(q, backwards);
-        doc.text('find-count', r ? (r.index + 1) + ' из ' + r.total : 'нет');
+        const r = t.model.findNext(findQueryText(), backwards, findOpts());
+        updateFindCount(r);
+        code.ensureCaretVisible();
+    }
+    function toggleFindOpt(name) {
+        const o = findOpts();
+        code.setFind(findQueryText(), { [name]: !o[name] });
+        const now = findOpts();
+        doc.cls('find-case', 'on', now.caseSensitive);
+        doc.cls('find-word', 'on', now.wholeWord);
+        doc.cls('find-regex', 'on', now.regex);
+        s.findQuery = null;
+        updateFindCount(null);
+    }
+    function replaceStep(all) {
+        const t = activeTab();
+        if (!t || !t.model) return;
+        const q = findQueryText(), text = String(doc.value('replace-input') || '');
+        if (!q) return;
+        let r = null;
+        if (all) t.model.replaceAll(q, text, findOpts());
+        else r = t.model.replaceNext(q, text, findOpts());
+        code.setFind(q);
+        changed();
+        updateFindCount(r);
         code.ensureCaretVisible();
     }
 
@@ -1528,12 +1657,19 @@ export function createEditor($) {
         doc.on('code', 'mousedown', (id, ev, key) => {
             if (key && key.startsWith('completion:')) { focusCode(); return; }
             if (key && key.startsWith('fold:')) { focusCode(); return; }
+            if (key && key.startsWith('menu:')) return;
+            if (key && key.startsWith('sticky:')) { focusCode(); code.gotoLine(parseInt(key.slice(7), 10)); return; }
+            if (key && key.startsWith('crumb:')) { focusCode(); code.gotoLine(parseInt(key.slice(6), 10)); return; }
             if (s.focus === 'find' || s.focus === 'palette') { doc.focus('find-input', false); }
             focusCode();
             code.mouseDown();
         });
         doc.on('code-gutter', 'click', (id, ev, key) => {
             if (key && key.startsWith('fold:')) code.toggleFoldAt(parseInt(key.slice(5), 10));
+            else if (key && key.startsWith('ln:')) { focusCode(); code.selectLineAt(parseInt(key.slice(3), 10)); }
+        });
+        doc.on('code-menu', 'click', (id, ev, key) => {
+            if (key && key.startsWith('menu:')) { focusCode(); code.menuClick(parseInt(key.slice(5), 10)); }
         });
         doc.on('code-completion', 'click', (id, ev, key) => {
             if (key && key.startsWith('completion:')) code.chooseCompletion(parseInt(key.slice(11), 10));
@@ -1542,7 +1678,13 @@ export function createEditor($) {
         doc.on('find-prev', 'click', () => findStep(true));
         doc.on('find-next', 'click', () => findStep(false));
         doc.on('find-close', 'click', () => closeFind());
-        doc.on('find-input', 'focus', () => { s.focus = 'find'; });
+        doc.on('find-input', 'focus', () => { s.focus = 'find'; s.findField = 'find-input'; });
+        doc.on('replace-input', 'focus', () => { s.focus = 'find'; s.findField = 'replace-input'; });
+        doc.on('find-case', 'click', () => toggleFindOpt('caseSensitive'));
+        doc.on('find-word', 'click', () => toggleFindOpt('wholeWord'));
+        doc.on('find-regex', 'click', () => toggleFindOpt('regex'));
+        doc.on('replace-one', 'click', () => replaceStep(false));
+        doc.on('replace-all', 'click', () => replaceStep(true));
 
         doc.on('insp-body', 'click', (id, ev, key) => {
             if (!key) return;
@@ -1576,6 +1718,7 @@ export function createEditor($) {
         doc.on('palette-list', 'click', (id, ev, key) => { if (key !== null && key !== undefined) acceptPalette(parseInt(key, 10)); });
 
         code.state.onChange = () => changed();
+        code.state.onGoto = (p) => gotoDefinitionAt(p);
         code.state.onCaret = () => { renderStatus(); renderInspector(); };
         code.state.onHover = (pos) => {
             const t = activeTab();
@@ -1620,9 +1763,19 @@ export function createEditor($) {
             if ($.input.pressed('enter')) { acceptPalette(); return; }
         }
         if (s.focus === 'find') {
-            if ($.input.pressed('enter')) findStep(shift);
-            const q = String(doc.value('find-input') || '');
-            if (q !== s.findQuery) { s.findQuery = q; const n = code.setFind(q); doc.text('find-count', q ? n + ' совп.' : ''); }
+            const alt = $.input.altDown();
+            if ($.input.pressed('enter')) {
+                if (mod && alt) replaceStep(true);
+                else if (s.findField === 'replace-input') replaceStep(false);
+                else findStep(shift);
+            }
+            if (alt && !mod) {
+                if ($.input.pressed('c')) toggleFindOpt('caseSensitive');
+                if ($.input.pressed('w')) toggleFindOpt('wholeWord');
+                if ($.input.pressed('r')) toggleFindOpt('regex');
+            }
+            const q = findQueryText();
+            if (q !== s.findQuery) { s.findQuery = q; code.setFind(q); updateFindCount(null); }
         }
         const at = activeTab();
         const own = at && at.kind === 'studio' && !s.palette ? (at.studio.ownKeys || []) : [];
@@ -1672,7 +1825,21 @@ export function createEditor($) {
             const cr = doc.rect('code'), ck = cr ? Math.round(cr.w) + 'x' + Math.round(cr.h) : '';
             if (ck !== s.codeRectKey) { s.codeRectKey = ck; code.invalidate(); }
             code.update(dt, s.focus === 'code', {
-                find: openFind,
+                find: () => openFind(false),
+                gotoDefinition: () => gotoDefinitionAt(),
+                rename: () => renameSymbol(),
+                format: () => formatDocument(),
+                menu: [
+                    { label: 'Перейти к определению', keys: 'F12', run: () => gotoDefinitionAt() },
+                    { label: 'Найти все вхождения', keys: 'Shift+F12', run: () => findWordInProject() },
+                    { label: 'Переименовать в файле', keys: 'F2', run: () => renameSymbol() },
+                    { sep: true },
+                    { label: 'Выровнять отступы', keys: 'Shift+Alt+F', run: () => formatDocument() },
+                    { label: 'Комментарий строк', keys: 'Cmd+/', run: () => code.toggleComment() },
+                    { label: 'Найти в файле', keys: 'Cmd+F', run: () => openFind(false) },
+                    { label: 'Заменить в файле', keys: 'Cmd+H', run: () => openFind(true) },
+                ],
+                replace: () => openFind(true),
                 gotoLine: () => openPalette('line'),
             });
         }
