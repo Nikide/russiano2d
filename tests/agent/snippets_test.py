@@ -128,6 +128,12 @@ def main():
     sec = json.load(open(os.path.join(game, "project.json")))["editor"]["snippets"]
     check(sorted(sec["catalog_lock"]) == ["actor.visual-profile"], "catalog_lock — только используемые: %s" % sorted(sec["catalog_lock"]))
 
+    # Build: в поставке generated и только использованные пакеты.
+    b = r2d("build", game, "--out", os.path.join(tmp, "out"))
+    tail = b.get("outputTail", "")
+    check(b["ok"] and "generated/snippets/index.js" in tail, "build включает generated/snippets/index.js")
+    check("movement.top-down.js" in tail and "movement.platformer" not in tail, "в поставке только использованные пакеты")
+
     # Объект из Editor (origin: graph) + пакет подбора: монета исчезает при касании.
     check(r2d("snippet", "entity", game, "--id", "coin", "--tag", "coin", "--x", "170", "--y", "300",
               "--w", "12", "--h", "12", "--body", "none")["ok"], "entity: #coin в графе")

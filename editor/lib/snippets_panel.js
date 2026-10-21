@@ -242,11 +242,16 @@ export function createSnippetsPanel($, doc, host) {
                 '<button class="st-btn sn-mini" data-key="sn:remove:' + esc(s.id) + '">Удалить набор</button></div>';
 
         // Генерация.
-        html += '<span class="sn-h">Код</span><div class="sn-row"><button class="st-btn primary" data-key="sn:generate">Сгенерировать</button>' +
-            '<button class="st-btn" data-key="sn:preview">Проверить</button></div>';
+        const codeOwned = ((sec.generation || {}).ownership) === 'code';
+        html += '<span class="sn-h">Код · владелец: ' + (codeOwned ? 'ручной JS (code-authored)' : 'генератор') + '</span><div class="sn-row">' +
+            (codeOwned ? '' : '<button class="st-btn primary" data-key="sn:generate">Сгенерировать</button>') +
+            '<button class="st-btn" data-key="sn:preview">Проверить</button>' +
+            '<button class="st-btn" data-key="sn:own:' + (codeOwned ? 'generator' : 'code') + '">' + (codeOwned ? 'Вернуть генератору' : 'В ручное владение') + '</button>' +
+            '<button class="st-btn" data-key="sn:rollback">Откатить project.json</button></div>';
         if (st.gen) {
             for (const f of st.gen.files || []) {
-                html += '<div class="tree-row" data-key="sn:file:' + esc(f.path) + '" style="padding-left: 4px;"><span class="sn-st ' + esc(f.status) + '">' + esc(f.status) + '</span>' + esc(f.path) + '</div>';
+                html += '<div class="tree-row" data-key="sn:file:' + esc(f.path) + '" style="padding-left: 4px;"><span class="sn-st ' + esc(f.status) + '">' + esc(f.status) + '</span>' + esc(f.path) +
+                    '<span class="muted"> · ' + (f.owner === 'code' ? 'ручной' : 'генератор') + '</span></div>';
             }
             if (st.gen.entry_link && !st.gen.entry_link.present)
                 html += '<span class="sn-hint">В ' + esc(st.gen.entry) + ' будет добавлена строка подключения generated/snippets.</span>';
@@ -288,6 +293,8 @@ export function createSnippetsPanel($, doc, host) {
         else if (op === 'generate') await generate(false);
         else if (op === 'overwrite') await generate(true);
         else if (op === 'preview') await preview();
+        else if (op === 'own') { await run(['snippet', 'own', host.root(), arg], arg === 'code' ? 'generated/snippets передан в ручное владение' : 'generated/snippets возвращён генератору'); await preview(); }
+        else if (op === 'rollback') await run(['snippet', 'rollback', host.root()], 'project.json откатан к предыдущей записи', (j) => { if (j.rolled_back) host.projectChanged(); });
         else if (op === 'file') host.openFile(arg);
         else if (op === 'entity') await createEntity(doc.value('sn-new-id'), doc.value('sn-new-tag'));
         else if (op === 'package') await createPackage(doc.value('sn-pkg-id'), doc.value('sn-pkg-title'));

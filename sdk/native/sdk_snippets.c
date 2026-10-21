@@ -1192,9 +1192,29 @@ static int cmd_generate(const SdkArgs *a, const char *dir)
             catalog_load(&cat, sdk_arg_value(a, "--catalog"), dir, &rep);
             check_section(root, manifest, dir, &cat, &rep);
             code_owned = !strcmp(r2d_json_str(r2d_json_get(r2d_json_get(sn, "generation"), "ownership"), "generator"), "code");
-            if (code_owned)
+            if (code_owned) {
                 diag(&rep, SDK_INFO, "SNIP122", manifest, NULL, "editor.snippets.generation.ownership",
                      "область передана в code-authored: генератор её не пишет");
+                // Показываем владельца каждого файла области: все — ручной JS.
+                snprintf(out_rel, sizeof out_rel, "%s", r2d_json_str(r2d_json_get(r2d_json_get(sn, "generation"), "output"), "generated/snippets"));
+                char base[2048];
+                snprintf(base, sizeof base, "%s/%s", dir, out_rel);
+                static const char *const subs[] = { "", "/packages" };
+                for (int k = 0; k < 2; ++k) {
+                    char d2[2100];
+                    snprintf(d2, sizeof d2, "%s%s", base, subs[k]);
+                    FileList fl = { (char (*)[256])calloc(1024, 256), 0, 1024 };
+                    if (sdk_is_dir(d2)) SDL_EnumerateDirectory(d2, files_cb, &fl);
+                    qsort(fl.names, (size_t)fl.count, 256, cmp_name);
+                    for (int i = 0; i < fl.count; ++i) {
+                        char rel[640];
+                        snprintf(rel, sizeof rel, "%s%s/%s", out_rel, subs[k], fl.names[i]);
+                        plan_add(g, rel, NULL);
+                        snprintf(g->files[g->count - 1].status, 12, "code");
+                    }
+                    free(fl.names);
+                }
+            }
         }
     }
     if (root && rep.errors == 0 && !code_owned) {
@@ -1332,6 +1352,8 @@ static int cmd_generate(const SdkArgs *a, const char *dir)
         sdk_put_kv_str(&out, "path", g->files[i].rel);
         r2d_sb_putc(&out, ',');
         sdk_put_kv_str(&out, "status", g->files[i].status);
+        r2d_sb_putc(&out, ',');
+        sdk_put_kv_str(&out, "owner", code_owned ? "code" : "generator");
         if (print && g->files[i].text) { r2d_sb_putc(&out, ','); sdk_put_kv_str(&out, "text", g->files[i].text); }
         r2d_sb_putc(&out, '}');
     }
@@ -1923,6 +1945,74 @@ static int cmd_entity(const SdkArgs *a, const char *dir)
     return rc;
 }
 
+// own <проект> code|generator: владелец области generated/snippets.
+// code — генератор её больше не пишет, файлы остаются как есть (ручной JS);
+// generator — вернуть генератору (следующий generate покажет diff/конфликты).
+static int cmd_own(const SdkArgs *a, const char *dir)
+{
+    SdkReport rep;
+    sdk_report_init(&rep);
+    const char *who = sdk_arg_positional(a, 2);
+    if (!who || (strcmp(who, "code") && strcmp(who, "generator")))
+        return sdk_fail(&rep, "SDK_USAGE", "Использование: r2d snippet own <проект> code|generator");
+    R2dJson *root = load_v2(dir, &rep);
+    if (root) {
+        R2dJson *gen = jensure(section_of(root), "generation", "{\"output\": \"generated/snippets\", \"entry\": \"generated/snippets/index.js\"}");
+        if (!strcmp(who, "generator")) jobj_drop(gen, "ownership");
+        else jobj_put(gen, "ownership", jnew("\"code\""));
+    }
+    R2dSb extra;
+    r2d_sb_init(&extra);
+    r2d_sb_puts(&extra, "\"ownership\":");
+    r2d_sb_put_json_string(&extra, who);
+    r2d_sb_putc(&extra, ',');
+    int rc = finish_edit(&rep, dir, root, !root || sdk_arg_flag(a, "--dry-run"), extra.data);
+    r2d_sb_free(&extra);
+    r2d_json_free(root);
+    sdk_report_free(&rep);
+    return rc;
+}
+
+// rollback <проект>: вернуть project.json из project.json.bak (последняя запись
+// r2d). Текущая версия не теряется: меняется местами с .bak. Повтор — откат отката.
+static int cmd_rollback(const SdkArgs *a, const char *dir)
+{
+    SdkReport rep;
+    sdk_report_init(&rep);
+    char cur[2048], bak[2100], tmp[2100];
+    sdk_join(dir, "project.json", cur, sizeof cur);
+    snprintf(bak, sizeof bak, "%s.bak", cur);
+    snprintf(tmp, sizeof tmp, "%s.r2d-swap", cur);
+    bool done = false;
+    if (!sdk_file_exists(bak)) diag(&rep, SDK_ERROR, "SNIP130", bak, NULL, NULL, "нет project.json.bak — откатывать нечего");
+    else {
+        SdkReport check;
+        sdk_report_init(&check);
+        sdk_validate_file(bak, "project", &check);
+        // Незаполненные значения сниппетов откат не блокируют — как и запись.
+        if (check.errors && (!check.items.data || strstr(check.items.data, "\"R2D"))) {
+            diag(&rep, SDK_ERROR, "SNIP130", bak, NULL, NULL, "project.json.bak не проходит проверку — откат отменён");
+        } else if (!sdk_arg_flag(a, "--dry-run")) {
+            done = SDL_RenamePath(cur, tmp) && SDL_RenamePath(bak, cur) && SDL_RenamePath(tmp, bak);
+            if (!done) diag(&rep, SDK_ERROR, "SNIP131", cur, NULL, NULL, "не удалось поменять project.json и .bak местами");
+        }
+        sdk_report_free(&check);
+    }
+    R2dSb out;
+    r2d_sb_init(&out);
+    r2d_sb_printf(&out, "{\"ok\":%s,\"rolled_back\":%s,", rep.errors == 0 ? "true" : "false", done ? "true" : "false");
+    sdk_report_put_counts(&rep, &out);
+    r2d_sb_putc(&out, ',');
+    sdk_report_put(&rep, &out);
+    r2d_sb_putc(&out, '}');
+    puts(out.data);
+    fflush(stdout);
+    r2d_sb_free(&out);
+    const int rc = rep.errors == 0 ? 0 : 1;
+    sdk_report_free(&rep);
+    return rc;
+}
+
 // new <проект> <id> [--kind behavior|kit] [--title …] [--category …] [--deps a,b]
 // Автор пакета: каркас пакета проекта в <проект>/snippets/<id>/, тот же
 // контракт и та же проверка, что у встроенных.
@@ -2165,11 +2255,14 @@ int sdk_cmd_snippet(const SdkArgs *a)
         if (!strcmp(sub, "generate")) return cmd_generate(a, dir);
         if (!strcmp(sub, "entity")) return cmd_entity(a, dir);
         if (!strcmp(sub, "new")) return cmd_new(a, dir);
+        if (!strcmp(sub, "own")) return cmd_own(a, dir);
+        if (!strcmp(sub, "rollback")) return cmd_rollback(a, dir);
     }
     return sdk_fail(&rep, "SDK_USAGE",
                     "Использование: r2d snippet catalog [--project P] [--query Q] [--id ID] [--strict] | "
                     "validate <пакет> | check|generate [--write|--check|--overwrite|--print] <проект> | "
                     "add <проект> <пакет> --owner KEY | set <проект> <экземпляр> поле=JSON | "
                     "remove <проект> <экземпляр|набор> | update <проект> [пакет] | "
-                    "entity <проект> --id ID [--tag T --x --y --w --h --body] [--remove] | new <проект> <id> [--kind] [--title]");
+                    "entity <проект> --id ID [--tag T --x --y --w --h --body] [--remove] | new <проект> <id> [--kind] [--title] | "
+                    "own <проект> code|generator | rollback <проект>");
 }
