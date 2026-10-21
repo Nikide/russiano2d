@@ -1,0 +1,71 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.climb",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Лазание"
+  },
+  "description": {
+    "ru": "На лестнице или верёвке гравитация выключена, движение вверх-вниз клавишами."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.gravity"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.fn.velocity"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "ladder",
+      "label": "Лестницы",
+      "type": "string",
+      "default": ".ladder",
+      "hint": "Селектор зон лазания"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 120,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "лестница",
+    "верёвка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

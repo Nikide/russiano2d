@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сущность"
+  },
+  "description": {
+    "ru": "Базовая видимая сущность: подпись, классы для селекторов и видимость."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.show"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "label",
+      "label": "Подпись",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "classes",
+      "label": "Классы",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "visible",
+      "label": "Видим",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "сущность",
+    "основа"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

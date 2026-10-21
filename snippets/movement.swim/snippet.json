@@ -1,0 +1,86 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.swim",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Плавание"
+  },
+  "description": {
+    "ru": "В воде: сопротивление, плавучесть и всплытие клавишей."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.vec"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "water",
+      "label": "Вода",
+      "type": "string",
+      "default": ".water",
+      "hint": "Селектор зон воды"
+    },
+    {
+      "id": "drag",
+      "label": "Сопротивление",
+      "type": "number",
+      "default": 2,
+      "min": 0,
+      "max": 20,
+      "step": 0.1
+    },
+    {
+      "id": "buoyancy",
+      "label": "Плавучесть",
+      "type": "number",
+      "default": 900,
+      "min": 0,
+      "max": 5000,
+      "unit": "пикс./с²"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 160,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "вода",
+    "плавание"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

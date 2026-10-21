@@ -1,0 +1,54 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.wall-slide",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Скольжение по стене"
+  },
+  "description": {
+    "ru": "У стены в воздухе скорость падения ограничена."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.onFloor"
+    },
+    {
+      "api": "$.fn.onWall"
+    },
+    {
+      "api": "$.fn.velocity"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "maxFall",
+      "label": "Скорость скольжения",
+      "type": "number",
+      "default": 90,
+      "min": 0,
+      "max": 2000,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "стена",
+    "platformer"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interactable.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Интерактивный объект"
+  },
+  "description": {
+    "ru": "Действие по клавише рядом с объектом: подсказка, условие доступности и событие."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.input.pressed"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "action",
+      "label": "Событие действия",
+      "type": "string",
+      "default": "interact",
+      "hint": "Глобальное событие $.emit"
+    },
+    {
+      "id": "prompt",
+      "label": "Подсказка",
+      "type": "string",
+      "default": "Нажмите E"
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "actor",
+      "label": "Кто действует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "requires",
+      "label": "Условие (ключ данных у actor)",
+      "type": "string",
+      "default": "",
+      "hint": "Пусто — всегда доступно"
+    }
+  ],
+  "tags": [
+    "действие",
+    "дверь",
+    "рычаг"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

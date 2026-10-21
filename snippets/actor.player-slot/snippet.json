@@ -1,0 +1,51 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.player-slot",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Слот игрока"
+  },
+  "description": {
+    "ru": "Связь объекта с локальным игроком (1–4) для HUD, ввода и сохранений."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.removeClass"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "slot",
+      "label": "Игрок",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 4
+    }
+  ],
+  "tags": [
+    "игрок",
+    "кооператив"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

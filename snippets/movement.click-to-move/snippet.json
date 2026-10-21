@@ -1,0 +1,89 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.click-to-move",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Движение по клику"
+  },
+  "description": {
+    "ru": "Объект идёт к точке мира, по которой щёлкнули мышью."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.mousePressed"
+    },
+    {
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 200,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "button",
+      "label": "Кнопка",
+      "type": "enum",
+      "default": "left",
+      "options": [
+        "left",
+        "right"
+      ]
+    },
+    {
+      "id": "reach",
+      "label": "Радиус прибытия",
+      "type": "number",
+      "default": 4,
+      "min": 1,
+      "max": 200,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "мышь",
+    "RTS",
+    "point-and-click"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

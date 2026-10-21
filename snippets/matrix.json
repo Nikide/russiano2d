@@ -9,10 +9,13 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.hide",
+    "$.fn.removeClass",
+    "$.fn.show"
    ],
    "gaps": [],
    "dependencies": []
@@ -24,11 +27,14 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
-    "$.camera"
+    "$.camera.follow",
+    "$.camera.unfollow",
+    "$.fn.addClass",
+    "$.fn.controls",
+    "$.fn.removeClass",
+    "$.fn.speed"
    ],
    "gaps": [],
    "dependencies": []
@@ -40,10 +46,12 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.removeClass",
+    "$.fn.team"
    ],
    "gaps": [],
    "dependencies": []
@@ -55,10 +63,13 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.health",
+    "$.fn.removeClass",
+    "$.fn.team"
    ],
    "gaps": [],
    "dependencies": []
@@ -70,10 +81,15 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.addClass",
+    "$.fn.at",
+    "$.fn.distanceTo",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.fn.removeClass",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -85,11 +101,16 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.weapons",
-    "$.combat"
+    "$.fn.at",
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -101,10 +122,12 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.items"
+    "$.emit",
+    "$.fn.distanceTo",
+    "$.fn.remove",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -116,10 +139,18 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.addClass",
+    "$.fn.alive",
+    "$.fn.emit",
+    "$.fn.fadeOut",
+    "$.fn.health",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.prefab.has",
+    "$.prefab.instantiate",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -148,10 +179,13 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -163,10 +197,11 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.removeClass"
    ],
    "gaps": [],
    "dependencies": []
@@ -178,10 +213,9 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.data"
    ],
    "gaps": [],
    "dependencies": []
@@ -193,10 +227,11 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.angle",
+    "$.fn.at",
+    "$.fn.size"
    ],
    "gaps": [],
    "dependencies": []
@@ -222,10 +257,9 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.controls"
    ],
    "gaps": [],
    "dependencies": []
@@ -237,10 +271,11 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.removeClass"
    ],
    "gaps": [],
    "dependencies": []
@@ -252,10 +287,12 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.addClass",
+    "$.fn.addTag",
+    "$.fn.removeClass",
+    "$.fn.removeTag"
    ],
    "gaps": [],
    "dependencies": []
@@ -267,10 +304,9 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.data"
    ],
    "gaps": [],
    "dependencies": []
@@ -282,10 +318,16 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.active",
+    "$.fn.emit",
+    "$.fn.hide",
+    "$.fn.remove",
+    "$.fn.show",
+    "$.off",
+    "$.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -297,10 +339,12 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.prefab"
+    "$.fn.emit",
+    "$.fn.pos",
+    "$.prefab.has",
+    "$.prefab.instantiate"
    ],
    "gaps": [],
    "dependencies": []
@@ -347,10 +391,13 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.data",
+    "$.fn.lookAt",
+    "$.fn.velocity",
+    "$.input.mouseWorld",
+    "$.input.vec",
     "$.updateFor"
    ],
    "gaps": [],
@@ -363,10 +410,10 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.velocity",
+    "$.input.padAxis",
     "$.updateFor"
    ],
    "gaps": [],
@@ -379,10 +426,14 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.input.mousePressed",
+    "$.input.mouseWorld",
     "$.updateFor"
    ],
    "gaps": [],
@@ -395,10 +446,12 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.fn.velocity",
     "$.updateFor"
    ],
    "gaps": [],
@@ -429,10 +482,13 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.emit",
+    "$.fn.invulnerable",
+    "$.fn.velocity",
+    "$.input.pressed",
+    "$.input.vec",
     "$.updateFor"
    ],
    "gaps": [],
@@ -445,14 +501,17 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.jump",
+    "$.fn.onFloor",
+    "$.input.pressed",
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.platformer"
+   ]
   },
   {
    "n": 30,
@@ -461,14 +520,17 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.jump",
+    "$.fn.onFloor",
+    "$.input.pressed",
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.platformer"
+   ]
   },
   {
    "n": 31,
@@ -496,10 +558,11 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.onFloor",
+    "$.fn.onWall",
+    "$.fn.velocity",
     "$.updateFor"
    ],
    "gaps": [],
@@ -512,14 +575,21 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.emit",
+    "$.fn.flip",
+    "$.fn.onFloor",
+    "$.fn.onWall",
+    "$.fn.velocity",
+    "$.input.pressed",
+    "$.input.vec",
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.platformer"
+   ]
   },
   {
    "n": 34,
@@ -528,10 +598,14 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.emit",
+    "$.fn.gravity",
+    "$.fn.overlaps",
+    "$.fn.some",
+    "$.fn.velocity",
+    "$.input.vec",
     "$.updateFor"
    ],
    "gaps": [],
@@ -544,10 +618,13 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.emit",
+    "$.fn.overlaps",
+    "$.fn.some",
+    "$.fn.velocity",
+    "$.input.vec",
     "$.updateFor"
    ],
    "gaps": [],
@@ -560,10 +637,14 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.size",
+    "$.fn.velocity",
+    "$.fn.width",
+    "$.input.down",
     "$.updateFor"
    ],
    "gaps": [],
@@ -576,10 +657,15 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.size",
+    "$.fn.velocity",
+    "$.fn.width",
+    "$.input.pressed",
     "$.updateFor"
    ],
    "gaps": [],
@@ -592,14 +678,19 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.closest",
+    "$.fn.externalVelocity",
+    "$.fn.first",
+    "$.fn.hp",
+    "$.fn.pos",
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 39,
@@ -608,10 +699,14 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.at",
+    "$.fn.height",
+    "$.fn.onFloor",
+    "$.fn.pos",
+    "$.fn.width",
+    "$.selection.each",
     "$.updateFor"
    ],
    "gaps": [],
@@ -624,10 +719,19 @@
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.input",
+    "$.fn.active",
+    "$.fn.at",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.hide",
+    "$.fn.pos",
+    "$.fn.show",
+    "$.fn.velocity",
+    "$.input.pressed",
+    "$.input.vec",
     "$.updateFor"
    ],
    "gaps": [],

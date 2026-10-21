@@ -1,0 +1,11 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "classes": [
+      "boss"
+    ],
+    "tags": [
+      "flying"
+    ]
+  }
+}

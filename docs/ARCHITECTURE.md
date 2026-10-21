@@ -555,7 +555,7 @@ $.ready(() => {
       .on('death', e => {
         $.sound.play('die.wav');
         $.emit('kill', e.self);
-        e.self.fadeOut(200).remove();
+        e.self.fadeOut(200).then(() => e.self.remove());   // fadeOut — Promise
       })
       .appendTo($.world);
   }

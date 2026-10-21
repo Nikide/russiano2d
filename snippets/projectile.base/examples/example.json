@@ -1,0 +1,10 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "velocity": [
+      0,
+      -300
+    ],
+    "pierce": true
+  }
+}

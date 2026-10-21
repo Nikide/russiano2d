@@ -3,62 +3,62 @@
 Сгенерировано `python3 scripts/snippet_matrix.py` из §12 [ТЗ](SNIPPET_SYSTEM_PROJECT.md),
 каталога `snippets/` и `api.schema.json`. Руками не править.
 
-Реализовано: **28 из 500**. Строк с пробелом API: **0**.
+Реализовано: **62 из 500**. Строк с пробелом API: **0**.
 
 Колонка API: для реализованного пакета — фактические `requires`; для
 запланированного — опорные пространства `$` по префиксу ID (предварительно,
 уточняется при реализации пакета).
 
 
-## A. Базовые сущности и управление — 2/20
+## A. Базовые сущности и управление — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 001 | `actor.base` | ⬜ | `$.fn`, `$.prefab` | — |
-| 002 | `player.base` | ⬜ | `$.fn`, `$.input`, `$.camera` | — |
-| 003 | `npc.base` | ⬜ | `$.fn`, `$.nav` | — |
-| 004 | `enemy.base` | ⬜ | `$.fn`, `$.combat` | — |
-| 005 | `companion.base` | ⬜ | `$.fn`, `$.nav` | — |
-| 006 | `projectile.base` | ⬜ | `$.fn`, `$.weapons`, `$.combat` | — |
-| 007 | `pickup.base` | ⬜ | `$.fn`, `$.items` | — |
-| 008 | `breakable.base` | ⬜ | `$.fn`, `$.combat` | — |
+| 001 | `actor.base` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.hide`, `$.fn.removeClass`, `$.fn.show` | — |
+| 002 | `player.base` | ✅ | `$.camera.follow`, `$.camera.unfollow`, `$.fn.addClass`, `$.fn.controls`, `$.fn.removeClass`, `$.fn.speed` | — |
+| 003 | `npc.base` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass`, `$.fn.team` | — |
+| 004 | `enemy.base` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.health`, `$.fn.removeClass`, `$.fn.team` | — |
+| 005 | `companion.base` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.removeClass`, `$.updateFor` | — |
+| 006 | `projectile.base` | ✅ | `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.selection.each`, `$.updateFor` | — |
+| 007 | `pickup.base` | ✅ | `$.emit`, `$.fn.distanceTo`, `$.fn.remove`, `$.updateFor` | — |
+| 008 | `breakable.base` | ✅ | `$.fn.addClass`, `$.fn.alive`, `$.fn.emit`, `$.fn.fadeOut`, `$.fn.health`, `$.fn.pos`, `$.fn.remove`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor` | — |
 | 009 | `trigger.base` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.off`, `$.fn.on` | — |
-| 010 | `interactable.base` | ⬜ | `$.fn`, `$.input` | — |
-| 011 | `actor.faction` | ⬜ | `$.fn`, `$.prefab` | — |
-| 012 | `actor.identity` | ⬜ | `$.fn`, `$.prefab` | — |
-| 013 | `actor.spawn-profile` | ⬜ | `$.fn`, `$.prefab` | — |
+| 010 | `interactable.base` | ✅ | `$.emit`, `$.fn.data`, `$.fn.distanceTo`, `$.input.pressed`, `$.updateFor` | — |
+| 011 | `actor.faction` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass` | — |
+| 012 | `actor.identity` | ✅ | `$.fn.data` | — |
+| 013 | `actor.spawn-profile` | ✅ | `$.fn.angle`, `$.fn.at`, `$.fn.size` | — |
 | 014 | `actor.visual-profile` | ✅ | `$.fn.sprite` | — |
-| 015 | `actor.control-profile` | ⬜ | `$.fn`, `$.prefab` | — |
-| 016 | `actor.player-slot` | ⬜ | `$.fn`, `$.prefab` | — |
-| 017 | `actor.tags` | ⬜ | `$.fn`, `$.prefab` | — |
-| 018 | `actor.attributes` | ⬜ | `$.fn`, `$.prefab` | — |
-| 019 | `actor.lifecycle` | ⬜ | `$.fn`, `$.prefab` | — |
-| 020 | `actor.prefab-variant` | ⬜ | `$.fn`, `$.prefab` | — |
+| 015 | `actor.control-profile` | ✅ | `$.fn.controls` | — |
+| 016 | `actor.player-slot` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass` | — |
+| 017 | `actor.tags` | ✅ | `$.fn.addClass`, `$.fn.addTag`, `$.fn.removeClass`, `$.fn.removeTag` | — |
+| 018 | `actor.attributes` | ✅ | `$.fn.data` | — |
+| 019 | `actor.lifecycle` | ✅ | `$.fn.active`, `$.fn.emit`, `$.fn.hide`, `$.fn.remove`, `$.fn.show`, `$.off`, `$.on`, `$.updateFor` | — |
+| 020 | `actor.prefab-variant` | ✅ | `$.fn.emit`, `$.fn.pos`, `$.prefab.has`, `$.prefab.instantiate` | — |
 
-## B. Движение и перемещение — 4/20
+## B. Движение и перемещение — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 021 | `movement.top-down` | ✅ | `$.fn.velocity`, `$.input.vec`, `$.updateFor` | — |
 | 022 | `movement.platformer` | ✅ | `$.fn.jump`, `$.fn.onFloor`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
-| 023 | `movement.twin-stick` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 024 | `movement.analog` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 025 | `movement.click-to-move` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 026 | `movement.follow-path` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
+| 023 | `movement.twin-stick` | ✅ | `$.fn.data`, `$.fn.lookAt`, `$.fn.velocity`, `$.input.mouseWorld`, `$.input.vec`, `$.updateFor` | — |
+| 024 | `movement.analog` | ✅ | `$.fn.velocity`, `$.input.padAxis`, `$.updateFor` | — |
+| 025 | `movement.click-to-move` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.input.mousePressed`, `$.input.mouseWorld`, `$.updateFor` | — |
+| 026 | `movement.follow-path` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
 | 027 | `movement.dash` | ✅ | `$.fn.emit`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
-| 028 | `movement.dodge-roll` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 029 | `movement.coyote-jump` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 030 | `movement.jump-buffer` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
+| 028 | `movement.dodge-roll` | ✅ | `$.fn.emit`, `$.fn.invulnerable`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
+| 029 | `movement.coyote-jump` | ✅ | `$.fn.jump`, `$.fn.onFloor`, `$.input.pressed`, `$.updateFor` | — |
+| 030 | `movement.jump-buffer` | ✅ | `$.fn.jump`, `$.fn.onFloor`, `$.input.pressed`, `$.updateFor` | — |
 | 031 | `movement.double-jump` | ✅ | `$.fn.jump`, `$.fn.onFloor`, `$.input.pressed`, `$.updateFor` | — |
-| 032 | `movement.wall-slide` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 033 | `movement.wall-jump` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 034 | `movement.climb` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 035 | `movement.swim` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 036 | `movement.crouch` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 037 | `movement.prone` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 038 | `movement.knockback` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 039 | `movement.platform-ride` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
-| 040 | `movement.vehicle-seat` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
+| 032 | `movement.wall-slide` | ✅ | `$.fn.onFloor`, `$.fn.onWall`, `$.fn.velocity`, `$.updateFor` | — |
+| 033 | `movement.wall-jump` | ✅ | `$.fn.emit`, `$.fn.flip`, `$.fn.onFloor`, `$.fn.onWall`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
+| 034 | `movement.climb` | ✅ | `$.fn.emit`, `$.fn.gravity`, `$.fn.overlaps`, `$.fn.some`, `$.fn.velocity`, `$.input.vec`, `$.updateFor` | — |
+| 035 | `movement.swim` | ✅ | `$.fn.emit`, `$.fn.overlaps`, `$.fn.some`, `$.fn.velocity`, `$.input.vec`, `$.updateFor` | — |
+| 036 | `movement.crouch` | ✅ | `$.fn.emit`, `$.fn.height`, `$.fn.size`, `$.fn.velocity`, `$.fn.width`, `$.input.down`, `$.updateFor` | — |
+| 037 | `movement.prone` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.height`, `$.fn.size`, `$.fn.velocity`, `$.fn.width`, `$.input.pressed`, `$.updateFor` | — |
+| 038 | `movement.knockback` | ✅ | `$.fn.closest`, `$.fn.externalVelocity`, `$.fn.first`, `$.fn.hp`, `$.fn.pos`, `$.updateFor` | — |
+| 039 | `movement.platform-ride` | ✅ | `$.fn.at`, `$.fn.height`, `$.fn.onFloor`, `$.fn.pos`, `$.fn.width`, `$.selection.each`, `$.updateFor` | — |
+| 040 | `movement.vehicle-seat` | ✅ | `$.fn.active`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.height`, `$.fn.hide`, `$.fn.pos`, `$.fn.show`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
 
 ## C. Оружие и атаки — 4/20
 

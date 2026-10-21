@@ -1,0 +1,84 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "player.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Игрок"
+  },
+  "description": {
+    "ru": "Основа управляемого игрока: схема ввода движка (.controls), скорость и камера."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.fn.speed"
+    },
+    {
+      "api": "$.fn.controls"
+    },
+    {
+      "api": "$.camera.follow"
+    },
+    {
+      "api": "$.camera.unfollow"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "scheme",
+      "label": "Ввод",
+      "type": "enum",
+      "default": "wasd",
+      "options": [
+        "wasd",
+        "arrows",
+        "platformer"
+      ]
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 250,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "camera",
+      "label": "Камера следует",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "игрок",
+    "основа"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "action": "door:open",
+    "requires": "key"
+  }
+}

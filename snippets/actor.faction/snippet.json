@@ -1,0 +1,60 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.faction",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Фракция"
+  },
+  "description": {
+    "ru": "Фракция объекта и списки дружественных и враждебных фракций в данных."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.removeClass"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "faction",
+      "label": "Фракция",
+      "type": "string",
+      "default": "neutral"
+    },
+    {
+      "id": "allies",
+      "label": "Союзники",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "enemies",
+      "label": "Враги",
+      "type": "list",
+      "default": []
+    }
+  ],
+  "tags": [
+    "фракция",
+    "отношения"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

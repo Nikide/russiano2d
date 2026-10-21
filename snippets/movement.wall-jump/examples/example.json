@@ -1,0 +1,9 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "force": [
+      400,
+      600
+    ]
+  }
+}

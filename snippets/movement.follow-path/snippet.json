@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.follow-path",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Движение по пути"
+  },
+  "description": {
+    "ru": "Проходит список точек с остановками; по кругу или один раз."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "points",
+      "label": "Точки (x,y через ;)",
+      "type": "string",
+      "default": "0,0; 200,0",
+      "hint": "Например: 100,300; 400,300"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 120,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "pause",
+      "label": "Остановка",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "loop",
+      "label": "По кругу",
+      "type": "bool",
+      "default": false
+    }
+  ],
+  "tags": [
+    "путь",
+    "маршрут"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

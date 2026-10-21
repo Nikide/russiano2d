@@ -1,0 +1,57 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.tags",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Теги и классы"
+  },
+  "description": {
+    "ru": "Управляемые классы и теги объекта для селекторов $."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.fn.addTag"
+    },
+    {
+      "api": "$.fn.removeTag"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "classes",
+      "label": "Классы",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "tags",
+      "label": "Теги",
+      "type": "list",
+      "default": []
+    }
+  ],
+  "tags": [
+    "селектор",
+    "класс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

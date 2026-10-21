@@ -1,0 +1,80 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "pickup.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Предмет в мире"
+  },
+  "description": {
+    "ru": "Предмет подбирается в радиусе: событие pickup с id предмета и количеством."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "pickup",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.remove"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "item",
+      "label": "ID предмета",
+      "type": "string",
+      "default": "coin"
+    },
+    {
+      "id": "count",
+      "label": "Количество",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 100000
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 20,
+      "min": 1,
+      "max": 1000,
+      "unit": "пикс."
+    },
+    {
+      "id": "collector",
+      "label": "Кто подбирает",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    }
+  ],
+  "tags": [
+    "предмет",
+    "подбор"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

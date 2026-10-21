@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.dodge-roll",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Перекат"
+  },
+  "description": {
+    "ru": "Перекат по направлению ввода с окном неуязвимости и перезарядкой."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.invulnerable"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.velocity"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "space"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 520,
+      "min": 0,
+      "max": 3000,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "duration",
+      "label": "Длительность",
+      "type": "int",
+      "default": 300,
+      "min": 20,
+      "max": 3000,
+      "unit": "мс"
+    },
+    {
+      "id": "iframes",
+      "label": "Неуязвимость",
+      "type": "int",
+      "default": 250,
+      "min": 0,
+      "max": 3000,
+      "unit": "мс"
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 700,
+      "min": 0,
+      "max": 20000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "перекат",
+    "уклонение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

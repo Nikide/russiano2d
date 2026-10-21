@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.lifecycle",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Жизненный цикл"
+  },
+  "description": {
+    "ru": "Активация при старте или по событию и удаление через заданное время."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.active"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.remove"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "active",
+      "label": "Активен сразу",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": "activateOn",
+      "label": "Включить по событию",
+      "type": "string",
+      "default": "",
+      "hint": "Глобальное событие; пусто — нет"
+    },
+    {
+      "id": "removeAfter",
+      "label": "Удалить через",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 3600000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "таймер",
+    "активация"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

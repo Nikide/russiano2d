@@ -1,0 +1,54 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.identity",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Имя и описание"
+  },
+  "description": {
+    "ru": "Имя, портрет и описание объекта для диалогов и интерфейса."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Имя",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "portrait",
+      "label": "Портрет",
+      "type": "asset",
+      "assetKind": "image"
+    },
+    {
+      "id": "description",
+      "label": "Описание",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "имя",
+    "портрет"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.coyote-jump",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Coyote time"
+  },
+  "description": {
+    "ru": "Прыжок в коротком окне после схода с края платформы."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.onFloor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.jump"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "movement.platformer"
+    }
+  ],
+  "fields": [
+    {
+      "id": "window",
+      "label": "Окно",
+      "type": "int",
+      "default": 120,
+      "min": 10,
+      "max": 1000,
+      "unit": "мс"
+    },
+    {
+      "id": "jumpForce",
+      "label": "Сила прыжка",
+      "type": "number",
+      "default": 520,
+      "min": 0,
+      "max": 1400
+    },
+    {
+      "id": "jumpKey",
+      "label": "Клавиша прыжка",
+      "type": "string",
+      "default": "space"
+    }
+  ],
+  "tags": [
+    "прыжок",
+    "platformer"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

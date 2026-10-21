@@ -1,0 +1,61 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.platform-ride",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Езда на платформе"
+  },
+  "description": {
+    "ru": "Стоя на движущейся платформе, объект перемещается вместе с ней."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.fn.onFloor"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.fn.at"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "platforms",
+      "label": "Платформы",
+      "type": "string",
+      "default": ".platform",
+      "hint": "Селектор движущихся платформ"
+    }
+  ],
+  "tags": [
+    "платформа",
+    "лифт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

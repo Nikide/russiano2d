@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "companion.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Спутник"
+  },
+  "description": {
+    "ru": "Спутник держится рядом с лидером; при большом отрыве телепортируется."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "leader",
+      "label": "Лидер",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "distance",
+      "label": "Дистанция",
+      "type": "number",
+      "default": 48,
+      "min": 0,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 220,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "teleport",
+      "label": "Телепорт дальше",
+      "type": "number",
+      "default": 600,
+      "min": 0,
+      "max": 20000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "спутник",
+    "союзник"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

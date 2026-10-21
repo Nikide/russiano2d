@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "enemy.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Противник"
+  },
+  "description": {
+    "ru": "Основа противника: команда, здоровье и цель."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.fn.team"
+    },
+    {
+      "api": "$.fn.health"
+    },
+    {
+      "api": "$.fn.data"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "team",
+      "label": "Команда",
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 64
+    },
+    {
+      "id": "hp",
+      "label": "Здоровье",
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 1000000
+    },
+    {
+      "id": "target",
+      "label": "Цель",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "враг",
+    "основа"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

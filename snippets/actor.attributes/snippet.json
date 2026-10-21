@@ -1,0 +1,44 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.attributes",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Характеристики"
+  },
+  "description": {
+    "ru": "Пользовательские характеристики узла: строки «ключ=значение», числа распознаются."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "values",
+      "label": "Характеристики",
+      "type": "list",
+      "default": [
+        "strength=10"
+      ]
+    }
+  ],
+  "tags": [
+    "данные",
+    "статы"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.prefab-variant",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Вариант prefab"
+  },
+  "description": {
+    "ru": "Создаёт объекты зарегистрированного $.prefab рядом с объектом-маркером."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.prefab.has"
+    },
+    {
+      "api": "$.prefab.instantiate"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "prefab",
+      "label": "Имя prefab",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.prefab.register/load"
+    },
+    {
+      "id": "count",
+      "label": "Количество",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "id": "offset",
+      "label": "Смещение",
+      "type": "vec2",
+      "default": [
+        0,
+        0
+      ]
+    }
+  ],
+  "tags": [
+    "prefab",
+    "спавн"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "values": {
+    "action": "door:open",
+    "requires": "key"
+  }
+}

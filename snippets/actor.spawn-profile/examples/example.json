@@ -1,0 +1,10 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "position": [
+      64,
+      64
+    ],
+    "angle": 45
+  }
+}

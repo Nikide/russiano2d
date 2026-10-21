@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "breakable.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Разрушаемый объект"
+  },
+  "description": {
+    "ru": "Объект с прочностью; при разрушении исчезает и может оставить prefab."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "health",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.health"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.prefab.has"
+    },
+    {
+      "api": "$.prefab.instantiate"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.fadeOut"
+    },
+    {
+      "api": "$.fn.remove"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "durability",
+      "label": "Прочность",
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 1000000
+    },
+    {
+      "id": "result",
+      "label": "Результат",
+      "type": "enum",
+      "default": "remove",
+      "options": [
+        "remove",
+        "fade"
+      ]
+    },
+    {
+      "id": "drop",
+      "label": "Prefab после разрушения",
+      "type": "string",
+      "default": "",
+      "hint": "Имя из $.prefab; пусто — ничего"
+    }
+  ],
+  "tags": [
+    "ящик",
+    "разрушение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.control-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Профиль управления"
+  },
+  "description": {
+    "ru": "Встроенный контроллер движка по схеме действий: wasd, стрелки или платформер."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.controls"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "scheme",
+      "label": "Схема",
+      "type": "enum",
+      "default": "wasd",
+      "options": [
+        "wasd",
+        "arrows",
+        "platformer"
+      ]
+    }
+  ],
+  "tags": [
+    "ввод",
+    "управление"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

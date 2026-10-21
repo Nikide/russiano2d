@@ -1,0 +1,106 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.vehicle-seat",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Транспорт"
+  },
+  "description": {
+    "ru": "Посадка водителя по клавише рядом, управление транспортом и выход."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.active"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "driver",
+      "label": "Водитель",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус посадки",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 1000,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 320,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "машина",
+    "транспорт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

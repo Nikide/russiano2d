@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.spawn-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Профиль появления"
+  },
+  "description": {
+    "ru": "Начальная позиция, размер и угол объекта при подключении."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.angle"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "position",
+      "label": "Позиция",
+      "type": "vec2",
+      "default": [
+        100,
+        100
+      ]
+    },
+    {
+      "id": "size",
+      "label": "Размер",
+      "type": "vec2",
+      "default": [
+        32,
+        32
+      ]
+    },
+    {
+      "id": "angle",
+      "label": "Угол",
+      "type": "number",
+      "default": 0,
+      "min": -360,
+      "max": 360,
+      "unit": "°"
+    }
+  ],
+  "tags": [
+    "позиция",
+    "размер"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

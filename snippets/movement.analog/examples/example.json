@@ -1,0 +1,6 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "deadzone": 0.2
+  }
+}

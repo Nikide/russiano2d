@@ -1,0 +1,7 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "durability": 5,
+    "result": "fade"
+  }
+}

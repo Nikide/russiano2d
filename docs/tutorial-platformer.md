@@ -189,7 +189,7 @@ $.ready(($) => {
 
 ```js
 $('<enemy>', { class: 'walker' }).at(x, y).health(30)
-    .on('death', e => e.self.fadeOut(200).remove())
+    .on('death', e => e.self.fadeOut(200).then(() => e.self.remove()))   // fadeOut — Promise
     .appendTo($.world).attr('dir', 1);
 
 $.update(() => {

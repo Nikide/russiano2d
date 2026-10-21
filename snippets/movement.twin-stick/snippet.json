@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.twin-stick",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Twin-stick"
+  },
+  "description": {
+    "ru": "Движение клавишами и прицел мышью независимо друг от друга."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.lookAt"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 220,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "keys",
+      "label": "Движение",
+      "type": "enum",
+      "default": "wasd",
+      "options": [
+        "wasd",
+        "arrows"
+      ]
+    },
+    {
+      "id": "rotate",
+      "label": "Поворачивать к прицелу",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "shooter",
+    "мышь"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

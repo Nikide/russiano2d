@@ -1,0 +1,80 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.knockback",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Отбрасывание"
+  },
+  "description": {
+    "ru": "При потере здоровья объект отбрасывает от ближайшего источника с затуханием."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.closest"
+    },
+    {
+      "api": "$.fn.first"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.externalVelocity"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "source",
+      "label": "Источники",
+      "type": "string",
+      "default": ".enemy",
+      "hint": "Селектор, от которого отбрасывает"
+    },
+    {
+      "id": "force",
+      "label": "Сила",
+      "type": "number",
+      "default": 260,
+      "min": 0,
+      "max": 5000,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "decay",
+      "label": "Затухание",
+      "type": "int",
+      "default": 180,
+      "min": 10,
+      "max": 5000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "удар",
+    "отдача"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

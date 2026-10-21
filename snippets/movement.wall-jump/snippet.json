@@ -1,0 +1,76 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.wall-jump",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Прыжок от стены"
+  },
+  "description": {
+    "ru": "Отталкивание от стены: скорость от стены и вверх."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.onFloor"
+    },
+    {
+      "api": "$.fn.onWall"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.fn.flip"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "movement.platformer"
+    }
+  ],
+  "fields": [
+    {
+      "id": "jumpKey",
+      "label": "Клавиша прыжка",
+      "type": "string",
+      "default": "space"
+    },
+    {
+      "id": "force",
+      "label": "Сила (от стены, вверх)",
+      "type": "vec2",
+      "default": [
+        320,
+        520
+      ]
+    }
+  ],
+  "tags": [
+    "стена",
+    "прыжок"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

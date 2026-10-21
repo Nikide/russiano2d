@@ -1,0 +1,64 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "NPC"
+  },
+  "description": {
+    "ru": "Основа NPC: команда, профиль отношения и класс npc для селекторов."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.fn.team"
+    },
+    {
+      "api": "$.fn.data"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "team",
+      "label": "Команда",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64
+    },
+    {
+      "id": "profile",
+      "label": "Профиль",
+      "type": "enum",
+      "default": "neutral",
+      "options": [
+        "friendly",
+        "neutral",
+        "hostile"
+      ]
+    }
+  ],
+  "tags": [
+    "npc",
+    "основа"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}
