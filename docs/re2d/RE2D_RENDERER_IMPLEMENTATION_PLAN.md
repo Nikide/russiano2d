@@ -52,7 +52,7 @@ Profiling hooks and public smoke bindings SHOULD begin with their feature rather
 
 ## Verification performed in Phase 0
 
-Rebuilt current targets with `cmake --build build --target r2d_bsp_test r2d_re2d_world_test r2d_re2d_test -j6` (Release, AppleClang, macOS arm64). Ran all three executables successfully. These checks prove existing baseline behavior only, not new cells, portals, GPU surfaces or lighting. Full application/SDK, agent suite and visual lab have not been rerun in Phase 0. GZDoom runtime was not run; official wiki access failed, so behavioral requirements remain plan-derived.
+Rebuilt current targets with `xmake test -y -j 8` (Release, AppleClang, macOS arm64). Ran all three executables successfully. These checks prove existing baseline behavior only, not new cells, portals, GPU surfaces or lighting. Full application/SDK, agent suite and visual lab have not been rerun in Phase 0. GZDoom runtime was not run; official wiki access failed, so behavioral requirements remain plan-derived.
 
 Before each major phase MUST reread source §73 and reference rules. MUST record actual gate evidence and remaining gaps; checked boxes in source Definition of Done are target requirements, not baseline completion. No commits/releases/publication were requested.
 

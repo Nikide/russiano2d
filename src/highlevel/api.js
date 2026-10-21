@@ -10,6 +10,7 @@
 // ===========================================================================
 
 import { engine } from './native.js';
+import { installApiDocs, documentApiSymbol } from './api_docs.js';
 import {
     ctx, Node, Wrapper, TAGS, wrap, wrapOne, query, def, defGet,
     packColor, withAlpha, registerSelector, nodeBounds, boundsOverlap,
@@ -89,7 +90,7 @@ import { installProc } from './proc.js';
 import { installKinds } from './kinds.js';
 // --- RE2D — необязательный слой 3D-авторинга спрайтов ------------------------
 // Модули ниже ставятся только когда нативное ядро их собрало
-// (R2D_ENABLE_RE2D=ON, см. src/CMakeLists.txt). В сборке платформера
+// (R2D_ENABLE_RE2D=ON, см. xmake.lua). В сборке платформера
 // (`-DR2D_ENABLE_RE2D=OFF`) engine.re2d / engine.rotsprite / engine.real2d не
 // существуют, и установка молча пропускается: $ остаётся обычным 2D-API.
 // Проверка одна на файл — loadRe2dSupport() ниже.
@@ -228,7 +229,7 @@ function translateSelector(selector) {
  *
  * Единственная проверка, по которой `$` решает, ставить ли модули Re2D /
  * RotSprite / Real2D / mesh / cels. Движок с `-DR2D_ENABLE_RE2D=OFF`
- * (2D-платформерная сборка, см. src/CMakeLists.txt) не создаёт ни одного из
+ * (2D-платформерная сборка, см. xmake.lua) не создаёт ни одного из
  * этих объектов `engine.*`, поэтому установка пропускается целиком — а не
  * падает на первом же `engine.re2d.*` внутри чужого модуля.
  *
@@ -298,6 +299,10 @@ export function createApi() {
         if (arg && arg.nodes) return arg;
         return wrap([]);
     };
+
+    // Описания публичного API доступны Editor и --dump-api, но сами не
+    // перечисляются как игровая поверхность `$`.
+    installApiDocs($);
 
     $._wrapper = Wrapper;
     $._node = Node;
@@ -422,6 +427,9 @@ export function createApi() {
     $.world = ctx.world;
     $.camera = ctx.camera;
     $.input = ctx.input;
+    documentApiSymbol($, '$.input', {
+        description: 'Работа с клавиатурой, действия, мышью и геймпадом; здесь собраны игровые запросы ввода и переназначение управления.',
+    });
     $.sound = ctx.sound;
     $.scene = ctx.scene;
     $.ui = ctx.ui;

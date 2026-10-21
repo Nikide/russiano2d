@@ -80,6 +80,7 @@ static void test_extraction_counts_and_order_on_two_cells(void)
     TEST_ASSERT_FLOAT_WITHIN(EPS, 0.0f, lines[2].y1);
     TEST_ASSERT_FLOAT_WITHIN(EPS, 100.0f, lines[2].x2);
     TEST_ASSERT_FLOAT_WITHIN(EPS, 100.0f, lines[2].y2);
+    r2d_world_free(&world);
 }
 
 static void test_portal_closed_open_kind_and_index(void)
@@ -108,6 +109,7 @@ static void test_portal_closed_open_kind_and_index(void)
     TEST_ASSERT_FLOAT_WITHIN(EPS, 0.0f, lines[2].y1);
     TEST_ASSERT_FLOAT_WITHIN(EPS, 100.0f, lines[2].x2);
     TEST_ASSERT_FLOAT_WITHIN(EPS, 100.0f, lines[2].y2);
+    r2d_world_free(&world);
 }
 
 static void test_truncation_reports_total(void)
@@ -137,6 +139,7 @@ static void test_truncation_reports_total(void)
     TEST_ASSERT_EQUAL_INT(3, r2d_world_automap_lines(&world, NULL, lines, 6));
     TEST_ASSERT_EQUAL_INT(R2D_AUTOMAP_PORTAL, lines[2].kind);
     TEST_ASSERT_EQUAL_INT(SENTINEL, lines[3].index);
+    r2d_world_free(&world);
 }
 
 static void test_state_lookup_default_and_out_of_range(void)
@@ -252,6 +255,7 @@ static void test_invalid_arguments(void)
     // Count query ignores capacity entirely, including a negative one.
     TEST_ASSERT_EQUAL_INT(3, r2d_world_automap_lines(&world, NULL, NULL, -7));
     TEST_ASSERT_EQUAL_INT(-1, r2d_world_automap_lines(&world, NULL, &line, -7));
+    r2d_world_free(&world);
 }
 
 static void test_determinism(void)
@@ -279,6 +283,7 @@ static void test_determinism(void)
     TEST_ASSERT_EQUAL_INT(0, memcmp(a, b, sizeof a));
     TEST_ASSERT_EQUAL_INT(1, world.portal_count);
     TEST_ASSERT_EQUAL_INT(5, world.wall_count);
+    r2d_world_free(&world);
 }
 
 int main(void)

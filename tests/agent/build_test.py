@@ -180,7 +180,7 @@ def main():
 
         # --- 8. Конфигурация RE2D: модули и данные = сборка -----------------
         # §30: OFF-сборка закреплена фактом, а не обещанием; demos/ копируется
-        # только в ON-сборку (src/CMakeLists.txt: R2D_DATA_DIRS).
+        # только в ON-сборку (xmake target data files).
         with Agent(binary=BINARY, game=FIXTURE, seed=5) as game:
             game.step(3)
             enabled = game.eval("$.re2dEnabled")
@@ -195,14 +195,14 @@ def main():
               "demos/ рядом с бинарником %s при $.re2dEnabled=%s"
               % ("есть" if demos_next else "нет", enabled))
 
-        # --- 9. Версия — одна на проект (CMakeLists.txt) --------------------
+        # --- 9. Версия — одна на проект (VERSION) --------------------
         sdk_bin = os.path.join(os.path.dirname(BINARY),
                                "r2d-sdk" + (".exe" if BINARY.endswith(".exe") else ""))
         if os.path.exists(sdk_bin):
             version_json = subprocess.run([sdk_bin, "version"], capture_output=True,
                                           text=True, timeout=60).stdout
             check(json.loads(version_json)["version"] == release.read_version(),
-                  "r2d-sdk version берёт версию из CMakeLists.txt (%s)"
+                  "r2d-sdk version берёт версию из VERSION (%s)"
                   % release.read_version())
         else:
             print("  skip нет r2d-sdk рядом с движком — версия SDK не проверена")

@@ -2,12 +2,12 @@
 // ручки ресайза Collision Tools, план зон Audio Tools, hit-test выбора в RmlUi Studio.
 // Запуск: ./build/_deps/quickjs-build/qjs tests/js/sdk_studio_curves_test.mjs
 import { test, eq, near, truthy, falsy, finish } from './_harness.mjs';
-import * as K from '../../sdk/lib/kinds/particles.js';
+import * as K from '../../editor/lib/shared/kinds/particles.js';
 import { graphBoxPoint, graphBoxT, graphBoxValue, graphPointAt } from '../../sdk/tools/particle-studio.js';
 import { shapeHandles, handleHit, resizePatch } from '../../sdk/tools/collision-tools.js';
 import { zoneMap, zonePoint, zoneAt } from '../../sdk/tools/audio-tools.js';
 import { pickNodeIndex } from '../../sdk/tools/rmlui-studio.js';
-import * as M from '../../sdk/lib/rml_model.js';
+import * as M from '../../editor/lib/shared/rml_model.js';
 
 test('rampRange: alpha всегда 0..1, size — до максимума точек', () => {
     eq(JSON.stringify(K.rampRange([{ t: 0, alpha: 0 }, { t: 1, alpha: 1 }], 'alpha')), '[0,1]');

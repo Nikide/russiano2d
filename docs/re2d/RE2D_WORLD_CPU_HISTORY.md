@@ -57,8 +57,8 @@ API remains a wrapper; gameplay types are unchanged.
 ## Verification and reproduction
 
 ```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j6
+xmake f -m release -o build-xmake/release
+xmake build -y -j 8 r2d
 python3 tools/bench_re2d_world.py --frames 30 --samples 3 --json build/bench_re2d_world.json
 ./build/russiano2d --game demos/re2d_bsp_world
 ```

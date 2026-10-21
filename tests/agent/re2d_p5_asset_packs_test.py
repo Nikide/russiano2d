@@ -3,7 +3,7 @@
 # P5 asset packs: 16-direction ultra sprites, per-layer sky, distant city.
 #
 # Assets-only gate: manifests, atlas grid, PNG dimensions/alpha and runtime
-# compatibility with `$.atlas`. Runs `r2d-sdk atlas-info` for every atlas and
+# compatibility with `$.atlas`. Runs `r2d atlas-info` for every atlas and
 # loads the sheets through the real engine (agent mode, no pixels asserted).
 #
 # Run:
@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent   # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SDK = os.path.join(ROOT, "build", "r2d-sdk")
+SDK = os.environ.get("R2D_BINARY", os.path.join(ROOT, "build", "r2d"))
 ULTRA = os.path.join(ROOT, "assets", "sprites", "ultra16")
 SKY = os.path.join(ROOT, "assets", "sky")
 FAILURES = []
@@ -139,7 +139,7 @@ def main():
                               capture_output=True, text=True)
         report = json.loads(proc.stdout or "{}")
         check(proc.returncode == 0 and report.get("ok") is True,
-              "%s r2d-sdk atlas-info ok" % name)
+              "%s r2d atlas-info ok" % name)
         check(len(report.get("frames", [])) == expected, "%s SDK frame count %d" % (name, expected))
     check(total_frames == 336, "ultra16 total frames = 336 (got %d)" % total_frames)
 

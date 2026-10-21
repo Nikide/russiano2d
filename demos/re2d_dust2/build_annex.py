@@ -7,7 +7,7 @@ Walls are emitted pre-split around openings (like the original door posts) so th
 authored-wall order of the original map is preserved.
 
     python3 demos/re2d_dust2/build_annex.py            # edit map + routes
-    build/r2d-sdk world-compile demos/re2d_dust2/dust2.re2dmap --renderer \
+    $R2D_BINARY world-compile demos/re2d_dust2/dust2.re2dmap --renderer \
         --output demos/re2d_dust2/dust2.re2dworld
     python3 demos/re2d_dust2/build_annex.py --doors    # map compiled door ids into routes.json
 """

@@ -23,7 +23,7 @@ R2D_BINARY=build-2d/russiano2d python3 tests/agent/recovery_test.py
 
 | Сбой | Как воспроизводится | Что проверяет тест (факты) |
 |---|---|---|
-| **Save failure** | запись в каталог `CMakeLists.txt/saves` — путь «внутри файла» | `save()` → `false`, `stats().last_error` с текстом, стадия `temp`; ошибка уходит в `$.debug.errors()`; экран показывает её человеку; рабочее состояние и посторонний слот целы; кадры идут |
+| **Save failure** | запись в каталог `VERSION/saves` — путь «внутри файла» | `save()` → `false`, `stats().last_error` с текстом, стадия `temp`; ошибка уходит в `$.debug.errors()`; экран показывает её человеку; рабочее состояние и посторонний слот целы; кадры идут |
 | **Corrupted slot** | основной `slot-run.json` заменяется на `{broken json` | `verify().ok === false` и `backup === true`; `load()` берёт `.bak`, `stats().recovered` = 1, из копии поднимается значение v1; `profile` побайтово не изменён |
 | **Safe repair** | `$.save.recover('run')` | основной файл **побайтово равен** `.bak`, `verify().ok === true` снова |
 | **Слот из будущего** | в слот пишется `version: 999` | `save()` → `false`, код `R2D_SAVE_FUTURE`, файл не изменён, `stats().rejected_future` = 1 |

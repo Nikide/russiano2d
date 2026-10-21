@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # ===========================================================================
-# Тест нативного CLI r2d-sdk: команды tools/assets/project/projects/validate/
+# Тест нативного CLI единого r2d: команды tools/assets/project/projects/validate/
 # run/build печатают один JSON-объект с структурной диагностикой.
 #
-# Python здесь только тестовая обвязка репозитория; сам инструмент — C-бинарник
-# без внешних runtime (docs/SDK.md).
+# Python здесь только тестовая обвязка репозитория; сам инструмент — тот же
+# C-бинарник r2d, который обслуживает Editor и agent protocol.
 #
 # Запуск (после сборки): python3 tests/agent/sdk_cli_test.py
 # ===========================================================================
@@ -16,8 +16,8 @@ import subprocess
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SDK = os.environ.get("R2D_SDK_BINARY", os.path.join(ROOT, "build", "r2d-sdk"))
-ENGINE = os.environ.get("R2D_BINARY", os.path.join(ROOT, "build", "russiano2d"))
+R2D = os.environ.get("R2D_BINARY", os.path.join(ROOT, "build", "r2d"))
+ENGINE = R2D
 FIX = os.path.join(ROOT, "tests", "fixtures", "sdk")
 FAILURES = []
 
@@ -29,7 +29,7 @@ def check(condition, message):
 
 
 def sdk(*args, timeout=120):
-    proc = subprocess.run([SDK, *args], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+    proc = subprocess.run([R2D, *args], cwd=ROOT, capture_output=True, text=True, timeout=timeout)
     lines = [l for l in proc.stdout.splitlines() if l.strip()]
     check(len(lines) == 1, f"{args[0]}: ровно одна строка JSON в stdout (строк: {len(lines)})")
     try:
@@ -45,11 +45,11 @@ def codes(data):
 
 
 def main():
-    check(os.path.isfile(SDK), f"бинарник r2d-sdk собран: {SDK}")
+    check(os.path.isfile(R2D), f"единый бинарник r2d собран: {R2D}")
 
     # --- version / commands -------------------------------------------------
     rc, d = sdk("version")
-    check(rc == 0 and d["ok"] and d["name"] == "r2d-sdk", "version")
+    check(rc == 0 and d["ok"] and d["name"] == "r2d", "version сообщает единый бинарник r2d")
     rc, d = sdk("commands")
     names = [c["name"] for c in d["commands"]]
     for n in ("tools", "assets", "project", "projects", "validate", "run", "build"):

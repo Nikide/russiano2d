@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SpriteMesh tabs share the native bake/runtime, with independent settings/history."""
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -105,7 +106,8 @@ def test():
             run(a,E+'.openWith("a.atlas.json","sprite-mesh")')
             a.eval('meshA.pause();meshA.doc.click("sm-front");meshA.doc.setValue("sm-preview-mode","wireframe");1');a.step(4)
             check(a.eval('meshA.state.camera.yaw===0 && meshA.state.camera.pitch===0 && meshA.doc.layoutRect("sm-view").w>0'), 'front view and embedded viewport are usable')
-            a.screenshot(str(Path(ROOT)/'build/editor-sprite-mesh-tabs.png'))
+            if os.environ.get('R2D_CAPTURE_VISUALS') == '1':
+                a.screenshot(str(Path(ROOT)/'build/editor-sprite-mesh-tabs.png'))
             run(a,E+'.openWith("new.atlas.json","sprite-mesh")')
             settle(a, E+'.activeTab().path==="new.atlas.json" && !!'+A+' && !'+A+'.state.busy')
             check(run(a,A+'.save()') and json.loads((root/'new.atlas.json').read_text())['re2d']['spriteMesh']['enabled'], 'first Save + Bake enables SpriteMesh on an unconfigured atlas')

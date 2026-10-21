@@ -5,18 +5,22 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from agent_client import Agent
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from re2d_skip import skip_without_sdk_command, skip_without_re2d   # noqa: E402
-if skip_without_sdk_command('world-compile', what='Dust2 portal regression'):
+from re2d_skip import skip_without_r2d_command, skip_without_re2d   # noqa: E402
+if skip_without_r2d_command('world', what='Dust2 portal regression'):
     sys.exit(0)
 failed=[]
 def check(ok,name):
  print(('ok ' if ok else 'FAIL ')+name,flush=True)
  if not ok:failed.append(name)
 def main():
- sdk = os.environ.get('R2D_SDK_BINARY', 'build/r2d-sdk')
+ r2d = os.environ.get('R2D_BINARY', 'build/r2d')
  compiled=Path('build/dust2-portal-regression.re2dworld')
- run=subprocess.run([sdk,'world-compile','demos/re2d_dust2/dust2.re2dmap','--renderer','--output',str(compiled)],capture_output=True,text=True)
- check(run.returncode==0,'current native SDK recompiles slope side portals without precision rejection')
+ run=subprocess.run([r2d,'world','compile','demos/re2d_dust2/dust2.re2dmap','--renderer','--output',str(compiled)],capture_output=True,text=True)
+ try:
+  compile_result=json.loads(run.stdout or '{}')
+ except json.JSONDecodeError:
+  compile_result={}
+ check(run.returncode==0 and compile_result.get('ok'),'r2d world compile recompiles slope side portals without precision rejection')
  if run.returncode:return 1
  with Agent(game='demos/re2d_dust2',seed=7) as a:
   if skip_without_re2d(a):

@@ -240,7 +240,7 @@ stderr печатается имя checkpoint, кадр и expected/actual, а �
 
 1. **Версия движка в бинарнике отставала от проекта** — теперь строка одна на
    проект: `R2D_VERSION_STRING` приходит из CMake (`PROJECT_VERSION`,
-   [src/CMakeLists.txt](../src/CMakeLists.txt)), запасное значение —
+   [xmake.lua](../xmake.lua)), запасное значение —
    `"0.0.0-dev"` для нестандартных сборок ([r2d.h](../src/r2d.h)). Раньше в
    коде была зашита `"0.1.0"` при проекте `0.1.14`, и эта строка шла в usage,
    заголовок окна, событие `ready` агента и User-Agent HTTP.

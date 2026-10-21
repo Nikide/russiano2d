@@ -60,7 +60,7 @@ directories are allowed; a missing group path fails the section.
 | `@stream` | `src/re2d_world_stream.c`<br>`src/re2d_world_stream.h`<br>`tests/re2d/stream_test.c`<br>`docs/RE2D_HUGE_WORLD.md` |
 | `@stream_io` | `src/re2d_world_stream_io.c`<br>`src/re2d_world_stream_io.h`<br>`tests/re2d/stream_io_test.c` |
 | `@terrain` | `src/re2d_world_terrain.c`<br>`tests/re2d/terrain_test.c`<br>`docs/RE2D_RENDER_FEATURES.md` |
-| `@tests_policy` | `tests/CMakeLists.txt`<br>`CMakeLists.txt`<br>`docs/TESTING.md`<br>`tests/re2d`<br>`tests/js` |
+| `@tests_policy` | `xmake/tests.lua`<br>`xmake.lua`<br>`docs/TESTING.md`<br>`tests/re2d`<br>`tests/js` |
 | `@trigger` | `src/re2d_world_trigger.c`<br>`tests/re2d/trigger_test.c` |
 | `@vfx` | `src/re2d_world_vfx.c`<br>`src/re2d_world_vfx.h`<br>`src/re2d_world_particle.c`<br>`assets/vfx/pack.json`<br>`docs/RE2D_VFX.md`<br>`tests/re2d/vfx_test.c`<br>`tests/re2d/particle_test.c`<br>`tests/agent/re2d_vfx_pack_test.py` |
 | `@vfx_render` | `tests/agent/re2d_render_vfx_pass_test.py`<br>`demos/re2d_vfx_lab` |
@@ -213,7 +213,7 @@ directories are allowed; a missing group path fails the section.
 | 128 | RE2D MATERIAL DEBUG | `partial` | R | `docs/RE2D_DEBUG_VIEWS.md`, `tests/agent/re2d_debug_views_test.py` | Inspector by name/index is real (materialInfo/materialList, albedo/normal/emissive dims, blend, surfaceCount, tint/UV variation) and the debug material overlay is tested. Open: there is no trace/click material probe, and macro/detail/terrain/AO-factor fields required by the section are not exposed. |
 | 129 | TEST POLICY | `done` |  | `@tests_policy` | Unity for native, JS/agent for high-level/VN; no new Python core tests. |
 | 130 | PYTHON POLICY | `done` |  | `@tests_policy` | Unity for native, JS/agent for high-level/VN; no new Python core tests. |
-| 131 | NATIVE TEST STRUCTURE | `done` |  | `@tests_policy`, `tests/re2d`, `tests/re2d/LAYOUT.md`, `tools/test_layout_check.py`, `tests/agent/native_test_layout_test.py` | Documented compatibility layout: flat files mapped to roadmap subsystem dirs, every tracked test CMake-wired in both directions, accepted by native_test_layout_test. |
+| 131 | NATIVE TEST STRUCTURE | `done` |  | `@tests_policy`, `tests/re2d`, `tests/re2d/LAYOUT.md`, `tools/test_layout_check.py`, `tests/agent/native_test_layout_test.py` | Documented compatibility layout: flat files mapped to roadmap subsystem dirs, tracked test files are mapped, Xmake-referenced sources resolve, accepted by native_test_layout_test. |
 | 132 | FAST TEST SUITE | `done` |  | `@tests_policy`, `@handoff` | r2d_check/CTest fast suite: 158/158 in ~10 s. |
 | 133 | RENDER REGRESSION | `done` |  | `@render_tests` | Tolerance-based GPU frame regression harness + reference PNGs; references refreshed after visual review of the final renderer frame (0.0000% delta on re-run). |
 | 134 | SPECIFIC REGRESSION TESTS | `done` |  | `tests/agent/re2d_render_visual_features_test.py`, `tests/agent/re2d_render_regression_test.py`, `tests/agent/re2d_world_renderer_test.py`, `tests/agent/re2d_dust2_test.py`, `@huge_test` | Grounding/material/fog/sky/region families are covered; renderer, dust2 and huge-world agent suites are green after final integration. |
@@ -241,9 +241,9 @@ directories are allowed; a missing group path fails the section.
 
 | gate | result |
 |---|---|
-| build | `cmake --build build -j 8` PASS |
-| native CTest | `r2d_check` 163/163 passed, 12.89 s |
-| ci_verify | PASS (RE2D=on, 4052 API names, schema/typings/docs fresh, lint/validate/doctor green) |
+| build | `xmake build -y -j 8 r2d` PASS |
+| native tests | Xmake native/JS targets; see current test gate |
+| xmake | single r2d executable; see docs/BUILD.md |
 | site build | `python3 site/build-doc.py` PASS |
 | docs/API guards | doc_claims, doc_coverage, api_docs_sync, api_freeze, site_prune PASS |
 | BASHNYA repro | exit 0; packaged runtime reports `large_save` serialization error, repo build succeeds with 4097 spans |
@@ -297,9 +297,8 @@ directories are allowed; a missing group path fails the section.
 ## Acceptance commands
 
 ```bash
-cmake --build build -j 8
-cmake --build build --target r2d_check -j 8
-python3 tools/ci_verify.py --build-dir build
+xmake build -y -j 8 r2d
+xmake test -y -j 8
 python3 tests/doc_claims_test.py
 python3 tests/doc_coverage_test.py
 python3 tests/api_docs_sync_test.py

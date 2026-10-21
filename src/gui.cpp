@@ -4,7 +4,7 @@
 // Используются штатные бэкенды RmlUi:
 //   Backends/RmlUi_Platform_SDL.cpp      — SystemInterface_SDL
 //   Backends/RmlUi_Renderer_SDL_GPU.cpp  — RenderInterface_SDL_GPU
-// Их исходники подключаются напрямую в наш исполняемый файл (см. src/CMakeLists.txt),
+// Их исходники подключаются напрямую в наш исполняемый файл (см. xmake.lua),
 // потому что мы сами владеем окном и GPU-устройством.
 // ===========================================================================
 
@@ -15,8 +15,7 @@
 
 #include "icons.h"
 
-// Сплэш SDK, вшитый в бинарник (cmake/Splash.cmake): RmlUi читает картинку и
-// разметку из памяти, внешние sdk/assets и sdk/ui для сплэша не нужны.
+// Сплэш Editor, вшитый в бинарник: RmlUi читает картинку и разметку из памяти.
 #include "r2d_splash_data.h"
 
 #include <RmlUi/Core.h>
@@ -66,8 +65,7 @@ public:
 
     Rml::FileHandle Open(const Rml::String &path) override
     {
-        // Сплэш SDK вшит в бинарник: отдаём байты из памяти до обращения к
-        // диску, поэтому сплэш работает и без каталога sdk/ рядом с бинарником.
+        // Сплэш Editor вшит в бинарник: отдаём байты из памяти до обращения к диску.
         for (int i = 0; i < r2d_embedded_asset_count; ++i) {
             const R2dEmbeddedAsset &asset = r2d_embedded_assets[i];
             const size_t alen = std::strlen(asset.path);

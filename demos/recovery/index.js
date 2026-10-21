@@ -29,10 +29,10 @@
 
 //: Каталог слотов: writable и вне дерева ассетов игры.
 const SAVE_DIR = 'build/recovery-saves';
-//: Путь «внутри файла CMakeLists.txt» — такой каталог создать нельзя, поэтому
+//: Путь «внутри файла VERSION» — такой каталог создать нельзя, поэтому
 //: запись обязана провалиться на стадии temp. Это и есть «save failure» без
 //: chmod и без платформенных различий в правах.
-const BAD_SAVE_DIR = 'CMakeLists.txt/saves';
+const BAD_SAVE_DIR = 'VERSION/saves';
 const SLOT = 'run';
 const PROFILE_SLOT = 'profile';
 //: Ассет под наблюдением `$.reload`: живой JSON, который правит автор.

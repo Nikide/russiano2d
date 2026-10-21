@@ -245,34 +245,6 @@ bool r2d_app_init(R2DApp *app, const char *title, int width, int height, bool vs
 
     r2d__pick_base_path(app);
 
-    // Иконка приложения. Файл лежит рядом с игрой, поэтому грузим её после
-    // выбора базового каталога. На macOS SDL ставит её как иконку приложения
-    // (док), на Windows и Linux — как иконку окна.
-    char icon_path[4096];
-    r2d_app_resolve_path(app, icon_path, sizeof icon_path, "assets/icons/russiano2d.png");
-    // В собранной игре иконка лежит в грузе — читаем из памяти.
-    SDL_Surface *icon = NULL;
-    if (r2d_vfs_has(icon_path)) {
-        size_t data_size = 0;
-        uint8_t *data = r2d_vfs_read(icon_path, &data_size);
-        if (data) {
-            SDL_IOStream *io = SDL_IOFromConstMem(data, data_size);
-            if (io) icon = IMG_Load_IO(io, true);
-            r2d_vfs_free(data);
-        }
-    } else {
-        icon = IMG_Load(icon_path);
-    }
-    if (icon) {
-        if (!SDL_SetWindowIcon(app->window, icon)) {
-            R2D_WARN("не удалось поставить иконку окна: %s", SDL_GetError());
-        }
-        SDL_DestroySurface(icon);
-    } else {
-        // Не ошибка: движок запускается и из каталога без ассетов.
-        R2D_WARN("иконка не найдена: %s", icon_path);
-    }
-
     R2D_LOG("окно %dx%d (буфер %dx%d)%s, базовый каталог: %s",
              width, height, app->pixel_width, app->pixel_height,
              headless ? " [скрыто]" : "",
@@ -1435,6 +1407,34 @@ void r2d_app_resolve_path(const R2DApp *app, char *out, size_t out_size, const c
         SDL_snprintf(out, out_size, "%s%s%s", app->base_path, has_sep ? "" : "/", relative);
     } else {
         SDL_snprintf(out, out_size, "%s", relative);
+    }
+}
+
+void r2d_app_set_window_icon(R2DApp *app)
+{
+    if (!app || !app->window) return;
+    // Вызывается после выбора --game: у Editor и игры могут быть свои иконки.
+    // Если проект не содержит файл, resolve_path оставляет общую иконку r2d.
+    char icon_path[4096];
+    r2d_app_resolve_path(app, icon_path, sizeof icon_path, "assets/icons/russiano2d.png");
+    SDL_Surface *icon = NULL;
+    if (r2d_vfs_has(icon_path)) {
+        size_t data_size = 0;
+        uint8_t *data = r2d_vfs_read(icon_path, &data_size);
+        if (data) {
+            SDL_IOStream *io = SDL_IOFromConstMem(data, data_size);
+            if (io) icon = IMG_Load_IO(io, true);
+            r2d_vfs_free(data);
+        }
+    } else {
+        icon = IMG_Load(icon_path);
+    }
+    if (icon) {
+        if (!SDL_SetWindowIcon(app->window, icon))
+            R2D_WARN("не удалось поставить иконку окна: %s", SDL_GetError());
+        SDL_DestroySurface(icon);
+    } else {
+        R2D_WARN("иконка не найдена: %s", icon_path);
     }
 }
 

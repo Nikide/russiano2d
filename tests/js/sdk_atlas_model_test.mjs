@@ -5,7 +5,7 @@
 // ===========================================================================
 
 import { test, eq, truthy, falsy, near, finish } from './_harness.mjs';
-import * as m from '../../sdk/lib/atlas_model.js';
+import * as m from '../../editor/lib/shared/atlas_model.js';
 
 const SAMPLE = {
     meta: {

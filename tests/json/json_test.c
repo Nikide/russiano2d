@@ -9,7 +9,7 @@
 //   gcc -fsanitize=address -g -I src tests/json/json_test.c src/json.c -o /tmp/json_test
 //   /tmp/json_test
 //
-// Сборка через CMake: цель r2d_json_test (см. tests/CMakeLists.txt).
+// Сборка через Xmake: цель r2d_json_test (см. xmake/tests.lua).
 // ===========================================================================
 #include "json.h"
 #include "unity.h"

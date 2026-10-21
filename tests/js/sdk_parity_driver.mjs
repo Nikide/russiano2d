@@ -2,8 +2,8 @@
 // (sdk/lib/kinds/*.js, sdk/lib/rml_model.js) и печатает { путь: ["severity:code", …] }.
 // Запуск: qjs -m tests/js/sdk_parity_driver.mjs -- список.txt   (строки «вид<TAB>путь»)
 import * as std from 'qjs:std';
-import { KINDS } from '../../sdk/lib/kinds/index.js';
-import * as R from '../../sdk/lib/rml_model.js';
+import { KINDS } from '../../editor/lib/shared/kinds/index.js';
+import * as R from '../../editor/lib/shared/rml_model.js';
 
 const list = std.loadFile(scriptArgs[scriptArgs.length - 1]).split('\n').filter(Boolean);
 const out = {};

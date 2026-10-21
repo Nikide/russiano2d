@@ -8,7 +8,7 @@ from pathlib import Path
 
 root=Path(__file__).resolve().parents[2]
 demo=Path(__file__).resolve().parent
-binary=Path(os.environ.get('R2D_SDK_BINARY',str(root/'build/r2d-sdk')))
+binary=Path(os.environ.get('R2D_BINARY',str(root/'build/r2d')))
 rig=demo/'npc.character.json'
 clips={}
 with tempfile.TemporaryDirectory(prefix='re2d-npc-import-') as tmp:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Расширения SDK: discovery, манифесты, merged registry, установка, хост в GUI.
+"""Расширения: discovery, манифесты, merged registry, установка, JS-host.
 
 Проверяется на реальном backend (docs/SDK_EXTENSIONS.md):
   * built-in / user / project discovery и детерминированный порядок;
@@ -7,8 +7,8 @@
     SDK_EXTENSION_ENTRY_MISSING, SDK_EXTENSION_CONTRIBUTION_INVALID;
   * merged effective registry в tools и tool list (sdk_tools.json не меняется);
   * tool list|info|validate|install|uninstall;
-  * хост расширений в настоящем SDK GUI: activate(), декларативные
-    contributions, открытие инструмента расширения, снимок для агента.
+  * compatibility host legacy SDK shell: activate(), декларативные
+    contributions и снимок для агента. Новый Editor host проверяется отдельно.
 
 Запуск (после сборки): python3 tests/agent/sdk_extensions_test.py
 """
@@ -22,7 +22,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'tools'))
 from agent_client import Agent, ROOT   # noqa: E402
 
-SDK = os.path.join(ROOT, 'build', 'r2d-sdk')
+R2D = os.environ.get('R2D_BINARY', os.path.join(ROOT, 'build', 'r2d'))
 FIX = os.path.join(ROOT, 'tests', 'fixtures', 'sdk', 'extensions')
 WORK = os.path.join(ROOT, 'build', 'sdk-ext-test')
 failures = []
@@ -35,7 +35,7 @@ def check(v, m):
 
 
 def cli(*args, expect=0):
-    r = subprocess.run([SDK] + list(args), cwd=ROOT, capture_output=True, text=True)
+    r = subprocess.run([R2D] + list(args), cwd=ROOT, capture_output=True, text=True)
     try:
         data = json.loads(r.stdout)
     except Exception:

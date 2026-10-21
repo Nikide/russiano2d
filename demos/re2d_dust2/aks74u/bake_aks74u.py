@@ -3,19 +3,20 @@
 
     python3 demos/re2d_dust2/aks74u/bake_aks74u.py <dir with source/fp_hands_aks74u.fbx and textures/>
 
-Every PNG/JSON comes from `build/r2d-sdk bake-re2d` (FBX loader: sdk/native/sdk_fbx.c). One call per frame
+Every PNG/JSON comes from `r2d bake-re2d` (FBX loader: sdk/native/sdk_fbx.c). One call per frame
 with a fixed --pivot/--scale, so the frames of a clip line up. The result is a flip-book of ordinary
 Re2DSprite assets (no mesh, no skeleton at runtime); frames.json lists the clips for main.js.
 The FBX and its 40 MB of textures are NOT in the repository (third-party asset, supplied by the user).
 """
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).parent
 ROOT = HERE.parents[2]
-SDK = ROOT / 'build' / 'r2d-sdk'
+R2D = Path(os.environ.get('R2D_BINARY', str(ROOT / 'build' / 'r2d')))
 
 # Fixed pivot (centre of the union of all clip bounding boxes, metres, Y up) and scale (units/metre).
 PIVOT = '0.006,-0.249,-0.283'
@@ -32,7 +33,7 @@ CLIPS = [  # name, FBX stack, seconds, frames
 
 
 def bake(fbx, ao, name, stack, t):
-    cmd = [str(SDK), 'bake-re2d', str(fbx), '--type', 'weapon', '--output', str(HERE), '--name', name,
+    cmd = [str(R2D), 'bake-re2d', str(fbx), '--type', 'weapon', '--output', str(HERE), '--name', name,
            '--uv', 'auto', '--size', str(SIZE), '--scale', str(SCALE), '--pivot', PIVOT, '--style', 'anime',
            '--fbx-stack', stack, '--fbx-time', f'{t:.4f}', '--fbx-tint', TINT, '--fbx-ao', f'aks74u={ao},aks74u.wood={ao}']
     out = subprocess.run(cmd, capture_output=True, text=True)

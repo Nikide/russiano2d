@@ -3,7 +3,7 @@
 
 Reads compiled cell/span topology, writes inspectable author walls. Inclined
 edges use one-unit strips (maximum 0.8-unit deviation); floors stay continuous.
-Recompile the source afterwards with r2d-sdk world-compile --renderer.
+Recompile the source afterwards with r2d world-compile --renderer.
 """
 import json,math
 from pathlib import Path

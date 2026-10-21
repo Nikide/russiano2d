@@ -11,6 +11,7 @@
 
 import { engine } from './native.js';
 import { ctx, query, engineOf } from './core.js';
+import { documentApiMethod } from './api_docs.js';
 
 // Псевдонимы: то, что пишет игрок → имя, которое понимает SDL.
 const ALIASES = {
@@ -244,7 +245,13 @@ export function installInput($) {
         // --- Клавиши --------------------------------------------------------
         // Gameplay-запросы. Пока жив хотя бы один hard-lock, они возвращают
         // false; UI/диалог, который сам держит такой лок, читает raw-варианты.
-        down(name) { return input.hardLocked() ? false : input._any(name, 'down'); },
+        down: documentApiMethod($, '$.input.down', function down(name) {
+            return input.hardLocked() ? false : input._any(name, 'down');
+        }, {
+            description: 'Проверяет, нажато ли игровое действие или клавиша. Возвращает false, пока ввод заблокирован жёстким локом.',
+            args: [{ name: 'name', type: 'string', description: 'Имя действия или клавиши.' }],
+            returns: 'boolean',
+        }),
         pressed(name) { return input.hardLocked() ? false : input._any(name, 'pressed'); },
         released(name) { return input.hardLocked() ? false : input._any(name, 'released'); },
         rawDown(name) { return input._any(name, 'down'); },
@@ -561,6 +568,20 @@ export function installInput($) {
         /** Символы, введённые за этот кадр (UTF-8, с учётом раскладки).
          *  Основа <ui.input>: скан-коды не знают про IME и compose. */
         text() { return engine.textInput(); },
+        /** Незавершённый текстовый ввод IME: строка композиции и её позиция. */
+        ime() {
+            if (typeof engine.ime !== 'function') return { text: '', start: 0 };
+            const value = engine.ime();
+            return value && typeof value.text === 'string'
+                ? { text: value.text, start: Number(value.start) || 0 }
+                : { text: '', start: 0 };
+        },
+        /** Привязать системное окно кандидатов IME к полю ввода в координатах окна. */
+        textInputArea(x, y, w, h, cursor) {
+            if (typeof engine.textInputArea === 'function')
+                engine.textInputArea(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)), Math.max(0, Math.round(cursor || 0)));
+            return input;
+        },
         /** Системный буфер обмена: текст или null (пусто/нет доступа). */
         clipboard() {
             if (typeof engine.clipboard !== 'function') return null;

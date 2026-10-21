@@ -1,14 +1,14 @@
 // Чистая логика студий данных: sdk/lib/kit.js и sdk/lib/kinds/*.js. Запуск: qjs -m tests/js/sdk_kinds_test.mjs
-import { KINDS, kindForPath } from '../../sdk/lib/kinds/index.js';
-import * as K from '../../sdk/lib/kit.js';
-import * as TM from '../../sdk/lib/kinds/tilemap.js';
-import * as PT from '../../sdk/lib/kinds/particles.js';
-import * as CO from '../../sdk/lib/kinds/collision.js';
-import * as FO from '../../sdk/lib/kinds/fonts.js';
-import * as AU from '../../sdk/lib/kinds/audio.js';
-import * as IN from '../../sdk/lib/kinds/input.js';
-import * as LA from '../../sdk/lib/kinds/layers.js';
-import * as views from '../../sdk/lib/views.js';
+import { KINDS, kindForPath } from '../../editor/lib/shared/kinds/index.js';
+import * as K from '../../editor/lib/shared/kit.js';
+import * as TM from '../../editor/lib/shared/kinds/tilemap.js';
+import * as PT from '../../editor/lib/shared/kinds/particles.js';
+import * as CO from '../../editor/lib/shared/kinds/collision.js';
+import * as FO from '../../editor/lib/shared/kinds/fonts.js';
+import * as AU from '../../editor/lib/shared/kinds/audio.js';
+import * as IN from '../../editor/lib/shared/kinds/input.js';
+import * as LA from '../../editor/lib/shared/kinds/layers.js';
+import * as views from '../../editor/lib/shared/views.js';
 
 let fails = 0;
 const check = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) fails++; };

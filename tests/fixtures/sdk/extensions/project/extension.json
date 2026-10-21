@@ -61,6 +61,19 @@
         "title": "Bevel"
       }
     ],
+    "worldOverlays": [
+      {
+        "id": "fixture.overlay.guide",
+        "label": "Fixture guides",
+        "shapes": [
+          { "kind": "point", "position": [64, 64], "label": "Guide point", "color": "#ff8855" },
+          { "kind": "line", "from": [0, 128, 0], "to": [128, 128, 48], "label": "Guide line", "color": "#66ddaa" },
+          { "kind": "rect", "min": [160, 32, 0], "max": [288, 160, 48], "label": "Guide volume", "color": "#7799ff" },
+          { "kind": "point", "position": ["64", 80], "label": "Invalid coordinate" },
+          { "kind": "point", "position": [96, 80], "label": "Fallback color", "color": "url(javascript:alert(1))" }
+        ]
+      }
+    ],
     "validators": [
       {
         "id": "fixture.validator.grid",

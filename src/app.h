@@ -210,6 +210,8 @@ const char *r2d_app_title(const R2DApp *app);
 // Каталог игры для поиска ассетов (--game). Относительный путь делается
 // абсолютным от текущего каталога. NULL или "" — вернуться к base_path.
 void r2d_app_set_game_path(R2DApp *app, const char *dir);
+// Обновляет иконку после выбора каталога игры, чтобы проект мог задать свою.
+void r2d_app_set_window_icon(R2DApp *app);
 
 void r2d_app_set_size(R2DApp *app, int width, int height);
 void r2d_app_get_size(const R2DApp *app, int *width, int *height);

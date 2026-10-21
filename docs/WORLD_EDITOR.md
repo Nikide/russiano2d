@@ -125,14 +125,14 @@ Hammer в Editor использует `editor/studios/hammer.js`, отдельн
 сессию на вкладку. `sdk/tools/world-editor.js` сохраняет старый фасад
 `$.sdkApp.studios.world` через адаптер к тому же контроллеру.
 
-Каждая кнопка/menu/toolbar-действие вызывает ровно эти операции; агент вызывает
-их же через `$.sdkApp.studios.world.ops`. Расширения используют документированное
-подмножество.
+Каждая кнопка/menu/toolbar-действие вызывает те же операции; агент в Editor
+вызывает их через `$.editorApp.activeTab().inst.ops`. Legacy shell продолжает
+использовать `$.sdkApp.studios.world.ops`.
 
 Capability discovery для агента:
 
 ```js
-$.sdkApp.studios.world.capabilities();
+$.editorApp.activeTab().inst.capabilities();
 // { editor, file, operations:[{name,args}], entityDefinitions:[], extensions:[],
 //   build:['validate','compile','run','buildAndRun'], snapshot }
 ```
@@ -154,9 +154,9 @@ $.sdkApp.studios.world.capabilities();
 
 | Действие | Backend |
 |---|---|
-| Validate | `r2d-sdk world info <map> --renderer` |
-| Compile | `r2d-sdk world compile <map> --renderer --output <map>.re2dworld` |
-| Run | `$.sdkApp.runProject()` (настоящий runtime) |
+| Validate | `r2d world info <map> --renderer` |
+| Compile | `r2d world compile <map> --renderer --output <map>.re2dworld` |
+| Run | Run/F5 в Editor (настоящий runtime) |
 | Build & Run | save → validate → compile → run |
 
 Диагностики кликабельны: выбор объекта/свойства, фокус вьюпорта. Структурные
@@ -183,23 +183,23 @@ $.sdkApp.studios.world.capabilities();
 
 ## 7. Расширение редактора
 
-Расширение (см. [SDK_EXTENSIONS.md](SDK_EXTENSIONS.md)) может добавить в World
-Editor: entity definitions, inspector sections, toolbar/menu actions, dock
-panels, world tools, validators и build steps. Contribution-точки декларативны;
-поведение регистрируется через `ctx.sdk.register*`. Если расширение добавило
-кнопку, та же операция обязана быть доступна программно (agent parity).
+Расширение (см. [SDK_EXTENSIONS.md](SDK_EXTENSIONS.md)) может добавить в Hammer
+entity definitions, toolbar/menu actions, panels и world tools. Contribution-
+точки декларативны; поведение регистрируется через `ctx.sdk.register*`. Если
+расширение добавило кнопку, та же операция обязана быть доступна программно
+(agent parity). Validators, build steps, agent commands, inspectors и overlays
+пока не имеют consumers в Editor.
 
-`worldOverlays` реестр читает и отдаёт (`ext.overlays()`), но декларативного
-формата отрисовки overlay/gizmo пока нет — это следующий шаг; остальные
-contribution-точки подключены (validators идут в диагностику, buildSteps
-исполняются в Build & Run, agentCommands доступны агенту).
+`worldOverlays` зарегистрированы в общем host, но Hammer пока не показывает
+overlay/gizmo. Неиспользуемые registry entries остаются доступными для будущих
+UI consumers; отсутствие consumer явно отражено в [SDK_EXTENSIONS.md](SDK_EXTENSIONS.md).
 
 ## 8. Проверка
 
 ```bash
 python3 tests/agent/world_editor_test.py     # живой движок: UI+ops+snapshot
 python3 tests/agent/world_edit_cli_test.py   # CLI-контракт world-edit
-./build/r2d-sdk world compile tests/fixtures/sdk/world/editor_base.re2dmap --renderer --output /tmp/a.re2dworld
+"$R2D_BINARY" world compile tests/fixtures/sdk/world/editor_base.re2dmap --renderer --output /tmp/a.re2dworld
 python3 tests/agent/sdk_studios_test.py      # реестр инструментов
 ```
 

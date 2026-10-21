@@ -4,7 +4,7 @@
 #
 # Разница с остальными тестами: они проверяют исходники, а этот — то, что
 # реально запускается. Проверяется главное обещание профиля «2D-платформер»:
-# движок в конфигурации БЕЗ RE2D-authoring (R2D_ENABLE_RE2D=OFF) поднимает `$`,
+# движок в конфигурации БЕЗ RE2D-authoring (отдельная 2D-конфигурация Xmake не реализована) поднимает `$`,
 # открывает игру и примеры, а заявленные подсистемы доступны игре.
 #
 # Это доказательство §35.3 «delivery: запуск установленного пакета» и §37
@@ -68,7 +68,7 @@ def main():
     binary = os.path.join(ROOT, BINARY) if not os.path.isabs(BINARY) else BINARY
     print("== Профиль 2D (без RE2D authoring): %s ==" % BINARY)
     if not os.path.exists(binary):
-        print("  пропуск: %s не собран (соберите: cmake -S . -B build-2d -DR2D_ENABLE_RE2D=OFF)" % BINARY)
+        print("  пропуск: %s не собран (соберите: xmake f -p <platform> -a <arch> -o build-xmake)" % BINARY)
         return 0
 
     # --- 1. Игра из репозитория поднимается ---------------------------------

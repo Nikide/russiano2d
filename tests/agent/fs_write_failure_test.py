@@ -234,9 +234,9 @@ def main():
             a.step(3)
             a.eval("$.debug.clearErrors(); 'ok'")
             before = len(a.stderr_text().splitlines())
-            # CMakeLists.txt — обычный файл в корне: запись «внутрь файла»
+            # VERSION — обычный файл в корне: запись «внутрь файла»
             # невыполнима при любых правах (ENOTDIR), каталог не создаётся.
-            blocked = a.eval("$.fs.write('CMakeLists.txt/inner.json', '{}')")
+            blocked = a.eval("$.fs.write('VERSION/inner.json', '{}')")
             a.step(1)
             lines = fresh_lines(a, before)
             print("  --   путь внутри файла → %s" % blocked)

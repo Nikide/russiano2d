@@ -26571,7 +26571,8 @@
       "dir": 1,
       "from": 0,
       "to": 128,
-      "top": 1024
+      "top": 1024,
+      "segments": 8
     },
     {
       "id": "c7_8",
@@ -26585,7 +26586,8 @@
       "dir": -1,
       "from": 0,
       "to": 128,
-      "top": 1024
+      "top": 1024,
+      "segments": 8
     },
     {
       "id": "c11_3",
@@ -26599,7 +26601,8 @@
       "dir": -1,
       "from": 0,
       "to": 128,
-      "top": 1024
+      "top": 1024,
+      "segments": 8
     },
     {
       "id": "a_tx_ramp",
@@ -26625,7 +26628,8 @@
           "color": "#0c3418"
         }
       },
-      "wall": "metal"
+      "wall": "metal",
+      "segments": 8
     },
     {
       "id": "a_ramp",
@@ -26646,7 +26650,8 @@
         "level": 0.38,
         "color": "#e8f0ff"
       },
-      "wall": "concrete"
+      "wall": "concrete",
+      "segments": 8
     }
   ],
   "lighting": {

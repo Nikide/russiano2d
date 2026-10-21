@@ -11,7 +11,7 @@
 #include <string.h>
 
 // Версия движка. При обычной сборке приходит из CMake (PROJECT_VERSION, см.
-// src/CMakeLists.txt); запасное значение — только для нестандартных сборок,
+// xmake.lua); запасное значение — только для нестандартных сборок,
 // где r2d.h компилируют без нашего CMake.
 #ifndef R2D_VERSION_STRING
 #define R2D_VERSION_STRING "0.0.0-dev"

@@ -1041,12 +1041,9 @@ $.fs
 $.fs.basePath
 $.fs.exists
 $.fs.list
-$.fs.pickFile
-$.fs.pickFolder
 $.fs.readJSON
 $.fs.readText
 $.fs.remove
-$.fs.saveFile
 $.fs.write
 $.fs.writeAtomic
 $.fs.writeJSON

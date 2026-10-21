@@ -1,5 +1,5 @@
 // RML-модель RmlUi Studio: разбор, правки, ссылки, RCSS. Запуск: qjs -m tests/js/sdk_rml_test.mjs
-import * as R from '../../sdk/lib/rml_model.js';
+import * as R from '../../editor/lib/shared/rml_model.js';
 
 let fails = 0;
 const check = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) fails++; };

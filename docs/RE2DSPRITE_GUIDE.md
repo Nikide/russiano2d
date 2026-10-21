@@ -739,7 +739,7 @@ remove/dispose и смена сцены освобождают его.
 Проверки из корня репозитория:
 
 ```sh
-cmake --build build -j 6
+xmake build -y -j 8 r2d
 ./build/tests/r2d_rotsprite_test
 ./build/_deps/quickjs-build/qjs tests/js/rotsprite_json_test.mjs
 python3 tests/rotsprite/surface_test.py

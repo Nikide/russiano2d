@@ -63,7 +63,7 @@ well, tower opening or outdoor contour.
 
 ## Compiler diagnostics for boundaries
 
-`r2d-sdk world compile` emits `SDK_WORLD_SKY_LEAK` from an exterior flood fill:
+`r2d world compile` emits `SDK_WORLD_SKY_LEAK` from an exterior flood fill:
 void/exterior is seeded at cell sides with no neighbour and no full wall
 coverage, then flooded through shared cell sides not sealed by walls. The
 diagnostic lists the reached cell ids, so a single missing outer wall is

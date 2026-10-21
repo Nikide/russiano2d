@@ -9,11 +9,11 @@ targets and the 163-test gate keep working. This table is the
 authoritative mapping for a future mechanical move into the roadmap's
 subsystem directories.
 
-Every tracked file below is referenced by a CMakeLists.txt target and
+Every tracked file below is referenced by a xmake test target and
 exists on disk. `python3 tools/test_layout_check.py --check` validates
-both directions (file->CMake and CMake->file).
+both directions (file->Xmake and Xmake->file).
 
-| file | proposed directory | CMake wired |
+| file | proposed directory | Xmake wired |
 |---|---|---|
 | `atlas_prefetch_test.c` | `sprite` | yes |
 | `atlas_test.c` | `sprite` | yes |
@@ -21,8 +21,8 @@ both directions (file->CMake and CMake->file).
 | `audio_zone_test.c` | `core` | yes |
 | `automap_test.c` | `core` | yes |
 | `batch_test.c` | `render` | yes |
-| `brush_advanced_fixture_test.c` | `world` | yes |
-| `brush_entity_smoke_test.c` | `world` | yes |
+| `brush_advanced_fixture_test.c` | `world` | NO |
+| `brush_entity_smoke_test.c` | `world` | NO |
 | `brush_test.c` | `world` | yes |
 | `controller_test.c` | `core` | yes |
 | `debug_views_test.c` | `render` | yes |
@@ -30,7 +30,7 @@ both directions (file->CMake and CMake->file).
 | `exr_test.c` | `sky` | yes |
 | `hierarchical_visibility_test.c` | `pvs` | yes |
 | `hint_cache_test.c` | `region` | yes |
-| `hint_visibility_test.c` | `pvs` | yes |
+| `hint_visibility_test.c` | `pvs` | NO |
 | `impostor_lod_policy_test.c` | `streaming` | yes |
 | `impostor_test.c` | `streaming` | yes |
 | `material_anim_test.c` | `material` | yes |
@@ -56,7 +56,7 @@ both directions (file->CMake and CMake->file).
 | `secret_test.c` | `core` | yes |
 | `semantic_test.c` | `core` | yes |
 | `sky_layers_test.c` | `sky` | yes |
-| `sky_leak_test.c` | `sky` | yes |
+| `sky_leak_test.c` | `sky` | NO |
 | `sky_test.c` | `sky` | yes |
 | `stream_io_test.c` | `streaming` | yes |
 | `stream_residency_test.c` | `streaming` | yes |
@@ -65,7 +65,7 @@ both directions (file->CMake and CMake->file).
 | `trace_test.c` | `core` | yes |
 | `trigger_test.c` | `core` | yes |
 | `vfx_test.c` | `vfx` | yes |
-| `volume_entity_test.c` | `world` | yes |
+| `volume_entity_test.c` | `world` | NO |
 | `volume_test.c` | `world` | yes |
 | `world_test.c` | `core` | yes |
 | `world_tools_test.c` | `world` | yes |
@@ -83,7 +83,7 @@ both directions (file->CMake and CMake->file).
 - `vfx/`: **2**
 - `streaming/`: **5**
 
-Tracked tests: **54**; CMake-wired: **54**; CMake source references: **54**.
+Tracked tests: **54**; Xmake-wired: **49**; Xmake source references: **49**.
 
 Untracked files (new work not yet wired) are reported as warnings, not
 as part of the compatibility contract: none.
@@ -92,7 +92,7 @@ as part of the compatibility contract: none.
 
 1. create the proposed subdirectories;
 2. `git mv` each file per this table;
-3. rewrite `tests/CMakeLists.txt` / `sdk/native/CMakeLists.txt` paths;
-4. run `cmake -S . -B build && cmake --build build --target r2d_check -j 8`;
+3. rewrite `tests/xmake/tests.lua` / `sdk/native/xmake/tests.lua` paths;
+4. run `xmake test -y`;
 5. update this table (the checker knows the new paths only through the
    same manifest, so update `tools/test_layout_check.py` in the same commit).

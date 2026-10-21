@@ -100,9 +100,36 @@ def test():
             a.eval(A + '.ops.select(1);' + A + '.ops.action("tool:brush");1'); a.step(2)
             move(a, 0, 0); a.mouse(1, 'click'); a.step(2)
             check(tile(a, 0, 0, 1) == 3 and tile(a, 0, 0, 0) == 0, 'brush paints the selected layer only')
-            # Optional fields stay absent after Apply.
             a.eval(A + '.doc.click("aw-document-apply");1'); a.step(2)
             check(a.eval('!("terrains" in ' + A + '.state.data) && !("autotile" in ' + A + '.state.data)'), 'absent optional document fields stay absent after Apply')
+
+            a.eval(A + '.doc.setValue("tm-terrain-new-name","grass");' + A + '.ops.action("terrain:add");1'); a.step(2)
+            check(a.eval(A + '.state.data.terrains.grass.base') == 3, 'terrain is created from the current brush tile')
+            a.eval(A + '.doc.setValue("tm-terrain-name","ground");' + A + '.doc.setValue("tm-terrain-mode","bit16");' +
+                   A + '.doc.setValue("tm-terrain-base","2");' + A + '.doc.setValue("tm-terrain-solid","[2]");' +
+                   A + '.doc.setValue("tm-terrain-transitions","{\\"0\\":4}");' + A + '.doc.setValue("tm-terrain-border","true");' + A + '.ops.action("terrain:apply");1'); a.step(2)
+            terrain = a.eval(A + '.state.data.terrains.ground')
+            check(terrain['mode'] == 'bit16' and terrain['base'] == 2 and terrain['transitions'] == {'0': 4} and
+                  terrain['border'] is True and 'grass' not in a.eval(A + '.state.data.terrains'),
+                  'structured terrain editor applies properties and renames in one edit')
+            a.eval(A + '.ops.action("terrain:ground");1'); a.step(2)
+            check(a.eval(A + '.state.data.autotile.terrain === "ground"'), 'paint mode activates the selected terrain on the runtime preview')
+            a.eval(A + '.doc.setValue("tm-autotile-base","3");' + A + '.doc.setValue("tm-autotile-solid","[2]");' +
+                   A + '.doc.setValue("tm-autotile-border","true");' + A + '.ops.action("autotile:apply");1'); a.step(2)
+            check(a.eval(A + '.state.data.autotile.base === 3 && ' + A + '.state.data.autotile.solid[0] === 2 && ' +
+                         A + '.state.data.autotile.border === true'), 'autotile base, solid set and border use the runtime contract')
+            a.eval(A + '.doc.setValue("tm-terrain-transitions","{\\"256\\":4}");' + A + '.ops.action("terrain:apply");1'); a.step(2)
+            check(a.eval(A + '.state.data.terrains.ground.transitions["0"] === 4 && ' + A + '.diagnostics()[0].code === "EDITOR_ASSET_ACTION"'),
+                  'invalid transition mask is rejected before changing the terrain')
+
+            a.eval(A + '.ops.action("anim:add");1'); a.step(2)
+            a.eval(A + '.doc.setValue("tm-anim-tile","4");' + A + '.doc.setValue("tm-anim-frames","4, 5, 6");' +
+                   A + '.doc.setValue("tm-anim-fps","8");' + A + '.ops.action("anim:apply");1'); a.step(2)
+            check(a.eval(A + '.state.data.animations[0].tile === 4 && ' + A + '.state.data.animations[0].frames.length === 3 && ' +
+                         A + '.state.data.animations[0].fps === 8'), 'animation editor writes explicit runtime tile frames and speed')
+            check(a.eval(A + '.undo()') and a.eval(A + '.state.data.animations[0].frames.length === 1') and
+                  a.eval(A + '.redo()') and a.eval(A + '.state.data.animations[0].frames.length === 3'),
+                  'animation settings are independently undoable and redoable')
             check(path.read_bytes() == original, 'edits do not touch the file before Save')
             check(run(a, A + '.save()') is True and not a.eval(A + '.dirty()'), 'Save validates and writes')
             saved = json.loads(path.read_text())

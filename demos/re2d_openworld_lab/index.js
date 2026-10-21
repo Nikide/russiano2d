@@ -1,12 +1,12 @@
 // ===========================================================================
 // Re2D Open World lab (R-04/R-05/R-06): a map authored as Hammer-like solid
-// brushes is compiled by `r2d-sdk world compile` into rectangular cells/spans,
+// brushes is compiled by `r2d world compile` into rectangular cells/spans,
 // walls/tool materials, portals and a region grid. The runtime loads only the
 // ordinary `.re2dworld`; this demo has no custom renderer, no 3D mesh and no
 // second scene graph.
 //
 // Build:
-//   r2d-sdk world compile demos/re2d_openworld_lab/openworld.re2dmap \
+//   r2d world compile demos/re2d_openworld_lab/openworld.re2dmap \
 //       --renderer --region-size 256 \
 //       --output demos/re2d_openworld_lab/openworld.re2dworld
 //
@@ -19,7 +19,7 @@ const FRAME = { w: 960, h: 540 };
 const SPAWN = { x: 160, y: 160, h: 96, yaw: 0.6, pitch: 0, fov: 1.15, near: 4 };
 const PLAYER = { radius: 14, height: 56, speed: 260, step: 10, eye: 64 };
 
-// Compiler metadata from the shipped .re2dworld (r2d-sdk world compile).
+// Compiler metadata from the shipped .re2dworld (r2d world compile).
 const REGIONS = {
     size: 256, columns: 8, rows: 8, count: 25, pvsEdges: 600,
     // Occupied grid slots (row * columns + col), sorted row-major exactly like

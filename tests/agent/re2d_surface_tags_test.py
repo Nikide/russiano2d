@@ -3,7 +3,7 @@
 # P0.1: user surface tags + exact ground lookup (GTA-like roadmap).
 #
 # Verifies the whole authored-data chain end-to-end:
-#   .re2dmap span tags/ceilingTags -> r2d-sdk world-compile (native author JSON
+#   .re2dmap span tags/ceilingTags -> r2d world-compile (native author JSON
 #   + baked .re2dworld wire v6) -> $.re2dWorld.fromJSON -> public
 #   world.groundAt / surface(i).tags()/hasTag()/tag() / surfaceTagsAt.
 # Also proves old untagged payloads keep their legacy wire version and that
@@ -27,7 +27,7 @@ if skip_without_sdk_command('world-compile', what='Re2D surface tags'):
     sys.exit(0)
 from agent_client import Agent   # noqa: E402
 
-SDK = os.environ.get('R2D_SDK_BINARY', 'build/r2d-sdk')
+SDK = os.environ.get('R2D_BINARY', 'build/r2d')
 FAILED = []
 
 

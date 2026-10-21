@@ -38,9 +38,9 @@ def main():
           "compatibility layout mode is explicit")
     check(report.get("tracked", 0) >= 40, "native test count is meaningful: %s" % report.get("tracked"))
     check(report.get("wired") == report.get("tracked"),
-          "every tracked test is CMake-wired: %s/%s" % (report.get("wired"), report.get("tracked")))
+          "every tracked test is Xmake-wired: %s/%s" % (report.get("wired"), report.get("tracked")))
     check(report.get("references", 0) >= report.get("tracked", 0),
-          "CMake references at least every tracked source: %s" % report.get("references"))
+          "Xmake references at least every tracked source: %s" % report.get("references"))
     check(not report.get("errors"), "no missing/duplicate/unwired tracked tests")
 
     suggested = set(report.get("suggested_dirs") or [])

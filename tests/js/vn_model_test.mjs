@@ -1,6 +1,6 @@
 import { test, eq, truthy, finish } from './_harness.mjs';
-import * as M from '../../sdk/lib/vn_model.js';
-import { createHistory } from '../../sdk/lib/history.js';
+import * as M from '../../editor/lib/shared/vn_model.js';
+import { createHistory } from '../../editor/lib/shared/history.js';
 
 const source = '# canon\r\n\r\n:start\r\n  w (smirk): Привет!\r\n- Да {trust += 1} -> yes\r\ncustom data\r\n:yes\r\nend';
 test('source round trip preserves CRLF, comments, unknown rows and missing EOF newline', () => {

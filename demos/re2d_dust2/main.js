@@ -27,7 +27,11 @@ function safeSrc(src){
     for(const k of ['at','volume','range'])self[k]=(...a)=>{call(src[k],undefined)(...a);return self;};
     return self;
 }
-function snd(file,opts){try{return safeSrc(clubAudio.source(file,opts));}catch(e){return NULL_SRC;}}
+// Re2D world channels request the native HRTF backend explicitly. Keep the
+// capability decision visible in the HUD and use equal-power panning when the
+// current build has no native HRTF backend.
+const worldHrtfAvailable=!!($.audio&&typeof $.audio.hrtf==='function'&&$.audio.hrtf().steam);
+function snd(file,opts){try{return safeSrc(clubAudio.source(file,{...opts,hrtf:worldHrtfAvailable}));}catch(e){return NULL_SRC;}}
 const debugViews=['final','cell-id','span-id','depth','owner','light-level','dynamic-light-count','normal','emissive','bsp','portals','shadow-mask','overdraw'];
 function dustCamera(name){const c=routeData.cameras[name]||routeData.annexCameras[name];view.x=c[0];view.y=c[1];view.h=c[2];view.yaw=c[3];view.pitch=0;motion.vx=motion.vy=motion.vz=0;motion.grounded=true;}
 function dustMove(dx,dy){
@@ -169,7 +173,7 @@ $.ready(()=>{
     globalThis.clubAudio=$.re2dWorldAudio(world);
     globalThis.dustSteps={count:0,last:null,variant:0};globalThis.dustWalkAudio=dustWalkAudio;
     globalThis.dustWind=snd(base+'audio/wind.wav',{x:view.x,y:view.y,h:800,range:2000,reference:1000,volume:.14,loop:true,hrtf:true,priority:10});
-    globalThis.clubMusic=clubAudio.source(base+'club_loop.mp3',{x:2352,y:1840,h:64,range:1300,reference:130,volume:.7,loop:true,hrtf:true});
+    globalThis.clubMusic=snd(base+'club_loop.mp3',{x:2352,y:1840,h:64,range:1300,reference:130,volume:.7,loop:true});
     dustCamera('T SPAWN');
     $.window.mouseLock(true);
 });
@@ -207,7 +211,7 @@ function renderView(){const rp=aks.recoil*.45,ry=aks.recoilYaw*.3;return fx.x||f
 
 // ---- Second map: the burning facility (key 0). A separate `$.re2dWorld`; switching maps swaps `world` and `clubAudio`. ----
 // Flames/smoke/explosions are the engine's `$.particles` presets (anchors projected from the world); zombies are Re2D characters
-// baked by r2d-sdk from the supplied Mixamo FBX (walk via animation-import, hit/death are the existing rig clips).
+// baked by r2d from the supplied Mixamo FBX (walk via animation-import, hit/death are the existing rig clips).
 const FIRE_DIR=base+'fire/';
 const fireMap=globalThis.fireMap={loaded:false,active:false,t:0,nextBoom:3,world:null,audio:null,meta:null,dust:null,dustAudio:null,ret:null,
     fires:[],alarms:[],alarmLights:[],crackle:new Map(),booms:[],zombies:[],hp:100,dead:0,noise:0,kills:0};
@@ -236,7 +240,7 @@ function dustAudioPark(){
 }
 function dustAudioResume(){
     globalThis.dustWind=snd(base+'audio/wind.wav',{x:view.x,y:view.y,h:800,range:2000,reference:1000,volume:.14,loop:true,hrtf:true,priority:10});
-    globalThis.clubMusic=clubAudio.source(base+'club_loop.mp3',{x:2352,y:1840,h:64,range:1300,reference:130,volume:.7,loop:true,hrtf:true});
+    globalThis.clubMusic=snd(base+'club_loop.mp3',{x:2352,y:1840,h:64,range:1300,reference:130,volume:.7,loop:true});
 }
 function cleanFire(){
     for(const e of fireMap.fires){e.flame.remove();e.smoke.remove();e.light.remove();}
@@ -394,7 +398,7 @@ function fireUpdate(dt){
     fireMap.booms=fireMap.booms.filter(b=>{if(fireMap.t<b.until)return true;for(const n of b.nodes)n.remove();return false;});
     for(const z of fireMap.zombies)zombieUpdate(z,dt);
 }
-// ---- Player weapon: AKS-74U with hands, one dense Re2DSprite v3 baked by r2d-sdk from the supplied FBX ----
+// ---- Player weapon: AKS-74U with hands, one dense Re2DSprite v3 baked by r2d from the supplied FBX ----
 // The viewmodel is an ordinary 2D sprite over the world frame, synthesized with a perspective eye (`projection.eye` in aks.character.json):
 // the sprite centre is the view axis (the crosshair), so the weapon sits where a first-person camera would see it.
 // Its tint follows `world.lightAt`, so it goes dark in a dark room.
@@ -412,7 +416,7 @@ const staticGuns={ak47:[46,138],pistol:[13,138],revolver:[15,138],shotgun:[48,13
 const aks=globalThis.aks={frames:{},clips:null,node:null,clip:'idle',t:0,ammo:30,mag:30,cool:0,flash:[],flashT:0,recoil:0,recoilYaw:0,timers:[],reloadClicked:false};
 globalThis.weaponIndex=0;globalThis.vmKick=0;
 function weaponInit(){
-    // v3 viewmodel: one dense Re2DSprite with skin clips idle/draw/fire/reload baked by `r2d-sdk bake-re2d3`
+    // v3 viewmodel: one dense Re2DSprite with skin clips idle/draw/fire/reload baked by `r2d bake-re2d3`
     aks.clips={idle:{seconds:.0167},draw:{seconds:1},fire:{seconds:.3},reload:{seconds:1.8833}};
     const def=JSON.parse($.fs.readText(base+'aks3/aks.character.json')).projection;
     AKS.eye=def.eye;AKS.focal=$.window.size().h/2/Math.tan(AKS.fov*Math.PI/360);
@@ -582,7 +586,7 @@ $.update(dt=>{
     const zone=inFire?{name:'FIRE FACILITY'}:routeData.zones.find(z=>view.x>=z.rect[0]&&view.x<z.rect[0]+z.rect[2]&&view.y>=z.rect[1]&&view.y<z.rect[1]+z.rect[3]);
     hud.text('hp',inFire?(fireMap.dead>0?'YOU DIED':'HP '+fireMap.hp+'  ·  kills '+fireMap.kills+'/'+fireMap.meta.zombies.length):'');
     hud.text('ammo',weaponList[weaponIndex]==='aks74u'?(aks.clip==='reload'?'RELOAD':aks.ammo+' / '+aks.mag):weaponList[weaponIndex].toUpperCase());
-    const info=world.info();hud.text('status',`${inFire?'MAP 2':'DUST2'} / ${zone?.name??'WORLD'} · height ${Math.round(view.h-48)} · speed ${Math.round(Math.hypot(motion.vx,motion.vy))} · ${motion.grounded?'GROUND':'AIR'} · ${gpu?'GPU':'CPU'}`);
+    const info=world.info();hud.text('status',`${inFire?'MAP 2':'DUST2'} / ${zone?.name??'WORLD'} · height ${Math.round(view.h-48)} · speed ${Math.round(Math.hypot(motion.vx,motion.vy))} · ${motion.grounded?'GROUND':'AIR'} · ${gpu?'GPU':'CPU'} · ${worldHrtfAvailable?'HRTF':'PAN'}`);
     hud.text('stats',`${info.visibleCells}/${info.cells} cells · ${info.visibleSurfaces}/${info.surfaces} surfaces · ${info.lights} lights · ${info.frameMs.toFixed(2)} ms`);
 });
 $.render(()=>world.render(renderView(),1024,576));

@@ -10,7 +10,7 @@
 
 #include "noise.h"
 #include "profile.h"
-// RE2D — необязательный слой 3D-авторинга спрайтов (см. src/CMakeLists.txt,
+// RE2D — необязательный слой 3D-авторинга спрайтов (см. xmake.lua,
 // R2D_ENABLE_RE2D). При выключенной опции ни заголовков, ни биндингов нет:
 // игровой 2D-код и модули $, которые от них зависят, просто не устанавливаются.
 #ifdef R2D_ENABLE_RE2D
@@ -5379,6 +5379,15 @@ static JSValue r2d__js_fs_list(JSContext *ctx, JSValueConst this_val, int argc, 
     return arr;
 }
 
+// Return the operating system's configured Documents directory. SDL owns the
+// returned path for the lifetime of the process; JS_NewString copies it.
+static JSValue r2d__js_fs_documents_path(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    const char *path = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+    return JS_NewString(ctx, path ? path : "");
+}
+
 // --- §45: асинхронная загрузка ---------------------------------------------
 //
 // JS видит engine.async: поставить задание, забрать готовые результаты в
@@ -6852,6 +6861,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, fs, "exists", r2d__js_fs_exists, 1);
     r2d__set_fn(ctx, fs, "remove", r2d__js_fs_remove, 1);
     r2d__set_fn(ctx, fs, "list", r2d__js_fs_list, 1);
+    r2d__set_fn(ctx, fs, "documentsPath", r2d__js_fs_documents_path, 0);
     // Системные диалоги выбора папки/файла (src/dialog.h); ответ — через dialogPoll.
     r2d__set_fn(ctx, fs, "dialog", r2d__js_fs_dialog, 2);
     r2d__set_fn(ctx, fs, "dialogPoll", r2d__js_fs_dialog_poll, 0);

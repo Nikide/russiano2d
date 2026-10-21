@@ -2,8 +2,8 @@
 // Демо Re2D: тестовая комната на НОВОМ Re2D World (`$.re2dWorld` + .re2dmap).
 //
 // Карта — SDK-исходник `testroom.re2dmap`, скомпилированный в
-// `testroom.re2dworld` командой `r2d-sdk world-compile --renderer`:
-//   r2d-sdk world-compile demos/re2d_testroom/testroom.re2dmap \
+// `testroom.re2dworld` командой `r2d world-compile --renderer`:
+//   r2d world-compile demos/re2d_testroom/testroom.re2dmap \
 //       --renderer --output demos/re2d_testroom/testroom.re2dworld
 // Рантайм читает baked-геометрию (`$.re2dWorld.load`), а не рисует комнату
 // руками из `<wall>`+`$.re2d.room`.

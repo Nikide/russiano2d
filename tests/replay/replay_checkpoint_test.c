@@ -7,7 +7,7 @@
 // файла, обход проекта для content ID и сравнение нативного hash, без окна,
 // GPU и игровой симуляции.
 //
-// Сборка: цель r2d_replay_checkpoint_test (tests/CMakeLists.txt).
+// Сборка: цель r2d_replay_checkpoint_test (xmake/tests.lua).
 // ===========================================================================
 #include "replay.h"
 #include "unity.h"

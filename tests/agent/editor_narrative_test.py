@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Native VN tabs, lossless save, draft validation and actual story playback."""
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -11,6 +12,7 @@ from agent_client import Agent, ROOT
 from editor_hammer_test import settle, run
 
 E = '$.editorApp'
+D = '$.ui.doc("ui/editor.rml")'
 A = E + '.activeTab().inst'
 checks = 0
 
@@ -159,12 +161,14 @@ def test():
             settle(a, '!!' + A)
             check(a.eval(E + '.activeTab().path==="story/new.scene"'), 'new scene does not replace previous document identity')
             a.eval(E + '.openFile("story/a.scene");1'); a.step(4)
-            a.screenshot(str(Path(ROOT) / 'build/editor-narrative-tabs.png'))
+            if os.environ.get('R2D_CAPTURE_VISUALS') == '1':
+                a.screenshot(str(Path(ROOT) / 'build/editor-narrative-tabs.png'))
             check(a.eval(A + '.ops.playScene()'), 'dirty document can preview before a close decision')
             settle(a, '$.story.running()')
             a.eval(E + '.closeTab("story/a.scene");1'); a.step(2)
             check(a.eval(E + '.state.tabs.some(t=>t.path==="story/a.scene")'), 'first close preserves dirty narrative tab')
-            a.eval(E + '.closeTab("story/a.scene");1'); a.step(3)
+            check(a.eval(E + '.state.closeRequest==="story/a.scene"'), 'dirty narrative close exposes explicit confirmation actions')
+            a.eval(D + '.click("close-confirm-discard");1'); a.step(3)
             check(not a.eval(E + '.state.tabs.some(t=>t.path==="story/a.scene")'), 'confirmed close releases only that document')
             check(a.eval(E + '.state.fullPreview===null && !$.story.running()'), 'closing active preview restores Editor and stops only its runtime')
     print('All', checks, 'Narrative Studio checks passed.')

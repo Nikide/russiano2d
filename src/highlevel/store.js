@@ -231,6 +231,9 @@ export function installStore($) {
         /** Абсолютный путь к чему угодно внутри каталога игры — для логов. */
         basePath() { return engine.basePath || ''; },
 
+        /** Системный каталог Documents/«Документы» текущего пользователя. */
+        documentsPath() { return engine.fs.documentsPath(); },
+
         /**
          * Системное окно выбора папки. Promise → абсолютный путь или null
          * (пользователь отменил). opts: { title, path } — path: где открыть.

@@ -1600,7 +1600,7 @@ engine.ui.on(doc, 'btn-quit', 'click', () => engine.quit());
 ### Мост инструментов `engine.sdk`
 
 Только при `"toolHost": true` в `project.json` ([`src/sdk_host.h`](../../src/sdk_host.h)):
-`available()`, `start(kind, args[])` (`kind` — `'tool'` для `r2d-sdk` рядом с
+`available()`, `start(kind, args[])` (`kind` — `'tool'` для `r2d` рядом с
 движком либо `'engine'`; возвращает id ≥ 0 или код ошибки < 0), `poll(id)`,
 `kill(id)`, `release(id)`, `paths()`. Из игры доступен только через `$.sdk`
 ([highlevel/sdk.md](../highlevel/sdk.md)).

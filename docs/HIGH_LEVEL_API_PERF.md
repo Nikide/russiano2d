@@ -1177,7 +1177,7 @@ parallax, UI-контролы (контейнеры, скролл, фокус, �
 
 ```bash
 # 1. Собрать (Debug — как в отчёте; для релизных чисел — build-release)
-cmake --build build -j
+xmake build -y -j 8 r2d
 
 # 2. Быстрый набор: 11 прогонов, ~1 минута
 python3 tools/bench_highlevel.py
@@ -1230,15 +1230,15 @@ JS и прогоните оба перекрёстно (`--binary`):
 
 ```bash
 # эталон: исходный JS и принудительная перегенерация встроенной таблицы
-# (cmake не увидит правку, если вернуть файлы копией с сохранением mtime)
+# Xmake regenerates the embedded JS header as part of the build.
 git stash push src/highlevel
-rm -f build/generated/r2d_js_data.h && cmake --build build -j
-cp build/russiano2d build/russiano2d-base
+rm -f build/generated/r2d_js_data.h && xmake build -y -j 8 r2d
+cp build-xmake/macos-arm64/macosx/arm64/release/r2d build-xmake/r2d-base
 git stash pop
-rm -f build/generated/r2d_js_data.h && cmake --build build -j
+rm -f build/generated/r2d_js_data.h && xmake build -y -j 8 r2d
 
-python3 tools/bench_highlevel.py --binary build/russiano2d-base --repeat 3 --json build/ab_base.json
-python3 tools/bench_highlevel.py --binary build/russiano2d      --repeat 3 --json build/ab_new.json
+python3 tools/bench_highlevel.py --binary build-xmake/r2d-base --repeat 3 --json build/ab_base.json
+python3 tools/bench_highlevel.py --binary build-xmake/macos-arm64/macosx/arm64/release/r2d --repeat 3 --json build/ab_new.json
 ```
 
 ---

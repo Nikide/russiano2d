@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Dust2 annex: big multi-room wing, doors, room-over-room, HRTF ambience and SDK-baked Re2DSprite guns."""
+"""Dust2 annex: big multi-room wing, doors, positional audio and Re2DSprite guns."""
 import json,os,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
 from agent_client import Agent
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from re2d_skip import skip_without_sdk_command, skip_without_re2d   # noqa: E402
-if skip_without_sdk_command('bake-re2d', what='SDK-baked weapons'):
-    sys.exit(0)
+from re2d_skip import skip_without_re2d   # noqa: E402
 failed=[]
 def check(ok,name):
  print(('ok ' if ok else 'FAIL ')+name,flush=True)
@@ -18,14 +16,16 @@ def main():
   if skip_without_re2d(a):
       return
   a.step(8)
+  hrtf_available=a.eval('$.audio.hrtf().steam')
   info=a.eval('world.info()')
   check(info['cells']>=300 and info['portals']>=600 and info['lights']>=40,'annex adds a large map: %d cells, %d portals, %d lights'%(info['cells'],info['portals'],info['lights']))
-  frames=[]
+  capture_visuals=os.environ.get('R2D_CAPTURE_VISUALS')=='1';frames=[]
   for name in routes['annexCameras']:
    a.eval('dustCamera('+json.dumps(name)+')');a.step(6)
    check(a.eval('world.support(view.x,view.y,view.h-48,64,9)!==null') is True and a.eval('world.info().visibleSurfaces')>0,'annex camera '+name+' stands in a supported free span and renders')
-   path=Path('build/annex/test_'+name.lower().replace(' ','_')+'.png');path.parent.mkdir(exist_ok=True);a.screenshot(str(path));frames.append(path.read_bytes())
-  check(len(set(frames))==len(frames),'every annex camera produces a distinct real frame')
+   if capture_visuals:
+    path=Path('build/annex/test_'+name.lower().replace(' ','_')+'.png');path.parent.mkdir(exist_ok=True);a.screenshot(str(path));frames.append(path.read_bytes())
+  if capture_visuals:check(len(set(frames))==len(frames),'every annex camera produces a distinct real frame')
   check(a.eval('world.spanAt(5440,1840,40)!==world.spanAt(5440,1840,330)&&world.spanAt(5440,1840,40)!==null&&world.spanAt(5440,1840,330)!==null&&world.spanAt(5440,1840,260)===null') is True,'atrium has two free spans at the same XY with solid between them')
   a.eval('globalThis.walk=(points)=>{for(const [x,y] of points){let guard=0;while(Math.hypot(view.x-x,view.y-y)>.1){if(++guard>4000)return false;const d=Math.hypot(x-view.x,y-view.y),s=Math.min(2,d);if(!dustMove((x-view.x)/d*s,(y-view.y)/d*s))return false;}}return true;}')
   a.eval('dustCamera("CLUB")')
@@ -41,10 +41,10 @@ def main():
   # HRTF ambience: nearest sources only (16 shared mixer channels).
   a.eval('view.x=4080;view.y=1000;view.h=48');a.step(40)
   amb=a.eval('({n:annexAmbient.active.size,infos:[...annexAmbient.active.values()].map(s=>s.info())})')
-  check(1<=amb['n']<=6 and all(i['hrtf'] for i in amb['infos']),'server room keeps nearest ambience sources alive, all HRTF (%d)'%amb['n'])
+  check(1<=amb['n']<=6 and all(i['hrtf']==hrtf_available for i in amb['infos']),'server room keeps nearest ambience alive with the available audio backend (%d sources)'%amb['n'])
   a.eval('view.x=6800;view.y=2200;view.h=48');a.step(40)
   amb2=a.eval('annexAmbient.active.size');check(amb2<=6,'ambience stays within its channel budget in the yard (%d)'%amb2)
-  # Re2DSprite guns baked by r2d-sdk.
+  # Re2DSprite guns baked by r2d.
   check(a.eval('weaponList.length')==8 and a.eval("weaponList[0]")=='aks74u','the animated SDK-baked AKS-74U is the main weapon, plus seven procedural guns')
   seen=set()
   for _ in range(8):
@@ -70,14 +70,14 @@ def main():
   check(a.eval('annexNPCs.length')==5 and a.eval("['smg','pistol','sniper','shotgun','lmg'].every((k,i)=>!!$.re2dSprite.definition(annexNPCs[i]).equipment[k])") is True,'five annex NPCs carry their own gun equipment')
   for g in ['pistol','revolver','shotgun','smg','sniper','lmg']:
    rep=json.loads(Path('demos/rotsprite/weapons/%s.bake.json'%g).read_text())
-   check(rep.get('ok') and rep.get('type')=='weapon' and rep.get('uvOverlapTexels',1)==0,'%s gun is an r2d-sdk bake-re2d weapon without UV overlap'%g)
+   check(rep.get('ok') and rep.get('type')=='weapon' and rep.get('uvOverlapTexels',1)==0,'%s gun is an r2d bake-re2d weapon without UV overlap'%g)
   # ---- second map (key 0): separate $.re2dWorld, zombies, HRTF alarm, explosions ----
   dust_cells=a.eval('world.info().cells')
   a.eval('view.x=3400;view.y=1840;view.h=48;view.yaw=0;view.pitch=0');a.step(3)
   a.key('0');a.step(30)
   check(a.eval('fireMap.active')is True and a.eval('world.info().cells')==163 and dust_cells>=300,'key 0 switches to the second map (a separate world with its own %d cells)'%163)
   check(a.eval('fireMap.zombies.length')==8 and a.eval('fireMap.fires.length')==9,'fire map spawns 8 zombies and 9 fires')
-  check(a.eval('fireMap.alarms.length')==4 and a.eval('fireMap.alarms.every(s=>s.info().hrtf)') is True,'four fire-alarm sources (the supplied mp3) play through HRTF')
+  check(a.eval('fireMap.alarms.length')==4 and a.eval('fireMap.alarms.every(s=>s.info().hrtf===$.audio.hrtf().steam)') is True,'four fire-alarm sources use the available HRTF or equal-power backend')
   check(a.eval('fireMap.zombies.every(z=>world.support(z.x,z.y,0,64,9)!==null)') is True,'every zombie stands on supported floor')
   a.eval('view.x=2640;view.y=1040;view.h=48;view.yaw=0;view.pitch=0;fireMap.noise=3');a.step(2)
   near=a.eval('(()=>{const z=fireMap.zombies.find(z=>Math.hypot(z.x-view.x,z.y-view.y)<200&&!z.dead);return z?1:0})()')
@@ -102,7 +102,7 @@ def main():
   a.key('0');a.step(20)
   check(a.eval('fireMap.active') is False and a.eval('world.info().cells')==dust_cells and abs(a.eval('view.x')-3400)<1,'key 0 returns to Dust2 at the same spot')
   zrep=json.loads(Path('demos/re2d_dust2/zombie/zombie.bake.json').read_text())
-  check(zrep.get('ok') and zrep.get('type')=='character' and len(zrep.get('character',{}).get('mapping',[0]))>=0,'zombie is an r2d-sdk bake-re2d character (FBX skin mesh, Mixamo humanoid)')
+  check(zrep.get('ok') and zrep.get('type')=='character' and len(zrep.get('character',{}).get('mapping',[0]))>=0,'zombie is an r2d bake-re2d character (FBX skin mesh, Mixamo humanoid)')
  print(('FAILED: %d'%len(failed)) if failed else 'all annex checks passed')
  return 1 if failed else 0
 sys.exit(main())

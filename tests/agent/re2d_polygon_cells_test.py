@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent   # noqa: E402
 from re2d_skip import skip_without_re2d   # noqa: E402
 
-SDK = os.environ.get("R2D_SDK_BINARY", "build/r2d-sdk")
+SDK = os.environ.get("R2D_BINARY", "build/r2d")
 L_MAP = "tests/fixtures/sdk/world/polygon_l.re2dmap"
 SLANT_MAP = "tests/fixtures/sdk/world/polygon_slanted.re2dmap"
 OUT = os.path.join("build", "test_polygon_l.re2dworld")

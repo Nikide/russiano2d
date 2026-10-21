@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent, ROOT   # noqa: E402
 
 FAILURES = []
-SDK_BIN = os.environ.get("R2D_SDK_BINARY", os.path.join(ROOT, "build", "r2d-sdk"))
+SDK_BIN = os.environ.get("R2D_BINARY", os.path.join(ROOT, "build", "r2d"))
 FIX = os.path.join(ROOT, "tests", "fixtures", "sdk", "data_proj")
 PROJ = os.path.join(ROOT, "build", "sdk_studios_proj")
 SHELL = "$.ui.doc('sdk/ui/shell.rml')"

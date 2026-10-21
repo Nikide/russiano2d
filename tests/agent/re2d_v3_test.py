@@ -22,16 +22,16 @@ if skip_without_re2d_binary(what='Re2DSprite v3') or not sdk_available():
     sys.exit(0)
 
 with tempfile.TemporaryDirectory() as tmp:
-    out = subprocess.run(['build/r2d-sdk', 'convert-re2d3', 'demos/assets/art/mascot/russi_model_maid.png', '--output', tmp, '--name', 'r', '--density', '4',
+    out = subprocess.run([os.environ.get('R2D_BINARY', 'build/r2d'), 'convert-re2d3', 'demos/assets/art/mascot/russi_model_maid.png', '--output', tmp, '--name', 'r', '--density', '4',
                           '--character', 'demos/rotsprite/russi.character.json'], capture_output=True, text=True)
     rep = json.loads(out.stdout)
     check(rep.get('ok') and rep['grid'] == [1024, 768] and rep['texels'] > 100000, 'convert-re2d3 builds a dense v3 from the mascot v2 PNG')
-    bad = subprocess.run(['build/r2d-sdk', 'convert-re2d3', 'demos/assets/art/mascot/../../../rotsprite/russi3.png', '--output', tmp], capture_output=True, text=True)
+    bad = subprocess.run([os.environ.get('R2D_BINARY', 'build/r2d'), 'convert-re2d3', 'demos/assets/art/mascot/../../../rotsprite/russi3.png', '--output', tmp], capture_output=True, text=True)
     check(bad.returncode != 0, 'convert-re2d3 rejects a PNG that is not v2')
 
-# Внешний CLI r2d-sdk здесь проверяется ДО агента, поэтому сборку смотрим
+# Unified CLI r2d здесь проверяется ДО агента, поэтому сборку смотрим
 # статически: без RE2D (или без собранного CLI) проверять нечего.
-if skip_without_re2d_binary(what='Re2DSprite v3 + r2d-sdk convert-re2d3') or not sdk_available():
+if skip_without_re2d_binary(what='Re2DSprite v3 + r2d convert-re2d3') or not sdk_available():
     sys.exit(0)
 
 with Agent(game='demos/re2d_gun_viewer', seed=7) as a:

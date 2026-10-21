@@ -5,10 +5,10 @@
 # Это вторая половина приёмки §29 (первая — sdk_validation_test.py): ассет
 # можно проверить CLI, «открыть в preview» и использовать в игре, и при этом
 # backend и runtime не расходятся. Проверяется не описание, а сравнение:
-#   * SDK (`r2d-sdk atlas-info` — тот же разбор, что читает студия) и движок
+#   * SDK (`r2d atlas-info` — тот же разбор, что читает студия) и движок
 #     (`$.atlas.load()`) дают одинаковый список кадров, их регионы и размеры;
 #   * SDK видит проект и его ассеты по РЕАЛЬНОЙ файловой структуре
-#     (`r2d-sdk assets`) — скрытой базы проекта нет;
+#     (`r2d assets`) — скрытой базы проекта нет;
 #   * испорченный ассет отклоняется ОБОИМИ сторонами согласованно.
 #
 # Запуск:
@@ -24,24 +24,12 @@ import tempfile
 import zlib
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-def _sdk_binary():
-    """Путь к r2d-sdk: переменная, затем сборка SDK, затем общая сборка.
-
-    В дереве две сборки: `build-sdk` (SDK и его тесты) и `build` (движок).
-    Раньше тест жёстко смотрел в `build`, поэтому после правки валидаторов он
-    мог проверять СТАРЫЙ бинарник и «проходить» на несуществующем коде.
-    """
-    env = os.environ.get("R2D_SDK_BINARY")
-    if env:
-        return env
-    for sub in ("build-sdk", "build"):
-        candidate = os.path.join(ROOT, sub, "r2d-sdk")
-        if os.path.exists(candidate):
-            return candidate
-    return os.path.join(ROOT, "build", "r2d-sdk")
+def _r2d_binary():
+    """Путь к единому r2d; задаётся AGENTS.md через R2D_BINARY."""
+    return os.environ.get("R2D_BINARY", os.path.join(ROOT, "build", "r2d"))
 
 
-SDK = _sdk_binary()
+R2D = _r2d_binary()
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 from agent_client import Agent   # noqa: E402
 
@@ -79,7 +67,7 @@ ATLAS = {
 
 
 def sdk(*args):
-    out = subprocess.run([SDK, *args], capture_output=True, text=True, timeout=60, cwd=ROOT)
+    out = subprocess.run([R2D, *args], capture_output=True, text=True, timeout=60, cwd=ROOT)
     try:
         return json.loads(out.stdout.strip() or "{}")
     except Exception:                                 # noqa: BLE001
@@ -104,8 +92,8 @@ def make_project(tmp):
 
 def main():
     print("== §29: parity preview SDK ↔ движок ==")
-    if not os.path.exists(SDK):
-        print("  пропуск: %s не собран" % os.path.relpath(SDK, ROOT))
+    if not os.path.exists(R2D):
+        print("  пропуск: %s не собран" % os.path.relpath(R2D, ROOT))
         return 0
 
     with tempfile.TemporaryDirectory(prefix="r2d-parity-") as tmp:

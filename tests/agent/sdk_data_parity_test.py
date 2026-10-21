@@ -20,7 +20,7 @@ import subprocess
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SDK = os.environ.get("R2D_SDK_BINARY", os.path.join(ROOT, "build", "r2d-sdk"))
+SDK = os.environ.get("R2D_BINARY", os.path.join(ROOT, "build", "r2d"))
 QJS = os.environ.get("R2D_QJS", os.path.join(ROOT, "build", "_deps", "quickjs-build", "qjs"))
 WORK = os.path.join(ROOT, "build", "sdk_parity")
 DRIVER = os.path.join(ROOT, "tests", "js", "sdk_parity_driver.mjs")

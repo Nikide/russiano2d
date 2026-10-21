@@ -1,7 +1,7 @@
 import { test, eq, truthy, finish } from './_harness.mjs';
-import { createMap, displayItems, mapBounds, inspectorSchema } from '../../sdk/lib/world_editor/model.js';
-import { createSelection } from '../../sdk/lib/world_editor/selection.js';
-import { createViewports } from '../../sdk/lib/world_editor/viewport.js';
+import { createMap, displayItems, mapBounds, inspectorSchema } from '../../editor/lib/shared/world_editor/model.js';
+import { createSelection } from '../../editor/lib/shared/world_editor/selection.js';
+import { createViewports } from '../../editor/lib/shared/world_editor/viewport.js';
 
 const source={version:1,cells:[{id:'room',rect:[100,200,128,64],spans:[{bottom:0,top:96},{bottom:128,top:256}]}],walls:[{id:'edge',from:[100,200],to:[228,200],bottom:0,top:256}]};
 test('cell maps keep native region defaults and have no injected world envelope',()=>{

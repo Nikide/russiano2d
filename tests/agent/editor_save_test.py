@@ -10,6 +10,7 @@ from agent_client import Agent, ROOT
 from editor_hammer_test import settle, run
 
 E = '$.editorApp'
+D = '$.ui.doc("ui/editor.rml")'
 checks = 0
 
 
@@ -68,12 +69,67 @@ def test():
                 check(json.loads((root / name).read_text())['actions']['jump'] == ['space', 'f'], 'Save All wrote ' + name)
             check(not a.eval(E + '.studios.dirty(' + tab('a.input.json') + ')'), 'tabs clean after Save All')
 
-            # Closing a dirty tab needs a second request; the first one keeps it.
+            # A later conflict must identify the failed path, keep other saves,
+            # and activate the document whose resolution dialog needs attention.
+            a.eval(tab('a.input.json') + '.inst.ops.addKey("jump","g");1')
             a.eval(tab('b.input.json') + '.inst.ops.addKey("jump","g");1'); a.step(2)
+            b_external = {'version': 1, 'actions': {'jump': ['space', 'external']}}
+            (root / 'b.input.json').write_text(json.dumps(b_external))
+            check(run(a, E + '.saveAll()') is False and
+                  json.loads((root / 'a.input.json').read_text())['actions']['jump'] == ['space', 'f', 'g'] and
+                  json.loads((root / 'b.input.json').read_text()) == b_external,
+                  'Save All keeps successful writes and does not overwrite a conflicted document')
+            check(a.eval(E + '.activeTab().path==="b.input.json" && ' +
+                         E + '.state.outputEntries.some(e=>e.source==="editor" && e.text.includes("b.input.json")) && ' +
+                         E + '.state.status.includes("b.input.json")'),
+                  'Save All names the failed document in status and Output and opens its conflict choices')
+            check(run(a, tab('b.input.json') + '.inst.ops.resolveConflict("overwrite")') is True and
+                  json.loads((root / 'b.input.json').read_text())['actions']['jump'] == ['space', 'f', 'g'],
+                  'Save All failure remains resolvable from the activated studio tab')
+
+            # Run waits for Save All, including dirty resource studio documents.
+            a.eval(tab('a.input.json') + '.inst.ops.addKey("jump","i");1'); a.step(2)
+            launched = run(a, E + '.run({headless:true,frames:2})')
+            check(launched and json.loads((root / 'a.input.json').read_text())['actions']['jump'] == ['space', 'f', 'g', 'i'], 'Run saves dirty resource tabs before launching')
+            settle(a, E + '.state.run && !' + E + '.state.run.running')
+
+            # A dirty close offers explicit Save, Discard, and Cancel actions.
+            a.eval(tab('b.input.json') + '.inst.ops.addKey("jump","h");1'); a.step(2)
             a.eval(E + '.closeTab("b.input.json");1'); a.step(1)
-            check(a.eval('!!' + tab('b.input.json')), 'first close of a dirty tab is refused')
+            check(a.eval(E + '.state.closeRequest==="b.input.json" && ' +
+                         D + '.content("close-confirm").includes("Закрыть без сохранения")'),
+                  'dirty close opens an explicit three-action confirmation')
+            a.eval(D + '.click("close-confirm-cancel");1'); a.step(2)
+            check(a.eval('!!' + tab('b.input.json') + ' && ' + tab('b.input.json') + '.inst.dirty() && ' + E + '.state.closeRequest===null') and
+                  json.loads((root / 'b.input.json').read_text())['actions']['jump'] == ['space', 'f', 'g'],
+                  'Cancel keeps the dirty tab and original file')
             a.eval(E + '.closeTab("b.input.json");1'); a.step(1)
-            check(a.eval('!' + tab('b.input.json')) and json.loads((root / 'b.input.json').read_text())['actions']['jump'] == ['space', 'f'], 'second close discards unsaved edits without writing')
+            a.eval(D + '.click("close-confirm-discard");1'); a.step(2)
+            check(not a.eval('!!' + tab('b.input.json')) and
+                  json.loads((root / 'b.input.json').read_text())['actions']['jump'] == ['space', 'f', 'g'],
+                  'Discard closes the tab without writing its edits')
+
+            a.eval(tab('a.input.json') + '.inst.ops.addKey("jump","j");1'); a.step(2)
+            a.eval(E + '.closeTab("a.input.json");1'); a.step(1)
+            a.tap('Return'); a.step(2)
+            settle(a, '!' + tab('a.input.json'))
+            check(json.loads((root / 'a.input.json').read_text())['actions']['jump'] == ['space', 'f', 'g', 'i', 'j'],
+                  'Save button writes the dirty studio document before closing it')
+
+            denied = root / 'denied.js'
+            denied.write_text('$.ready(() => {});\n')
+            denied.chmod(0o444)
+            a.eval(E + '.openFile("denied.js");1'); a.step(2)
+            a.eval(E + '.activeTab().model.insert("// unsaved\\n");1')
+            a.eval(E + '.closeTab("denied.js");1'); a.step(1)
+            a.eval(D + '.click("close-confirm-save");1'); a.step(2)
+            check(a.eval('!!' + tab('denied.js') + ' && ' + tab('denied.js') + '.model.dirty && ' + E + '.state.closeRequest!==null') and
+                  denied.read_text() == '$.ready(() => {});\n',
+                  'failed Save keeps the dirty tab, original file, and confirmation open')
+            a.tap('Escape'); a.step(2)
+            check(a.eval(E + '.state.closeRequest===null && ' + tab('denied.js') + '.model.dirty'),
+                  'Escape cancels close without clearing the dirty document')
+            denied.chmod(0o644)
 
 
 if __name__ == '__main__':

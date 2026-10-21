@@ -3,19 +3,20 @@
 
     python3 demos/re2d_dust2/zombie/bake_zombie.py <dir with source/Zombie Walk.fbx and textures/>
 
-1. `r2d-sdk bake-re2d --type character` (FBX skin mesh -> 10-bone Re2D rig, sdk/native/sdk_fbx.c),
-2. `r2d-sdk animation-import` retargets the Mixamo walk onto that rig,
+1. `r2d bake-re2d --type character` (FBX skin mesh -> 10-bone Re2D rig, sdk/native/sdk_fbx.c),
+2. `r2d animation-import` retargets the Mixamo walk onto that rig,
 3. hit/death are the existing rig clips from demos/re2d_npcs/animations.json (root rotation/translation).
 The FBX and textures are third-party assets supplied by the user and are not kept in the repository.
 """
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).parent
 ROOT = HERE.parents[2]
-SDK = ROOT / 'build' / 'r2d-sdk'
+R2D = Path(os.environ.get('R2D_BINARY', str(ROOT / 'build' / 'r2d')))
 
 
 def run(cmd):
@@ -30,12 +31,12 @@ def main(src):
     src = Path(src)
     fbx = next(src.rglob('Zombie Walk.fbx'))
     diffuse = next(src.rglob('zombie_Packed0_Diffuse.png'))
-    rep = run([SDK, 'bake-re2d', fbx, '--type', 'character', '--output', HERE, '--name', 'zombie', '--size', '2048',
+    rep = run([R2D, 'bake-re2d', fbx, '--type', 'character', '--output', HERE, '--name', 'zombie', '--size', '2048',
                '--style', 'anime', '--fbx-ao', f'default={diffuse}',
                '--fbx-rot', 'LeftArm=0,0,-105;RightArm=0,0,105'])   # A-pose: animation-import swings limbs from "hanging down"
     print('zombie mesh: parts', rep['parts'], 'samples', rep['samples'])
     anim = HERE / 'zombie.animations.json'
-    run([SDK, 'animation-import', fbx, '--rig', HERE / 'zombie.character.json', '--output', anim, '--clip', 'walk',
+    run([R2D, 'animation-import', fbx, '--rig', HERE / 'zombie.character.json', '--output', anim, '--clip', 'walk',
          '--stack', 'mixamo.com', '--fps', '15', '--seam', '.15'])
     clips = json.loads(anim.read_text())['clips']
     npc = json.loads((ROOT / 'demos/re2d_npcs/animations.json').read_text())['clips']

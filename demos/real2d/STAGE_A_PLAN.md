@@ -98,7 +98,7 @@ MUST.
   реализовать store-ZIP/SHA256, либо писать hex-LE как в
   `src/re2d_world_bake.c` (устоявшийся в проекте вариант). Стадию A это не
   блокирует: бейкер сейчас на Python.
-* Регистрация: `src/CMakeLists.txt` (список источников) и
+* Регистрация: `xmake.lua` (список источников) и
   `src/script.c` (`r2d__make_engine`, рядом с `r2d_re2d_install`).
 
 ## 7. Порядок работ

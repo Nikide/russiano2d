@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # ===========================================================================
-# CLI-контракт native world-edit: r2d-sdk world-edit <map> --op ... --args ...
+# CLI-контракт native world-edit: r2d world-edit <map> --op ... --args ...
 #
 # Проверяет ровно то, чем пользуются GUI и агент: один JSON-объект в stdout,
 # канонический файл при --out, data без --out, коды выхода 0/1/2 и отказ
 # невалидной правки без изменения исходника. Python здесь только тестовая
-# обвязка; backend — C-бинарник build/r2d-sdk (docs/SDK.md).
+# обвязка; backend — native-команды единого бинарника `r2d`.
 #
 # Запуск (после сборки): python3 tests/agent/world_edit_cli_test.py
 # ===========================================================================
@@ -17,7 +17,7 @@ import sys
 import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-SDK = os.environ.get("R2D_SDK_BINARY", os.path.join(ROOT, "build", "r2d-sdk"))
+SDK = os.environ.get("R2D_BINARY", os.path.join(ROOT, "build", "r2d"))
 FAILURES = []
 
 BASE_MAP = {
@@ -84,7 +84,7 @@ def find(obj, key, ident):
 
 
 def main():
-    check(os.path.isfile(SDK), f"бинарник r2d-sdk собран: {SDK}")
+    check(os.path.isfile(SDK), f"единый бинарник r2d собран: {SDK}")
     if not os.path.isfile(SDK):
         return 1
 

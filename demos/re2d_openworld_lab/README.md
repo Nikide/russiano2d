@@ -9,7 +9,7 @@ and no second scene graph.
 ## Build the map
 
 ```bash
-r2d-sdk world compile demos/re2d_openworld_lab/openworld.re2dmap \
+r2d world compile demos/re2d_openworld_lab/openworld.re2dmap \
     --renderer --region-size 256 \
     --output demos/re2d_openworld_lab/openworld.re2dworld
 ```
@@ -31,7 +31,7 @@ Compiler output (this fixture):
 ## Run
 
 ```bash
-./build/russiano2d --game demos --scene re2d_openworld_lab
+$R2D_BINARY --game demos --scene re2d_openworld_lab
 ```
 
 Controls: WASD walk, arrows look, F1 toggle HUD, Escape exit. The HUD shows the

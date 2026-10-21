@@ -2,7 +2,7 @@
 """Author the standalone "burning facility" map (second world of the Dust2 demo).
 
     python3 demos/re2d_dust2/fire/build_fire.py        # writes fire.re2dmap and fire.json
-    build/r2d-sdk world-compile demos/re2d_dust2/fire/fire.re2dmap --renderer --output demos/re2d_dust2/fire/fire.re2dworld
+    $R2D_BINARY world-compile demos/re2d_dust2/fire/fire.re2dmap --renderer --output demos/re2d_dust2/fire/fire.re2dworld
 
 Uses the same Annex authoring helpers as the Dust2 wing (rooms, openings, lintel walls, themes) but produces a
 separate .re2dmap: main.js loads it as its own `$.re2dWorld` and switches worlds on key 0.

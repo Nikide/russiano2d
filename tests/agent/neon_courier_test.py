@@ -68,7 +68,7 @@ def main():
         check(not errors,'нет ошибок игровой логики: '+str(errors))
     with tempfile.TemporaryDirectory(prefix='r2d-courier-package-') as tmp:
         binary=os.path.join(tmp,'courier')
-        result=subprocess.run([os.path.join(ROOT,'build','r2d-sdk'),'build',
+        result=subprocess.run([os.environ.get('R2D_BINARY',os.path.join(ROOT,'build','r2d')),'build',
                                os.path.join(ROOT,'games','neon-courier'),'--out',binary,'--no-encrypt'],
                               cwd=ROOT,capture_output=True,text=True,timeout=60)
         check(result.returncode==0,'SDK собирает исполняемую игру')

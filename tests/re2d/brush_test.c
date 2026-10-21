@@ -46,7 +46,7 @@ static SdkBrushBounds make_bounds(void)
     return bounds;
 }
 
-static void fill_fixture(SdkBrushSpec brushes[6])
+static void fill_fixture(SdkBrushSpec *brushes)
 {
     brushes[0] = make_rect("wall.north", 100, 0, 16, 48, 0, 128, SDK_BRUSH_TOOL_NONE);
     brushes[1] = make_rect("wall.south", 100, 80, 16, 48, 0, 128, SDK_BRUSH_TOOL_NONE);
@@ -88,7 +88,7 @@ static void test_compile_brush_world(void)
     SdkBrushSpec brushes[5];
     fill_fixture(brushes);
     SdkBrushBounds bounds = make_bounds();
-    SdkBrushOutput out;
+    SdkBrushOutput out = {0};
     SdkBrushStats stats;
     char error[256] = {0};
     TEST_ASSERT_TRUE_MESSAGE(sdk_brush_compile(brushes, 5, &bounds, &out, &stats,
@@ -133,7 +133,7 @@ static void test_compiler_is_deterministic(void)
     SdkBrushSpec brushes[5];
     fill_fixture(brushes);
     SdkBrushBounds bounds = make_bounds();
-    SdkBrushOutput a, b;
+    SdkBrushOutput a = {0}, b = {0};
     SdkBrushStats sa, sb;
     char error[256] = {0};
     TEST_ASSERT_TRUE(sdk_brush_compile(brushes, 5, &bounds, &a, &sa, error, sizeof error));
@@ -153,7 +153,7 @@ static void test_compiler_is_deterministic(void)
 static void test_empty_brush_set_and_bounds(void)
 {
     SdkBrushBounds bounds = make_bounds();
-    SdkBrushOutput out;
+    SdkBrushOutput out = {0};
     SdkBrushStats stats;
     char error[256] = {0};
     TEST_ASSERT_TRUE_MESSAGE(sdk_brush_compile(NULL, 0, &bounds, &out, &stats,
@@ -173,7 +173,7 @@ static void test_invalid_brush_rejected(void)
     SdkBrushSpec brushes[5];
     fill_fixture(brushes);
     SdkBrushBounds bounds = make_bounds();
-    SdkBrushOutput out;
+    SdkBrushOutput out = {0};
     SdkBrushStats stats;
     char error[256] = {0};
 
@@ -190,12 +190,14 @@ static void test_invalid_brush_rejected(void)
                                         error, sizeof error));
     TEST_ASSERT_NOT_NULL(strstr(error, "convex"));
     TEST_ASSERT_EQUAL_INT(0, out.cell_count);
+    sdk_brush_output_free(&out);
 
     fill_fixture(brushes);
     brushes[0].top = brushes[0].bottom;
     TEST_ASSERT_FALSE(sdk_brush_compile(brushes, 2, &bounds, &out, &stats,
                                         error, sizeof error));
     TEST_ASSERT_NOT_NULL(strstr(error, "top > bottom"));
+    sdk_brush_output_free(&out);
 
     fill_fixture(brushes);
     SdkBrushBounds bad = bounds;
@@ -203,6 +205,7 @@ static void test_invalid_brush_rejected(void)
     TEST_ASSERT_FALSE(sdk_brush_compile(brushes, 2, &bad, &out, &stats,
                                         error, sizeof error));
     TEST_ASSERT_NOT_NULL(strstr(error, "bounds"));
+    sdk_brush_output_free(&out);
 }
 
 static void test_tool_flags_are_carried_to_walls(void)
@@ -212,7 +215,7 @@ static void test_tool_flags_are_carried_to_walls(void)
     brushes[1] = make_rect("sky.wall", 128, 0, 16, 128, 0, 128, SDK_BRUSH_TOOL_SKY);
     brushes[2] = make_rect("occluder.marker", 180, 40, 8, 48, 0, 128, SDK_BRUSH_TOOL_OCCLUDER);
     SdkBrushBounds bounds = make_bounds();
-    SdkBrushOutput out;
+    SdkBrushOutput out = {0};
     SdkBrushStats stats;
     char error[256] = {0};
     TEST_ASSERT_TRUE(sdk_brush_compile(brushes, 3, &bounds, &out, &stats,
@@ -258,7 +261,7 @@ static void test_convex_polygon_footprint(void)
     brush.ring[2] = (SdkBrushPoint){80, 80};
     brush.ring[3] = (SdkBrushPoint){40, 40};
     SdkBrushBounds bounds = make_bounds();
-    SdkBrushOutput out;
+    SdkBrushOutput out = {0};
     SdkBrushStats stats;
     char error[256] = {0};
 
@@ -327,6 +330,7 @@ static void test_rectilinear_holes(void)
     }
     TEST_ASSERT_TRUE(hole_cell);
     TEST_ASSERT_TRUE(solid_cell);
+    sdk_brush_output_free(&out);
 
     // Hole outside the footprint and overlapping holes are rejected.
     SdkBrushSpec bad = brush;
@@ -334,12 +338,14 @@ static void test_rectilinear_holes(void)
     TEST_ASSERT_FALSE(sdk_brush_compile(&bad, 1, &bounds, &out, &stats,
                                         error, sizeof error));
     TEST_ASSERT_NOT_NULL(strstr(error, "hole"));
+    sdk_brush_output_free(&out);
     bad = brush;
     bad.hole_count = 2;
     bad.holes[1] = (SdkBrushHole){120, 52, 8, 8};
     TEST_ASSERT_FALSE(sdk_brush_compile(&bad, 1, &bounds, &out, &stats,
                                         error, sizeof error));
     TEST_ASSERT_NOT_NULL(strstr(error, "overlap"));
+    sdk_brush_output_free(&out);
 }
 
 static void test_csg_subtract_splits_solid(void)
@@ -349,7 +355,7 @@ static void test_csg_subtract_splits_solid(void)
     brushes[1] = make_rect("cut", 80, 48, 32, 16, 16, 48, SDK_BRUSH_TOOL_NONE);
     brushes[1].subtract = true;
     SdkBrushBounds bounds = make_bounds();
-    SdkBrushOutput out;
+    SdkBrushOutput out = {0};
     SdkBrushStats stats;
     char error[256] = {0};
 
@@ -373,6 +379,8 @@ static void test_csg_subtract_splits_solid(void)
         }
     }
     TEST_ASSERT_TRUE(cut_cell);
+    sdk_brush_output_free(&out);
+    memset(&out, 0, sizeof out);
     // Every subtract cell is a plain solid without holes.
     SdkBrushSpec bad = brushes[1];
     bad.hole_count = 1;
@@ -380,6 +388,7 @@ static void test_csg_subtract_splits_solid(void)
     TEST_ASSERT_FALSE(sdk_brush_compile((SdkBrushSpec[2]){brushes[0], bad}, 2,
                                         &bounds, &out, &stats, error, sizeof error));
     TEST_ASSERT_NOT_NULL(strstr(error, "subtract"));
+    sdk_brush_output_free(&out);
 }
 
 static void test_brush_entity_mapping(void)

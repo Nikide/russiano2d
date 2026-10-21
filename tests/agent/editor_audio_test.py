@@ -51,7 +51,7 @@ def test():
         (root / 'project.json').write_text('{"title":"Audio","width":1440,"height":900}')
         (root / 'main.js').write_text('$.ready(() => {});')
         shutil.copyfile(Path(ROOT) / 'demos/re2d_dust2/annex/bubble.wav', root / 'sfx/bubble.wav')
-        data = {'version': 1, 'buses': {'music': {'volume': 0.6}, 'sfx': {'volume': 1}, 'ui': {'parent': 'sfx', 'volume': 0.5}},
+        data = {'version': 1, 'buses': {'music': {'volume': 0.6, 'effect': 'echo', 'effectParams': {'delay': 120, 'feedback': 0.4, 'preserved': 7}}, 'sfx': {'volume': 1}, 'ui': {'parent': 'sfx', 'volume': 0.5}},
                 'sounds': {'pop': {'path': 'sfx/bubble.wav', 'bus': 'ui', 'loop': True}},
                 'zones': [{'name': 'hall', 'rect': [0, 0, 600, 300], 'height': 6, 'material': 'concrete'}]}
         path = root / 'mix.audio.json'
@@ -74,6 +74,22 @@ def test():
             check(abs(a.eval(A + '.ops.gain("ui")') - 0.5) < 1e-6, 'runtime gain restored after undo')
             a.eval(A + '.ops.action("vol:+:music");1'); a.step(1)
             check(abs(a.eval(A + '.state.data.buses.music.volume') - 0.65) < 1e-9, 'strip + raises volume by 0.05')
+
+            check(a.eval(A + '.doc.value("f-effectParams-delay")') == '120' and
+                  a.eval(A + '.doc.value("f-effectParams-feedback")') == '0.4',
+                  'selected echo bus exposes typed parameter fields')
+            a.eval(A + '.doc.setValue("f-effectParams-delay","320");' + A + '.doc.click("aw-apply");1'); a.step(2)
+            check(a.eval(A + '.state.data.buses.music.effectParams.delay') == 320 and
+                  a.eval(A + '.state.data.buses.music.effectParams.preserved') == 7,
+                  'effect field edit merges known params and preserves unknown runtime data')
+            check(a.eval(A + '.undo()') and a.eval(A + '.state.data.buses.music.effectParams.delay') == 120,
+                  'effect parameter edit is one undoable document operation')
+            check(a.eval(A + '.redo()') and a.eval(A + '.state.data.buses.music.effectParams.delay') == 320,
+                  'effect parameter redo restores the same authored value')
+            a.eval(A + '.doc.setValue("f-effectParams-feedback","1");' + A + '.doc.click("aw-apply");1'); a.step(2)
+            check(a.eval(A + '.state.data.buses.music.effectParams.feedback') == 0.4 and
+                  a.eval(A + '.diagnostics()[0].code === "EDITOR_ASSET_FIELD"'),
+                  'out-of-range feedback is rejected without changing the bus')
 
             # Real playback through the file's bus.
             check(a.eval(A + '.ops.play("pop")') and a.eval(A + '.ops.playing()') == ['pop'], 'sound plays through the runtime')

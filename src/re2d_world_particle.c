@@ -316,7 +316,7 @@ static bool particle_collide(const R2DWorldParticleCollision *collision,
     if (floor_mode) {
         float floor = 0.0f, ceiling = 0.0f;
         if (collision->support(collision->user,p->x,p->y,p->h,&floor,&ceiling) &&
-            isfinite(floor) && isfinite(ceiling) && p->h < floor) {
+            isfinite(floor) && isfinite(ceiling) && p->h <= floor && p->vh < 0.0f) {
             if (p->collision == R2D_PARTICLE_COLLIDE_DESPAWN) return false;
             p->h = floor;
             if (p->vh < 0.0f) {

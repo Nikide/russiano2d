@@ -1377,6 +1377,7 @@ interface R2D_font {
 
 interface R2D_fs {
     basePath(): any;
+    documentsPath(): any;
     exists(arg0: any): any;
     list(arg0: any): any;
     pickFile(arg0: any): any;
@@ -1574,6 +1575,7 @@ interface R2D_input {
     glyphs(arg0: any): any;
     hardLocked(): any;
     hardLocks(): any;
+    ime(): any;
     loadBindings(): any;
     lock(arg0: any, arg1: any, arg2: any): any;
     lockCount(): any;
@@ -1618,6 +1620,7 @@ interface R2D_input {
     synthSeen(): any;
     taken(): any;
     text(): any;
+    textInputArea(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any): any;
     touch(arg0: any): any;
     touchCount(): any;
     touched(): any;
@@ -2983,6 +2986,7 @@ interface R2D_________ {
     glyphs(arg0: any): any;
     hardLocked(): any;
     hardLocks(): any;
+    ime(): any;
     loadBindings(): any;
     lock(arg0: any, arg1: any, arg2: any): any;
     lockCount(): any;
@@ -3027,6 +3031,7 @@ interface R2D_________ {
     synthSeen(): any;
     taken(): any;
     text(): any;
+    textInputArea(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any): any;
     touch(arg0: any): any;
     touchCount(): any;
     touched(): any;

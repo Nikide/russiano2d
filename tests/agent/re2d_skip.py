@@ -2,7 +2,7 @@
 # ===========================================================================
 # Пропуск 3D-тестов в сборке без RE2D.
 #
-# Движок собирается в двух конфигурациях (см. src/CMakeLists.txt и
+# Движок собирается в двух конфигурациях (см. xmake.lua и
 # docs/BUILD.md): по умолчанию `R2D_ENABLE_RE2D=ON` (с 3D-авторингом спрайтов)
 # и `-DR2D_ENABLE_RE2D=OFF` (сборка 2D-платформера: ни RE2D, ни Real2D, ни
 # RotSprite, ни Re2D World).
@@ -24,9 +24,8 @@
 #       if skip_without_re2d(a):
 #           return
 #
-# Часть тестов проверяет 3D-авторинг раньше, чем создаёт агента (например,
-# внешним CLI `r2d-sdk`). Для них есть статические пробы ниже — они читают
-# сборку, а не гадают.
+# Часть тестов проверяет Re2D-авторинг раньше, чем создаёт агента. Для них
+# есть статические пробы ниже — они читают единую сборку `r2d`, а не гадают.
 # ===========================================================================
 
 import os
@@ -67,9 +66,9 @@ def skip_without_re2d(agent, what=""):
 def binary_has_re2d(path=None):
     """Статически: собран ли бинарник движка с RE2D.
 
-    Нужно тестам, которые ходят во внешний CLI (r2d-sdk) ДО создания агента.
+    Нужно тестам, которые вызывают CLI r2d ДО создания агента.
     """
-    binary = path or os.environ.get("R2D_BINARY") or os.path.join(ROOT, "build", "russiano2d")
+    binary = path or os.environ.get("R2D_BINARY") or os.path.join(ROOT, "build", "r2d")
     if not os.path.exists(binary):
         return True                       # нечего проверять — пусть тест упадёт явно
     try:
@@ -90,13 +89,11 @@ def skip_without_re2d_binary(path=None, what=""):
 def sdk_has_command(name, path=None):
     """Есть ли у собранного CLI команда `name`.
 
-    Команды 3D-авторинга (`world-compile`, `convert-re2d3`, `bake-re2d`)
-    вырезаны вместе с SDK-частью RE2D — это решение владельца, а не регрессия
-    движка. Тест, которому нужна такая команда, обязан пропуститься с причиной,
-    иначе «удалено осознанно» выглядит как «сломано».
+    Команды Re2D-авторинга проверяются на том же бинарнике r2d, что и Editor.
+    Путь берётся из R2D_BINARY, как требует AGENTS.md.
     """
     import json as _json
-    binary = path or os.environ.get("R2D_SDK_BINARY") or os.path.join(ROOT, "build", "r2d-sdk")
+    binary = path or os.environ.get("R2D_BINARY") or os.path.join(ROOT, "build", "r2d")
     if not os.path.exists(binary):
         return False
     try:
@@ -108,30 +105,52 @@ def sdk_has_command(name, path=None):
 
 
 def skip_without_sdk_command(name, what="", path=None):
-    """Пропуск теста, которому нужна команда CLI, вырезанная вместе с 3D-SDK.
+    """Пропуск теста, если единый CLI r2d не содержит нужной команды.
 
-    Возвращает True (и печатает причину), если команды нет: это осознанное
-    удаление авторинга, а не поломка движка.
+    Возвращает True (и печатает причину), если команды нет в текущей сборке.
     """
     if sdk_has_command(name, path):
         return False
     detail = (" (%s)" % what) if what else ""
-    print("  пропуск: у r2d-sdk нет команды «%s» — 3D-авторинг вырезан из SDK%s"
+    print("  пропуск: у r2d нет команды «%s» — операция недоступна в этой сборке%s"
+          % (name, detail))
+    sys.stdout.flush()
+    return True
+
+
+def r2d_has_command(name, path=None):
+    """Проверить наличие команды в едином бинарнике r2d."""
+    import json as _json
+    binary = path or os.environ.get("R2D_BINARY") or os.path.join(ROOT, "build", "r2d")
+    try:
+        out = subprocess.run([binary, "commands"], capture_output=True, text=True, timeout=60)
+        data = _json.loads(out.stdout or "{}")
+        return any(c.get("name") == name for c in data.get("commands", []))
+    except Exception:                     # noqa: BLE001 — CLI может быть старым/битым
+        return False
+
+
+def skip_without_r2d_command(name, what="", path=None):
+    """Честно пропустить integration-тест, если команда отсутствует в r2d."""
+    if r2d_has_command(name, path):
+        return False
+    detail = (" (%s)" % what) if what else ""
+    print("  пропуск: у r2d нет команды «%s» — операция недоступна в этой сборке%s"
           % (name, detail))
     sys.stdout.flush()
     return True
 
 
 def sdk_available(path=None):
-    """Собран ли CLI SDK (`r2d-sdk`) — внешний инструмент тестов.
+    """Найден ли единый CLI r2d для внешнего вызова из тестов.
 
-    Движок его не требует: это отдельный бинарник (см. sdk/native/CMakeLists.txt),
-    и в дереве после `--target russiano2d` его может не быть.
+    По умолчанию проверяется тот же r2d, который запускает Editor и CLI.
+    Путь берётся из R2D_BINARY.
     """
-    binary = path or os.environ.get("R2D_SDK_BINARY") or os.path.join(ROOT, "build", "r2d-sdk")
+    binary = path or os.environ.get("R2D_BINARY") or os.path.join(ROOT, "build", "r2d")
     if os.path.exists(binary):
         return True
-    print("  пропуск: не собран r2d-sdk (%s) — проверять внешний CLI нечем" % binary)
+    print("  пропуск: не найден r2d (%s) — проверять CLI нечем" % binary)
     sys.stdout.flush()
     return False
 

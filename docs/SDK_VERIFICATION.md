@@ -1,5 +1,10 @@
 # SDK: проверенное состояние и ограничения
 
+> Историческая проверка отдельной SDK-сборки до миграции на Xmake. Её команды
+> и результаты не относятся к текущей конфигурации. Текущие build/package
+> gates описаны в [BUILD.md](BUILD.md), [TESTING.md](TESTING.md) и
+> [RELEASING.md](RELEASING.md).
+
 Сверка 2026-10-20, macOS arm64, ветка `main`, сборка `build`
 (RelWithDebInfo). Команды и возможности — [SDK.md](SDK.md),
 очередь работ — [SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md),

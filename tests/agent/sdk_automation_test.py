@@ -3,7 +3,7 @@
 import json, os, subprocess, sys, time
 sys.path.insert(0,os.path.join(os.path.dirname(__file__),'..','..','tools'))
 from agent_client import Agent,ROOT
-SDK=os.environ.get('R2D_SDK_BINARY',os.path.join(ROOT,'build','r2d-sdk'))
+SDK=os.environ.get('R2D_BINARY',os.path.join(ROOT,'build','r2d'))
 OUT=os.path.join(ROOT,'build','sdk_automation');os.makedirs(OUT,exist_ok=True)
 failed=[]
 def check(x,m):

@@ -104,9 +104,11 @@ def test_architecture():
 
     # «Обычный 2D-профиль работает без Re2D authoring»: OFF-конфигурация
     # существует как опция сборки и не требует RE2D-модулей в игре.
-    cmake = read("CMakeLists.txt")
-    check("R2D_ENABLE_RE2D" in cmake, "профиль без RE2D задан опцией R2D_ENABLE_RE2D")
-    check(exists("tests/agent/re2d_gate_test.py"), "профиль без RE2D закреплён тестом re2d_gate_test")
+    xmake = read("xmake.lua")
+    check('target("r2d")' in xmake or 'target("r2d"' in xmake,
+          "основной executable задаётся целью Xmake r2d")
+    check(exists("tests/agent/re2d_gate_test.py"),
+          "профиль Re2D закреплён тестом re2d_gate_test")
 
 
 # ---------------------------------------------------------------------------

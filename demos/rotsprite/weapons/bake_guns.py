@@ -3,10 +3,11 @@
 
     python3 demos/rotsprite/weapons/bake_guns.py [name ...]
 
-Every PNG/JSON comes from `build/r2d-sdk bake-re2d --type weapon`; this script only
+Every PNG/JSON comes from `r2d bake-re2d --type weapon`; this script only
 adds the game sockets (trigger / foregrip / muzzle) to the baked *.character.json.
 """
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -16,13 +17,13 @@ ROOT = HERE.parents[2]
 sys.path.insert(0, str(HERE))
 import make_guns  # noqa: E402
 
-SDK = ROOT / 'build' / 'r2d-sdk'
+R2D = Path(os.environ.get('R2D_BINARY', str(ROOT / 'build' / 'r2d')))
 
 
 def bake(name):
     make_guns.BUILDERS[name.replace('_fp', '')](fp=name.endswith('_fp'))
     model = HERE / 'source' / f'{name}_model.obj'
-    run = subprocess.run([str(SDK), 'bake-re2d', str(model), '--type', 'weapon', '--output', str(HERE),
+    run = subprocess.run([str(R2D), 'bake-re2d', str(model), '--type', 'weapon', '--output', str(HERE),
                           '--name', name, '--uv', 'existing', '--size', '4096', '--scale', '1',
                           '--origin', 'center', '--style', 'anime'], capture_output=True, text=True)
     report = json.loads(run.stdout)

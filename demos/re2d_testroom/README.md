@@ -15,8 +15,8 @@ maid_fps_weapons (пистолет, дробовик, АК): выстрел и �
 (40 кадров), рост 150, ближе 180 px не подходят, чтобы не закрывать экран.
 
 ```bash
-./build/russiano2d --game demos --scene re2d_testroom
-./build/russiano2d --game demos        # кнопка «Re2D · комната врагов»
+$R2D_BINARY --game demos --scene re2d_testroom
+$R2D_BINARY --game demos        # кнопка «Re2D · комната врагов»
 ```
 
 | Управление | Что делает |
@@ -30,12 +30,12 @@ maid_fps_weapons (пистолет, дробовик, АК): выстрел и �
 ## 1. Карта: SDK-исходник вместо ручной комнаты
 
 ```bash
-build/r2d-sdk world-compile demos/re2d_testroom/testroom.re2dmap \
+$R2D_BINARY world-compile demos/re2d_testroom/testroom.re2dmap \
     --renderer --output demos/re2d_testroom/testroom.re2dworld
 ```
 
 `testroom.re2dmap` — inspectable source (cells/spans/walls/lights), его
-проверяет `r2d-sdk validate` (тип `re2d.world`). Компилятор — тот же native
+проверяет `r2d validate` (тип `re2d.world`). Компилятор — тот же native
 bake, что читает `$.re2dWorld`: `stats.cells=1`, `walls=12`, `spans=1`,
 4 динамических света, 0 ошибок. `testroom.re2dworld` закоммичен рядом, как и
 прочие карты демо.

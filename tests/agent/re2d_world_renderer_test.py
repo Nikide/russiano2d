@@ -23,31 +23,31 @@ def capture(a,name):
     return decode(path)[3]
 def main():
     output=Path('build/test_renderer_compiled.re2dworld')
-    r=subprocess.run([os.environ.get('R2D_SDK_BINARY','build/r2d-sdk'),'world-compile','tests/fixtures/sdk/world/two.re2dmap','--renderer','--output',str(output)],capture_output=True,text=True)
+    r=subprocess.run([os.environ.get('R2D_BINARY','build/r2d'),'world-compile','tests/fixtures/sdk/world/two.re2dmap','--renderer','--output',str(output)],capture_output=True,text=True)
     compiled=json.loads(output.read_text()) if r.returncode==0 else {}
     report=json.loads(r.stdout) if r.returncode==0 else {}
     check(r.returncode==0 and compiled.get('version')==1 and compiled['portals'][0]['from']==[100,30]
           and report.get('outputFormat')=='re2dworld-v1' and report.get('runtimePortals') is True,
           'native SDK output preserves version and portal boundary and reports runtime format')
     ramp_output=Path('build/test_renderer_ramp.re2dworld')
-    r=subprocess.run([os.environ.get('R2D_SDK_BINARY','build/r2d-sdk'),'world-compile','tests/fixtures/sdk/world/slope.re2dmap','--renderer','--output',str(ramp_output)],capture_output=True,text=True)
+    r=subprocess.run([os.environ.get('R2D_BINARY','build/r2d'),'world-compile','tests/fixtures/sdk/world/slope.re2dmap','--renderer','--output',str(ramp_output)],capture_output=True,text=True)
     ramp=json.loads(ramp_output.read_text()) if r.returncode==0 else {}
     check(r.returncode==0 and len(ramp.get('cells',[]))==3 and ramp['cells'][2]['spans'][0].get('floorSlope')=={'a':.5,'b':0},'SDK renderer preserves one continuous slope instead of five steps')
     stairs_source=Path('build/test_renderer_stairs.re2dmap')
     stairs_source.write_text(json.dumps({'version':1,'name':'stairs','cells':[],'walls':[],'portals':[],'stairs':[{'id':'steps','rect':[0,0,100,100],'axis':'x','dir':1,'steps':4,'base':0,'rise':8,'top':120}]}))
     stairs_output=Path('build/test_renderer_stairs.re2dworld')
-    r=subprocess.run([os.environ.get('R2D_SDK_BINARY','build/r2d-sdk'),'world-compile',str(stairs_source),'--renderer','--output',str(stairs_output)],capture_output=True,text=True)
+    r=subprocess.run([os.environ.get('R2D_BINARY','build/r2d'),'world-compile',str(stairs_source),'--renderer','--output',str(stairs_output)],capture_output=True,text=True)
     stairs=json.loads(stairs_output.read_text()) if r.returncode==0 else {}
     check(r.returncode==0 and len(stairs.get('cells',[]))==4 and len(stairs.get('portals',[]))==3,'SDK generated stairs retain three native portal connections')
     stair_wall_data=json.loads(stairs_source.read_text());stair_wall_data['cells']=[{'id':'approach','rect':[-25,0,25,100],'spans':[{'bottom':0,'top':120}]}];stair_wall_data['walls']=[{'id':'lintel','from':[0,0],'to':[0,100],'bottom':120,'top':160}]
     stair_wall_source=Path('build/test_renderer_stair_lintel.re2dmap');stair_wall_source.write_text(json.dumps(stair_wall_data));stair_wall_output=Path('build/test_renderer_stair_lintel.re2dworld')
-    r=subprocess.run([os.environ.get('R2D_SDK_BINARY','build/r2d-sdk'),'world-compile',str(stair_wall_source),'--renderer','--output',str(stair_wall_output)],capture_output=True,text=True)
+    r=subprocess.run([os.environ.get('R2D_BINARY','build/r2d'),'world-compile',str(stair_wall_source),'--renderer','--output',str(stair_wall_output)],capture_output=True,text=True)
     check(r.returncode==0 and len(json.loads(stair_wall_output.read_text())['portals'])==4,'authored lintel above headroom does not suppress a generated stair opening')
     static_source=Path('build/test_renderer_static.re2dmap');static_data=json.loads(Path('tests/fixtures/sdk/world/two.re2dmap').read_text())
     for cell in static_data['cells']:cell['spans'][0]['lighting']={'level':0,'color':'#ffffff'}
     static_data['lighting']={'mode':'classic','dynamic':True,'shadows':True};static_data['lights']=[{'x':50,'y':50,'h':40,'radius':200,'intensity':2,'color':'#ff0000','shadow':True}]
     static_source.write_text(json.dumps(static_data));static_output=Path('build/test_renderer_static.re2dworld')
-    r=subprocess.run([os.environ.get('R2D_SDK_BINARY','build/r2d-sdk'),'world-compile',str(static_source),'--renderer','--output',str(static_output)],capture_output=True,text=True)
+    r=subprocess.run([os.environ.get('R2D_BINARY','build/r2d'),'world-compile',str(static_source),'--renderer','--output',str(static_output)],capture_output=True,text=True)
     static_compiled=json.loads(static_output.read_text()) if r.returncode==0 else {}
     static_version=static_compiled.get('baked',{}).get('version',0)
     check(r.returncode==0 and static_version>=2,f'SDK baker serializes static span lighting and light associations in versioned native tables (baked v{static_version})')

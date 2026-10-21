@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate detailed Re2DSprite weapons: pixel-art textures + real 3D volumes -> OBJ -> r2d-sdk bake-re2d.
+"""Generate detailed Re2DSprite weapons: pixel-art textures + real 3D volumes -> OBJ -> r2d bake-re2d.
 
 No external art: every part is drawn here with a tiny pixel toolkit (masks, material
 shading, rim light, outline). Output per gun (same format as ak47.*):
@@ -227,7 +227,7 @@ def triangulate(poly):
 
 
 class Gun:
-    """Collects textured volumes; writes <name>.obj/.mtl/.png (source) for r2d-sdk bake-re2d."""
+    """Collects textured volumes; writes <name>.obj/.mtl/.png (source) for r2d bake-re2d."""
 
     def __init__(self, name, seed=3, fp=False, two_hand=True):
         self.name = name + ('_fp' if fp else '')

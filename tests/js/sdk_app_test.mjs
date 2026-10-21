@@ -4,8 +4,8 @@
 // ===========================================================================
 
 import { test, eq, truthy, falsy, finish } from './_harness.mjs';
-import * as m from '../../sdk/lib/model.js';
-import * as v from '../../sdk/lib/views.js';
+import * as m from '../../editor/lib/shared/model.js';
+import * as v from '../../editor/lib/shared/views.js';
 
 test('escapeHtml экранирует разметку и кавычки', () => {
     eq(m.escapeHtml('<a href="x">&</a>'), '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;');

@@ -17,6 +17,7 @@ from agent_client import Agent, ROOT
 
 FIXTURE = Path(ROOT) / 'tests/fixtures/sdk/world/editor_base.re2dmap'
 E = '$.editorApp'
+D = '$.ui.doc("ui/editor.rml")'
 A = E + '.activeTab().inst'
 failures = []
 
@@ -151,13 +152,17 @@ def run_test():
             check(snap(a)['map']['brushes'] == n + 1, 'real viewport drag creates a native brush')
             check(a.eval('hammerA.undo() && hammerA.map.brushes.length===' + str(n)), 'viewport drag is one undo step')
             # Dirty close is guarded by the Editor and second close releases only that tab.
+            check(run(a, 'hammerA.ops.createBrush({rect:[0,0,16,16],bottom:0,top:64})')['ok'], 'create a dirty map edit before close')
+            check(a.eval('hammerA.dirty()'), 'Hammer document is dirty before close')
             a.eval(E + '.closeTab("a.re2dmap");1'); a.step(2)
             check(a.eval(E + '.state.tabs.filter(t=>t.kind==="studio").length===2'), 'first close preserves a dirty tab')
-            a.eval(E + '.closeTab("a.re2dmap");1'); a.step(5)
+            check(a.eval(E + '.state.closeRequest==="a.re2dmap"'), 'dirty close exposes explicit confirmation actions')
+            a.eval(D + '.click("close-confirm-discard");1'); a.step(5)
             check(a.eval(E + '.state.tabs.filter(t=>t.kind==="studio").length===1 && hammerB.active && hammerA.session.state.node===null'), 'confirmed close disposes only its own preview')
             # Capture one useful state for layout review, not a sequence of screenshots.
-            capture = Path(ROOT) / 'build/editor-hammer-tabs.png'
-            a.screenshot(str(capture))
+            if os.environ.get('R2D_CAPTURE_VISUALS') == '1':
+                capture = Path(ROOT) / 'build/editor-hammer-tabs.png'
+                a.screenshot(str(capture))
             check(not a.eval(E + '.state.tabs.some(t=>!!t.error)'), 'Editor reports no tab loading errors')
     print('\nASSERTION_FAILURES:', len(failures))
     return bool(failures)

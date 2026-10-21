@@ -9,7 +9,7 @@
 // ===========================================================================
 
 import { test, eq, truthy, joined, finish } from './_harness.mjs';
-import * as K from '../../sdk/lib/kinds/tilemap.js';
+import * as K from '../../editor/lib/shared/kinds/tilemap.js';
 import { ctx, Node, wrap, wrapOne, query } from '../../src/highlevel/core.js';
 import { installGfx } from '../../src/highlevel/render.js';
 import {

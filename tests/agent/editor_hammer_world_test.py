@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Re2D World authoring shares Hammer tabs, history and native preview."""
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -111,7 +112,8 @@ def test():
             d=a.eval(E+'.state.problemList.find(d=>d.source && d.source.location && d.source.location.section==="cells").source')
             check(a.eval('worldA.navigateDiagnostic('+json.dumps(d)+') && worldA.selection.snapshot().kind==="cell"'),'Problems navigation selects cell in common inspector')
             a.eval('worldA.undo();1');run(a,'worldA.ops.validate()');a.eval('worldA.session.state.debugView="final";worldA.session.state.world.debug.view("final");worldA.render();1');a.step(4)
-            a.screenshot(str(Path(ROOT)/'build/editor-hammer-world.png'))
+            if os.environ.get('R2D_CAPTURE_VISUALS') == '1':
+                a.screenshot(str(Path(ROOT)/'build/editor-hammer-world.png'))
             check(not list(Path(ROOT).glob('editor/build/.we-*-in-*')),'native edit scratch files are removed')
             a.eval(E+'.closeTab("a.re2dmap");1');a.step(3)
             check(a.eval('!worldA.session.state.world && !!worldB.map.cells'),'closing A releases only its runtime and retains B map')
