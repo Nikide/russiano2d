@@ -51,6 +51,7 @@
         <div id="rail">
             <div id="rail-project" class="rail-btn on"></div>
             <div id="rail-search" class="rail-btn"></div>
+            <div id="rail-snippets" class="rail-btn" title="Кирпичики"></div>
             <div id="rail-run" class="rail-btn"></div>
             <div id="rail-tools" class="rail-btn"></div>
         </div>

@@ -646,7 +646,9 @@ static SDL_EnumerationResult files_cb(void *user, const char *dir, const char *n
         !strcmp(name, "dist") || !strcmp(name, "checkpoints") || !strcmp(name, "saves"))
         return SDL_ENUM_CONTINUE;
     char full[2048];
-    SDL_snprintf(full, sizeof full, "%s/%s", dir, name);
+    // SDL отдаёт dir с завершающим «/»: без проверки ключи вложенных файлов получали «//».
+    const size_t dl = strlen(dir);
+    SDL_snprintf(full, sizeof full, (dl && dir[dl - 1] == '/') ? "%s%s" : "%s/%s", dir, name);
     if (sdk_is_dir(full)) {
         SDL_EnumerateDirectory(full, files_cb, fl);
         return SDL_ENUM_CONTINUE;

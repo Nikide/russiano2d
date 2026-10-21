@@ -17,6 +17,7 @@ import { createStudioHost, studioFor, studioById, studiosFor } from './lib/studi
 import { pickProjectFile } from './lib/studio_kit.js';
 import { createExtensionHost } from './lib/shared/extensions.js';
 import { createGraphPanel } from './lib/graph_panel.js';
+import { createSnippetsPanel } from './lib/snippets_panel.js';
 import { normalizeGraph, describe as describeGraph } from './lib/shared/graph_model.js';
 
 const DOC = 'ui/editor.rml';
@@ -114,6 +115,31 @@ export function createEditor($) {
         migrate: () => migrateProject(),
         layout: () => renderLayout(),
     });
+
+    // --- «Кирпичики» (docs/SNIPPETS.md): боковая панель сниппетов ------------------
+    const snippets = createSnippetsPanel($, doc, {
+        tool: (args) => tool(args),
+        root: () => s.project.abs,
+        projectJson: () => s.project && s.project.json,
+        v2: () => !!(s.project && s.project.meta && s.project.meta.v2),
+        entries: () => s.entries,
+        active: () => !!s.project && s.side === 'snippets' && !s.sidebarHidden,
+        manifestDirty: () => manifestDirty(),
+        setStatus: (t, k) => setStatus(t, k),
+        projectChanged: () => { syncManifestTabs(); refreshProjectJson(); },
+        filesChanged: () => { refreshTree(); for (const t of s.tabs) if (t.model && !t.model.dirty && $.fs.exists(full(t.path))) { const x = $.fs.readText(full(t.path)); if (typeof x === 'string' && x !== t.model.text()) { t.model.setText(x); t.diskText = x; } } },
+        openFile: (p) => { openFile(p); focusCode(); },
+    });
+
+    function showSnippets() {
+        if (!s.project) return;
+        s.side = 'snippets';
+        s.sidebarHidden = false;
+        s.lastTreeHtml = '';
+        renderLayout();
+        snippets.render();
+        snippets.load();
+    }
 
     // --- состояние на диске ---------------------------------------------------
 
@@ -433,6 +459,7 @@ export function createEditor($) {
         closeAllTabs(true);
         const meta = projectMeta(json, abs);
         s.project = { abs, title: meta.title, version: meta.version, width: meta.width, height: meta.height, json, meta };
+        snippets.reset();
         s.graphNorm = normalizeGraph(json.editor && json.editor.graph);
         s.graphStale = false; s.graphSelected = null;
         graphPanel.setView('overview', null, true);
@@ -500,6 +527,7 @@ export function createEditor($) {
     function renderTree() {
         if (!s.project) return;
         if (s.side === 'search') { renderSearchResults(); return; }
+        if (s.side === 'snippets') { snippets.render(); return; }
         const rows = [];
         const openPaths = new Set(s.tabs.map((t) => t.path));
         const walk = (node, depth) => {
@@ -1208,6 +1236,8 @@ export function createEditor($) {
         { id: 'agent-session', label: 'Тесты: выполнить активную .agent.json сессию', keys: '', run: () => runAgentSession() },
         { id: 'migrate-project', label: 'Проект: перейти на schema_version 2', keys: '', run: () => migrateProject() },
         { id: 'reindex', label: 'Проект: перестроить связи проекта (граф)', keys: '', run: () => reindex() },
+        { id: 'snippets', label: 'Вид: Кирпичики (сниппеты)', keys: '', run: () => showSnippets() },
+        { id: 'snippets-generate', label: 'Кирпичики: сгенерировать generated/snippets', keys: '', run: () => snippets.generate(false) },
         { id: 'graph', label: 'Вид: граф проекта (нижняя панель)', keys: '', run: () => { s.bottom = 'graph'; s.bottomCollapsed = false; renderAll(); } },
         { id: 'build', label: 'Проект: собрать игру (validate → build)', keys: 'Cmd/Ctrl+Shift+B', run: () => buildPackage() },
         { id: 'refresh', label: 'Проект: обновить дерево файлов', keys: '', run: () => refreshTree() },
@@ -1560,12 +1590,12 @@ export function createEditor($) {
         doc.cls('inspector', 'hidden', studioOn);
         doc.cls('center', 'studio-on', studioOn && !!t.api);
         doc.cls('sidebar', 'hidden', s.sidebarHidden);
-        doc.text('side-title', s.side === 'search' ? 'Поиск по проекту' : 'Проект');
+        doc.text('side-title', s.side === 'search' ? 'Поиск по проекту' : s.side === 'snippets' ? 'Кирпичики' : 'Проект');
         doc.cls('side-search', 'hidden', s.side !== 'search');
         doc.cls('bottom', 'collapsed', s.bottomCollapsed);
         doc.cls('bottom', 'graph', s.bottom === 'graph');
         doc.cls('bottom', 'tall', s.bottom === 'graph' && graphPanel.state.full);
-        for (const r of ['project', 'search', 'run', 'tools']) doc.cls('rail-' + r, 'on', s.side === r && !s.sidebarHidden);
+        for (const r of ['project', 'search', 'snippets', 'run', 'tools']) doc.cls('rail-' + r, 'on', s.side === r && !s.sidebarHidden);
         code.invalidate();
     }
 
@@ -1600,6 +1630,7 @@ export function createEditor($) {
         doc.html('tb-stop', icon('stop') + ' Stop');
         doc.text('rail-project', icon('description'));
         doc.text('rail-search', icon('search'));
+        doc.text('rail-snippets', icon('extension'));
         doc.text('rail-run', icon('play_circle'));
         doc.text('rail-tools', icon('widgets'));
         doc.text('find-prev', icon('arrow_upward'));
@@ -1632,13 +1663,17 @@ export function createEditor($) {
 
         doc.on('rail-project', 'click', () => { s.side = 'project'; s.sidebarHidden = !s.sidebarHidden; s.lastTreeHtml = ''; renderTree(); renderLayout(); });
         doc.on('rail-search', 'click', showProjectSearch);
+        doc.on('rail-snippets', 'click', () => showSnippets());
+        doc.on('side-body', 'change', (id, ev, key, target) => { if (s.side === 'snippets') snippets.domChanged(target); });
         doc.on('search-input', 'change', () => searchProject(doc.value('search-input')));
         doc.on('rail-run', 'click', () => run());
         doc.on('rail-tools', 'click', () => openPalette('commands'));
 
         doc.on('side-body', 'click', (id, ev, key) => {
             if (!key) return;
-            if (key.startsWith('search:')) {
+            if (key.startsWith('sn:')) {
+                snippets.click(key.slice(3));
+            } else if (key.startsWith('search:')) {
                 openSearchResult(parseInt(key.slice(7), 10));
             } else if (key.startsWith('d:')) {
                 const p = key.slice(2);
@@ -1891,7 +1926,7 @@ export function createEditor($) {
     doc.show();
     return {
         state: s, showGraph, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
-        searchProject, openSearchResult, showProjectSearch, runAgentSession,
+        searchProject, openSearchResult, showProjectSearch, runAgentSession, snippets, showSnippets,
         manifest, migrateProject, reindex, checkIndex, graphInfo, refreshProjectJson, graph: graphPanel, showPM, createProject, openProjectDialog, pickNewProjectDir, openFileDialog,
         openPalette, closePalette, activeTab, closeTab, code, studios, extensions: extensionHost,
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
