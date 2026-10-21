@@ -50,6 +50,9 @@ def main():
         bad = a.eval("""(() => { try { $.updateFor(null, () => {}); return 'no'; }
                         catch (e) { return e instanceof TypeError ? 'type' : 'other'; } })()""")
         check(bad == "type", "updateFor(null) — TypeError: %s" % bad)
+        f = a.eval("(() => { const n = $('#ufb'); const a = n.flip(); n.flip(true); const b = n.flip(); n.flip(false, true); return [a, b, n.flip(), $('#nope').flip()]; })()")
+        check(f == [{"x": False, "y": False}, {"x": True, "y": False}, {"x": False, "y": True}, {"x": False, "y": False}],
+              ".flip() без аргументов читает отражение: %s" % f)
     if FAILURES:
         print("FAILED: %d" % len(FAILURES))
         sys.exit(1)

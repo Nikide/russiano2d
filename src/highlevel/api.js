@@ -1027,6 +1027,14 @@ function installNodeMethods($) {
     });
 
     def('flip', function (x, y) {
+        // Без аргументов — чтение: { x, y } — отражён ли первый узел по осям
+        // (направление взгляда для ИИ и прицела). Раньше такой вызов был пустым.
+        if (x === undefined && y === undefined) {
+            const first = this.nodes[0];
+            if (!first) return { x: false, y: false };
+            const s = worldScaleOf(first);
+            return { x: s.x < 0, y: s.y < 0 };
+        }
         return this.eachNode((_, el) => {
             const node = el;
             // Знаковый масштаб — мировой (скомпонованный): у локального узла он

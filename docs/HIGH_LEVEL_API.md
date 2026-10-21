@@ -255,6 +255,7 @@ $('#hero').h              // → 40
 .scale(1.5) / .scale(sx, sy)
 .lookAt('#hero')           // повернуться к цели
 .flip(true, false)         // отразить по осям
+.flip()                    // → { x, y }: отражён ли узел (направление взгляда)
 .layer(2) .depth(z)        // порядок отрисовки
 .depthRelative(true)       // depth СКЛАДЫВАЕТСЯ с родителем
 .distanceTo('#enemy')      // → число
