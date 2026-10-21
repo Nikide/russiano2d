@@ -36,6 +36,12 @@ PREFIX_API = {
     "audio": ["$.audio", "$.sound"], "feedback": ["$.hitFx", "$.fx", "$.camera"], "ui": ["$.ui"],
     "save": ["$.save", "$.store"], "settings": ["$.store", "$.ui"], "accessibility": ["$.ui", "$.input"],
     "localization": ["$.i18n"], "net": ["$.net"], "kit": [],
+    "survival": ["$.fn", "$.updateFor"], "physics": ["$.fn"], "pinball": ["$.fn", "$.input"],
+    "racing": ["$.fn", "$.time"], "rhythm": ["$.time", "$.input", "$.audio"], "farming": ["$.fn", "$.inv"],
+    "fishing": ["$.random", "$.input"], "cards": ["$.random", "$.fn"], "turn": ["$.fn", "$.store"],
+    "grid": ["$.nav"], "tower": ["$.prefab", "$.input"], "sports": ["$.fn", "$.store"],
+    "colony": ["$.fn", "$.updateFor"], "traffic": ["$.fn", "$.updateFor"], "run": ["$.random", "$.save", "$.scene"],
+    "replay": ["$.save", "$.updateFor"],
 }
 
 
