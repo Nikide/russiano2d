@@ -408,6 +408,9 @@ R2dPayload *r2d_payload_parse(uint8_t *buffer, size_t size, char *err, size_t er
                                   "груз: неизвестные признаки контейнера 0x%X (код R2D_PAYLOAD_FLAGS)", flags);
             return NULL;
         }
+        // Тело версии 2 начинается после слова флагов, а не перед ним.
+        body = r.p;
+        body_size = (size_t)(r.end - r.p);
         if (flags & R2D_PAYLOAD_FLAG_ZSTD) {
             uint64_t raw = 0;
             if (!read_u64(&r, &raw)) {

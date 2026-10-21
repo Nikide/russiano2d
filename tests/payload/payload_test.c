@@ -120,6 +120,36 @@ static void test_valid_container(void)
     r2d_payload_free(p);   // освобождает и буфер
 }
 
+// Версия 2 без признака zstd (flags == 0): тело идёт сразу за словом флагов и
+// обязано разбираться так же, как в версии 1.
+static void test_v2_without_zstd_flag(void)
+{
+    const char *entry = "main.js";
+    const char *path = "a.txt";
+    const char *data = "hi";
+    const size_t size = 4 + 4 + 4 + 4 + strlen(entry) + 4 + 4 + strlen(path) + 4 + strlen(data);
+    uint8_t *buf = (uint8_t *)SDL_malloc(size);
+    size_t n = 0;
+    put_u32(buf + n, R2D_PAYLOAD_MAGIC);        n += 4;
+    put_u32(buf + n, R2D_PAYLOAD_VERSION_ZSTD); n += 4;
+    put_u32(buf + n, 0);                        n += 4;   // flags
+    put_u32(buf + n, (uint32_t)strlen(entry));  n += 4;
+    memcpy(buf + n, entry, strlen(entry));      n += strlen(entry);
+    put_u32(buf + n, 1);                        n += 4;
+    put_u32(buf + n, (uint32_t)strlen(path));   n += 4;
+    memcpy(buf + n, path, strlen(path));        n += strlen(path);
+    put_u32(buf + n, (uint32_t)strlen(data));   n += 4;
+    memcpy(buf + n, data, strlen(data));        n += strlen(data);
+
+    char err[128] = {0};
+    R2dPayload *p = r2d_payload_parse(buf, n, err, sizeof err);
+    check(p != NULL, "v2 без zstd разобран");
+    if (!p) { SDL_free(buf); return; }
+    check(SDL_strcmp(p->entry, entry) == 0, "v2 без zstd: точка входа прочитана");
+    check(r2d_payload_find(p, "a.txt") != NULL, "v2 без zstd: файл найден");
+    r2d_payload_free(p);
+}
+
 // Обрезанный заголовок: магия есть, дальше обрыв.
 static void test_truncated_header(void)
 {
@@ -137,6 +167,7 @@ int main(void)
     RUN_TEST(test_bad_record_keeps_ownership);
     RUN_TEST(test_truncated_record_does_not_free);
     RUN_TEST(test_valid_container);
+    RUN_TEST(test_v2_without_zstd_flag);
     RUN_TEST(test_truncated_header);
     return UNITY_END();
 }
