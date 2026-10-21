@@ -3,7 +3,7 @@
 Сгенерировано `python3 scripts/snippet_matrix.py` из §12 [ТЗ](SNIPPET_SYSTEM_PROJECT.md),
 каталога `snippets/` и `api.schema.json`. Руками не править.
 
-Реализовано: **500 из 500**. Строк с пробелом (API или механика вне §12): **19**.
+Реализовано: **500 из 500**. Строк с пробелом (API или механика вне §12): **0**.
 
 Колонка API: для реализованного пакета — фактические `requires`; для
 запланированного — опорные пространства `$` по префиксу ID (предварительно,
@@ -18,17 +18,17 @@
 | 002 | `player.base` | ✅ | `$.camera.follow`, `$.camera.unfollow`, `$.fn.addClass`, `$.fn.controls`, `$.fn.removeClass`, `$.fn.speed` | — |
 | 003 | `npc.base` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass`, `$.fn.team` | — |
 | 004 | `enemy.base` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.health`, `$.fn.removeClass`, `$.fn.team` | — |
-| 005 | `companion.base` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.removeClass`, `$.updateFor` | — |
+| 005 | `survival.oxygen` | ✅ | `$.fn.damage`, `$.fn.data`, `$.fn.max`, `$.fn.min`, `$.fn.overlaps`, `$.fn.some`, `$.updateFor` | — |
 | 006 | `projectile.base` | ✅ | `$.fn.add`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.has`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
-| 007 | `pickup.base` | ✅ | `$.emit`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.remove`, `$.updateFor` | — |
-| 008 | `breakable.base` | ✅ | `$.fn.addClass`, `$.fn.alive`, `$.fn.emit`, `$.fn.fadeOut`, `$.fn.has`, `$.fn.health`, `$.fn.pos`, `$.fn.remove`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor`, `$.world` | — |
+| 007 | `physics.ball` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.attr`, `$.fn.body`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.velocity`, `$.off`, `$.on`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
+| 008 | `pinball.flipper` | ✅ | `$.fn.angle`, `$.fn.emit`, `$.fn.overlaps`, `$.fn.velocity`, `$.input.down`, `$.selection.each`, `$.updateFor` | — |
 | 009 | `trigger.base` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.triggers` | — |
 | 010 | `interactable.base` | ✅ | `$.emit`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.updateFor` | — |
 | 011 | `actor.faction` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass` | — |
 | 012 | `actor.identity` | ✅ | `$.fn.data` | — |
 | 013 | `actor.spawn-profile` | ✅ | `$.fn.angle`, `$.fn.at`, `$.fn.size` | — |
 | 014 | `actor.visual-profile` | ✅ | `$.fn.sprite` | — |
-| 015 | `actor.control-profile` | ✅ | `$.fn.controls` | — |
+| 015 | `racing.positions` | ✅ | `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.map`, `$.fn.min`, `$.fn.slice`, `$.store.set`, `$.updateFor` | — |
 | 016 | `actor.player-slot` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass` | — |
 | 017 | `actor.tags` | ✅ | `$.fn.addClass`, `$.fn.addTag`, `$.fn.removeClass`, `$.fn.removeTag` | — |
 | 018 | `actor.attributes` | ✅ | `$.fn.data`, `$.fn.slice` | — |
@@ -44,7 +44,7 @@
 | 023 | `movement.twin-stick` | ✅ | `$.fn.data`, `$.fn.lookAt`, `$.fn.velocity`, `$.input.mouseWorld`, `$.input.vec`, `$.updateFor` | — |
 | 024 | `movement.analog` | ✅ | `$.fn.min`, `$.fn.velocity`, `$.input.padAxis`, `$.updateFor` | — |
 | 025 | `movement.click-to-move` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.input.mousePressed`, `$.input.mouseWorld`, `$.updateFor` | — |
-| 026 | `movement.follow-path` | ✅ | `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 026 | `racing.lap-counter` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.fn.overlaps`, `$.fn.slice`, `$.time.now`, `$.updateFor` | — |
 | 027 | `movement.dash` | ✅ | `$.fn.emit`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
 | 028 | `movement.dodge-roll` | ✅ | `$.fn.emit`, `$.fn.invulnerable`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
 | 029 | `movement.coyote-jump` | ✅ | `$.fn.jump`, `$.fn.onFloor`, `$.input.pressed`, `$.updateFor` | — |
@@ -222,8 +222,8 @@
 | 166 | `economy.reputation-price` | ✅ | `$.fn.attr`, `$.fn.data`, `$.fn.max`, `$.fn.min`, `$.updateFor` | — |
 | 167 | `economy.reward` | ✅ | `$.emit`, `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.inv`, `$.items.has`, `$.off`, `$.on` | — |
 | 168 | `economy.loot-table` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.random.int`, `$.random.seed`, `$.random.weighted` | — |
-| 169 | `economy.weighted-drop` | ✅ | `$.emit`, `$.fn.appendTo`, `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.random.int`, `$.random.seed`, `$.random.weighted`, `$.updateFor`, `$.world` | — |
-| 170 | `economy.chest-loot` | ✅ | `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.inv`, `$.items.has`, `$.random.int`, `$.random.seed`, `$.random.weighted` | — |
+| 169 | `cards.deck-hand` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.random.int` | — |
+| 170 | `turn.initiative-queue` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.fn.some`, `$.off`, `$.on`, `$.store.set` | — |
 | 171 | `crafting.recipe` | ✅ | `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map` | — |
 | 172 | `crafting.station` | ✅ | `$.emit`, `$.fn.add`, `$.fn.addClass`, `$.fn.count`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.find`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.input.pressed`, `$.inv`, `$.updateFor` | — |
 | 173 | `crafting.queue` | ✅ | `$.fn.add`, `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.inv`, `$.updateFor` | — |
@@ -240,7 +240,7 @@
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 181 | `stats.base` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map` | — |
-| 182 | `stats.modifier` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map` | — |
+| 182 | `sports.goal` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.overlaps`, `$.fn.some`, `$.selection.get`, `$.store`, `$.store.get`, `$.store.set`, `$.updateFor` | — |
 | 183 | `stats.derived` | ✅ | `$.fn.data`, `$.fn.filter`, `$.fn.map`, `$.fn.maxHp`, `$.fn.off`, `$.fn.on`, `$.fn.speed` | — |
 | 184 | `progression.xp` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on` | — |
 | 185 | `progression.level` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.hp`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.selection.get` | — |
@@ -275,7 +275,7 @@
 | 209 | `quest.objective-escort` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status` | — |
 | 210 | `quest.objective-branch` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.story.flags`, `$.story.set` | — |
 | 211 | `quest.sequence` | ✅ | `$.emit`, `$.fn.emit`, `$.quest.accept`, `$.quest.status`, `$.quest.turnIn`, `$.updateFor` | — |
-| 212 | `quest.parallel` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.quest.def`, `$.quest.progress`, `$.quest.status`, `$.updateFor` | — |
+| 212 | `ui.stage-select` | ✅ | `$.fn.filter`, `$.fn.hide`, `$.fn.html`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.off`, `$.on`, `$.save`, `$.save.get`, `$.scene.load`, `$.selection.get`, `$.ui.markup` | — |
 | 213 | `quest.optional-objective` | ✅ | `$.emit`, `$.fn.emit`, `$.quest.def`, `$.quest.progress`, `$.quest.status`, `$.updateFor` | — |
 | 214 | `quest.timer` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.max`, `$.quest.cancel`, `$.quest.status`, `$.updateFor` | — |
 | 215 | `quest.failure-condition` | ✅ | `$.emit`, `$.fn.alive`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.quest.cancel`, `$.quest.status`, `$.selection.get`, `$.story.flags`, `$.updateFor` | — |
@@ -296,7 +296,7 @@
 | 225 | `dialogue.portrait` | ✅ | `$.dialog.off`, `$.dialog.on`, `$.fn.appendTo`, `$.fn.at`, `$.fn.filter`, `$.fn.hide`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.fn.show`, `$.fn.size`, `$.fn.sprite`, `$.world` | — |
 | 226 | `dialogue.typewriter` | ✅ | `$.audio.play`, `$.dialog.isOpen`, `$.dialog.isTyping`, `$.dialog.speed`, `$.dialog.text`, `$.fn.speed`, `$.fn.text`, `$.updateFor` | — |
 | 227 | `dialogue.skip` | ✅ | `$.dialog.choices`, `$.dialog.isOpen`, `$.dialog.next`, `$.input.down`, `$.input.pressed`, `$.updateFor` | — |
-| 228 | `dialogue.voice-line` | ✅ | `$.audio.play`, `$.dialog.off`, `$.dialog.on`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.stop` | — |
+| 228 | `grid.pathfinding` | ✅ | `$.fn.add`, `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.slice`, `$.nav.grid`, `$.nav.pathOn`, `$.updateFor` | — |
 | 229 | `dialogue.auto-advance` | ✅ | `$.dialog.choices`, `$.dialog.isOpen`, `$.dialog.next`, `$.dialog.off`, `$.dialog.on`, `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.updateFor` | — |
 | 230 | `dialogue.conversation-lock` | ✅ | `$.dialog.isOpen`, `$.fn.active`, `$.fn.controls`, `$.fn.data`, `$.fn.emit`, `$.fn.velocity`, `$.updateFor` | — |
 | 231 | `story.flag` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.story.set` | — |
@@ -353,7 +353,7 @@
 | 272 | `world.day-night` | ✅ | `$.emit`, `$.fn.color`, `$.fn.emit`, `$.fn.map`, `$.fn.slice`, `$.store.set`, `$.time.now`, `$.updateFor`, `$.world.color` | — |
 | 273 | `world.gravity-zone` | ✅ | `$.fn.add`, `$.fn.emit`, `$.fn.gravity`, `$.fn.has`, `$.fn.overlaps`, `$.fn.velocity`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
 | 274 | `world.time-scale-zone` | ✅ | `$.fn.overlaps`, `$.fn.scale`, `$.time.scale`, `$.updateFor` | — |
-| 275 | `world.camera-boundary` | ✅ | `$.camera.limits`, `$.fn.height`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.updateFor` | — |
+| 275 | `tower.placement` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.hasClass`, `$.fn.some`, `$.input.mousePressed`, `$.input.mouseWorld`, `$.input.pressed`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor`, `$.world`, `$.world.query` | — |
 | 276 | `world.one-way-platform` | ✅ | `$.fn.addClass`, `$.fn.oneWay`, `$.fn.removeClass` | — |
 | 277 | `world.moving-hazard` | ✅ | `$.fn.angle`, `$.fn.at`, `$.fn.damage`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.overlaps`, `$.fn.pos`, `$.selection.each`, `$.updateFor` | — |
 | 278 | `world.secret-area` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.fadeTo`, `$.fn.overlaps`, `$.save`, `$.save.get`, `$.save.set`, `$.selection.get`, `$.updateFor` | — |
@@ -365,8 +365,8 @@
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 281 | `camera.follow` | ✅ | `$.camera.follow` | — |
-| 282 | `camera.deadzone` | ✅ | `$.camera.deadzone` | — |
-| 283 | `camera.lookahead` | ✅ | `$.camera.lookahead` | — |
+| 282 | `traffic.signal` | ✅ | `$.fn.color`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.filter`, `$.fn.velocity`, `$.selection.each`, `$.updateFor` | — |
+| 283 | `run.route-generator` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.random.pick`, `$.random.seed`, `$.save`, `$.save.get`, `$.save.set`, `$.scene.load`, `$.selection.get` | — |
 | 284 | `camera.smoothing` | ✅ | `$.camera.at`, `$.camera.follow`, `$.camera.isOnScreen`, `$.camera.unfollow`, `$.fn.at`, `$.fn.pos`, `$.updateFor` | — |
 | 285 | `camera.bounds` | ✅ | `$.camera.limits` | — |
 | 286 | `camera.room-lock` | ✅ | `$.camera.follow`, `$.camera.limits`, `$.camera.panTo`, `$.camera.unfollow`, `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.height`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.updateFor` | — |
@@ -381,7 +381,7 @@
 | 295 | `camera.parallax-focus` | ✅ | `$.fn.filter`, `$.fn.map`, `$.fn.parallax`, `$.layers.parallax` | — |
 | 296 | `render.tint-profile` | ✅ | `$.fn.color`, `$.fn.filter`, `$.fn.map`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.off`, `$.on`, `$.updateFor`, `$.world.color`, `$.world.getBackground` | — |
 | 297 | `render.fade` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.style`, `$.off`, `$.on`, `$.ui.markup`, `$.updateFor` | — |
-| 298 | `render.flash` | ✅ | `$.fn.flash`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.vfx.flash` | — |
+| 298 | `ui.world-map` | ✅ | `$.fn.add`, `$.fn.height`, `$.fn.hide`, `$.fn.html`, `$.fn.map`, `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.show`, `$.fn.width`, `$.input.pressed`, `$.off`, `$.on`, `$.save`, `$.save.get`, `$.save.set`, `$.selection.get`, `$.ui.markup`, `$.updateFor` | — |
 | 299 | `render.vignette` | ✅ | `$.fn.show`, `$.ui.markup` | — |
 | 300 | `render.accessibility-filter` | ✅ | `$.emit`, `$.fn.color`, `$.fn.emit`, `$.store`, `$.store.set`, `$.world.color` | — |
 
@@ -416,7 +416,7 @@
 |---|---|---|---|---|
 | 321 | `audio.one-shot` | ✅ | `$.audio.play`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
 | 322 | `audio.loop` | ✅ | `$.audio.play`, `$.fn.off`, `$.fn.on`, `$.fn.stop`, `$.off`, `$.on` | — |
-| 323 | `audio.music-zone` | ✅ | `$.fn.overlaps`, `$.sound.crossfade`, `$.sound.stopMusic`, `$.updateFor` | — |
+| 323 | `rhythm.lanes` | ✅ | `$.audio.play`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.find`, `$.fn.map`, `$.input.pressed`, `$.time.now`, `$.updateFor` | — |
 | 324 | `audio.music-transition` | ✅ | `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.sound.crossfade` | — |
 | 325 | `audio.ambience` | ✅ | `$.audio.play`, `$.fn.stop`, `$.random`, `$.random.pick`, `$.random.range`, `$.updateFor` | — |
 | 326 | `audio.footsteps` | ✅ | `$.audio.playAt`, `$.fn.emit`, `$.fn.filter`, `$.fn.find`, `$.fn.hasClass`, `$.fn.height`, `$.fn.map`, `$.fn.onFloor`, `$.fn.pos`, `$.fn.some`, `$.fn.velocity`, `$.updateFor`, `$.world.query` | — |
@@ -426,8 +426,8 @@
 | 330 | `audio.dialogue` | ✅ | `$.audio.play`, `$.dialog`, `$.dialog.define`, `$.dialog.play`, `$.fn.off`, `$.fn.on` | — |
 | 331 | `audio.distance-profile` | ✅ | `$.audio.play`, `$.fn.distanceTo`, `$.fn.max`, `$.fn.min`, `$.fn.stop`, `$.fn.volume`, `$.updateFor` | — |
 | 332 | `audio.ducking` | ✅ | `$.audio.musicVolume`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.updateFor` | — |
-| 333 | `feedback.hit-stop` | ✅ | `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.time.hitStop` | — |
-| 334 | `feedback.camera-shake` | ✅ | `$.camera.shake`, `$.fn.off`, `$.fn.on`, `$.fn.shake`, `$.selection.get`, `$.store.get` | — |
+| 333 | `fishing.cast` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.max`, `$.input.pressed`, `$.random.range`, `$.random.weighted`, `$.updateFor` | — |
+| 334 | `farming.crop` | ✅ | `$.emit`, `$.fn.add`, `$.fn.addClass`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.has`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.input.pressed`, `$.items.has`, `$.updateFor` | — |
 | 335 | `feedback.particles` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.particles.preset`, `$.time.wait`, `$.world` | — |
 | 336 | `feedback.screen-pulse` | ✅ | `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.style`, `$.off`, `$.on`, `$.ui.markup`, `$.updateFor` | — |
 | 337 | `feedback.controller-rumble` | ✅ | `$.fn.filter`, `$.fn.map`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.input.rumble`, `$.input.rumbleSupported`, `$.off`, `$.on`, `$.selection.get`, `$.store.get` | — |
@@ -452,7 +452,7 @@
 | 351 | `ui.dialogue-box` | ✅ | `$.dialog.isOpen`, `$.dialog.off`, `$.dialog.on`, `$.dialog.text`, `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.text`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
 | 352 | `ui.choice-list` | ✅ | `$.dialog.choices`, `$.dialog.choose`, `$.dialog.isOpen`, `$.dialog.isTyping`, `$.emit`, `$.fn.emit`, `$.fn.hide`, `$.fn.html`, `$.fn.map`, `$.fn.on`, `$.fn.show`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
 | 353 | `ui.interaction-prompt` | ✅ | `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.text`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.ui.markup` | — |
-| 354 | `ui.objective-marker` | ✅ | `$.camera.isOnScreen`, `$.camera.worldToScreen`, `$.fn.first`, `$.fn.max`, `$.fn.min`, `$.fn.pos`, `$.fn.show`, `$.fn.style`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 354 | `replay.ghost` | ✅ | `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.emit`, `$.fn.height`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.slice`, `$.fn.width`, `$.off`, `$.on`, `$.save`, `$.save.get`, `$.save.set`, `$.selection.get`, `$.updateFor`, `$.world` | — |
 | 355 | `ui.minimap-markers` | ✅ | `$.camera.minimap`, `$.fn.filter`, `$.fn.map` | — |
 | 356 | `ui.pause-menu` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.hide`, `$.fn.on`, `$.fn.pause`, `$.fn.show`, `$.input.pressed`, `$.scene.load`, `$.selection.get`, `$.store.get`, `$.time.pause`, `$.time.resume`, `$.ui.markup`, `$.updateFor` | — |
 | 357 | `ui.settings-menu` | ✅ | `$.audio.masterVolume`, `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.scale`, `$.fn.show`, `$.fn.value`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.store.set`, `$.ui.markup`, `$.ui.scale`, `$.window.toggleFullscreen` | — |
@@ -466,7 +466,7 @@
 |---|---|---|---|---|
 | 361 | `save.profile` | ✅ | `$.emit`, `$.fn.emit`, `$.save.profile`, `$.selection.get` | — |
 | 362 | `save.slot` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.save.autosave`, `$.save.slot`, `$.save.stopAutosave`, `$.time.now` | — |
-| 363 | `save.checkpoint` | ✅ | `$.fn.data`, `$.fn.hp`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.off`, `$.on`, `$.save.set`, `$.save.slot` | — |
+| 363 | `colony.task-board` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.off`, `$.on`, `$.selection.each`, `$.updateFor` | — |
 | 364 | `save.inventory` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.save.get`, `$.save.set`, `$.selection.get` | — |
 | 365 | `save.quest-state` | ✅ | `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.quest.load`, `$.quest.save`, `$.save.get`, `$.save.set`, `$.selection.get` | — |
 | 366 | `save.story-state` | ✅ | `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.save.get`, `$.save.set`, `$.selection.get`, `$.story.flags`, `$.story.set` | — |
@@ -544,13 +544,13 @@
 | 423 | `kit.platformer-collectathon` | ✅ | состав kit | — |
 | 424 | `kit.platformer-checkpoint` | ✅ | состав kit | — |
 | 425 | `kit.metroidvania-gates` | ✅ | состав kit | — |
-| 426 | `kit.metroidvania-map` | ✅ | состав kit | вне каталога: Карта исследованных комнат как экран — ui.minimap-markers показывает камеру, а не накопленную карту. |
+| 426 | `kit.metroidvania-map` | ✅ | состав kit | — |
 | 427 | `kit.adventure-interaction` | ✅ | состав kit | — |
 | 428 | `kit.adventure-inventory` | ✅ | состав kit | — |
 | 429 | `kit.puzzle-platformer` | ✅ | состав kit | — |
 | 430 | `kit.precision-platformer` | ✅ | состав kit | — |
 | 431 | `kit.parkour` | ✅ | состав kit | — |
-| 432 | `kit.underwater` | ✅ | состав kit | вне каталога: Кислород как отдельный ресурс не описан в §12 (можно через ui.stamina-bar и data). |
+| 432 | `kit.underwater` | ✅ | состав kit | — |
 | 433 | `kit.gravity-platformer` | ✅ | состав kit | — |
 | 434 | `kit.vehicle-platformer` | ✅ | состав kit | — |
 | 435 | `kit.boss-platformer` | ✅ | состав kit | — |
@@ -558,7 +558,7 @@
 | 437 | `kit.exploration-journal` | ✅ | состав kit | — |
 | 438 | `kit.secret-hunt` | ✅ | состав kit | — |
 | 439 | `kit.level-challenge` | ✅ | состав kit | — |
-| 440 | `kit.stage-select` | ✅ | состав kit | вне каталога: Экран выбора уровня как RmlUi-меню в §12 отдельным пакетом не описан. |
+| 440 | `kit.stage-select` | ✅ | состав kit | — |
 
 ## W. Пакеты shooter, action и roguelike — 20/20
 
@@ -573,13 +573,13 @@
 | 447 | `kit.cover-shooter` | ✅ | состав kit | — |
 | 448 | `kit.shooter-loadout` | ✅ | состав kit | — |
 | 449 | `kit.boss-rush` | ✅ | состав kit | — |
-| 450 | `kit.roguelike-run` | ✅ | состав kit | вне каталога: Генерация маршрута забега отдельным пакетом в §12 нет. |
+| 450 | `kit.roguelike-run` | ✅ | состав kit | — |
 | 451 | `kit.roguelite-meta` | ✅ | состав kit | — |
-| 452 | `kit.deckbuilder-battle` | ✅ | состав kit | вне каталога: Рука, колода и цена карт отдельными пакетами в §12 нет — механика карт остаётся за игрой. |
+| 452 | `kit.deckbuilder-battle` | ✅ | состав kit | — |
 | 453 | `kit.action-combo` | ✅ | состав kit | — |
 | 454 | `kit.fighting-game` | ✅ | состав kit | — |
 | 455 | `kit.beat-em-up` | ✅ | состав kit | — |
-| 456 | `kit.tower-defense` | ✅ | состав kit | вне каталога: Установка башен на клетки отдельным пакетом в §12 нет. |
+| 456 | `kit.tower-defense` | ✅ | состав kit | — |
 | 457 | `kit.lane-defense` | ✅ | состав kit | — |
 | 458 | `kit.bomb-arena` | ✅ | состав kit | — |
 | 459 | `kit.survival-combat` | ✅ | состав kit | — |
@@ -590,25 +590,25 @@
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 461 | `kit.jrpg-party` | ✅ | состав kit | — |
-| 462 | `kit.jrpg-turn-battle` | ✅ | состав kit | вне каталога: Очередь ходов (initiative) отдельным пакетом в §12 нет. |
-| 463 | `kit.tactical-grid` | ✅ | состав kit | вне каталога: Поиск пути и подсветка клеток хода отдельным пакетом в §12 нет. |
+| 462 | `kit.jrpg-turn-battle` | ✅ | состав kit | — |
+| 463 | `kit.tactical-grid` | ✅ | состав kit | — |
 | 464 | `kit.tactical-squad` | ✅ | состав kit | — |
 | 465 | `kit.crpg-dialogue` | ✅ | состав kit | — |
 | 466 | `kit.dungeon-crawl` | ✅ | состав kit | — |
 | 467 | `kit.life-sim` | ✅ | состав kit | — |
-| 468 | `kit.farming` | ✅ | состав kit | вне каталога: Посев, рост и полив растений отдельными пакетами в §12 нет. |
-| 469 | `kit.fishing` | ✅ | состав kit | вне каталога: Заброс и поплавок отдельным пакетом в §12 нет; поклёвка — puzzle.timing. |
+| 468 | `kit.farming` | ✅ | состав kit | — |
+| 469 | `kit.fishing` | ✅ | состав kit | — |
 | 470 | `kit.crafting-survival` | ✅ | состав kit | — |
-| 471 | `kit.colony-management` | ✅ | состав kit | вне каталога: Распределение задач жителям отдельным пакетом в §12 нет. |
+| 471 | `kit.colony-management` | ✅ | состав kit | — |
 | 472 | `kit.business-sim` | ✅ | состав kit | — |
-| 473 | `kit.traffic-management` | ✅ | состав kit | вне каталога: Светофор как отдельный пакет в §12 нет; сигналы — puzzle.state-machine. |
-| 474 | `kit.racing-time-trial` | ✅ | состав kit | вне каталога: Подсчёт кругов и ghost-рекорд отдельными пакетами в §12 нет (ghost — kit.replay-ghost). |
-| 475 | `kit.racing-combat` | ✅ | состав kit | вне каталога: Позиции гонщиков отдельным пакетом в §12 нет. |
-| 476 | `kit.sports-match` | ✅ | состав kit | вне каталога: Мяч и голы отдельными пакетами в §12 нет. |
-| 477 | `kit.platform-sports` | ✅ | состав kit | вне каталога: Мяч отдельным пакетом в §12 нет. |
-| 478 | `kit.rhythm` | ✅ | состав kit | вне каталога: Нотные дорожки отдельным пакетом в §12 нет. |
+| 473 | `kit.traffic-management` | ✅ | состав kit | — |
+| 474 | `kit.racing-time-trial` | ✅ | состав kit | — |
+| 475 | `kit.racing-combat` | ✅ | состав kit | — |
+| 476 | `kit.sports-match` | ✅ | состав kit | — |
+| 477 | `kit.platform-sports` | ✅ | состав kit | — |
+| 478 | `kit.rhythm` | ✅ | состав kit | — |
 | 479 | `kit.music-arcade` | ✅ | состав kit | — |
-| 480 | `kit.pinball` | ✅ | состав kit | вне каталога: Флипперы и шар отдельными пакетами в §12 нет. |
+| 480 | `kit.pinball` | ✅ | состав kit | — |
 
 ## Y. Narrative, обучение, полный проект и QA — 20/20
 
@@ -623,7 +623,7 @@
 | 487 | `kit.tutorial` | ✅ | состав kit | — |
 | 488 | `kit.daily-challenge` | ✅ | состав kit | — |
 | 489 | `kit.achievement-set` | ✅ | состав kit | — |
-| 490 | `kit.replay-ghost` | ✅ | состав kit | вне каталога: Запись и воспроизведение ghost отдельным пакетом в §12 нет ($.replay есть в API). |
+| 490 | `kit.replay-ghost` | ✅ | состав kit | — |
 | 491 | `kit.local-coop` | ✅ | состав kit | — |
 | 492 | `kit.authoritative-coop` | ✅ | состав kit | — |
 | 493 | `kit.arena-multiplayer` | ✅ | состав kit | — |

@@ -76,19 +76,19 @@
   },
   {
    "n": 5,
-   "id": "companion.base",
-   "summary": "спутник, привязанный к игроку или группе.",
+   "id": "survival.oxygen",
+   "summary": "запас воздуха под водой, расход, восполнение и урон при нехватке.",
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.addClass",
-    "$.fn.at",
-    "$.fn.distanceTo",
-    "$.fn.moveTowards",
-    "$.fn.pos",
-    "$.fn.removeClass",
+    "$.fn.damage",
+    "$.fn.data",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.overlaps",
+    "$.fn.some",
     "$.updateFor"
    ],
    "gaps": [],
@@ -120,17 +120,28 @@
   },
   {
    "n": 7,
-   "id": "pickup.base",
-   "summary": "предмет в мире с радиусом взаимодействия.",
+   "id": "physics.ball",
+   "summary": "мяч с физическим телом, отскоками, владением и сбросом в центр.",
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.emit",
-    "$.fn.distanceTo",
+    "$.fn.addClass",
+    "$.fn.at",
+    "$.fn.attr",
+    "$.fn.body",
+    "$.fn.data",
     "$.fn.emit",
-    "$.fn.remove",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.off",
+    "$.on",
+    "$.selection.each",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -138,25 +149,20 @@
   },
   {
    "n": 8,
-   "id": "breakable.base",
-   "summary": "разрушаемый объект с прочностью и результатом.",
+   "id": "pinball.flipper",
+   "summary": "флиппер с поворотом по клавише и ударом по мячу.",
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.addClass",
-    "$.fn.alive",
+    "$.fn.angle",
     "$.fn.emit",
-    "$.fn.fadeOut",
-    "$.fn.has",
-    "$.fn.health",
-    "$.fn.pos",
-    "$.fn.remove",
-    "$.prefab.has",
-    "$.prefab.instantiate",
-    "$.updateFor",
-    "$.world"
+    "$.fn.overlaps",
+    "$.fn.velocity",
+    "$.input.down",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -261,14 +267,21 @@
   },
   {
    "n": 15,
-   "id": "actor.control-profile",
-   "summary": "ссылка на набор действий игрока.",
+   "id": "racing.positions",
+   "summary": "позиции участников гонки по пройденным воротам и дистанции.",
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.controls"
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.map",
+    "$.fn.min",
+    "$.fn.slice",
+    "$.store.set",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -456,20 +469,21 @@
   },
   {
    "n": 26,
-   "id": "movement.follow-path",
-   "summary": "прохождение списка точек с остановками.",
+   "id": "racing.lap-counter",
+   "summary": "круги по контрольным воротам, время круга и лучший круг.",
    "section": "B",
    "section_title": "Движение и перемещение",
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
     "$.fn.emit",
-    "$.fn.every",
-    "$.fn.filter",
-    "$.fn.map",
-    "$.fn.moveTowards",
-    "$.fn.pos",
-    "$.fn.velocity",
+    "$.fn.min",
+    "$.fn.overlaps",
+    "$.fn.slice",
+    "$.time.now",
     "$.updateFor"
    ],
    "gaps": [],
@@ -3615,62 +3629,47 @@
   },
   {
    "n": 169,
-   "id": "economy.weighted-drop",
-   "summary": "веса выпадения с проверкой крайних значений.",
+   "id": "cards.deck-hand",
+   "summary": "колода, рука, добор, сброс и цена карт в энергии.",
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.emit",
-    "$.fn.appendTo",
-    "$.fn.at",
     "$.fn.data",
     "$.fn.emit",
     "$.fn.filter",
     "$.fn.map",
     "$.fn.off",
     "$.fn.on",
-    "$.fn.overlaps",
-    "$.fn.pos",
-    "$.fn.remove",
-    "$.fn.size",
-    "$.random.int",
-    "$.random.seed",
-    "$.random.weighted",
-    "$.updateFor",
-    "$.world"
+    "$.random.int"
    ],
    "gaps": [],
-   "dependencies": [
-    "health.base"
-   ]
+   "dependencies": []
   },
   {
    "n": 170,
-   "id": "economy.chest-loot",
-   "summary": "содержимое сундука по таблице.",
+   "id": "turn.initiative-queue",
+   "summary": "очередь ходов по инициативе, начало и конец хода.",
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.add",
+    "$.emit",
+    "$.fn.attr",
     "$.fn.data",
     "$.fn.emit",
-    "$.fn.filter",
-    "$.fn.has",
-    "$.fn.map",
-    "$.inv",
-    "$.items.has",
-    "$.random.int",
-    "$.random.seed",
-    "$.random.weighted"
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.slice",
+    "$.fn.some",
+    "$.off",
+    "$.on",
+    "$.store.set"
    ],
    "gaps": [],
-   "dependencies": [
-    "inventory.container"
-   ]
+   "dependencies": []
   },
   {
    "n": 171,
@@ -3935,22 +3934,25 @@
   },
   {
    "n": 182,
-   "id": "stats.modifier",
-   "summary": "временные и постоянные модификаторы параметра.",
+   "id": "sports.goal",
+   "summary": "ворота, засчитанный гол, счёт команд и сброс мяча.",
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.data",
+    "$.emit",
     "$.fn.emit",
-    "$.fn.filter",
-    "$.fn.map"
+    "$.fn.overlaps",
+    "$.fn.some",
+    "$.selection.get",
+    "$.store",
+    "$.store.get",
+    "$.store.set",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": [
-    "stats.base"
-   ]
+   "dependencies": []
   },
   {
    "n": 183,
@@ -4572,21 +4574,27 @@
   },
   {
    "n": 212,
-   "id": "quest.parallel",
-   "summary": "несколько целей, выполняемых параллельно.",
+   "id": "ui.stage-select",
+   "summary": "экран выбора открытых уровней с результатами.",
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.emit",
-    "$.fn.emit",
     "$.fn.filter",
+    "$.fn.hide",
+    "$.fn.html",
     "$.fn.map",
-    "$.quest.def",
-    "$.quest.progress",
-    "$.quest.status",
-    "$.updateFor"
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.off",
+    "$.on",
+    "$.save",
+    "$.save.get",
+    "$.scene.load",
+    "$.selection.get",
+    "$.ui.markup"
    ],
    "gaps": [],
    "dependencies": []
@@ -4934,21 +4942,26 @@
   },
   {
    "n": 228,
-   "id": "dialogue.voice-line",
-   "summary": "аудиофайл реплики и синхронизация с текстом.",
+   "id": "grid.pathfinding",
+   "summary": "клетки хода, поиск пути A* и подсветка доступных клеток.",
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.audio.play",
-    "$.dialog.off",
-    "$.dialog.on",
-    "$.fn.filter",
-    "$.fn.map",
+    "$.fn.add",
+    "$.fn.at",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.moveTowards",
     "$.fn.off",
     "$.fn.on",
-    "$.fn.stop"
+    "$.fn.pos",
+    "$.fn.slice",
+    "$.nav.grid",
+    "$.nav.pathOn",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6030,19 +6043,28 @@
   },
   {
    "n": 275,
-   "id": "world.camera-boundary",
-   "summary": "ограничение движения камеры.",
+   "id": "tower.placement",
+   "summary": "установка построек на свободные клетки за ресурсы.",
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.camera.limits",
-    "$.fn.height",
-    "$.fn.overlaps",
-    "$.fn.pos",
-    "$.fn.width",
-    "$.updateFor"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.hasClass",
+    "$.fn.some",
+    "$.input.mousePressed",
+    "$.input.mouseWorld",
+    "$.input.pressed",
+    "$.prefab.has",
+    "$.prefab.instantiate",
+    "$.updateFor",
+    "$.world",
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -6169,28 +6191,48 @@
   },
   {
    "n": 282,
-   "id": "camera.deadzone",
-   "summary": "удержание игрока в безопасной экранной зоне.",
+   "id": "traffic.signal",
+   "summary": "светофор с фазами и остановкой агентов на красный.",
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.camera.deadzone"
+    "$.fn.color",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.velocity",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
   },
   {
    "n": 283,
-   "id": "camera.lookahead",
-   "summary": "смещение камеры по направлению скорости.",
+   "id": "run.route-generator",
+   "summary": "детерминированный маршрут забега из комнат по зерну.",
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.camera.lookahead"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.random.pick",
+    "$.random.seed",
+    "$.save",
+    "$.save.get",
+    "$.save.set",
+    "$.scene.load",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -6502,21 +6544,33 @@
   },
   {
    "n": 298,
-   "id": "render.flash",
-   "summary": "полноэкранная вспышка через RmlUi.",
+   "id": "ui.world-map",
+   "summary": "карта посещённых комнат и отметки на экране RmlUi.",
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.flash",
+    "$.fn.add",
+    "$.fn.height",
+    "$.fn.hide",
+    "$.fn.html",
+    "$.fn.map",
+    "$.fn.max",
     "$.fn.off",
     "$.fn.on",
+    "$.fn.pos",
+    "$.fn.show",
+    "$.fn.width",
+    "$.input.pressed",
     "$.off",
     "$.on",
+    "$.save",
+    "$.save.get",
+    "$.save.set",
     "$.selection.get",
-    "$.store.get",
-    "$.vfx.flash"
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7007,16 +7061,21 @@
   },
   {
    "n": 323,
-   "id": "audio.music-zone",
-   "summary": "музыкальный профиль игровой области.",
+   "id": "rhythm.lanes",
+   "summary": "нотные дорожки по времени трека и оценка попадания.",
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.overlaps",
-    "$.sound.crossfade",
-    "$.sound.stopMusic",
+    "$.audio.play",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.find",
+    "$.fn.map",
+    "$.input.pressed",
+    "$.time.now",
     "$.updateFor"
    ],
    "gaps": [],
@@ -7206,44 +7265,53 @@
   },
   {
    "n": 333,
-   "id": "feedback.hit-stop",
-   "summary": "краткое замедление игрового времени.",
+   "id": "fishing.cast",
+   "summary": "заброс, ожидание поклёвки и подсечка в окне времени.",
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.off",
-    "$.fn.on",
-    "$.off",
-    "$.on",
-    "$.selection.get",
-    "$.store.get",
-    "$.time.hitStop"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.max",
+    "$.input.pressed",
+    "$.random.range",
+    "$.random.weighted",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
   },
   {
    "n": 334,
-   "id": "feedback.camera-shake",
-   "summary": "сигнал тяжёлого попадания камерой.",
+   "id": "farming.crop",
+   "summary": "посев, рост по игровому времени, полив и сбор урожая.",
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.camera.shake",
+    "$.emit",
+    "$.fn.add",
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.min",
     "$.fn.off",
     "$.fn.on",
-    "$.fn.shake",
-    "$.selection.get",
-    "$.store.get"
+    "$.fn.remove",
+    "$.input.pressed",
+    "$.items.has",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": [
-    "health.base"
-   ]
+   "dependencies": []
   },
   {
    "n": 335,
@@ -7705,25 +7773,34 @@
   },
   {
    "n": 354,
-   "id": "ui.objective-marker",
-   "summary": "экранный маркер текущей цели.",
+   "id": "replay.ghost",
+   "summary": "запись прохождения и полупрозрачный призрак лучшего результата.",
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.camera.isOnScreen",
-    "$.camera.worldToScreen",
-    "$.fn.first",
-    "$.fn.max",
-    "$.fn.min",
+    "$.fn.alpha",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.off",
+    "$.fn.on",
     "$.fn.pos",
-    "$.fn.show",
-    "$.fn.style",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.fn.slice",
+    "$.fn.width",
+    "$.off",
+    "$.on",
+    "$.save",
+    "$.save.get",
+    "$.save.set",
     "$.selection.get",
-    "$.store.get",
-    "$.ui.markup",
-    "$.updateFor"
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -7913,22 +7990,27 @@
   },
   {
    "n": 363,
-   "id": "save.checkpoint",
-   "summary": "сохранение позиции и допустимого состояния игрока.",
+   "id": "colony.task-board",
+   "summary": "доска задач и назначение жителей на работы.",
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.emit",
+    "$.fn.attr",
     "$.fn.data",
-    "$.fn.hp",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.moveTowards",
     "$.fn.off",
     "$.fn.on",
     "$.fn.pos",
     "$.off",
     "$.on",
-    "$.save.set",
-    "$.save.slot"
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -9343,8 +9425,7 @@
     "health.death",
     "health.respawn",
     "interact.checkpoint",
-    "world.checkpoint-chain",
-    "save.checkpoint"
+    "world.checkpoint-chain"
    ]
   },
   {
@@ -9376,13 +9457,11 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Карта исследованных комнат как экран — ui.minimap-markers показывает камеру, а не накопленную карту."
-   ],
+   "gaps": [],
    "dependencies": [
     "world.streamed-room",
     "world.secret-area",
-    "ui.minimap-markers",
+    "ui.world-map",
     "camera.room-lock"
    ]
   },
@@ -9487,14 +9566,12 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Кислород как отдельный ресурс не описан в §12 (можно через ui.stamina-bar и data)."
-   ],
+   "gaps": [],
    "dependencies": [
     "movement.swim",
+    "survival.oxygen",
     "health.base",
-    "interact.pickup",
-    "world.moving-hazard"
+    "interact.pickup"
    ]
   },
   {
@@ -9624,13 +9701,11 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Экран выбора уровня как RmlUi-меню в §12 отдельным пакетом не описан."
-   ],
+   "gaps": [],
    "dependencies": [
+    "ui.stage-select",
     "progression.unlock",
     "world.level-exit",
-    "ui.result-screen",
     "save.slot"
    ]
   },
@@ -9810,13 +9885,11 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Генерация маршрута забега отдельным пакетом в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
+    "run.route-generator",
     "economy.loot-table",
-    "economy.weighted-drop",
-    "economy.chest-loot",
+    "item.drop",
     "world.streamed-room",
     "save.slot"
    ]
@@ -9846,12 +9919,10 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Рука, колода и цена карт отдельными пакетами в §12 нет — механика карт остаётся за игрой."
-   ],
+   "gaps": [],
    "dependencies": [
-    "ability.base",
-    "ability.resource-cost",
+    "cards.deck-hand",
+    "turn.initiative-queue",
     "ability.targeting",
     "stats.base"
    ]
@@ -9871,7 +9942,7 @@
     "animation.attack",
     "animation.cancel-rules",
     "feedback.combo-popup",
-    "feedback.hit-stop"
+    "animation.hit-pause"
    ]
   },
   {
@@ -9920,15 +9991,12 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Установка башен на клетки отдельным пакетом в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
-    "movement.follow-path",
+    "tower.placement",
     "ai.wave-director",
     "economy.wallet",
-    "weapon.base",
-    "weapon.projectile"
+    "ui.health-bar"
    ]
   },
   {
@@ -9943,7 +10011,7 @@
    "gaps": [],
    "dependencies": [
     "ai.wave-director",
-    "movement.follow-path",
+    "ai.waypoint-patrol",
     "weapon.base",
     "weapon.hitscan",
     "economy.wallet"
@@ -10028,10 +10096,9 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Очередь ходов (initiative) отдельным пакетом в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
+    "turn.initiative-queue",
     "ability.base",
     "ability.targeting",
     "ability.area-effect",
@@ -10049,14 +10116,12 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Поиск пути и подсветка клеток хода отдельным пакетом в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
-    "world.tilemap-layer",
+    "grid.pathfinding",
+    "turn.initiative-queue",
     "ability.resource-cost",
-    "ability.targeting",
-    "puzzle.state-machine"
+    "ability.targeting"
    ]
   },
   {
@@ -10108,7 +10173,7 @@
     "world.streamed-room",
     "camera.room-lock",
     "ai.spawner",
-    "economy.chest-loot",
+    "economy.loot-table",
     "world.scene-exit"
    ]
   },
@@ -10138,14 +10203,12 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Посев, рост и полив растений отдельными пакетами в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
+    "farming.crop",
     "world.day-night",
     "inventory.grid",
-    "economy.shop",
-    "crafting.queue"
+    "economy.shop"
    ]
   },
   {
@@ -10157,13 +10220,11 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Заброс и поплавок отдельным пакетом в §12 нет; поклёвка — puzzle.timing."
-   ],
+   "gaps": [],
    "dependencies": [
-    "puzzle.timing",
-    "economy.loot-table",
-    "inventory.grid"
+    "fishing.cast",
+    "inventory.grid",
+    "economy.loot-table"
    ]
   },
   {
@@ -10193,11 +10254,9 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Распределение задач жителям отдельным пакетом в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
-    "npc.daily-needs",
+    "colony.task-board",
     "npc.personality",
     "npc.relationship",
     "economy.wallet"
@@ -10229,12 +10288,9 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Светофор как отдельный пакет в §12 нет; сигналы — puzzle.state-machine."
-   ],
+   "gaps": [],
    "dependencies": [
-    "movement.follow-path",
-    "puzzle.state-machine",
+    "traffic.signal",
     "world.spawn-points"
    ]
   },
@@ -10247,13 +10303,11 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Подсчёт кругов и ghost-рекорд отдельными пакетами в §12 нет (ghost — kit.replay-ghost)."
-   ],
+   "gaps": [],
    "dependencies": [
     "movement.vehicle-seat",
-    "world.checkpoint-chain",
-    "world.level-exit",
+    "racing.lap-counter",
+    "replay.ghost",
     "ui.result-screen"
    ]
   },
@@ -10266,13 +10320,12 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Позиции гонщиков отдельным пакетом в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
     "movement.vehicle-seat",
     "weapon.rocket",
-    "world.level-exit"
+    "racing.lap-counter",
+    "racing.positions"
    ]
   },
   {
@@ -10284,10 +10337,9 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Мяч и голы отдельными пакетами в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
+    "sports.goal",
     "net.team-assignment",
     "net.scoreboard",
     "net.round-state"
@@ -10302,11 +10354,9 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Мяч отдельным пакетом в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
-    "movement.platformer",
+    "physics.ball",
     "net.round-state",
     "net.scoreboard"
    ]
@@ -10320,11 +10370,9 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Нотные дорожки отдельным пакетом в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
-    "puzzle.timing",
+    "rhythm.lanes",
     "feedback.combo-popup",
     "audio.music-transition"
    ]
@@ -10340,7 +10388,7 @@
    "api": [],
    "gaps": [],
    "dependencies": [
-    "puzzle.timing",
+    "rhythm.lanes",
     "feedback.combo-popup",
     "feedback.screen-pulse",
     "audio.one-shot"
@@ -10355,11 +10403,9 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Флипперы и шар отдельными пакетами в §12 нет."
-   ],
+   "gaps": [],
    "dependencies": [
-    "interact.pressure-plate",
+    "pinball.flipper",
     "net.scoreboard",
     "puzzle.reset"
    ]
@@ -10530,10 +10576,9 @@
    "kind": "kit",
    "status": "implemented",
    "api": [],
-   "gaps": [
-    "вне каталога: Запись и воспроизведение ghost отдельным пакетом в §12 нет ($.replay есть в API)."
-   ],
+   "gaps": [],
    "dependencies": [
+    "replay.ghost",
     "world.checkpoint-chain",
     "save.slot"
    ]

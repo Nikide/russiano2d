@@ -1,0 +1,99 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "traffic.signal",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Светофор"
+  },
+  "description": {
+    "ru": "Фазы зелёный/жёлтый/красный по таймеру; агенты в зоне светофора стоят на красный."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "green",
+      "label": "Зелёный",
+      "type": "int",
+      "default": 5000,
+      "min": 100,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "yellow",
+      "label": "Жёлтый",
+      "type": "int",
+      "default": 1500,
+      "min": 0,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "red",
+      "label": "Красный",
+      "type": "int",
+      "default": 5000,
+      "min": 100,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "agents",
+      "label": "Агенты",
+      "type": "string",
+      "default": ".car"
+    },
+    {
+      "id": "zone",
+      "label": "Зона остановки",
+      "type": "number",
+      "default": 60,
+      "min": 0,
+      "max": 5000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "трафик",
+    "светофор"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "farming.crop",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Грядка"
+  },
+  "description": {
+    "ru": "Посев семенем из инвентаря, рост по стадиям с поливом, сбор урожая в инвентарь."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.items.has"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "seed",
+      "label": "Семя (id предмета)",
+      "type": "string",
+      "default": "seed_wheat"
+    },
+    {
+      "id": "harvest",
+      "label": "Урожай (id)",
+      "type": "string",
+      "default": "wheat"
+    },
+    {
+      "id": "yield",
+      "label": "Урожай, шт.",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "id": "growMs",
+      "label": "Время роста",
+      "type": "int",
+      "default": 60000,
+      "min": 1000,
+      "max": 86400000,
+      "unit": "мс"
+    },
+    {
+      "id": "stages",
+      "label": "Стадий",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 10
+    },
+    {
+      "id": "needsWater",
+      "label": "Нужен полив",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "ферма",
+    "урожай"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

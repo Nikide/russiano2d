@@ -6,7 +6,7 @@
     "ru": "Набор: пинбол"
   },
   "description": {
-    "ru": "Очки, цели и сброс стола. Вне каталога: Флипперы и шар отдельными пакетами в §12 нет."
+    "ru": "Очки, цели и сброс стола."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -17,7 +17,7 @@
   "requires": [],
   "dependencies": [
     {
-      "id": "interact.pressure-plate"
+      "id": "pinball.flipper"
     },
     {
       "id": "net.scoreboard"

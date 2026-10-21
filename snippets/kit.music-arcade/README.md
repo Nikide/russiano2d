@@ -2,4 +2,4 @@
 
 Ритм, эффекты и серия попаданий.
 
-Состав / зависимости: `puzzle.timing`, `feedback.combo-popup`, `feedback.screen-pulse`, `audio.one-shot`
+Состав / зависимости: `rhythm.lanes`, `feedback.combo-popup`, `feedback.screen-pulse`, `audio.one-shot`

@@ -6,7 +6,7 @@
     "ru": "Набор: бой колодой"
   },
   "description": {
-    "ru": "Ход и ресурсы через способности и выбор цели. Вне каталога: Рука, колода и цена карт отдельными пакетами в §12 нет — механика карт остаётся за игрой."
+    "ru": "Ход и ресурсы через способности и выбор цели."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -17,10 +17,10 @@
   "requires": [],
   "dependencies": [
     {
-      "id": "ability.base"
+      "id": "cards.deck-hand"
     },
     {
-      "id": "ability.resource-cost"
+      "id": "turn.initiative-queue"
     },
     {
       "id": "ability.targeting"

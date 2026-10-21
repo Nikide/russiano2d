@@ -1,0 +1,114 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "tower.placement",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Постройки на клетках"
+  },
+  "description": {
+    "ru": "Режим строительства: клик по свободной клетке ставит prefab постройки за ресурсы кошелька."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.hasClass"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.input.mousePressed"
+    },
+    {
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.prefab.has"
+    },
+    {
+      "api": "$.prefab.instantiate"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    },
+    {
+      "api": "$.world.query"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "prefab",
+      "label": "Prefab постройки",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "cost",
+      "label": "Цена",
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 1000000
+    },
+    {
+      "id": "cell",
+      "label": "Клетка",
+      "type": "int",
+      "default": 32,
+      "min": 4,
+      "max": 512,
+      "unit": "пикс."
+    },
+    {
+      "id": "toggleKey",
+      "label": "Режим стройки",
+      "type": "string",
+      "default": "b"
+    },
+    {
+      "id": "payer",
+      "label": "Кто платит",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "башни",
+    "строительство"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

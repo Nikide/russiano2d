@@ -30,9 +30,6 @@
     },
     {
       "id": "world.checkpoint-chain"
-    },
-    {
-      "id": "save.checkpoint"
     }
   ],
   "fields": [],

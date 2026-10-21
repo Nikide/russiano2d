@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "turn.initiative-queue",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Очередь ходов"
+  },
+  "description": {
+    "ru": "Пошаговый порядок по инициативе (data initiative): turn:start/turn:end на узлах, событие turn:next."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.store.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "units",
+      "label": "Участники",
+      "type": "string",
+      "default": ".combatant"
+    },
+    {
+      "id": "skipDead",
+      "label": "Пропускать павших",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "пошаговый",
+    "инициатива"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

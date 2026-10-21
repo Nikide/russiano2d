@@ -1,0 +1,95 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "survival.oxygen",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Кислород"
+  },
+  "description": {
+    "ru": "Запас воздуха: в воде тратится, на воздухе восполняется; на нуле — урон."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "water",
+      "label": "Вода",
+      "type": "string",
+      "default": ".water"
+    },
+    {
+      "id": "max",
+      "label": "Запас",
+      "type": "number",
+      "default": 100,
+      "min": 1,
+      "max": 100000
+    },
+    {
+      "id": "drain",
+      "label": "Расход",
+      "type": "number",
+      "default": 8,
+      "min": 0,
+      "max": 10000,
+      "unit": "ед./с"
+    },
+    {
+      "id": "refill",
+      "label": "Восполнение",
+      "type": "number",
+      "default": 40,
+      "min": 0,
+      "max": 10000,
+      "unit": "ед./с"
+    },
+    {
+      "id": "damage",
+      "label": "Урон без воздуха",
+      "type": "number",
+      "default": 5,
+      "min": 0,
+      "max": 100000,
+      "unit": "ед./с"
+    }
+  ],
+  "tags": [
+    "вода",
+    "выживание"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

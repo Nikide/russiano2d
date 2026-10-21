@@ -6,7 +6,7 @@
     "ru": "Набор: тактика на клетках"
   },
   "description": {
-    "ru": "Клетки, очки действия и доступные действия. Вне каталога: Поиск пути и подсветка клеток хода отдельным пакетом в §12 нет."
+    "ru": "Клетки, очки действия и доступные действия."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -17,16 +17,16 @@
   "requires": [],
   "dependencies": [
     {
-      "id": "world.tilemap-layer"
+      "id": "grid.pathfinding"
+    },
+    {
+      "id": "turn.initiative-queue"
     },
     {
       "id": "ability.resource-cost"
     },
     {
       "id": "ability.targeting"
-    },
-    {
-      "id": "puzzle.state-machine"
     }
   ],
   "fields": [],

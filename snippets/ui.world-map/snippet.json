@@ -1,0 +1,109 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.world-map",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Карта мира"
+  },
+  "description": {
+    "ru": "Экран RmlUi с посещёнными комнатами (world.streamed-room) и отметками; клавиша открывает."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.html"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.save"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "m"
+    },
+    {
+      "id": "scale",
+      "label": "Масштаб карты",
+      "type": "number",
+      "default": 0.05,
+      "min": 0.001,
+      "max": 1,
+      "step": 0.005
+    }
+  ],
+  "tags": [
+    "карта",
+    "метроидвания"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

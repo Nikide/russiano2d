@@ -1,0 +1,123 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "replay.ghost",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Призрак лучшего результата"
+  },
+  "description": {
+    "ru": "Запись позиций объекта за прохождение; лучший результат проигрывается полупрозрачным призраком."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.save"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "every",
+      "label": "Шаг записи",
+      "type": "int",
+      "default": 50,
+      "min": 10,
+      "max": 1000,
+      "unit": "мс"
+    },
+    {
+      "id": "finishEvent",
+      "label": "Событие финиша",
+      "type": "string",
+      "default": "race:finish"
+    },
+    {
+      "id": "key",
+      "label": "Ключ сохранения",
+      "type": "string",
+      "default": "ghost"
+    },
+    {
+      "id": "color",
+      "label": "Цвет призрака",
+      "type": "color",
+      "default": "#80c0ff"
+    }
+  ],
+  "tags": [
+    "призрак",
+    "рекорд"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

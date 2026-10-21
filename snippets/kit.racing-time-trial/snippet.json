@@ -6,7 +6,7 @@
     "ru": "Набор: гонка на время"
   },
   "description": {
-    "ru": "Контрольные точки, время и рекорд. Вне каталога: Подсчёт кругов и ghost-рекорд отдельными пакетами в §12 нет (ghost — kit.replay-ghost)."
+    "ru": "Контрольные точки, время и рекорд."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -20,10 +20,10 @@
       "id": "movement.vehicle-seat"
     },
     {
-      "id": "world.checkpoint-chain"
+      "id": "racing.lap-counter"
     },
     {
-      "id": "world.level-exit"
+      "id": "replay.ghost"
     },
     {
       "id": "ui.result-screen"

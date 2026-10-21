@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "racing.positions",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Позиции в гонке"
+  },
+  "description": {
+    "ru": "Места участников по пройденным воротам и дистанции до следующих: data('place')."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "racers",
+      "label": "Участники",
+      "type": "string",
+      "default": ".racer"
+    },
+    {
+      "id": "gates",
+      "label": "Ворота",
+      "type": "string",
+      "default": ".gate"
+    }
+  ],
+  "tags": [
+    "гонка",
+    "позиции"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

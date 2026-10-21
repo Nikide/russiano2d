@@ -6,7 +6,7 @@
     "ru": "Набор: забег рогалика"
   },
   "description": {
-    "ru": "Случайный маршрут, награда и состояние забега. Вне каталога: Генерация маршрута забега отдельным пакетом в §12 нет."
+    "ru": "Случайный маршрут, награда и состояние забега."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -17,13 +17,13 @@
   "requires": [],
   "dependencies": [
     {
+      "id": "run.route-generator"
+    },
+    {
       "id": "economy.loot-table"
     },
     {
-      "id": "economy.weighted-drop"
-    },
-    {
-      "id": "economy.chest-loot"
+      "id": "item.drop"
     },
     {
       "id": "world.streamed-room"

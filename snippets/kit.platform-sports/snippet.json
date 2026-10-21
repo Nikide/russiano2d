@@ -6,7 +6,7 @@
     "ru": "Набор: платформенный спорт"
   },
   "description": {
-    "ru": "Игроки, отскоки и раунд. Вне каталога: Мяч отдельным пакетом в §12 нет."
+    "ru": "Игроки, отскоки и раунд."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -17,7 +17,7 @@
   "requires": [],
   "dependencies": [
     {
-      "id": "movement.platformer"
+      "id": "physics.ball"
     },
     {
       "id": "net.round-state"

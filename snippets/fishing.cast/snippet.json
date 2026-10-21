@@ -1,0 +1,105 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "fishing.cast",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Рыбалка"
+  },
+  "description": {
+    "ru": "Заброс клавишей, ожидание поклёвки случайное время, подсечка в окне; улов по таблице."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.random.range"
+    },
+    {
+      "api": "$.random.weighted"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "f"
+    },
+    {
+      "id": "waitMin",
+      "label": "Поклёвка от",
+      "type": "int",
+      "default": 2000,
+      "min": 100,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "waitMax",
+      "label": "Поклёвка до",
+      "type": "int",
+      "default": 6000,
+      "min": 100,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "window",
+      "label": "Окно подсечки",
+      "type": "int",
+      "default": 600,
+      "min": 50,
+      "max": 10000,
+      "unit": "мс"
+    },
+    {
+      "id": "catch",
+      "label": "Улов (id=вес)",
+      "type": "list",
+      "default": [
+        "fish_small=8",
+        "fish_big=2"
+      ]
+    }
+  ],
+  "tags": [
+    "рыбалка",
+    "мини-игра"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "pinball.flipper",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Флиппер"
+  },
+  "description": {
+    "ru": "Флиппер поворачивается по клавише и отбивает мяч сильнее в момент удара."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.angle"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "z"
+    },
+    {
+      "id": "rest",
+      "label": "Угол покоя",
+      "type": "number",
+      "default": 25,
+      "min": -180,
+      "max": 180,
+      "unit": "°"
+    },
+    {
+      "id": "up",
+      "label": "Угол удара",
+      "type": "number",
+      "default": -30,
+      "min": -180,
+      "max": 180,
+      "unit": "°"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость поворота",
+      "type": "number",
+      "default": 900,
+      "min": 10,
+      "max": 10000,
+      "unit": "°/с"
+    },
+    {
+      "id": "ball",
+      "label": "Мяч",
+      "type": "string",
+      "default": ".ball"
+    },
+    {
+      "id": "power",
+      "label": "Сила удара",
+      "type": "number",
+      "default": 700,
+      "min": 0,
+      "max": 10000,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "пинбол"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

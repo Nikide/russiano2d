@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "sports.goal",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Ворота"
+  },
+  "description": {
+    "ru": "Мяч в воротах засчитывает гол команде (счёт в $.store) и возвращает мяч в центр."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "ball",
+      "label": "Мяч",
+      "type": "string",
+      "default": ".ball"
+    },
+    {
+      "id": "team",
+      "label": "Команда, получающая очко",
+      "type": "string",
+      "default": "red"
+    },
+    {
+      "id": "cooldown",
+      "label": "Пауза после гола",
+      "type": "int",
+      "default": 1500,
+      "min": 0,
+      "max": 20000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "спорт",
+    "гол"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

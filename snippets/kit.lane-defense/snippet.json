@@ -20,7 +20,7 @@
       "id": "ai.wave-director"
     },
     {
-      "id": "movement.follow-path"
+      "id": "ai.waypoint-patrol"
     },
     {
       "id": "weapon.base"

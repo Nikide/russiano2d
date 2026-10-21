@@ -1,0 +1,120 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "grid.pathfinding",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Ходы по клеткам"
+  },
+  "description": {
+    "ru": "Сетка $.nav поверх уровня: доступные клетки в пределах очков хода, путь A* и шаг по клеткам."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.nav.grid"
+    },
+    {
+      "api": "$.nav.pathOn"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "cell",
+      "label": "Клетка",
+      "type": "int",
+      "default": 32,
+      "min": 4,
+      "max": 512,
+      "unit": "пикс."
+    },
+    {
+      "id": "area",
+      "label": "Размер поля",
+      "type": "vec2",
+      "default": [
+        640,
+        480
+      ]
+    },
+    {
+      "id": "walls",
+      "label": "Препятствия",
+      "type": "string",
+      "default": ".wall"
+    },
+    {
+      "id": "moves",
+      "label": "Очков хода",
+      "type": "int",
+      "default": 4,
+      "min": 0,
+      "max": 100
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 160,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "тактика",
+    "клетки",
+    "A*"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

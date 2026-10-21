@@ -6,7 +6,7 @@
     "ru": "Набор: под водой"
   },
   "description": {
-    "ru": "Плавание, сбор и опасности. Вне каталога: Кислород как отдельный ресурс не описан в §12 (можно через ui.stamina-bar и data)."
+    "ru": "Плавание, сбор и опасности."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -20,13 +20,13 @@
       "id": "movement.swim"
     },
     {
+      "id": "survival.oxygen"
+    },
+    {
       "id": "health.base"
     },
     {
       "id": "interact.pickup"
-    },
-    {
-      "id": "world.moving-hazard"
     }
   ],
   "fields": [],

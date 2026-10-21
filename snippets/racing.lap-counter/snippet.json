@@ -1,0 +1,74 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "racing.lap-counter",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Круги гонки"
+  },
+  "description": {
+    "ru": "Круги по воротам по порядку: время круга, лучший круг и финиш после N кругов."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.time.now"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "gates",
+      "label": "Ворота (класс, data order)",
+      "type": "string",
+      "default": ".gate"
+    },
+    {
+      "id": "laps",
+      "label": "Кругов",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 1000
+    }
+  ],
+  "tags": [
+    "гонка",
+    "круги"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

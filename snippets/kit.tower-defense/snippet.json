@@ -6,7 +6,7 @@
     "ru": "Набор: защита башнями"
   },
   "description": {
-    "ru": "Маршрут врага, волны и ресурсы раунда. Вне каталога: Установка башен на клетки отдельным пакетом в §12 нет."
+    "ru": "Маршрут врага, волны и ресурсы раунда."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -17,7 +17,7 @@
   "requires": [],
   "dependencies": [
     {
-      "id": "movement.follow-path"
+      "id": "tower.placement"
     },
     {
       "id": "ai.wave-director"
@@ -26,10 +26,7 @@
       "id": "economy.wallet"
     },
     {
-      "id": "weapon.base"
-    },
-    {
-      "id": "weapon.projectile"
+      "id": "ui.health-bar"
     }
   ],
   "fields": [],

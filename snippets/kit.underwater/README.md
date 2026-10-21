@@ -1,9 +1,5 @@
 # Набор: под водой
 
-Плавание, сбор и опасности. Вне каталога: Кислород как отдельный ресурс не описан в §12 (можно через ui.stamina-bar и data).
+Плавание, сбор и опасности.
 
-Состав / зависимости: `movement.swim`, `health.base`, `interact.pickup`, `world.moving-hazard`
-
-## Чего нет в каталоге §12
-
-Кислород как отдельный ресурс не описан в §12 (можно через ui.stamina-bar и data).
+Состав / зависимости: `movement.swim`, `survival.oxygen`, `health.base`, `interact.pickup`

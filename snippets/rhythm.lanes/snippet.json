@@ -1,0 +1,106 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "rhythm.lanes",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Нотные дорожки"
+  },
+  "description": {
+    "ru": "Ноты «время_мс:дорожка» по треку; клавиши дорожек оценивают попадание: отлично/хорошо/мимо."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.play"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.time.now"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "notes",
+      "label": "Ноты (мс:дорожка)",
+      "type": "list",
+      "default": [
+        "1000:0",
+        "1500:1",
+        "2000:2"
+      ]
+    },
+    {
+      "id": "keys",
+      "label": "Клавиши дорожек",
+      "type": "list",
+      "default": [
+        "d",
+        "f",
+        "j",
+        "k"
+      ]
+    },
+    {
+      "id": "perfect",
+      "label": "Окно «отлично»",
+      "type": "int",
+      "default": 50,
+      "min": 1,
+      "max": 1000,
+      "unit": "мс"
+    },
+    {
+      "id": "good",
+      "label": "Окно «хорошо»",
+      "type": "int",
+      "default": 120,
+      "min": 1,
+      "max": 2000,
+      "unit": "мс"
+    },
+    {
+      "id": "music",
+      "label": "Трек",
+      "type": "asset",
+      "assetKind": "audio"
+    }
+  ],
+  "tags": [
+    "ритм",
+    "музыка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

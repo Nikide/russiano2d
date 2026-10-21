@@ -6,7 +6,7 @@
     "ru": "Набор: выбор уровня"
   },
   "description": {
-    "ru": "Выбор открытых уровней и их результатов. Вне каталога: Экран выбора уровня как RmlUi-меню в §12 отдельным пакетом не описан."
+    "ru": "Выбор открытых уровней и их результатов."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -17,13 +17,13 @@
   "requires": [],
   "dependencies": [
     {
+      "id": "ui.stage-select"
+    },
+    {
       "id": "progression.unlock"
     },
     {
       "id": "world.level-exit"
-    },
-    {
-      "id": "ui.result-screen"
     },
     {
       "id": "save.slot"

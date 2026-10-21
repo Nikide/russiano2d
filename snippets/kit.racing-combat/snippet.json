@@ -6,7 +6,7 @@
     "ru": "Набор: боевые гонки"
   },
   "description": {
-    "ru": "Транспорт, оружие и финиш. Вне каталога: Позиции гонщиков отдельным пакетом в §12 нет."
+    "ru": "Транспорт, оружие и финиш."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -23,7 +23,10 @@
       "id": "weapon.rocket"
     },
     {
-      "id": "world.level-exit"
+      "id": "racing.lap-counter"
+    },
+    {
+      "id": "racing.positions"
     }
   ],
   "fields": [],

@@ -1,0 +1,87 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "cards.deck-hand",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Колода и рука"
+  },
+  "description": {
+    "ru": "Колода, рука, добор, сброс и розыгрыш карт за энергию: события cards:play { index }."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.random.int"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "deck",
+      "label": "Колода (карта=цена)",
+      "type": "list",
+      "default": [
+        "strike=1",
+        "strike=1",
+        "defend=1",
+        "fireball=2"
+      ]
+    },
+    {
+      "id": "hand",
+      "label": "Карт в руке",
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 20
+    },
+    {
+      "id": "energy",
+      "label": "Энергия за ход",
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 100
+    },
+    {
+      "id": "shuffle",
+      "label": "Тасовать",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "карты",
+    "колода"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

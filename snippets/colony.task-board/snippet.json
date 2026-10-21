@@ -1,0 +1,100 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "colony.task-board",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Доска задач колонии"
+  },
+  "description": {
+    "ru": "Задачи «тип=место x,y» раздаются свободным жителям; житель идёт и выполняет за время."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "workers",
+      "label": "Жители",
+      "type": "string",
+      "default": ".colonist"
+    },
+    {
+      "id": "tasks",
+      "label": "Задачи (тип=x,y=мс)",
+      "type": "list",
+      "default": [
+        "wood=300,200=3000"
+      ]
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 80,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "колония",
+    "задачи"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

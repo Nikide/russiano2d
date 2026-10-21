@@ -6,7 +6,7 @@
     "ru": "Набор: пошаговый бой"
   },
   "description": {
-    "ru": "Действия, цели и итоги боя. Вне каталога: Очередь ходов (initiative) отдельным пакетом в §12 нет."
+    "ru": "Действия, цели и итоги боя."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -16,6 +16,9 @@
   "slots": [],
   "requires": [],
   "dependencies": [
+    {
+      "id": "turn.initiative-queue"
+    },
     {
       "id": "ability.base"
     },

@@ -1,0 +1,91 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.stage-select",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Выбор уровня"
+  },
+  "description": {
+    "ru": "Экран RmlUi с открытыми уровнями и их результатами; клик загружает уровень."
+  },
+  "kind": "behavior",
+  "category": "Жанровые механики",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.html"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.save"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.scene.load"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.ui.markup"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "stages",
+      "label": "Уровни (сцена=название)",
+      "type": "list",
+      "default": [
+        "level1=Луг",
+        "level2=Шпили"
+      ]
+    },
+    {
+      "id": "openEvent",
+      "label": "Открывается событием",
+      "type": "string",
+      "default": "stages:open"
+    }
+  ],
+  "tags": [
+    "уровни",
+    "меню"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

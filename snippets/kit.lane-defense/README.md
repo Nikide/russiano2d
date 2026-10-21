@@ -2,4 +2,4 @@
 
 Позиции обороны, волны и контроль прохода.
 
-Состав / зависимости: `ai.wave-director`, `movement.follow-path`, `weapon.base`, `weapon.hitscan`, `economy.wallet`
+Состав / зависимости: `ai.wave-director`, `ai.waypoint-patrol`, `weapon.base`, `weapon.hitscan`, `economy.wallet`

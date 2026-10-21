@@ -6,7 +6,7 @@
     "ru": "Набор: призрак заезда"
   },
   "description": {
-    "ru": "Локальная запись прохождения и ghost. Вне каталога: Запись и воспроизведение ghost отдельным пакетом в §12 нет ($.replay есть в API)."
+    "ru": "Локальная запись прохождения и ghost."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -16,6 +16,9 @@
   "slots": [],
   "requires": [],
   "dependencies": [
+    {
+      "id": "replay.ghost"
+    },
     {
       "id": "world.checkpoint-chain"
     },

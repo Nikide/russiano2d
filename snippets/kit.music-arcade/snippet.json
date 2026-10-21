@@ -17,7 +17,7 @@
   "requires": [],
   "dependencies": [
     {
-      "id": "puzzle.timing"
+      "id": "rhythm.lanes"
     },
     {
       "id": "feedback.combo-popup"

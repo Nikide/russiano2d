@@ -6,7 +6,7 @@
     "ru": "Набор: ритм"
   },
   "description": {
-    "ru": "Тайминг и оценка точности. Вне каталога: Нотные дорожки отдельным пакетом в §12 нет."
+    "ru": "Тайминг и оценка точности."
   },
   "kind": "kit",
   "category": "Наборы",
@@ -17,7 +17,7 @@
   "requires": [],
   "dependencies": [
     {
-      "id": "puzzle.timing"
+      "id": "rhythm.lanes"
     },
     {
       "id": "feedback.combo-popup"
