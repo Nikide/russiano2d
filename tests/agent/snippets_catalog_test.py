@@ -42,6 +42,8 @@ def slug(pid):
 
 
 def main():
+    m = subprocess.run([sys.executable, os.path.join(ROOT, "scripts/snippet_matrix.py"), "--check"], capture_output=True, text=True)
+    check(m.returncode == 0, "матрица §12 актуальна и все пакеты из неё: %s" % m.stdout.strip())
     cat = r2d("snippet", "catalog", "--fields")
     pkgs = [p for p in cat["packages"] if p["scope"] == "builtin"]
     check(cat["ok"] and len(pkgs) == cat["total"], "каталог: %d пакетов" % len(pkgs))

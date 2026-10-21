@@ -1,0 +1,7290 @@
+{
+ "format": 1,
+ "total": 500,
+ "packages": [
+  {
+   "n": 1,
+   "id": "actor.base",
+   "summary": "визуальная сущность, ID, размер, слоты поведения и настройки.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 2,
+   "id": "player.base",
+   "summary": "основа управляемого игрока, профиль ввода и камера.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 3,
+   "id": "npc.base",
+   "summary": "основа NPC с командой, профилем и портами поведения.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 4,
+   "id": "enemy.base",
+   "summary": "противник с командой, здоровьем и целью.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 5,
+   "id": "companion.base",
+   "summary": "спутник, привязанный к игроку или группе.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 6,
+   "id": "projectile.base",
+   "summary": "снаряд с владельцем, временем жизни и попаданием.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 7,
+   "id": "pickup.base",
+   "summary": "предмет в мире с радиусом взаимодействия.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 8,
+   "id": "breakable.base",
+   "summary": "разрушаемый объект с прочностью и результатом.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 9,
+   "id": "trigger.base",
+   "summary": "прямоугольная зона входа, выхода и нахождения.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.triggers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 10,
+   "id": "interactable.base",
+   "summary": "объект с действием, подсказкой и условием доступности.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 11,
+   "id": "actor.faction",
+   "summary": "фракция, дружественные и враждебные отношения.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 12,
+   "id": "actor.identity",
+   "summary": "имя, портрет, локализуемое описание и постоянный ID.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 13,
+   "id": "actor.spawn-profile",
+   "summary": "шаблон позиции, размера и начальных параметров.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 14,
+   "id": "actor.visual-profile",
+   "summary": "спрайт, кадр, цвет, слой и origin.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.sprite"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 15,
+   "id": "actor.control-profile",
+   "summary": "ссылка на набор действий игрока.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 16,
+   "id": "actor.player-slot",
+   "summary": "связь сущности с локальным игроком и контроллером.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 17,
+   "id": "actor.tags",
+   "summary": "управляемые теги и классы объекта для селекторов $.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 18,
+   "id": "actor.attributes",
+   "summary": "сериализуемые пользовательские характеристики узла.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 19,
+   "id": "actor.lifecycle",
+   "summary": "создание, активация, отключение и удаление сущности.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 20,
+   "id": "actor.prefab-variant",
+   "summary": "именованный вариант существующего $.prefab.",
+   "section": "A",
+   "section_title": "Базовые сущности и управление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.prefab"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 21,
+   "id": "movement.top-down",
+   "summary": "top-down движение с ускорением и трением.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.velocity",
+    "$.input.vec",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 22,
+   "id": "movement.platformer",
+   "summary": "бег, прыжок и контакт с землёй.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.jump",
+    "$.fn.onFloor",
+    "$.fn.velocity",
+    "$.input.pressed",
+    "$.input.vec",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 23,
+   "id": "movement.twin-stick",
+   "summary": "независимое направление движения и прицеливания.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 24,
+   "id": "movement.analog",
+   "summary": "нормализация и кривая аналогового стика.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 25,
+   "id": "movement.click-to-move",
+   "summary": "движение к выбранной мировой точке.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 26,
+   "id": "movement.follow-path",
+   "summary": "прохождение списка точек с остановками.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 27,
+   "id": "movement.dash",
+   "summary": "рывок с направлением, длительностью и перезарядкой.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.emit",
+    "$.fn.velocity",
+    "$.input.pressed",
+    "$.input.vec",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 28,
+   "id": "movement.dodge-roll",
+   "summary": "перекат с окном неуязвимости.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 29,
+   "id": "movement.coyote-jump",
+   "summary": "прыжок в коротком окне после схода с края.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 30,
+   "id": "movement.jump-buffer",
+   "summary": "запоминание нажатия до момента приземления.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 31,
+   "id": "movement.double-jump",
+   "summary": "ограниченное число прыжков в воздухе.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.jump",
+    "$.fn.onFloor",
+    "$.input.pressed",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": [
+    "movement.platformer"
+   ]
+  },
+  {
+   "n": 32,
+   "id": "movement.wall-slide",
+   "summary": "замедленное падение вдоль стены.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 33,
+   "id": "movement.wall-jump",
+   "summary": "отталкивание от стены с перенаправлением скорости.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 34,
+   "id": "movement.climb",
+   "summary": "движение по лестнице или верёвке.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 35,
+   "id": "movement.swim",
+   "summary": "перемещение в воде с сопротивлением и плавучестью.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 36,
+   "id": "movement.crouch",
+   "summary": "приседание, смена формы и ограничение скорости.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 37,
+   "id": "movement.prone",
+   "summary": "положение лёжа и профиль видимости.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 38,
+   "id": "movement.knockback",
+   "summary": "управляемое отбрасывание с затуханием.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 39,
+   "id": "movement.platform-ride",
+   "summary": "движение вместе с движущейся платформой.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 40,
+   "id": "movement.vehicle-seat",
+   "summary": "посадка, управление и выход из транспорта.",
+   "section": "B",
+   "section_title": "Движение и перемещение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.input",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 41,
+   "id": "weapon.base",
+   "summary": "определение оружия, слот, владелец и точка крепления.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 42,
+   "id": "weapon.melee",
+   "summary": "ближняя атака с активным окном и восстановлением.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 43,
+   "id": "weapon.hitscan",
+   "summary": "лучевая атака с дальностью, маской и уроном.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 44,
+   "id": "weapon.projectile",
+   "summary": "выстрел отдельным узлом-снарядом.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 45,
+   "id": "weapon.spread",
+   "summary": "дробовой выстрел с настраиваемым разбросом.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 46,
+   "id": "weapon.auto",
+   "summary": "непрерывная стрельба с ограниченной скорострельностью.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 47,
+   "id": "weapon.burst",
+   "summary": "очередь из заданного числа выстрелов.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 48,
+   "id": "weapon.charge",
+   "summary": "атака с зарядкой, порогами и усилением.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 49,
+   "id": "weapon.beam",
+   "summary": "непрерывный луч с периодическим уроном.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 50,
+   "id": "weapon.boomerang",
+   "summary": "снаряд с уходом, возвратом и повторным подбором.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 51,
+   "id": "weapon.grenade",
+   "summary": "бросок гранаты с отскоками и задержкой взрыва.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 52,
+   "id": "weapon.mine",
+   "summary": "установка мины с радиусом и условием активации.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 53,
+   "id": "weapon.shotgun",
+   "summary": "дробовик с патронами, разбросом и перезарядкой.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 54,
+   "id": "weapon.sniper",
+   "summary": "прицеливание, выстрел и пробитие целей.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 55,
+   "id": "weapon.rocket",
+   "summary": "ракета с заданием цели и взрывной областью.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 56,
+   "id": "weapon.chain-lightning",
+   "summary": "последовательное поражение соседних целей.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 57,
+   "id": "weapon.area-denial",
+   "summary": "временная опасная зона или стенка урона.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 58,
+   "id": "weapon.weapon-switch",
+   "summary": "переключение слотов с отменой незавершённой атаки.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 59,
+   "id": "weapon.ammo",
+   "summary": "боезапас, магазин и резерв патронов.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 60,
+   "id": "weapon.reload",
+   "summary": "ручная и автоматическая перезарядка с отменой.",
+   "section": "C",
+   "section_title": "Оружие и атаки",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.weapons",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 61,
+   "id": "health.base",
+   "summary": "максимум, текущее здоровье и событие смерти через $.combat.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.fadeOut",
+    "$.fn.health",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 62,
+   "id": "health.damage-types",
+   "summary": "каталог типов урона и правила их применения.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 63,
+   "id": "health.armor",
+   "summary": "плоское снижение входящего урона.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 64,
+   "id": "health.resistance",
+   "summary": "проценты сопротивления по типам урона.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 65,
+   "id": "health.shield",
+   "summary": "щит с отдельным запасом и восстановлением.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 66,
+   "id": "health.regeneration",
+   "summary": "восстановление здоровья с задержкой после урона.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.alive",
+    "$.fn.heal",
+    "$.fn.hp",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": [
+    "health.base"
+   ]
+  },
+  {
+   "n": 67,
+   "id": "health.invulnerability",
+   "summary": "временное окно неуязвимости.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.alive",
+    "$.fn.alpha",
+    "$.fn.hp",
+    "$.fn.invulnerable",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": [
+    "health.base"
+   ]
+  },
+  {
+   "n": 68,
+   "id": "health.hit-flash",
+   "summary": "визуальная вспышка при получении урона.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.flash",
+    "$.fn.hp",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": [
+    "health.base"
+   ]
+  },
+  {
+   "n": 69,
+   "id": "health.knockback-reaction",
+   "summary": "реакция на удар с направлением и силой.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 70,
+   "id": "health.stagger",
+   "summary": "оглушение по порогу накопленного воздействия.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 71,
+   "id": "health.poison",
+   "summary": "периодический урон с длительностью и стаками.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 72,
+   "id": "health.burning",
+   "summary": "горение с тиком урона и снятием эффектом.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 73,
+   "id": "health.freeze",
+   "summary": "заморозка, замедление и условия снятия.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 74,
+   "id": "health.slow",
+   "summary": "временное изменение скорости движения.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 75,
+   "id": "health.bleed",
+   "summary": "кровотечение с настраиваемой частотой тиков.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 76,
+   "id": "health.buff-debuff",
+   "summary": "общий временный модификатор характеристик.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 77,
+   "id": "health.death",
+   "summary": "визуал, блокирование ввода и cleanup при смерти.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 78,
+   "id": "health.respawn",
+   "summary": "возрождение у точки с переносом выбранных данных.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.alive",
+    "$.fn.emit",
+    "$.fn.respawn",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": [
+    "health.base"
+   ]
+  },
+  {
+   "n": 79,
+   "id": "health.revive",
+   "summary": "подъём союзника с временем и прерыванием.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 80,
+   "id": "health.damage-number",
+   "summary": "всплывающее число урона через RmlUi/эффект.",
+   "section": "D",
+   "section_title": "Здоровье, защита и состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.combat"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 81,
+   "id": "ai.idle",
+   "summary": "ожидание, поворот и условия пробуждения.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 82,
+   "id": "ai.waypoint-patrol",
+   "summary": "обход точек маршрута и паузы.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.moveTowards",
+    "$.fn.onWall",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 83,
+   "id": "ai.chase",
+   "summary": "преследование цели до дистанции или потери видимости.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.distanceTo",
+    "$.fn.moveTowards",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 84,
+   "id": "ai.melee-attack",
+   "summary": "подход к цели и ближняя атака.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 85,
+   "id": "ai.ranged-attack",
+   "summary": "удержание дистанции и стрельба.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 86,
+   "id": "ai.flee",
+   "summary": "отход от угрозы к безопасной точке.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 87,
+   "id": "ai.guard-post",
+   "summary": "охрана зоны и возврат на пост.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 88,
+   "id": "ai.follow-target",
+   "summary": "следование за целью без боевой логики.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.distanceTo",
+    "$.fn.moveTowards",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 89,
+   "id": "ai.line-of-sight",
+   "summary": "проверка видимости с сектором и препятствиями.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 90,
+   "id": "ai.hearing",
+   "summary": "обнаружение по звуковому источнику и радиусу.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 91,
+   "id": "ai.investigate",
+   "summary": "переход к последней известной позиции цели.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 92,
+   "id": "ai.search",
+   "summary": "поиск цели по точкам после потери контакта.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 93,
+   "id": "ai.cover",
+   "summary": "поиск и занятие точки укрытия.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 94,
+   "id": "ai.flank",
+   "summary": "выход к боковой позиции относительно игрока.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 95,
+   "id": "ai.formation",
+   "summary": "движение в заданном строю относительно лидера.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 96,
+   "id": "ai.boss-phases",
+   "summary": "переходы фаз по здоровью и событиям.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 97,
+   "id": "ai.boss-telegraph",
+   "summary": "предупредительная зона перед сильной атакой.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 98,
+   "id": "ai.spawner",
+   "summary": "создание врагов по лимиту и условиям.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 99,
+   "id": "ai.wave-director",
+   "summary": "настройка силы и состава волн.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.nav",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 100,
+   "id": "ai.leash",
+   "summary": "возврат противника в заданную область.",
+   "section": "E",
+   "section_title": "Поведение врагов",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 101,
+   "id": "npc.schedule",
+   "summary": "расписание действий по игровому времени.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 102,
+   "id": "npc.home-routine",
+   "summary": "перемещение между домом, работой и отдыхом.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 103,
+   "id": "npc.daily-needs",
+   "summary": "простые потребности NPC и выбор цели.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 104,
+   "id": "npc.personality",
+   "summary": "набор числовых черт для вариации поведения.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 105,
+   "id": "npc.relationship",
+   "summary": "отношение к игроку и пороги реакции.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 106,
+   "id": "npc.reputation",
+   "summary": "репутация игрока у одной или нескольких фракций.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 107,
+   "id": "npc.companion-follow",
+   "summary": "удержание дистанции и телепорт по правилам.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 108,
+   "id": "npc.companion-command",
+   "summary": "команды спутнику: следовать, ждать, атаковать.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 109,
+   "id": "npc.companion-revive",
+   "summary": "спасение игрока спутником при условии.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 110,
+   "id": "npc.party-member",
+   "summary": "включение героя в группу и порядок партии.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 111,
+   "id": "npc.party-formation",
+   "summary": "позиции членов группы около лидера.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 112,
+   "id": "npc.squad-leader",
+   "summary": "назначение лидера и общих целей группе.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 113,
+   "id": "npc.squad-order",
+   "summary": "передача команде поведения или маршрута.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 114,
+   "id": "npc.civilian-panic",
+   "summary": "бегство гражданских при опасности.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 115,
+   "id": "npc.civilian-rescue",
+   "summary": "эвакуация гражданских в безопасное место.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 116,
+   "id": "npc.vendor",
+   "summary": "торговец с ассортиментом и условиями покупки.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 117,
+   "id": "npc.quest-giver",
+   "summary": "выдача и завершение заданий через квестовые данные.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 118,
+   "id": "npc.dialogue-anchor",
+   "summary": "открытие диалога у выбранного персонажа.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 119,
+   "id": "npc.escort",
+   "summary": "следование за игроком с проверкой точки назначения.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 120,
+   "id": "npc.recruit",
+   "summary": "набор персонажа с проверкой лимита группы.",
+   "section": "F",
+   "section_title": "NPC, союзники и группы",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.nav"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 121,
+   "id": "interact.press-action",
+   "summary": "действие по input action у ближайшего объекта.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 122,
+   "id": "interact.hold-action",
+   "summary": "действие при удержании с прогрессом и отменой.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 123,
+   "id": "interact.context-prompt",
+   "summary": "русская подсказка действия по ситуации.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 124,
+   "id": "interact.pickup",
+   "summary": "подбор объекта с проверкой вместимости.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.audio.play",
+    "$.fn.overlaps",
+    "$.fn.remove",
+    "$.fn.trigger",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 125,
+   "id": "interact.door",
+   "summary": "открытие, блокировка и ключ.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 126,
+   "id": "interact.lock",
+   "summary": "замок с условием и состоянием.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 127,
+   "id": "interact.switch",
+   "summary": "переключатель состояния с событиями.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 128,
+   "id": "interact.pressure-plate",
+   "summary": "плита, активируемая одним или несколькими узлами.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 129,
+   "id": "interact.lever",
+   "summary": "рычаг с визуальными состояниями.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 130,
+   "id": "interact.chest",
+   "summary": "открытие контейнера и генерация содержимого.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 131,
+   "id": "interact.breakable",
+   "summary": "повреждение, разрушение и drop.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 132,
+   "id": "interact.pushable",
+   "summary": "толкание объекта с физической проверкой.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 133,
+   "id": "interact.movable-crate",
+   "summary": "ящик для головоломок и укрытий.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 134,
+   "id": "interact.moving-platform",
+   "summary": "платформа между точками и остановками.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 135,
+   "id": "interact.elevator",
+   "summary": "вызов лифта и управление этажами.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 136,
+   "id": "interact.teleporter",
+   "summary": "перенос игрока между метками.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 137,
+   "id": "interact.portal",
+   "summary": "переход зоны в другую сцену.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 138,
+   "id": "interact.checkpoint",
+   "summary": "сохранение spawn point и базовых значений.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 139,
+   "id": "interact.save-point",
+   "summary": "вызов ручного сохранения у объекта.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 140,
+   "id": "interact.hazard",
+   "summary": "периодическая опасная зона с фильтром целей.",
+   "section": "G",
+   "section_title": "Взаимодействие и объекты мира",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 141,
+   "id": "item.definition",
+   "summary": "тип предмета, имя, иконка и свойства.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 142,
+   "id": "item.stack",
+   "summary": "размер стека и правила объединения.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 143,
+   "id": "inventory.grid",
+   "summary": "сетка предметов с переносом между ячейками.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.inv",
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 144,
+   "id": "inventory.quickbar",
+   "summary": "быстрые слоты и выбор активного предмета.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.inv",
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 145,
+   "id": "inventory.weight",
+   "summary": "лимит массы и отображение нагрузки.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.inv",
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 146,
+   "id": "inventory.container",
+   "summary": "сундук или контейнер с двумя списками.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.inv",
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 147,
+   "id": "inventory.transfer",
+   "summary": "перемещение, разделение и объединение стека.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.inv",
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 148,
+   "id": "inventory.filter",
+   "summary": "фильтрация предметов по категориям и тегам.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.inv",
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 149,
+   "id": "inventory.sort",
+   "summary": "сортировка по имени, типу, редкости и цене.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.inv",
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 150,
+   "id": "equipment.slots",
+   "summary": "слоты экипировки с проверкой типов.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 151,
+   "id": "equipment.weapon-slot",
+   "summary": "экипировка и смена активного оружия.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 152,
+   "id": "equipment.armor",
+   "summary": "надевание брони и применение защитных параметров.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 153,
+   "id": "equipment.attachments",
+   "summary": "модификаторы оружия и их совместимость.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 154,
+   "id": "equipment.loadout",
+   "summary": "именованный набор экипировки персонажа.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 155,
+   "id": "item.consumable",
+   "summary": "использование расходника с эффектом и cooldown.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 156,
+   "id": "item.durability",
+   "summary": "прочность с ремонтом и поломкой.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 157,
+   "id": "item.quest-bound",
+   "summary": "квестовый предмет, который нельзя потерять случайно.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 158,
+   "id": "item.currency",
+   "summary": "один или несколько типов валюты.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 159,
+   "id": "item.drop",
+   "summary": "выпадение предметов при событии или смерти.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 160,
+   "id": "item.loot-pickup",
+   "summary": "сбор содержимого контейнера в инвентарь.",
+   "section": "H",
+   "section_title": "Подбор, инвентарь и экипировка",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 161,
+   "id": "economy.wallet",
+   "summary": "баланс валюты и безопасные операции изменения.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 162,
+   "id": "economy.price",
+   "summary": "базовая цена и модификатор стоимости.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 163,
+   "id": "economy.shop",
+   "summary": "список товаров и покупка/продажа.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 164,
+   "id": "economy.shop-stock",
+   "summary": "запас, обновление и ограничение количества.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 165,
+   "id": "economy.trade",
+   "summary": "обмен предметами между двумя сторонами.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 166,
+   "id": "economy.reputation-price",
+   "summary": "скидки по репутации и фракции.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 167,
+   "id": "economy.reward",
+   "summary": "награда за событие, цель или этап.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 168,
+   "id": "economy.loot-table",
+   "summary": "вероятностный список добычи.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 169,
+   "id": "economy.weighted-drop",
+   "summary": "веса выпадения с проверкой крайних значений.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 170,
+   "id": "economy.chest-loot",
+   "summary": "содержимое сундука по таблице.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 171,
+   "id": "crafting.recipe",
+   "summary": "рецепт с ингредиентами и результатом.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 172,
+   "id": "crafting.station",
+   "summary": "рабочая станция и список доступных рецептов.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 173,
+   "id": "crafting.queue",
+   "summary": "очередь производства с временем завершения.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 174,
+   "id": "crafting.repair",
+   "summary": "ремонт экипировки с расходом ресурсов.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 175,
+   "id": "crafting.upgrade",
+   "summary": "улучшение предмета с параметрами результата.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 176,
+   "id": "crafting.disassemble",
+   "summary": "разбор предмета на компоненты.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 177,
+   "id": "crafting.discover",
+   "summary": "открытие рецепта после события или предмета.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.inv"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 178,
+   "id": "economy.income-expense",
+   "summary": "журнал изменения валюты.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 179,
+   "id": "economy.auction",
+   "summary": "простая покупка/ставка у торгового NPC.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 180,
+   "id": "economy.quest-payment",
+   "summary": "выплата и удержание награды по этапу задания.",
+   "section": "I",
+   "section_title": "Экономика, торговля и ремесло",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.items",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 181,
+   "id": "stats.base",
+   "summary": "набор характеристик персонажа с Inspector.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.state"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 182,
+   "id": "stats.modifier",
+   "summary": "временные и постоянные модификаторы параметра.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.state"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 183,
+   "id": "stats.derived",
+   "summary": "вычисляемые показатели из базовых характеристик.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.state"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 184,
+   "id": "progression.xp",
+   "summary": "накопление опыта и события порога.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 185,
+   "id": "progression.level",
+   "summary": "рост уровня и выбор награды.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 186,
+   "id": "progression.skill-points",
+   "summary": "очки развития и остаток.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 187,
+   "id": "progression.skill-tree",
+   "summary": "узлы навыков и требования открытия.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 188,
+   "id": "progression.perk",
+   "summary": "пассивное свойство с условием применения.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 189,
+   "id": "ability.base",
+   "summary": "способность с входом, эффектом и стоимостью.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.combat",
+    "$.time"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 190,
+   "id": "ability.cooldown",
+   "summary": "перезарядка и отображение готовности.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.combat",
+    "$.time"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 191,
+   "id": "ability.resource-cost",
+   "summary": "расход маны, энергии или заряда.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.combat",
+    "$.time"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 192,
+   "id": "ability.charge",
+   "summary": "накапливаемый заряд способности.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.combat",
+    "$.time"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 193,
+   "id": "ability.targeting",
+   "summary": "выбор точки, цели или области действия.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.combat",
+    "$.time"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 194,
+   "id": "ability.area-effect",
+   "summary": "применение эффекта к набору объектов.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.combat",
+    "$.time"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 195,
+   "id": "ability.summon",
+   "summary": "создание временного союзника или объекта.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.combat",
+    "$.time"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 196,
+   "id": "progression.unlock",
+   "summary": "открытие функции после условия.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 197,
+   "id": "progression.mastery",
+   "summary": "уровень владения предметом или навыком.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 198,
+   "id": "progression.challenge",
+   "summary": "повторяемое испытание с критериями.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 199,
+   "id": "progression.loadout-preset",
+   "summary": "сохранение набора навыков.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 200,
+   "id": "progression.respec",
+   "summary": "сброс и перераспределение навыков.",
+   "section": "J",
+   "section_title": "Характеристики, уровни и способности",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.state",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 201,
+   "id": "quest.definition",
+   "summary": "идентификатор, описание, старт и завершение квеста.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 202,
+   "id": "quest.start-condition",
+   "summary": "условие доступа к заданию.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 203,
+   "id": "quest.objective-visit",
+   "summary": "достижение точки или зоны.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 204,
+   "id": "quest.objective-collect",
+   "summary": "сбор предметов заданного типа.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 205,
+   "id": "quest.objective-defeat",
+   "summary": "победа над целью или количеством врагов.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 206,
+   "id": "quest.objective-interact",
+   "summary": "использование объекта или NPC.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 207,
+   "id": "quest.objective-deliver",
+   "summary": "передача предмета персонажу.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 208,
+   "id": "quest.objective-survive",
+   "summary": "выживание в течение заданного времени.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 209,
+   "id": "quest.objective-escort",
+   "summary": "сопровождение цели до назначения.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 210,
+   "id": "quest.objective-branch",
+   "summary": "выбор одной из несовместимых целей.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 211,
+   "id": "quest.sequence",
+   "summary": "последовательность этапов задания.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 212,
+   "id": "quest.parallel",
+   "summary": "несколько целей, выполняемых параллельно.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 213,
+   "id": "quest.optional-objective",
+   "summary": "дополнительная цель с отдельной наградой.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 214,
+   "id": "quest.timer",
+   "summary": "ограничение времени и ветка провала.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 215,
+   "id": "quest.failure-condition",
+   "summary": "провал по здоровью, времени или событию.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 216,
+   "id": "quest.reward-table",
+   "summary": "набор наград по завершённым этапам.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 217,
+   "id": "quest.world-marker",
+   "summary": "указатель цели на карте или HUD.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 218,
+   "id": "quest.journal",
+   "summary": "список активных и завершённых заданий.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 219,
+   "id": "mission.wave-objective",
+   "summary": "цель по волнам и времени миссии.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 220,
+   "id": "mission.extraction",
+   "summary": "точка выхода и условия завершения миссии.",
+   "section": "K",
+   "section_title": "Задания, цели и миссии",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.quest"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 221,
+   "id": "dialogue.tree",
+   "summary": "разветвлённые реплики и переходы.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 222,
+   "id": "dialogue.choice",
+   "summary": "выбор игрока с условиями доступности.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 223,
+   "id": "dialogue.condition",
+   "summary": "проверка флага, предмета, значения или отношения.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 224,
+   "id": "dialogue.action",
+   "summary": "установка флага или вызов игрового события.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 225,
+   "id": "dialogue.portrait",
+   "summary": "портрет говорящего и выражение.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 226,
+   "id": "dialogue.typewriter",
+   "summary": "печать текста с настройкой скорости.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 227,
+   "id": "dialogue.skip",
+   "summary": "ускорение и завершение текущей реплики.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 228,
+   "id": "dialogue.voice-line",
+   "summary": "аудиофайл реплики и синхронизация с текстом.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 229,
+   "id": "dialogue.auto-advance",
+   "summary": "автоматический переход по таймеру.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 230,
+   "id": "dialogue.conversation-lock",
+   "summary": "временная блокировка перемещения при разговоре.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 231,
+   "id": "story.flag",
+   "summary": "именованный сохраняемый сюжетный флаг.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 232,
+   "id": "story.counter",
+   "summary": "прогресс сюжета в числовом счётчике.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 233,
+   "id": "story.scene-transition",
+   "summary": "переход между authored story-сценами.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 234,
+   "id": "story.cutscene",
+   "summary": "последовательность камеры, текста и действий.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 235,
+   "id": "story.choice-history",
+   "summary": "запись выбранных веток в save data.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 236,
+   "id": "story.relationship-route",
+   "summary": "очки отношений и пороги маршрута.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 237,
+   "id": "story.chapter",
+   "summary": "глава, входные условия и выход.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 238,
+   "id": "story.ending",
+   "summary": "проверка набора условий концовки.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 239,
+   "id": "story.vn-background",
+   "summary": "смена фона и переход через существующий VN Maker.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 240,
+   "id": "story.vn-character",
+   "summary": "появление, позиция и эмоция персонажа VN.",
+   "section": "L",
+   "section_title": "Диалоги и повествование",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.story",
+    "$.dialog"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 241,
+   "id": "puzzle.state-machine",
+   "summary": "несколько состояний и допустимые переходы.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 242,
+   "id": "puzzle.sequence-lock",
+   "summary": "повторение заданной последовательности.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 243,
+   "id": "puzzle.keypad",
+   "summary": "цифровой код и ограничение попыток.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 244,
+   "id": "puzzle.switch-combination",
+   "summary": "набор переключателей с проверкой решения.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 245,
+   "id": "puzzle.light-mirrors",
+   "summary": "отражение луча между направленными объектами.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 246,
+   "id": "puzzle.pressure-sequence",
+   "summary": "активация плит в правильном порядке.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 247,
+   "id": "puzzle.sokoban",
+   "summary": "толкание ящиков к целевым клеткам.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 248,
+   "id": "puzzle.matching",
+   "summary": "поиск пар и проверка завершения поля.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 249,
+   "id": "puzzle.sliding-tiles",
+   "summary": "перестановка элементов с одной пустой клеткой.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 250,
+   "id": "puzzle.rotating-discs",
+   "summary": "поворот механизмов для совпадения меток.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 251,
+   "id": "puzzle.wiring",
+   "summary": "соединение входов и выходов по правилам.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 252,
+   "id": "puzzle.logic-gates",
+   "summary": "AND/OR/NOT-ворота для игровой схемы.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 253,
+   "id": "puzzle.memory",
+   "summary": "последовательность визуальных или звуковых сигналов.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 254,
+   "id": "puzzle.timing",
+   "summary": "действие в допустимом временном окне.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 255,
+   "id": "puzzle.hidden-object",
+   "summary": "список объектов поиска и подтверждение.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 256,
+   "id": "puzzle.maze-switch",
+   "summary": "открытие пути переключателями и дверями.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 257,
+   "id": "puzzle.physics-balance",
+   "summary": "удержание равновесия физическими объектами.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 258,
+   "id": "puzzle.color-code",
+   "summary": "смешивание и сопоставление цветов.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 259,
+   "id": "puzzle.riddle",
+   "summary": "вопрос, набор допустимых ответов и реакция.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 260,
+   "id": "puzzle.reset",
+   "summary": "сброс головоломки и восстановление исходного состояния.",
+   "section": "M",
+   "section_title": "Головоломки и логические механики",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.fn",
+    "$.triggers",
+    "$.signal"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 261,
+   "id": "world.scene-entry",
+   "summary": "начальная точка и сценарий входа в сцену.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 262,
+   "id": "world.scene-exit",
+   "summary": "условие выхода и целевая сцена.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 263,
+   "id": "world.spawn-points",
+   "summary": "группа точек появления и выбор свободной.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 264,
+   "id": "world.checkpoint-chain",
+   "summary": "последовательность сохранённых контрольных точек.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 265,
+   "id": "world.tilemap-layer",
+   "summary": "назначение tilemap и параметров слоя.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 266,
+   "id": "world.tilemap-collision",
+   "summary": "настройка столкновений через существующий Tilemap.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 267,
+   "id": "world.breakable-tiles",
+   "summary": "разрушение и восстановление клеток карты.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 268,
+   "id": "world.parallax-layer",
+   "summary": "фоновый слой через существующую Parallax-студию.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 269,
+   "id": "world.light-zone",
+   "summary": "световая область с параметрами узла light.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 270,
+   "id": "world.audio-zone",
+   "summary": "смена музыки и окружения внутри области.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 271,
+   "id": "world.weather",
+   "summary": "визуальная погода и игровой эффект.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 272,
+   "id": "world.day-night",
+   "summary": "цикл времени и параметров окружения.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 273,
+   "id": "world.gravity-zone",
+   "summary": "локальный профиль гравитации.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 274,
+   "id": "world.time-scale-zone",
+   "summary": "изменение темпа игры в области.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 275,
+   "id": "world.camera-boundary",
+   "summary": "ограничение движения камеры.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 276,
+   "id": "world.one-way-platform",
+   "summary": "платформа с односторонним проходом.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 277,
+   "id": "world.moving-hazard",
+   "summary": "движущаяся опасность с маршрутом.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 278,
+   "id": "world.secret-area",
+   "summary": "обнаружение скрытой области и награда.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 279,
+   "id": "world.streamed-room",
+   "summary": "активация комнаты и её сущностей по переходу.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 280,
+   "id": "world.level-exit",
+   "summary": "завершение уровня и передача результата.",
+   "section": "N",
+   "section_title": "Уровень, мир и окружение",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.world",
+    "$.tilemap",
+    "$.layers"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 281,
+   "id": "camera.follow",
+   "summary": "следование за игроком.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.camera.follow"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 282,
+   "id": "camera.deadzone",
+   "summary": "удержание игрока в безопасной экранной зоне.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 283,
+   "id": "camera.lookahead",
+   "summary": "смещение камеры по направлению скорости.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 284,
+   "id": "camera.smoothing",
+   "summary": "сглаженное следование с ограничением времени.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 285,
+   "id": "camera.bounds",
+   "summary": "границы камеры уровня.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.camera.limits"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 286,
+   "id": "camera.room-lock",
+   "summary": "фиксация камеры внутри области.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 287,
+   "id": "camera.screen-shake",
+   "summary": "тряска с затуханием и приоритетом события.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.camera.shake",
+    "$.fn.hp",
+    "$.updateFor"
+   ],
+   "gaps": [],
+   "dependencies": [
+    "health.base"
+   ]
+  },
+  {
+   "n": 288,
+   "id": "camera.trauma",
+   "summary": "накопление и спад интенсивности встряски.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 289,
+   "id": "camera.zoom",
+   "summary": "плавное увеличение и возврат масштаба.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "implemented",
+   "api": [
+    "$.camera.zoom",
+    "$.camera.zoomTo"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 290,
+   "id": "camera.split-screen",
+   "summary": "локальная split camera для двух игроков.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 291,
+   "id": "camera.transition",
+   "summary": "переход камеры между целями и состояниями.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 292,
+   "id": "camera.death-focus",
+   "summary": "фокусировка на месте смерти или победителе.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 293,
+   "id": "camera.cutscene-rail",
+   "summary": "прохождение заданного списка точек.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 294,
+   "id": "camera.look-at-target",
+   "summary": "временный фокус на NPC или объекте.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 295,
+   "id": "camera.parallax-focus",
+   "summary": "связь центра и глубины параллакс-слоёв.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 296,
+   "id": "render.tint-profile",
+   "summary": "смена цветового профиля через узлы.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.gfx",
+    "$.fx"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 297,
+   "id": "render.fade",
+   "summary": "затемнение и осветление сцены.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.gfx",
+    "$.fx"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 298,
+   "id": "render.flash",
+   "summary": "полноэкранная вспышка через RmlUi.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.gfx",
+    "$.fx"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 299,
+   "id": "render.vignette",
+   "summary": "экранная рамка и настройка интенсивности.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.gfx",
+    "$.fx"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 300,
+   "id": "render.accessibility-filter",
+   "summary": "поддерживаемая цветовая коррекция сцены.",
+   "section": "O",
+   "section_title": "Камера и экранное представление",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.gfx",
+    "$.fx"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 301,
+   "id": "animation.idle-run",
+   "summary": "переключение idle и run по скорости.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 302,
+   "id": "animation.jump-fall",
+   "summary": "переход прыжок, падение, приземление.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 303,
+   "id": "animation.attack",
+   "summary": "проигрывание атаки и временное окно действия.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 304,
+   "id": "animation.damage",
+   "summary": "реакция на попадание и возврат к состоянию.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 305,
+   "id": "animation.death",
+   "summary": "завершение анимации смерти и удаление узла.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 306,
+   "id": "animation.direction-4",
+   "summary": "выбор четырёх направлений.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 307,
+   "id": "animation.direction-8",
+   "summary": "выбор восьми направлений.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 308,
+   "id": "animation.weapon-overlay",
+   "summary": "отдельный слой анимации оружия.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 309,
+   "id": "animation.blend-profile",
+   "summary": "переход между движениями с $.anim.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 310,
+   "id": "animation.cancel-rules",
+   "summary": "правила прерывания клипа событием.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 311,
+   "id": "animation.event-hooks",
+   "summary": "игровые события на кадрах animation clips.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 312,
+   "id": "animation.loop-profile",
+   "summary": "loop, ping-pong и конечное воспроизведение.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 313,
+   "id": "animation.speed-scale",
+   "summary": "скорость анимации от параметра игры.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 314,
+   "id": "animation.hit-pause",
+   "summary": "краткая остановка кадрового времени при попадании.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 315,
+   "id": "animation.afterimage",
+   "summary": "следы спрайта для dash и быстрой атаки.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 316,
+   "id": "animation.flash-overlay",
+   "summary": "временный цветовой слой при действии.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 317,
+   "id": "animation.emote",
+   "summary": "эмоция и время отображения над персонажем.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 318,
+   "id": "animation.spawn",
+   "summary": "появление с клипом и включением ввода.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 319,
+   "id": "animation.respawn",
+   "summary": "возвращение к сцене с эффектом.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 320,
+   "id": "animation.atlas-binding",
+   "summary": "выбор клипа из существующего atlas-файла.",
+   "section": "P",
+   "section_title": "Анимация и визуальные состояния",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.anim",
+    "$.tween"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 321,
+   "id": "audio.one-shot",
+   "summary": "короткий звук по игровому событию.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 322,
+   "id": "audio.loop",
+   "summary": "запуск и остановка зацикленного звука.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 323,
+   "id": "audio.music-zone",
+   "summary": "музыкальный профиль игровой области.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 324,
+   "id": "audio.music-transition",
+   "summary": "плавное переключение треков.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 325,
+   "id": "audio.ambience",
+   "summary": "фоновая атмосфера сцены.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 326,
+   "id": "audio.footsteps",
+   "summary": "звук шага по типу поверхности.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 327,
+   "id": "audio.weapon",
+   "summary": "звук выстрела, перезарядки и dry fire.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 328,
+   "id": "audio.damage",
+   "summary": "звук попадания и защита от перегруза.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 329,
+   "id": "audio.ui",
+   "summary": "звуки наведения, выбора и отказа.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 330,
+   "id": "audio.dialogue",
+   "summary": "голосовая реплика и текст.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 331,
+   "id": "audio.distance-profile",
+   "summary": "выбор дальности и уровня сигнала.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 332,
+   "id": "audio.ducking",
+   "summary": "приглушение музыки под важное событие.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.audio",
+    "$.sound"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 333,
+   "id": "feedback.hit-stop",
+   "summary": "краткое замедление игрового времени.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.hitFx",
+    "$.fx",
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 334,
+   "id": "feedback.camera-shake",
+   "summary": "сигнал тяжёлого попадания камерой.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.hitFx",
+    "$.fx",
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 335,
+   "id": "feedback.particles",
+   "summary": "запуск существующей Particle-студии и эффекта.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.hitFx",
+    "$.fx",
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 336,
+   "id": "feedback.screen-pulse",
+   "summary": "краткий контрастный экранный сигнал.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.hitFx",
+    "$.fx",
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 337,
+   "id": "feedback.controller-rumble",
+   "summary": "вибрация контроллера с безопасными пределами.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.hitFx",
+    "$.fx",
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 338,
+   "id": "feedback.combo-popup",
+   "summary": "отображение серии успешных действий.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.hitFx",
+    "$.fx",
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 339,
+   "id": "feedback.quest-toast",
+   "summary": "уведомление о цели или награде.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.hitFx",
+    "$.fx",
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 340,
+   "id": "feedback.error-prompt",
+   "summary": "доступная подсказка о невозможном действии.",
+   "section": "Q",
+   "section_title": "Звук и обратная связь",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.hitFx",
+    "$.fx",
+    "$.camera"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 341,
+   "id": "ui.health-bar",
+   "summary": "полоса здоровья из значения игрового узла.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 342,
+   "id": "ui.stamina-bar",
+   "summary": "выносливость, восстановление и состояние истощения.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 343,
+   "id": "ui.shield-bar",
+   "summary": "отдельная полоса щита.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 344,
+   "id": "ui.weapon-panel",
+   "summary": "активное оружие, режим и патроны.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 345,
+   "id": "ui.quickbar",
+   "summary": "быстрый выбор предметов.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 346,
+   "id": "ui.inventory-screen",
+   "summary": "экран инвентаря через RmlUi document.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 347,
+   "id": "ui.equipment-screen",
+   "summary": "экипировка и сравнение предметов.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 348,
+   "id": "ui.party-panel",
+   "summary": "портреты и состояния группы.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 349,
+   "id": "ui.quest-tracker",
+   "summary": "текущая цель и краткий прогресс.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 350,
+   "id": "ui.quest-journal",
+   "summary": "журнал заданий и фильтры.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 351,
+   "id": "ui.dialogue-box",
+   "summary": "окно реплики и имя говорящего.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 352,
+   "id": "ui.choice-list",
+   "summary": "кнопки выбора ветки диалога.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 353,
+   "id": "ui.interaction-prompt",
+   "summary": "контекстное действие около цели.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 354,
+   "id": "ui.objective-marker",
+   "summary": "экранный маркер текущей цели.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 355,
+   "id": "ui.minimap-markers",
+   "summary": "пользовательские маркеры на карте.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 356,
+   "id": "ui.pause-menu",
+   "summary": "пауза, продолжение и выход в меню.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 357,
+   "id": "ui.settings-menu",
+   "summary": "настройки игры через поддерживаемые RmlUi controls.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 358,
+   "id": "ui.confirm-dialog",
+   "summary": "подтверждение удаления, выхода и сброса.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 359,
+   "id": "ui.loading-overlay",
+   "summary": "текст и прогресс загрузки сцены.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 360,
+   "id": "ui.result-screen",
+   "summary": "экран итога уровня и повторного запуска.",
+   "section": "R",
+   "section_title": "RmlUi-интерфейс и HUD",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 361,
+   "id": "save.profile",
+   "summary": "именованный игровой профиль через штатное хранилище.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.save",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 362,
+   "id": "save.slot",
+   "summary": "несколько слотов и метаданные времени.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.save",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 363,
+   "id": "save.checkpoint",
+   "summary": "сохранение позиции и допустимого состояния игрока.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.save",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 364,
+   "id": "save.inventory",
+   "summary": "сериализация содержимого без функций и node handles.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.save",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 365,
+   "id": "save.quest-state",
+   "summary": "состояния активных заданий.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.save",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 366,
+   "id": "save.story-state",
+   "summary": "флаги, отношения и ветки истории.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.save",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 367,
+   "id": "save.world-state",
+   "summary": "выбранные состояния дверей и предметов.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.save",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 368,
+   "id": "save.migration",
+   "summary": "переход формата сейва с dry-run и сохранением backup.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.save",
+    "$.store"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 369,
+   "id": "settings.controls",
+   "summary": "раскладка и переназначение действий.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.store",
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 370,
+   "id": "settings.audio",
+   "summary": "громкость музыки, игры и интерфейса.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.store",
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 371,
+   "id": "settings.video",
+   "summary": "разрешение, fullscreen и масштаб интерфейса.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.store",
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 372,
+   "id": "settings.gameplay",
+   "summary": "сложность, скорость текста и вспомогательные опции.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.store",
+    "$.ui"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 373,
+   "id": "accessibility.text-scale",
+   "summary": "масштабирование текста HUD и диалогов.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 374,
+   "id": "accessibility.high-contrast",
+   "summary": "контрастные состояния интерактивных целей.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 375,
+   "id": "accessibility.color-cues",
+   "summary": "дублирование цвета формой и текстом.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 376,
+   "id": "accessibility.hold-alternative",
+   "summary": "переключаемое действие вместо удержания.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 377,
+   "id": "accessibility.reduce-motion",
+   "summary": "уменьшение тряски и переходов.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 378,
+   "id": "accessibility.subtitle",
+   "summary": "субтитры с параметрами отображения.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.ui",
+    "$.input"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 379,
+   "id": "localization.string-table",
+   "summary": "таблица локализованных ключей.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.i18n"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 380,
+   "id": "localization.number-time",
+   "summary": "локализованный формат числа, даты и таймера.",
+   "section": "S",
+   "section_title": "Сохранения, настройки и доступность",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.i18n"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 381,
+   "id": "net.session-bootstrap",
+   "summary": "запуск сессии через высокоуровневый $.net.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 382,
+   "id": "net.host-session",
+   "summary": "создание авторитетной игровой сессии.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 383,
+   "id": "net.client-session",
+   "summary": "вход в сессию и обработка отказа.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 384,
+   "id": "net.room-create",
+   "summary": "создание комнаты с правилами и лимитом игроков.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 385,
+   "id": "net.room-join",
+   "summary": "поиск и вход в комнату по коду.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 386,
+   "id": "net.room-leave",
+   "summary": "выход, cleanup и восстановление интерфейса.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 387,
+   "id": "net.lobby",
+   "summary": "список игроков и готовность к старту.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 388,
+   "id": "net.ready-check",
+   "summary": "сбор ready state и блокировка старта.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 389,
+   "id": "net.player-identity",
+   "summary": "ник, выбранный профиль и цвет.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 390,
+   "id": "net.player-spawn",
+   "summary": "появление сетевого игрока с устойчивым ID.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 391,
+   "id": "net.player-owner",
+   "summary": "связь сетевого владельца и обычной сущности.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 392,
+   "id": "net.authority-profile",
+   "summary": "выбор авторитетных полей и владельца.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 393,
+   "id": "net.host-migration",
+   "summary": "согласованная передача роли host при поддержке backend.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 394,
+   "id": "net.disconnect-screen",
+   "summary": "причина разрыва и доступные действия.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 395,
+   "id": "net.reconnect",
+   "summary": "повторное подключение с временными ограничениями.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 396,
+   "id": "net.invite-code",
+   "summary": "генерация и ввод кода комнаты.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 397,
+   "id": "net.matchmaking-filter",
+   "summary": "фильтр режима, карты и заполненности.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 398,
+   "id": "net.session-settings",
+   "summary": "синхронизация правил сессии.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 399,
+   "id": "net.coop-local",
+   "summary": "добавление второго локального игрока.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 400,
+   "id": "net.network-debug-hud",
+   "summary": "данные соединения через доступный диагностический API.",
+   "section": "T",
+   "section_title": "Сессии и многопользовательский проект",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 401,
+   "id": "net.replicate-transform",
+   "summary": "синхронизация трансформа существующей сущности.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 402,
+   "id": "net.replicate-health",
+   "summary": "серверное здоровье и клиенты для отображения.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 403,
+   "id": "net.replicate-animation",
+   "summary": "состояние визуальной анимации удалённого игрока.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 404,
+   "id": "net.replicate-inventory",
+   "summary": "авторитетные предметы и подтверждённые изменения.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 405,
+   "id": "net.input-command",
+   "summary": "высокоуровневая отправка ввода клиента.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 406,
+   "id": "net.server-action",
+   "summary": "проверяемое действие на авторитетной стороне.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 407,
+   "id": "net.damage-command",
+   "summary": "запрос урона с валидацией хозяина и дистанции.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 408,
+   "id": "net.projectile-authority",
+   "summary": "создание projectile только на выбранном авторитете.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 409,
+   "id": "net.interpolation-profile",
+   "summary": "визуальная интерполяция состояния удалённой сущности.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 410,
+   "id": "net.prediction-profile",
+   "summary": "предсказание локального ввода при поддержке $.net.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 411,
+   "id": "net.reconciliation",
+   "summary": "подтверждение и коррекция локального состояния.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 412,
+   "id": "net.rpc-action",
+   "summary": "именованное высокоуровневое действие с валидируемыми данными.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 413,
+   "id": "net.team-assignment",
+   "summary": "назначение команды и роли игрока.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 414,
+   "id": "net.scoreboard",
+   "summary": "таблица подтверждённого счёта.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 415,
+   "id": "net.round-state",
+   "summary": "состояния ожидания, игры, конца раунда.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 416,
+   "id": "net.vote-map",
+   "summary": "голосование карты и обработка равенства.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 417,
+   "id": "net.spectator",
+   "summary": "наблюдение без владения игровой сущностью.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 418,
+   "id": "net.shared-object",
+   "summary": "авторитетная совместная активация объекта.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 419,
+   "id": "net.coop-revive",
+   "summary": "сетевая помощь союзнику с проверкой владельца.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 420,
+   "id": "net.lag-safe-feedback",
+   "summary": "локальный отклик до подтверждения без смены истины.",
+   "section": "U",
+   "section_title": "Синхронизация и сетевой gameplay",
+   "kind": "behavior",
+   "status": "planned",
+   "api": [
+    "$.net"
+   ],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 421,
+   "id": "kit.platformer-core",
+   "summary": "игрок, платформерное движение, камера и цель уровня.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "implemented",
+   "api": [],
+   "gaps": [],
+   "dependencies": [
+    "movement.platformer",
+    "health.base",
+    "camera.follow"
+   ]
+  },
+  {
+   "n": 422,
+   "id": "kit.platformer-combat",
+   "summary": "ближнее оружие, враг, здоровье и hit feedback.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "implemented",
+   "api": [],
+   "gaps": [],
+   "dependencies": [
+    "health.base",
+    "health.hit-flash",
+    "health.invulnerability",
+    "camera.screen-shake"
+   ]
+  },
+  {
+   "n": 423,
+   "id": "kit.platformer-collectathon",
+   "summary": "сбор предметов, счётчик и выход.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 424,
+   "id": "kit.platformer-checkpoint",
+   "summary": "контрольная точка, смерть и безопасный возврат.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 425,
+   "id": "kit.metroidvania-gates",
+   "summary": "способности игрока и закрытые проходы.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 426,
+   "id": "kit.metroidvania-map",
+   "summary": "исследованные комнаты и отметки карты.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 427,
+   "id": "kit.adventure-interaction",
+   "summary": "осмотр объектов, контекстные действия и подсказки.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 428,
+   "id": "kit.adventure-inventory",
+   "summary": "ключи, предметы и комбинирование.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 429,
+   "id": "kit.puzzle-platformer",
+   "summary": "движение, блоки, кнопки и reset.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 430,
+   "id": "kit.precision-platformer",
+   "summary": "coyote time, jump buffer и retry.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 431,
+   "id": "kit.parkour",
+   "summary": "dash, wall-jump, препятствия и таймер.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 432,
+   "id": "kit.underwater",
+   "summary": "плавание, кислород, сбор и опасности.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 433,
+   "id": "kit.gravity-platformer",
+   "summary": "гравитационные зоны и смена направления.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 434,
+   "id": "kit.vehicle-platformer",
+   "summary": "транспортное средство и выход игрока.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 435,
+   "id": "kit.boss-platformer",
+   "summary": "телеграф, фазы и проверка победы.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 436,
+   "id": "kit.platformer-coop",
+   "summary": "два игрока и локальные цели уровня.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 437,
+   "id": "kit.exploration-journal",
+   "summary": "обнаружения, заметки и журнал мира.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 438,
+   "id": "kit.secret-hunt",
+   "summary": "секретные зоны, подсказки и завершение коллекции.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 439,
+   "id": "kit.level-challenge",
+   "summary": "временные цели и локальный результат.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 440,
+   "id": "kit.stage-select",
+   "summary": "выбор открытых уровней и их достижений.",
+   "section": "V",
+   "section_title": "Пакеты платформера, приключения и исследования",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 441,
+   "id": "kit.top-down-shooter",
+   "summary": "движение сверху, aim, оружие и враги.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 442,
+   "id": "kit.twin-stick-arena",
+   "summary": "twin-stick ввод, волны и выживание.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 443,
+   "id": "kit.bullet-heaven",
+   "summary": "массовые враги, автоатаки и рост уровня.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 444,
+   "id": "kit.arena-survival",
+   "summary": "арена, таймер и постепенно сложные волны.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 445,
+   "id": "kit.stealth",
+   "summary": "зрение, тревога, укрытия и сброс поиска.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 446,
+   "id": "kit.infiltration",
+   "summary": "сигнализации, ключевые зоны и цель миссии.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 447,
+   "id": "kit.cover-shooter",
+   "summary": "укрытия, дальний бой и подавление.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 448,
+   "id": "kit.shooter-loadout",
+   "summary": "выбор оружия, магазины и стартовый набор.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 449,
+   "id": "kit.boss-rush",
+   "summary": "последовательность боссов и итог забега.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 450,
+   "id": "kit.roguelike-run",
+   "summary": "случайный маршрут, награда и состояние забега.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 451,
+   "id": "kit.roguelite-meta",
+   "summary": "постоянные открытия между забегами.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 452,
+   "id": "kit.deckbuilder-battle",
+   "summary": "рука, цена карт и разрешение хода.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 453,
+   "id": "kit.action-combo",
+   "summary": "цепочки атак, отмены и combo score.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 454,
+   "id": "kit.fighting-game",
+   "summary": "два бойца, раунд, таймер и победа.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 455,
+   "id": "kit.beat-em-up",
+   "summary": "движение по глубине, враги и волновой выход.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 456,
+   "id": "kit.tower-defense",
+   "summary": "башни, маршрут врага и ресурсы раунда.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 457,
+   "id": "kit.lane-defense",
+   "summary": "позиции обороны, волны и контроль прохода.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 458,
+   "id": "kit.bomb-arena",
+   "summary": "бомбы, разрушаемые клетки и безопасная зона.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 459,
+   "id": "kit.survival-combat",
+   "summary": "здоровье, голод, инструменты и hostile NPC.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 460,
+   "id": "kit.horde-defense",
+   "summary": "постройки защиты, боеприпасы и финальная волна.",
+   "section": "W",
+   "section_title": "Пакеты shooter, action и roguelike",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 461,
+   "id": "kit.jrpg-party",
+   "summary": "группа, характеристики, очередь и меню команд.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 462,
+   "id": "kit.jrpg-turn-battle",
+   "summary": "раунды, действия, цели и итоги боя.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 463,
+   "id": "kit.tactical-grid",
+   "summary": "клетки, очки хода и доступные действия.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 464,
+   "id": "kit.tactical-squad",
+   "summary": "отряд, роли, приказы и укрытия.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 465,
+   "id": "kit.crpg-dialogue",
+   "summary": "навыковые проверки, флаги и последствия.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 466,
+   "id": "kit.dungeon-crawl",
+   "summary": "комнаты, встреча, добыча и переходы.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 467,
+   "id": "kit.life-sim",
+   "summary": "расписание NPC, отношения и календарь.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 468,
+   "id": "kit.farming",
+   "summary": "посев, рост, полив, урожай и продажа.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 469,
+   "id": "kit.fishing",
+   "summary": "заброс, поклёвка, minigame и добыча.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 470,
+   "id": "kit.crafting-survival",
+   "summary": "сбор ресурсов, рецепты и долговечность.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 471,
+   "id": "kit.colony-management",
+   "summary": "жители, задачи, ресурсы и события.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 472,
+   "id": "kit.business-sim",
+   "summary": "доход, расходы, цены и улучшения.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 473,
+   "id": "kit.traffic-management",
+   "summary": "транспортные агенты и светофорные сигналы.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 474,
+   "id": "kit.racing-time-trial",
+   "summary": "круги, контрольные точки, ghost и рекорд.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 475,
+   "id": "kit.racing-combat",
+   "summary": "транспорт, оружие, позиции и финиш.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 476,
+   "id": "kit.sports-match",
+   "summary": "команды, счёт, таймер и исход матча.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 477,
+   "id": "kit.platform-sports",
+   "summary": "игроки, мяч, отскоки и раунд.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 478,
+   "id": "kit.rhythm",
+   "summary": "дорожки, тайминг и оценка точности.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 479,
+   "id": "kit.music-arcade",
+   "summary": "ритм, эффекты и серия попаданий.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 480,
+   "id": "kit.pinball",
+   "summary": "флипперы, очки, цели и reset стола.",
+   "section": "X",
+   "section_title": "Пакеты RPG, тактики, симуляции и спорта",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 481,
+   "id": "kit.visual-novel",
+   "summary": "VN Maker сцены, персонажи, выборы и концовки.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 482,
+   "id": "kit.romance-routes",
+   "summary": "отношения, маршрут персонажа и условия финала.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 483,
+   "id": "kit.mystery-investigation",
+   "summary": "улики, связи и раскрытие дела.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 484,
+   "id": "kit.episodic-story",
+   "summary": "главы, сохранённые ветки и перенос прогресса.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 485,
+   "id": "kit.horror",
+   "summary": "свет, звук, преследование и безопасные зоны.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 486,
+   "id": "kit.escape-room",
+   "summary": "цепочка пазлов, предметы и завершение комнаты.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 487,
+   "id": "kit.tutorial",
+   "summary": "триггеры шагов, подтверждение ввода и пропуск.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 488,
+   "id": "kit.daily-challenge",
+   "summary": "ежедневная цель, награда и локальный прогресс.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 489,
+   "id": "kit.achievement-set",
+   "summary": "условия достижений и уведомления.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 490,
+   "id": "kit.replay-ghost",
+   "summary": "локальная запись прохождения и ghost.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 491,
+   "id": "kit.local-coop",
+   "summary": "split/общая камера, игроки, revive и общий HUD.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 492,
+   "id": "kit.authoritative-coop",
+   "summary": "host, авторитет, игровые сущности и синхронизация.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 493,
+   "id": "kit.arena-multiplayer",
+   "summary": "комнаты, матч, round state и scoreboard.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 494,
+   "id": "kit.multiplayer-survival",
+   "summary": "сессия, общий мир и серверные события.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 495,
+   "id": "kit.project-platformer",
+   "summary": "законченное приложение с меню, уровнями и сохранением.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 496,
+   "id": "kit.project-top-down-action",
+   "summary": "законченная игра с заданиями и оружием.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 497,
+   "id": "kit.project-vn-romance",
+   "summary": "законченная VN с маршрутами и концовками.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 498,
+   "id": "kit.project-jrpg",
+   "summary": "исследование, группа, боевая сцена и прогрессия.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 499,
+   "id": "kit.project-coop-adventure",
+   "summary": "законченный авторитетный кооперативный проект.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  },
+  {
+   "n": 500,
+   "id": "kit.project-witch",
+   "summary": "законченный Witch-проект с персонажем, боевыми поведениями, диалогами и прогрессией.",
+   "section": "Y",
+   "section_title": "Narrative, обучение, полный проект и QA",
+   "kind": "kit",
+   "status": "planned",
+   "api": [],
+   "gaps": [],
+   "dependencies": []
+  }
+ ]
+}
