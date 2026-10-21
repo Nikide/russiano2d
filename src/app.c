@@ -886,6 +886,31 @@ static void r2d__app_forward_virtual_mouse(R2DApp *app)
     }
 }
 
+// RmlUi получает клавиатуру событиями, как и мышь. Опросный ввод агента
+// должен проходить тем же путём: Tab/Backspace/shortcuts в реальном Inspector.
+static void r2d__app_forward_virtual_keys(R2DApp *app)
+{
+    SDL_Keymod mods = SDL_KMOD_NONE;
+    if (app->keys_cur[SDL_SCANCODE_LCTRL] || app->keys_cur[SDL_SCANCODE_RCTRL]) mods |= SDL_KMOD_CTRL;
+    if (app->keys_cur[SDL_SCANCODE_LSHIFT] || app->keys_cur[SDL_SCANCODE_RSHIFT]) mods |= SDL_KMOD_SHIFT;
+    if (app->keys_cur[SDL_SCANCODE_LALT] || app->keys_cur[SDL_SCANCODE_RALT]) mods |= SDL_KMOD_ALT;
+    if (app->keys_cur[SDL_SCANCODE_LGUI] || app->keys_cur[SDL_SCANCODE_RGUI]) mods |= SDL_KMOD_GUI;
+    for (int sc = 0; sc < SDL_SCANCODE_COUNT; ++sc) {
+        const bool down = app->keys_virt[sc] || app->keys_tap[sc];
+        if (down == app->keys_virt_sent[sc]) continue;
+        app->keys_virt_sent[sc] = down;
+        SDL_Event ev;
+        SDL_zero(ev);
+        ev.type = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+        ev.key.timestamp = SDL_GetTicksNS();
+        ev.key.scancode = (SDL_Scancode)sc;
+        ev.key.key = SDL_GetKeyFromScancode((SDL_Scancode)sc, mods, false);
+        ev.key.mod = mods;
+        ev.key.down = down;
+        r2d__app_dispatch(app, &ev);
+    }
+}
+
 void r2d_app_begin_frame(R2DApp *app)
 {
     // Предыдущее состояние ввода нужно для детекта фронтов нажатий.
@@ -906,6 +931,12 @@ void r2d_app_begin_frame(R2DApp *app)
     if (app->text_pending_len > 0) {
         if (r2d__text_buf_append(&app->text_input, &app->text_input_cap,
                                  &app->text_input_len, app->text_pending, true)) {
+            SDL_Event ev;
+            SDL_zero(ev);
+            ev.type = SDL_EVENT_TEXT_INPUT;
+            ev.text.timestamp = SDL_GetTicksNS();
+            ev.text.text = app->text_pending;
+            r2d__app_dispatch(app, &ev);
             app->text_pending[0] = '\0';
             app->text_pending_len = 0;
         }
@@ -1102,6 +1133,7 @@ void r2d_app_begin_frame(R2DApp *app)
         if (app->keys_virt[sc] || app->keys_tap[sc]) app->keys_cur[sc] = true;
     }
     r2d__app_forward_virtual_mouse(app);
+    r2d__app_forward_virtual_keys(app);
     app->mouse_cur |= app->mouse_virt;
     if (app->mouse_virt_active) {
         app->mouse_x = app->mouse_virt_x;

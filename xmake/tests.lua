@@ -924,6 +924,7 @@ target("snippets_regression_tests")
             "tests/sdk_snippet_migration_test.py",
             "tests/agent/snippets_test.py",
             "tests/agent/snippets_sections_test.py",
+            "tests/agent/snippets_network_test.py",
             "tests/agent/snippets_mechanics_test.py",
             "tests/agent/snippets_combat_test.py",
             "tests/agent/editor_snippets_test.py",

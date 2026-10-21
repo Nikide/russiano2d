@@ -113,6 +113,8 @@ def main():
     check(gen["ok"], "generate всего каталога: %s" % [d["message"] for d in gen["diagnostics"]][:3])
     again = r2d("snippet", "generate", game, "--check")
     check(again["ok"], "повторная генерация детерминирована")
+    lint = r2d("lint", game)
+    check(lint["ok"], "lint authored/generated JS: %s" % lint.get("diagnostics", [])[:3])
     v = r2d("validate", game)
     bad = [(d["code"], d["message"]) for d in v["diagnostics"] if d["severity"] in ("error", "fatal")]
     check(not bad, "validate проекта: %s" % bad[:3])

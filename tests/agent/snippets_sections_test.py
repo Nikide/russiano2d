@@ -77,7 +77,10 @@ $.ready(() => $.scene.load('first', {transition:'none'}));
             def ev(code):
                 return a.eval(code + "; 'ok'")
             eq("$('#identity').data('identity').name", 'Проверка', 'A: identity stored')
+            distance = a.eval("$('#chase').distanceTo($('#hero'))")
             a.hold(['D']); a.step(5); a.release_all()
+            assert a.eval("$('#chase').distanceTo($('#hero'))") < distance, 'E: chase approaches target'
+            print('  ok E: chase approaches target', flush=True)
             eq("Math.round($('#move').velocity().x)", 120, 'B: movement responds to input')
             ev("$('#regen').damage(30)"); a.step(3)
             eq("$('#regen').hp()", 70, 'D: regeneration delay')

@@ -73,6 +73,7 @@ typedef struct R2DApp {
     // Наполняется агентским протоколом (src/agent.c) и накладывается поверх
     // настоящего ввода в начале кадра — игра разницы не видит.
     bool     keys_virt[SDL_SCANCODE_COUNT];   // удерживается
+    bool     keys_virt_sent[SDL_SCANCODE_COUNT]; // доставлено подписчикам SDL (RmlUi)
     bool     keys_tap[SDL_SCANCODE_COUNT];    // нажатие ровно на один кадр
     uint32_t mouse_virt;                      // маска кнопок
     bool     mouse_virt_active;               // позиция курсора задана агентом

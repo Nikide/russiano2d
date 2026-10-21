@@ -132,3 +132,31 @@
   готовность отключившегося peer.
 - `snippets_test.py`: **PASS**. Общий повторяемый запуск новых и существующих
   suites: `xmake test snippets_regression_tests/contracts` (после UI шага).
+
+### Шаг 3: Editor и dogfood
+
+- `xmake test snippets_regression_tests/contracts`: **PASS**, 29.659 с;
+  includes boundaries/migration/runtime sections/network/mechanics/combat/Editor/UX.
+- `editor_snippets_test.py`: **49 checks PASS**: behavior и kit authoring,
+  preview исходника до/после без записи, обновление pinned version через
+  dry-run/apply, visibleIf, native отказ неверного vec2, ownership, внешний
+  generated conflict/recovery, undo/redo/rollback и reopen.
+- `editor_snippets_ux_test.py`: **PASS**, реальные RmlUi text/key/wheel events,
+  русский поиск без потери фокуса, Tab → категории, scroll 500 записей,
+  resize 960×640/1440×900. Снимки `acceptance-search.png` и
+  `acceptance-catalog-scroll.png` сняты из текущего Editor.
+- Исправления UX: поиск обновляет только результаты; форма автора свёрнута,
+  kit создаётся с составом; Inspector показывает группы/visibleIf/слоты/состав;
+  меняется только поле события, bool default не запускает ложную запись;
+  неверный vec2 не превращается в 0; JSON-списки сохраняют внутренние запятые.
+- Ввод агента раньше доставлял RmlUi только мышь. В существующий SDL event
+  path добавлены virtual key/text: UI догфуд проверяет реальные события вместо
+  подмены контролов. Нового UI/backend не добавлено.
+- `r2d lint snippets`: **PASS**, 420 JS sources, без диагностик.
+- Повторный `xmake test snippets_tests/catalog`: **PASS**, 500 пакетов,
+  101.976 с, включая явный lint authored/generated JS, validate и runtime.
+- QuickJS `tests/js/snippets_panel_test.mjs`: **PASS**, конверсия полей,
+  JSON списки с запятыми, ошибочные vec2 и выбор ресурсов.
+- Required docs: doc_claims/doc_coverage/api_docs_sync — **PASS**.
+  Общий JS run: 129/130 PASS; единственное падение — известный
+  `api_docs_test.mjs` из постороннего generated API каталога, файлы не менялись.
