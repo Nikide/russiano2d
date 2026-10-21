@@ -45,3 +45,7 @@ python3 tests/api_docs_sync_test.py && python3 tests/api_freeze_test.py
 
 Ошибки — со стабильными кодами (`R2D001`, `SDK_*`, ...) и machine-readable
 `--json`, пригодным для GUI/CI/агентов. Никаких молчаливых fallback'ов.
+
+## Передача работы
+
+Система сниппетов (ветка `snippets-system`): состояние, остаток и команды — [docs/HANDOFF_CODEX.md](docs/HANDOFF_CODEX.md).
