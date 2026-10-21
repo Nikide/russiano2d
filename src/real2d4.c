@@ -1438,6 +1438,10 @@ static JSValue js_load(JSContext *ctx, JSValueConst self, int argc, JSValueConst
         return JS_ThrowTypeError(ctx, "real2d.load: не прочитан контейнер %s", full);
     }
 
+    if (strlen(full) >= sizeof(((R2d4Asset *)0)->path)) {
+        r2d_vfs_free(bytes);
+        return JS_ThrowRangeError(ctx, "real2d.load: путь длиннее %zu байт", sizeof(((R2d4Asset *)0)->path) - 1);
+    }
     R2d4Asset *a = (R2d4Asset *)calloc(1, sizeof *a);
     if (!a) { r2d_vfs_free(bytes); return JS_ThrowOutOfMemory(ctx); }
     a->used = true;
