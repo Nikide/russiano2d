@@ -1,0 +1,74 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "pickup.collect",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Подбираемый предмет"
+  },
+  "description": {
+    "ru": "Исчезает при касании игрока и сообщает событие 'collect'."
+  },
+  "kind": "behavior",
+  "category": "Предметы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "pickup",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.trigger"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.audio.play"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "collector",
+      "label": "Кто подбирает",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "sound",
+      "label": "Звук",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "value",
+      "label": "Ценность",
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 1000000
+    }
+  ],
+  "tags": [
+    "монета",
+    "предмет"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.patrol",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Патруль"
+  },
+  "description": {
+    "ru": "Ходит туда-обратно и разворачивается у стены."
+  },
+  "kind": "behavior",
+  "category": "NPC",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.onWall"
+    },
+    {
+      "api": "$.fn.velocity"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 45,
+      "min": 0,
+      "max": 600,
+      "step": 1,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "startDir",
+      "label": "Начальное направление",
+      "type": "enum",
+      "default": "right",
+      "options": [
+        "left",
+        "right"
+      ]
+    }
+  ],
+  "tags": [
+    "враг",
+    "npc"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

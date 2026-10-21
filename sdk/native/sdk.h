@@ -366,7 +366,15 @@ int sdk_cmd_migrate_project(const SdkArgs *a);
 // Индексатор editor.graph в project.json (sdk_project_graph.c, docs/PROJECT_JSON.md).
 int sdk_cmd_project_index(const SdkArgs *a);
 int sdk_cmd_project_set(const SdkArgs *a);   // project-set: запись настроек schema v2 без переформатирования графа
-bool sdk_project_index_write(const char *dir, SdkReport *rep);   // r2d new: индекс после копирования шаблона
+bool sdk_project_index_write(const char *dir, SdkReport *rep);
+// Атомарная запись project.json schema 2 (проверка, project.json.bak, rename).
+bool sdk_project_manifest_write(const char *dir, const R2dJson *root, SdkReport *rep);
+// Система сниппетов (sdk_snippets.c, docs/SNIPPETS.md): каталог пакетов,
+// editor.snippets, детерминированная генерация generated/snippets/.
+int  sdk_cmd_snippet(const SdkArgs *a);
+// Проверка editor.snippets внутри validate project.json (коды SNIP*).
+void sdk_snippets_validate_section(const R2dJson *root, const char *manifest_path,
+                                   const char *dir, SdkReport *rep);   // r2d new: индекс после копирования шаблона
 // Имена сцен из $.scene.add('…') во всех .js проекта (с повторами, в порядке обхода).
 int sdk_project_scenes(const char *dir, char (*names)[128], int cap);
 int sdk_cmd_api(const SdkArgs *a);

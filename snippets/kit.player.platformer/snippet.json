@@ -1,0 +1,40 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.player.platformer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: игрок платформера"
+  },
+  "description": {
+    "ru": "Движение платформера, здоровье и камера одним действием."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.platformer"
+    },
+    {
+      "id": "health.basic"
+    },
+    {
+      "id": "camera.follow"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "игрок",
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

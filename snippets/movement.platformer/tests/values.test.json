@@ -1,0 +1,7 @@
+{
+  "values": {
+    "speed": 300,
+    "jumpForce": 600,
+    "keys": "arrows"
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.platformer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Движение платформера"
+  },
+  "description": {
+    "ru": "Бег влево-вправо и прыжок с земли."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.onFloor"
+    },
+    {
+      "api": "$.fn.jump"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 220,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "jumpForce",
+      "label": "Сила прыжка",
+      "type": "number",
+      "default": 520,
+      "min": 0,
+      "max": 1400,
+      "step": 10
+    },
+    {
+      "id": "keys",
+      "label": "Клавиши",
+      "type": "enum",
+      "default": "wasd",
+      "options": [
+        "wasd",
+        "arrows"
+      ]
+    },
+    {
+      "id": "jumpKey",
+      "label": "Клавиша прыжка",
+      "type": "string",
+      "default": "space"
+    }
+  ],
+  "tags": [
+    "игрок",
+    "прыжок",
+    "platformer"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

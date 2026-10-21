@@ -1,0 +1,6 @@
+{
+  "values": {
+    "max": 30,
+    "onDeath": "fade"
+  }
+}

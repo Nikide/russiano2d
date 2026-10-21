@@ -939,6 +939,47 @@ static void put_manifest(R2dSb *sb, const R2dJson *root, const char *graph_text)
     r2d_sb_puts(sb, "}\n");
 }
 
+
+// Атомарная запись project.json (schema 2) тем же писателем: черновик рядом,
+// проверка тем же validate, копия прежнего файла в project.json.bak и замена
+// переименованием. При ошибке файл не меняется. Общая для project-set и snippet.
+bool sdk_project_manifest_write(const char *dir, const R2dJson *root, SdkReport *rep)
+{
+    char manifest[2048], temp[2100], backup[2100];
+    sdk_join(dir, "project.json", manifest, sizeof manifest);
+    snprintf(temp, sizeof temp, "%s/.project.json.set.tmp", dir);
+    snprintf(backup, sizeof backup, "%s/project.json.bak", dir);
+    R2dSb text;
+    r2d_sb_init(&text);
+    put_manifest(&text, root, NULL);
+    bool written = false;
+    if (!sdk_write_file(temp, text.data, text.len)) {
+        sdk_diag(rep, SDK_ERROR, "SDK_IO", manifest, NULL, NULL, "не удалось записать черновик project.json");
+    } else {
+        SdkReport check;
+        sdk_report_init(&check);
+        sdk_validate_file(temp, "project", &check);
+        if (check.errors) {
+            sdk_diag(rep, SDK_ERROR, "R2D203", manifest, NULL, NULL,
+                     "новые значения не проходят проверку: файл не изменён");
+            if (check.items.data) r2d_sb_puts(&rep->items, rep->items.len ? "," : "");
+            if (check.items.data) r2d_sb_puts(&rep->items, check.items.data);
+            rep->errors += check.errors;
+            rep->count += check.count;
+        } else {
+            size_t old_size = 0;
+            char *old = sdk_read_file(manifest, &old_size);
+            if (old) { sdk_write_file(backup, old, old_size); free(old); }
+            if (SDL_RenamePath(temp, manifest)) written = true;
+            else sdk_diag(rep, SDK_ERROR, "SDK_IO", manifest, NULL, NULL, "не удалось заменить project.json");
+        }
+        SDL_RemovePath(temp);
+        sdk_report_free(&check);
+    }
+    r2d_sb_free(&text);
+    return written;
+}
+
 // ---------------------------------------------------------------------------
 // Команда
 // ---------------------------------------------------------------------------
@@ -1139,7 +1180,9 @@ int sdk_cmd_project_index(const SdkArgs *a)
 static const char *const k_settable[] = {
     "project.name", "project.version", "runtime.entry", "runtime.start_scene",
     "runtime.window.title", "runtime.window.width", "runtime.window.height",
-    "runtime.window.fullscreen", NULL
+    "runtime.window.fullscreen", "runtime.multiplayer.topology",
+    "runtime.multiplayer.port", "runtime.multiplayer.max_peers",
+    "runtime.multiplayer.sync_rate", NULL
 };
 
 static R2dJson *obj_find(R2dJson *o, const char *key)
@@ -1225,7 +1268,7 @@ int sdk_cmd_project_set(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     const char *dir = sdk_arg_positional(a, 0);
-    char manifest[2048], temp[2100];
+    char manifest[2048];
     R2dSb text;
     r2d_sb_init(&text);
     R2dJson *root = NULL;
@@ -1265,32 +1308,7 @@ int sdk_cmd_project_set(const SdkArgs *a)
                     }
                     applied++;
                 }
-                if (rep.errors == 0) {
-                    put_manifest(&text, root, NULL);
-                    snprintf(temp, sizeof temp, "%s/.project.json.set.tmp", dir);
-                    if (!sdk_write_file(temp, text.data, text.len)) {
-                        sdk_diag(&rep, SDK_ERROR, "SDK_IO", manifest, NULL, NULL, "не удалось записать черновик project.json");
-                    } else {
-                        SdkReport check;
-                        sdk_report_init(&check);
-                        sdk_validate_file(temp, "project", &check);
-                        if (check.errors) {
-                            // диагностика черновика приходит с путём временного файла — подменим на настоящий
-                            sdk_diag(&rep, SDK_ERROR, "R2D203", manifest, NULL, NULL,
-                                     "новые значения не проходят проверку: файл не изменён");
-                            if (check.items.data) r2d_sb_puts(&rep.items, rep.items.len ? "," : "");
-                            if (check.items.data) r2d_sb_puts(&rep.items, check.items.data);
-                            rep.errors += check.errors;
-                            rep.count += check.count;
-                        } else if (SDL_RenamePath(temp, manifest)) {
-                            written = true;
-                        } else {
-                            sdk_diag(&rep, SDK_ERROR, "SDK_IO", manifest, NULL, NULL, "не удалось заменить project.json");
-                        }
-                        SDL_RemovePath(temp);
-                        sdk_report_free(&check);
-                    }
-                }
+                if (rep.errors == 0) written = sdk_project_manifest_write(dir, root, &rep);
             }
         }
     }

@@ -1,0 +1,9 @@
+{
+  "values": {
+    "smooth": 0.2,
+    "deadzone": [
+      10,
+      10
+    ]
+  }
+}

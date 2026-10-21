@@ -245,6 +245,25 @@ static void validate_project_v2(const R2dJson *root, const char *path, const cha
                 if (fs && fs->type != R2D_JSON_BOOL) field_err(rep, "R2D203", path, "runtime.window.fullscreen", "нужен boolean");
             }
         }
+        const R2dJson *multiplayer = r2d_json_get(rt, "multiplayer");
+        if (multiplayer) {
+            if (multiplayer->type != R2D_JSON_OBJ) field_err(rep, "R2D203", path, "runtime.multiplayer", "ожидался объект");
+            else {
+                const R2dJson *topology = r2d_json_get(multiplayer, "topology");
+                const R2dJson *port = r2d_json_get(multiplayer, "port");
+                const R2dJson *max_peers = r2d_json_get(multiplayer, "max_peers");
+                const R2dJson *sync_rate = r2d_json_get(multiplayer, "sync_rate");
+                if (topology && (topology->type != R2D_JSON_STR
+                    || (strcmp(topology->string, "authoritative")
+                        && strcmp(topology->string, "mesh")
+                        && strcmp(topology->string, "relay")
+                        && strcmp(topology->string, "custom"))))
+                    field_err(rep, "R2D203", path, "runtime.multiplayer.topology", "authoritative | mesh | relay | custom");
+                if (port && !json_is_int_range(port, 0, 65535)) field_err(rep, "R2D203", path, "runtime.multiplayer.port", "целое 0..65535");
+                if (max_peers && !json_is_int_range(max_peers, 1, 256)) field_err(rep, "R2D203", path, "runtime.multiplayer.max_peers", "целое 1..256");
+                if (sync_rate && !json_is_int_range(sync_rate, 1, 120)) field_err(rep, "R2D203", path, "runtime.multiplayer.sync_rate", "целое 1..120");
+            }
+        }
     }
     if (entry_name) {
         char p[1100];
@@ -254,7 +273,10 @@ static void validate_project_v2(const R2dJson *root, const char *path, const cha
     }
     const R2dJson *ed = r2d_json_get(root, "editor");
     if (ed && ed->type != R2D_JSON_OBJ) field_err(rep, "R2D203", path, "editor", "ожидался объект");
-    else if (ed && r2d_json_get(ed, "graph")) validate_graph(r2d_json_get(ed, "graph"), path, dir, rep);
+    else if (ed) {
+        if (r2d_json_get(ed, "graph")) validate_graph(r2d_json_get(ed, "graph"), path, dir, rep);
+        if (r2d_json_get(ed, "snippets")) sdk_snippets_validate_section(root, path, dir, rep);
+    }
 }
 
 static void validate_project(const char *path, SdkReport *rep)

@@ -33,6 +33,7 @@ static const Command k_commands[] = {
     { "migrate-project", sdk_cmd_migrate_project, "project.json без schema_version → schema_version 2; --write сохраняет" },
     { "project-set", sdk_cmd_project_set, "записать настройки project.json (schema 2): project-set <проект> project.name=\"…\" runtime.window.width=1280" },
     { "project-index", sdk_cmd_project_index, "индексатор editor.graph из JS: [--write] [--check] (то же: project index)" },
+    { "snippet",  sdk_cmd_snippet,  "сниппеты: catalog|validate|check|add|set|remove|generate (editor.snippets → generated/snippets)" },
     { "api",      sdk_cmd_api,      "machine-readable $ API: dump/check/generate" },
     { "lint",     sdk_cmd_lint,     "API-aware линтер JS: $ API, коды R2D001…" },
     { "docs",     cmd_docs_generate, "generated $ API reference (docs generate)" },

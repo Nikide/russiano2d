@@ -1,0 +1,62 @@
+{
+  "schema_version": 2,
+  "project": {"name": "Snippets fixture", "version": "0.1.0"},
+  "runtime": {"entry": "main.js", "window": {"title": "Snippets fixture", "width": 640, "height": 360}},
+  "editor": {
+    "graph": {
+      "format": 1,
+      "status": "current",
+      "sources": [
+        {"path": "generated//snippets//index.js", "hash": "f82a4304df204898"},
+        {"path": "generated//snippets//packages//movement.topdown.js", "hash": "be4e94451615066a"},
+        {"path": "generated//snippets//packages//visual.sprite.js", "hash": "e78d04e3405b6c16"},
+        {"path": "main.js", "hash": "f6c1be94cbbe8ded"}
+      ],
+      "diagnostics": [],
+      "areas": [
+        {"key": "project:main", "type": "project", "label": "Проект", "origin": "code"},
+        {"key": "world:main", "type": "world", "label": "World", "runtime_root": "$.world", "origin": "code"}
+      ],
+      "entities": [
+        {"key": "script:generated//snippets//index.js", "area": "project:main", "type": "script", "origin": "code", "path": "generated//snippets//index.js", "source": {"file": "generated//snippets//index.js", "line": 1}},
+        {"key": "script:generated//snippets//packages//movement.topdown.js", "area": "project:main", "type": "script", "origin": "code", "path": "generated//snippets//packages//movement.topdown.js", "source": {"file": "generated//snippets//packages//movement.topdown.js", "line": 1}},
+        {"key": "script:generated//snippets//packages//visual.sprite.js", "area": "project:main", "type": "script", "origin": "code", "path": "generated//snippets//packages//visual.sprite.js", "source": {"file": "generated//snippets//packages//visual.sprite.js", "line": 1}},
+        {"key": "script:main.js", "area": "project:main", "type": "script", "origin": "code", "path": "main.js", "entry": true, "source": {"file": "main.js", "line": 1}},
+        {"key": "object:floor", "area": "world:main", "type": "object", "origin": "code", "tag": "ground", "public_id": "floor", "source": {"file": "main.js", "line": 5}},
+        {"key": "object:hero", "area": "world:main", "type": "object", "origin": "code", "tag": "hero", "public_id": "hero", "source": {"file": "main.js", "line": 6}}
+      ],
+      "edges": [
+        {"key": "edge:spatial_parent:world:main>object:floor", "type": "spatial_parent", "from": "world:main", "to": "object:floor", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 5}},
+        {"key": "edge:spatial_parent:world:main>object:hero", "type": "spatial_parent", "from": "world:main", "to": "object:hero", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 6}}
+      ],
+      "views": {}
+    },
+    "snippets": {
+      "format": 1,
+      "catalog_lock": {
+        "movement.topdown": {"version": "1.0.0", "manifest_hash": "16001bfd850c6e5a", "source": "builtin"},
+        "visual.sprite": {"version": "1.0.0", "manifest_hash": "e21a60a8da4d6a74", "source": "builtin"}
+      },
+      "instances": [
+        {
+          "id": "snippet:hero:movement.topdown",
+          "package": "movement.topdown",
+          "version": "1.0.0",
+          "owner": "object:hero",
+          "slot": "movement",
+          "values": {"speed": 180}
+        },
+        {
+          "id": "snippet:hero:visual.sprite",
+          "package": "visual.sprite",
+          "version": "1.0.0",
+          "owner": "object:hero",
+          "slot": "visual",
+          "values": {"image": "art/hero.png"}
+        }
+      ],
+      "sets": [],
+      "generation": {"output": "generated/snippets", "entry": "generated/snippets/index.js"}
+    }
+  }
+}
