@@ -1,7 +1,7 @@
 {
   "format": "r2d-snippet/1",
   "id": "npc.dialogue-anchor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "title": {
     "ru": "Диалог у персонажа"
   },

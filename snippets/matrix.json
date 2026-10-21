@@ -4902,7 +4902,7 @@
    "dependencies": [
     "economy.shop"
    ],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Торговец: рядом по клавише открывает лавку (событие shop:open с ассортиментом).",
    "source": "src/behavior.js",
    "examples": [
@@ -4943,7 +4943,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Выдаёт задание $.quest по клавише и принимает готовое.",
    "source": "src/behavior.js",
    "examples": [
@@ -4985,7 +4985,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "По клавише рядом запускает диалог $.dialog.",
    "source": "src/behavior.js",
    "examples": [
@@ -5073,7 +5073,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "По клавише рядом персонаж вступает в партию, если не превышен лимит.",
    "source": "src/behavior.js",
    "examples": [
@@ -5287,7 +5287,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Дверь открывается по interact или клавише рядом; может требовать ключ (предмет или данные).",
    "source": "src/behavior.js",
    "examples": [
@@ -5375,7 +5375,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Переключатель вкл/выкл по interact или клавише; глобальные события вкл и выкл.",
    "source": "src/behavior.js",
    "examples": [
@@ -5463,7 +5463,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Рычаг с визуальными состояниями: отражение и цвет; глобальные события.",
    "source": "src/behavior.js",
    "examples": [
@@ -5511,7 +5511,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Открывается один раз: содержимое уходит в инвентарь актора (data inv) или событием pickup.",
    "source": "src/behavior.js",
    "examples": [
@@ -5906,7 +5906,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "У объекта по клавише — ручное сохранение в слот $.save.",
    "source": "src/behavior.js",
    "examples": [
@@ -6203,7 +6203,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Сундук или тайник со своим $.inv; по клавише рядом — событие container:open с двумя списками.",
    "source": "src/behavior.js",
    "examples": [
@@ -7362,7 +7362,7 @@
    "dependencies": [
     "crafting.recipe"
    ],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Станция ремесла: рядом по клавише — меню (craft:menu); событие craft { recipe, by } создаёт предмет.",
    "source": "src/behavior.js",
    "examples": [
@@ -8815,7 +8815,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Взаимодействие с объектом (событие interact или клавиша рядом) засчитывает цель.",
    "source": "src/behavior.js",
    "examples": [
@@ -8860,7 +8860,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Передача предмета этому персонажу по клавише рядом: предмет уходит из инвентаря.",
    "source": "src/behavior.js",
    "examples": [
@@ -9526,7 +9526,7 @@
    "dependencies": [
     "dialogue.tree"
    ],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Варианты ответа к реплике диалога dialogue.tree с условием-флагом и записью выбора во флаг.",
    "source": "src/behavior.js",
    "examples": [
@@ -9611,7 +9611,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Выбор варианта или реплика диалога ставит флаг и шлёт игровое событие: «текст или id реплики=событие».",
    "source": "src/behavior.js",
    "examples": [
@@ -9649,7 +9649,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Портрет и выражение для говорящего: «говорящий:эмоция=картинка»; показывает узел-картинку.",
    "source": "src/behavior.js",
    "examples": [
@@ -9994,7 +9994,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "По событию — затемнение и $.scene.load следующей сцены (или $.story.play сценария).",
    "source": "src/behavior.js",
    "examples": [
@@ -10081,7 +10081,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Все выборы в диалогах записываются в сохранение ($.save) и data.",
    "source": "src/behavior.js",
    "examples": [
@@ -14356,7 +14356,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Посев семенем из инвентаря, рост по стадиям с поливом, сбор урожая в инвентарь.",
    "source": "src/behavior.js",
    "examples": [
@@ -15120,7 +15120,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Окно реплики и имя говорящего на событиях $.dialog (своя вёрстка поверх стандартной).",
    "source": "src/behavior.js",
    "examples": [
@@ -16327,7 +16327,7 @@
    ],
    "gaps": [],
    "dependencies": [],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Субтитры реплик и звуков с размером и фоном (RmlUi).",
    "source": "src/behavior.js",
    "examples": [
@@ -16777,7 +16777,7 @@
    "dependencies": [
     "net.lobby"
    ],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Старт матча, только когда все в лобби готовы; иначе старт заблокирован.",
    "source": "src/behavior.js",
    "examples": [
@@ -19840,7 +19840,7 @@
     "progression.xp",
     "economy.reward"
    ],
-   "version": "1.0.0",
+   "version": "1.0.1",
    "scenario": "Действия, цели и итоги боя.",
    "source": "dependency closure",
    "examples": [
