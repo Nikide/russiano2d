@@ -12,7 +12,7 @@ const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 export default function dialogueBox(node, config, $) {
     const doc = hud($, 'ui-dialogue', '<div class="panel" style="left: 5%; bottom: 20px; width: 90%; height: ' + config.height + 'px;"><div id="who" style="color: #ffd040;"></div><div id="text"></div></div>');
     doc.hide();
-    const onLine = (e) => { doc.text('who', esc(e.data.speaker || '')); doc.show(); };
+    const onLine = (e) => { doc.text('who', esc(e.speaker || '')); doc.show(); };
     const onEnd = () => doc.hide();
     $.dialog.on('line', onLine);
     $.dialog.on('end', onEnd);

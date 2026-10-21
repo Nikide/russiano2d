@@ -929,6 +929,7 @@ target("snippets_regression_tests")
             "tests/agent/snippets_combat_test.py",
             "tests/agent/editor_snippets_test.py",
             "tests/agent/editor_snippets_ux_test.py",
+            "tests/agent/snippets_genre_projects_test.py",
         }
         for _, file in ipairs(suites) do
             if os.execv("python3", {"-u", file}, {try = true, curdir = test_root,

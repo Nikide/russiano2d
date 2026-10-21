@@ -54,6 +54,21 @@ def project_json(root):
     return json.loads((root / 'project.json').read_text())
 
 
+def configure(a, root, package, values):
+    inst = next(i for i in project_json(root)['editor']['snippets']['instances'] if i['package'] == package)
+    a.eval("$.ui.doc('ui/editor.rml').setValue('sn-owner', %s);1" % json.dumps(inst['owner']))
+    run(a, E + ".snippets.changed('sn-owner')")
+    if a.eval(E + '.snippets.state.open') != inst['id']:
+        run(a, E + '.snippets.click(%s)' % json.dumps('open:' + inst['id']))
+    for key, value in values.items():
+        text = json.dumps(value, ensure_ascii=False) if isinstance(value, list) else str(value)
+        settle(a, E + '.snippets.state.busy===false')
+        a.eval("$.ui.doc('ui/editor.rml').setValue(%s,%s);1" % (json.dumps('sn-f-' + key), json.dumps(text, ensure_ascii=False)))
+        run(a, E + '.snippets.changed(%s)' % json.dumps('sn-f-' + key))
+        settle(a, E + '.snippets.state.busy===false')
+    check(next(i for i in project_json(root)['editor']['snippets']['instances'] if i['id'] == inst['id'])['values'].items() >= values.items(), package + ': значения Inspector сохранены')
+
+
 def genre(tmp, name, kit, entities):
     root = Path(tmp) / name
     res = r2d('new', 'blank', str(root), '--name', name)
@@ -72,20 +87,51 @@ def genre(tmp, name, kit, entities):
         run(a, E + ".snippets.click('add:%s')" % kit)
         sec = project_json(root)['editor']['snippets']
         check(any(s['package'] == kit for s in sec.get('sets', [])), '%s: набор %s подключён (%d экземпляров)' % (name, kit, len(sec['instances'])))
+        if name == 'vn':
+            run(a, E + ".snippets.click('add:dialogue.action')")
+            configure(a, root, 'dialogue.action', {'setFlag': 'route', 'actions': ['Свои=game:finale']})
+            configure(a, root, 'story.ending', {'endings': ['good: route', 'bad:']})
+        if name == 'jrpg':
+            run(a, E + ".snippets.createEntity('foe','foe',{x:350,y:300,body:'none'})")
+            run(a, E + ".snippets.click('add:enemy.base')")
+            configure(a, root, 'ability.targeting', {'mode': 'nearest'})
+            configure(a, root, 'turn.initiative-queue', {'units': '#hero, #foe'})
+        if name == 'roguelike':
+            configure(a, root, 'run.route-generator', {'seed': 1337, 'length': 3})
+        run(a, E + ".snippets.click('preview')")
         run(a, E + ".snippets.click('generate')")
         gen = a.eval(E + '.snippets.state.gen') or {}
         check(gen.get('ok') is True, '%s: генерация — %s' % (name, [d.get('message') for d in gen.get('diagnostics', [])][:3]))
         if SHOTS:
             a.screenshot(str(ROOT / 'docs/snippets/images' / ('%s-editor.png' % name)))
+    check(r2d('lint', str(root))['ok'], name + ': lint generated JS')
+    check(r2d('build', str(root), '--out', str(Path(tmp) / (name + '-build')))['ok'], name + ': Build')
     v = r2d('validate', str(root))
     check(v['ok'], '%s: validate — %s' % (name, [(d['code'], d['message']) for d in v['diagnostics'] if d['severity'] == 'error'][:3]))
     with Agent(game=str(root), seed=7) as a:
         a.step(10)
+        before_x = a.eval("$('#hero').pos().x")
         a.hold(['D', 'Space'])
         a.step(30)
         a.release_all()
         a.step(10)
         check(a.eval("$('#hero').length") == 1, '%s: герой создан сгенерированным JS' % name)
+        if name in ('platformer', 'witch', 'top-down'):
+            check(a.eval("$('#hero').pos().x") > before_x, name + ': управление двигает героя')
+        if name == 'vn':
+            a.eval("$.emit('dialogue:play',{id:'guard'});1"); a.step(2)
+            a.eval("$.dialog.skip();$.dialog.chooseByText('Свои');1"); a.step(2)
+            check(a.eval("$.story.flags.ending") == 'good', 'vn: выбор приводит к хорошей концовке')
+            check(bool(a.eval("$.save.get('choiceHistory') || $.save.get('choices')")), 'vn: выбор записан в save')
+        if name == 'jrpg':
+            a.eval("$('#hero').data('initiative',5);$.emit('turn:next');1")
+            check(a.eval("$.store.get('turn').unit") == 'hero', 'jrpg: очередь выдаёт ход герою')
+            hp = a.eval("$('#foe').hp()")
+            a.tap('Q'); a.step(3)
+            check(a.eval("$('#foe').hp()") < hp, 'jrpg: способность наносит урон противнику')
+        if name == 'roguelike':
+            check(a.eval("$('#hero').data('route').length") == 4, 'roguelike: три комнаты и босс')
+            check(a.eval("$.save.get('run').seed") == 1337, 'roguelike: seed и маршрут сохраняются')
         errs = a.eval('$.debug.errors()') or []
         check(not errs, '%s: игра без ошибок %s' % (name, [(e.get('message'), (e.get('source') or {}).get('file')) for e in errs[:3]]))
         if SHOTS:

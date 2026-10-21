@@ -4,7 +4,7 @@ export default function subtitles(node, config, $) {
     doc.show();
     let left = 0;
     const show = (text, ms) => { doc.text('s', String(text).replace(/</g, '&lt;')); left = ms; };
-    const onLine = (e) => show((config.speaker && e.data.speaker ? e.data.speaker + ': ' : '') + (e.data.fullText || e.data.text || ''), 4000);
+    const onLine = (e) => show((config.speaker && e.speaker ? e.speaker + ': ' : '') + (e.fullText || e.text || ''), 4000);
     const onSub = (e) => show(e.data && e.data.text || '', (e.data && e.data.ms) || 2500);
     $.dialog.on('line', onLine);
     $.on('subtitle', onSub);

@@ -17,6 +17,9 @@
   "requires": [],
   "dependencies": [
     {
+      "id": "health.base"
+    },
+    {
       "id": "turn.initiative-queue"
     },
     {

@@ -10145,6 +10145,7 @@
    "api": [],
    "gaps": [],
    "dependencies": [
+    "health.base",
     "turn.initiative-queue",
     "ability.base",
     "ability.targeting",

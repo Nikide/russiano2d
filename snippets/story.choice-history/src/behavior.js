@@ -2,7 +2,7 @@
 export default function choiceHistory(node, config, $) {
     const log = ($.save.get(config.key) || []).slice();
     const on = (e) => {
-        log.push({ dialog: $.dialog.definition(), node: $.dialog.node(), text: e.data.text });
+        log.push({ dialog: $.dialog.definition(), node: $.dialog.node(), text: e.text });
         while (log.length > config.keep) log.shift();
         $.save.set(config.key, log);
     };

@@ -160,3 +160,19 @@
 - Required docs: doc_claims/doc_coverage/api_docs_sync — **PASS**.
   Общий JS run: 129/130 PASS; единственное падение — известный
   `api_docs_test.mjs` из постороннего generated API каталога, файлы не менялись.
+
+### Шаг 4: усиление приёмки жанров
+
+- Genre fixtures дополнены настройкой полей **через Inspector Editor**, lint и
+  Build для каждого из семи проектов, проверкой движения Platformer/Witch/top-down,
+  выбора VN → хорошая концовка + save history, очереди JRPG и урона по противнику,
+  seeded маршрута roguelike и сохранения run.
+- Новые assertions обнаружили ошибки, которых не показывал smoke:
+  шесть пакетов ожидали `e.data` от `$.dialog.on`, хотя API передаёт payload
+  напрямую. Исправлены dialogue.action/choice/portrait, story.choice-history,
+  ui.dialogue-box и accessibility.subtitle; глобальные $.on остаются с e.data.
+- JRPG kit не инициализировал hp (stats.derived выставлял только maxHp), очередь
+  пропускала героя как погибшего. В `kit.jrpg-turn-battle` добавлен health.base.
+- Повторный VN/JRPG с этими assertions, lint, validate, Build и снимками:
+  **PASS**. `snippet_matrix.py` обновил состав JRPG, 500/500 сохранено.
+- Genre acceptance включён в `snippets_regression_tests/contracts`.
