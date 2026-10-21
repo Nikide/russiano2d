@@ -1,0 +1,66 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "accessibility.text-scale",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Масштаб текста"
+  },
+  "description": {
+    "ru": "Масштаб текста HUD и диалогов: $.store textScale (пакеты ui.* учитывают его)."
+  },
+  "kind": "behavior",
+  "category": "Доступность и язык",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.scale"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.ui.scale"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "scale",
+      "label": "Масштаб",
+      "type": "number",
+      "default": 1.25,
+      "min": 0.5,
+      "max": 3,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "доступность",
+    "текст"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

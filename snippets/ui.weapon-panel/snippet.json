@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.weapon-panel",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Панель оружия"
+  },
+  "description": {
+    "ru": "Активное оружие, режим и патроны (магазин / запас)."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.weapons.of"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "who",
+      "label": "Чей",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "position",
+      "label": "Позиция (x, y)",
+      "type": "vec2",
+      "default": [
+        20,
+        60
+      ]
+    }
+  ],
+  "tags": [
+    "HUD",
+    "оружие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

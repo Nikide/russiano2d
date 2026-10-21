@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "save.migration",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Миграция сейва"
+  },
+  "description": {
+    "ru": "Версия данных сейва и декларативные миграции: переименование ключей и значения по умолчанию ($.save.schema)."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.save.schema"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "version",
+      "label": "Версия данных",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "id": "namespace",
+      "label": "Пространство",
+      "type": "string",
+      "default": "run"
+    },
+    {
+      "id": "renames",
+      "label": "Переименования (версия:старый=новый)",
+      "type": "list",
+      "default": [
+        "1:coins=gold"
+      ]
+    },
+    {
+      "id": "defaults",
+      "label": "По умолчанию (ключ=число)",
+      "type": "list",
+      "default": [
+        "gold=0"
+      ]
+    }
+  ],
+  "tags": [
+    "миграция",
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "accessibility.reduce-motion",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Меньше движения"
+  },
+  "description": {
+    "ru": "Режим уменьшенного движения: пакеты тряски, вспышек и hit-stop его учитывают."
+  },
+  "kind": "behavior",
+  "category": "Доступность и язык",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.store.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "on",
+      "label": "Включено",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "доступность",
+    "укачивание"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

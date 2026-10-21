@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.confirm-dialog",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Подтверждение"
+  },
+  "description": {
+    "ru": "Диалог подтверждения: событие confirm { text, yes, no } — по ответу событие yes или no."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "yesText",
+      "label": "Да",
+      "type": "string",
+      "default": "Да"
+    },
+    {
+      "id": "noText",
+      "label": "Нет",
+      "type": "string",
+      "default": "Отмена"
+    }
+  ],
+  "tags": [
+    "UI",
+    "подтверждение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

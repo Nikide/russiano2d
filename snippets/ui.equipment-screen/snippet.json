@@ -1,0 +1,87 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.equipment-screen",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Экран экипировки"
+  },
+  "description": {
+    "ru": "Надетое по слотам и сравнение класса брони с предметом под курсором."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.html"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.items.get"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "equipment.slots"
+    }
+  ],
+  "fields": [
+    {
+      "id": "who",
+      "label": "Чей",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "key",
+      "label": "Открыть",
+      "type": "string",
+      "default": "c"
+    }
+  ],
+  "tags": [
+    "UI",
+    "экипировка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

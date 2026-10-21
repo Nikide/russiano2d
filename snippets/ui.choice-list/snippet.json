@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.choice-list",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Кнопки выбора"
+  },
+  "description": {
+    "ru": "Варианты ответа диалога кнопками RmlUi; клик выбирает."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.choices"
+    },
+    {
+      "api": "$.dialog.choose"
+    },
+    {
+      "api": "$.dialog.isOpen"
+    },
+    {
+      "api": "$.dialog.isTyping"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.html"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "position",
+      "label": "Позиция (x, y)",
+      "type": "vec2",
+      "default": [
+        640,
+        420
+      ]
+    }
+  ],
+  "tags": [
+    "UI",
+    "выбор"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

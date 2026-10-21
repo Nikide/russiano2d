@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.quest-tracker",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Трекер задания"
+  },
+  "description": {
+    "ru": "Текущая цель активного задания и прогресс на экране."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.quest.definitions"
+    },
+    {
+      "api": "$.quest.line"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "position",
+      "label": "Позиция (x, y)",
+      "type": "vec2",
+      "default": [
+        980,
+        20
+      ]
+    },
+    {
+      "id": "quest",
+      "label": "Задание (пусто — первое активное)",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "UI",
+    "квест"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.health-bar",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Полоса здоровья"
+  },
+  "description": {
+    "ru": "Полоса здоровья из hp и max_hp узла."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.style"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "who",
+      "label": "Чей",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "position",
+      "label": "Позиция (x, y)",
+      "type": "vec2",
+      "default": [
+        20,
+        20
+      ]
+    },
+    {
+      "id": "width",
+      "label": "Ширина",
+      "type": "int",
+      "default": 200,
+      "min": 20,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#d04040"
+    }
+  ],
+  "tags": [
+    "HUD",
+    "здоровье"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

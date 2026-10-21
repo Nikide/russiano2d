@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "accessibility.hold-alternative",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Переключение вместо удержания"
+  },
+  "description": {
+    "ru": "Удержание клавиши заменяется переключением: нажал — «держится», нажал снова — отпущено."
+  },
+  "kind": "behavior",
+  "category": "Доступность и язык",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.input.rawPressed"
+    },
+    {
+      "api": "$.input.synthDown"
+    },
+    {
+      "api": "$.input.synthRelease"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "keys",
+      "label": "Клавиши",
+      "type": "list",
+      "default": [
+        "e",
+        "shift"
+      ]
+    }
+  ],
+  "tags": [
+    "доступность",
+    "ввод"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "settings.gameplay",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Настройки игры"
+  },
+  "description": {
+    "ru": "Сложность (множитель урона по игроку), скорость текста и подсказки."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.speed"
+    },
+    {
+      "api": "$.fn.damageFilter"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.speed"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.store.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "difficulty",
+      "label": "Сложность",
+      "type": "enum",
+      "default": "normal",
+      "options": [
+        "easy",
+        "normal",
+        "hard"
+      ]
+    },
+    {
+      "id": "textSpeed",
+      "label": "Скорость текста",
+      "type": "int",
+      "default": 40,
+      "min": 5,
+      "max": 500,
+      "unit": "симв./с"
+    },
+    {
+      "id": "hints",
+      "label": "Подсказки",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    }
+  ],
+  "tags": [
+    "сложность",
+    "настройки"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

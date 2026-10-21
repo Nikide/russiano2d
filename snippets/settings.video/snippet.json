@@ -1,0 +1,105 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "settings.video",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Настройки изображения"
+  },
+  "description": {
+    "ru": "Полный экран, размер окна, вертикальная синхронизация и масштаб UI из $.store."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.scale"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.ui.scale"
+    },
+    {
+      "api": "$.window"
+    },
+    {
+      "api": "$.window.fullscreen"
+    },
+    {
+      "api": "$.window.size"
+    },
+    {
+      "api": "$.window.vsync"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "fullscreen",
+      "label": "Полный экран",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "id": "size",
+      "label": "Размер окна",
+      "type": "vec2",
+      "default": [
+        1280,
+        720
+      ]
+    },
+    {
+      "id": "vsync",
+      "label": "V-Sync",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": "uiScale",
+      "label": "Масштаб UI",
+      "type": "number",
+      "default": 1,
+      "min": 0.5,
+      "max": 3,
+      "step": 0.1
+    }
+  ],
+  "tags": [
+    "видео",
+    "настройки"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

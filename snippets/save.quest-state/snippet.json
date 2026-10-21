@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "save.quest-state",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Задания в сейве"
+  },
+  "description": {
+    "ru": "Состояние заданий ($.quest.save/load) в сейве."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.quest.load"
+    },
+    {
+      "api": "$.quest.save"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Ключ",
+      "type": "string",
+      "default": "quests"
+    }
+  ],
+  "tags": [
+    "квест",
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

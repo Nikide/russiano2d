@@ -1,0 +1,96 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "settings.audio",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Настройки звука"
+  },
+  "description": {
+    "ru": "Громкость общая, музыки и эффектов из $.store; событие audio:set { kind, value }."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.masterVolume"
+    },
+    {
+      "api": "$.audio.musicVolume"
+    },
+    {
+      "api": "$.audio.sfxVolume"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.store.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "master",
+      "label": "Общая",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "id": "music",
+      "label": "Музыка",
+      "type": "number",
+      "default": 0.8,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "id": "sfx",
+      "label": "Эффекты",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "звук",
+    "настройки"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

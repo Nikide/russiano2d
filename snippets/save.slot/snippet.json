@@ -1,0 +1,80 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "save.slot",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Слоты сохранения"
+  },
+  "description": {
+    "ru": "Несколько слотов с метаданными времени: события save:slot { n } и load:slot { n }."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.save.autosave"
+    },
+    {
+      "api": "$.save.slot"
+    },
+    {
+      "api": "$.save.stopAutosave"
+    },
+    {
+      "api": "$.time.now"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "slots",
+      "label": "Слотов",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 99
+    },
+    {
+      "id": "autosave",
+      "label": "Автосохранение (0 — нет)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 3600000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "слоты",
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

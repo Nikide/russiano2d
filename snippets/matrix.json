@@ -7404,9 +7404,17 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.hp",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.show",
+    "$.fn.style",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7418,9 +7426,17 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.data",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.show",
+    "$.fn.style",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7432,12 +7448,22 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.data",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.show",
+    "$.fn.style",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.shield"
+   ]
   },
   {
    "n": 344,
@@ -7446,12 +7472,21 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.data",
+    "$.fn.show",
+    "$.fn.text",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor",
+    "$.weapons.of"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 345,
@@ -7460,12 +7495,22 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.html",
+    "$.fn.map",
+    "$.fn.show",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.quickbar"
+   ]
   },
   {
    "n": 346,
@@ -7474,12 +7519,27 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.hide",
+    "$.fn.html",
+    "$.fn.map",
+    "$.fn.on",
+    "$.fn.show",
+    "$.input.pressed",
+    "$.items.get",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 347,
@@ -7488,12 +7548,25 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.data",
+    "$.fn.hide",
+    "$.fn.html",
+    "$.fn.map",
+    "$.fn.show",
+    "$.fn.text",
+    "$.input.pressed",
+    "$.items.get",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "equipment.slots"
+   ]
   },
   {
    "n": 348,
@@ -7502,12 +7575,22 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.data",
+    "$.fn.hp",
+    "$.fn.html",
+    "$.fn.map",
+    "$.fn.show",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "npc.party-member"
+   ]
   },
   {
    "n": 349,
@@ -7516,9 +7599,18 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.find",
+    "$.fn.show",
+    "$.fn.text",
+    "$.quest.definitions",
+    "$.quest.line",
+    "$.quest.status",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7530,9 +7622,22 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.filter",
+    "$.fn.hide",
+    "$.fn.html",
+    "$.fn.map",
+    "$.fn.on",
+    "$.fn.show",
+    "$.input.pressed",
+    "$.quest.definitions",
+    "$.quest.line",
+    "$.quest.status",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7544,9 +7649,21 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.dialog.isOpen",
+    "$.dialog.off",
+    "$.dialog.on",
+    "$.dialog.text",
+    "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.text",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7558,9 +7675,23 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.dialog.choices",
+    "$.dialog.choose",
+    "$.dialog.isOpen",
+    "$.dialog.isTyping",
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.hide",
+    "$.fn.html",
+    "$.fn.map",
+    "$.fn.on",
+    "$.fn.show",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7572,9 +7703,18 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.text",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup"
    ],
    "gaps": [],
    "dependencies": []
@@ -7586,9 +7726,20 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.camera.isOnScreen",
+    "$.camera.worldToScreen",
+    "$.fn.first",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.pos",
+    "$.fn.show",
+    "$.fn.style",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7600,9 +7751,11 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.camera.minimap",
+    "$.fn.filter",
+    "$.fn.map"
    ],
    "gaps": [],
    "dependencies": []
@@ -7614,9 +7767,22 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.hide",
+    "$.fn.on",
+    "$.fn.pause",
+    "$.fn.show",
+    "$.input.pressed",
+    "$.scene.load",
+    "$.selection.get",
+    "$.store.get",
+    "$.time.pause",
+    "$.time.resume",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7628,9 +7794,23 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.audio.masterVolume",
+    "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.scale",
+    "$.fn.show",
+    "$.fn.value",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.store.set",
+    "$.ui.markup",
+    "$.ui.scale",
+    "$.window.toggleFullscreen"
    ],
    "gaps": [],
    "dependencies": []
@@ -7642,9 +7822,20 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.text",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup"
    ],
    "gaps": [],
    "dependencies": []
@@ -7656,9 +7847,18 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.loading",
+    "$.loading.hide",
+    "$.loading.show",
+    "$.loading.title",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -7670,9 +7870,19 @@
    "section": "R",
    "section_title": "RmlUi-интерфейс и HUD",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui"
+    "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.text",
+    "$.off",
+    "$.on",
+    "$.scene.load",
+    "$.selection.get",
+    "$.store.get",
+    "$.ui.markup"
    ],
    "gaps": [],
    "dependencies": []
@@ -7684,10 +7894,12 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.save",
-    "$.store"
+    "$.emit",
+    "$.fn.emit",
+    "$.save.profile",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -7699,10 +7911,18 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.save",
-    "$.store"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.save.autosave",
+    "$.save.slot",
+    "$.save.stopAutosave",
+    "$.time.now"
    ],
    "gaps": [],
    "dependencies": []
@@ -7714,10 +7934,17 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.save",
-    "$.store"
+    "$.fn.data",
+    "$.fn.hp",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.off",
+    "$.on",
+    "$.save.set",
+    "$.save.slot"
    ],
    "gaps": [],
    "dependencies": []
@@ -7729,13 +7956,22 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.save",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.save.get",
+    "$.save.set",
+    "$.selection.get"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 365,
@@ -7744,10 +7980,18 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.save",
-    "$.store"
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.quest",
+    "$.quest.load",
+    "$.quest.save",
+    "$.save.get",
+    "$.save.set",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -7759,10 +8003,17 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.save",
-    "$.store"
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.save.get",
+    "$.save.set",
+    "$.selection.get",
+    "$.story.flags",
+    "$.story.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -7774,10 +8025,23 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.save",
-    "$.store"
+    "$.fn.alpha",
+    "$.fn.at",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.sensor",
+    "$.off",
+    "$.on",
+    "$.save.get",
+    "$.save.set",
+    "$.selection.each",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -7789,10 +8053,11 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.save",
-    "$.store"
+    "$.fn.filter",
+    "$.fn.map",
+    "$.save.schema"
    ],
    "gaps": [],
    "dependencies": []
@@ -7804,10 +8069,21 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.store",
-    "$.ui"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.input.bind",
+    "$.input.bindings",
+    "$.input.loadBindings",
+    "$.input.markDefaults",
+    "$.input.rebind",
+    "$.input.saveBindings",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -7819,10 +8095,20 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.store",
-    "$.ui"
+    "$.audio.masterVolume",
+    "$.audio.musicVolume",
+    "$.audio.sfxVolume",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.store.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -7834,10 +8120,22 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.store",
-    "$.ui"
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.scale",
+    "$.fn.size",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.store.set",
+    "$.ui.scale",
+    "$.window",
+    "$.window.fullscreen",
+    "$.window.size",
+    "$.window.vsync"
    ],
    "gaps": [],
    "dependencies": []
@@ -7849,10 +8147,18 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.store",
-    "$.ui"
+    "$.dialog.speed",
+    "$.fn.damageFilter",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.speed",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.store.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -7864,10 +8170,16 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui",
-    "$.input"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.scale",
+    "$.selection.get",
+    "$.store",
+    "$.store.get",
+    "$.store.set",
+    "$.ui.scale"
    ],
    "gaps": [],
    "dependencies": []
@@ -7879,10 +8191,17 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui",
-    "$.input"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.outline",
+    "$.selection.each",
+    "$.selection.get",
+    "$.store",
+    "$.store.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7894,10 +8213,21 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui",
-    "$.input"
+    "$.fn.add",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.height",
+    "$.fn.map",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.selection.each",
+    "$.selection.get",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -7909,10 +8239,16 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui",
-    "$.input"
+    "$.fn.add",
+    "$.fn.has",
+    "$.input.rawPressed",
+    "$.input.synthDown",
+    "$.input.synthRelease",
+    "$.selection.get",
+    "$.store.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7924,10 +8260,14 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui",
-    "$.input"
+    "$.emit",
+    "$.fn.emit",
+    "$.selection.get",
+    "$.store",
+    "$.store.get",
+    "$.store.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -7939,10 +8279,19 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.ui",
-    "$.input"
+    "$.dialog",
+    "$.dialog.off",
+    "$.dialog.on",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.text",
+    "$.off",
+    "$.on",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7954,9 +8303,17 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.i18n"
+    "$.emit",
+    "$.fn.add",
+    "$.fn.emit",
+    "$.fs.readJSON",
+    "$.i18n.add",
+    "$.i18n.lang",
+    "$.selection.get",
+    "$.store",
+    "$.store.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -7968,9 +8325,14 @@
    "section": "S",
    "section_title": "Сохранения, настройки и доступность",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.i18n"
+    "$.fn.max",
+    "$.fn.off",
+    "$.fn.on",
+    "$.i18n.number",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []

@@ -1,0 +1,90 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "accessibility.color-cues",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Не только цветом"
+  },
+  "description": {
+    "ru": "Дублирование цвета формой и текстом: подпись-символ над объектами по классам."
+  },
+  "kind": "behavior",
+  "category": "Доступность и язык",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "cues",
+      "label": "Подписи (селектор=символ)",
+      "type": "list",
+      "default": [
+        ".enemy=⚠",
+        ".loot=★"
+      ]
+    },
+    {
+      "id": "size",
+      "label": "Размер",
+      "type": "int",
+      "default": 12,
+      "min": 6,
+      "max": 64
+    }
+  ],
+  "tags": [
+    "доступность",
+    "дальтонизм"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.minimap-markers",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Метки на миникарте"
+  },
+  "description": {
+    "ru": "Миникарта камеры ($.camera.minimap) с метками объектов по классам."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.minimap"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "markers",
+      "label": "Метки (селектор=цвет)",
+      "type": "list",
+      "default": [
+        ".enemy=#ff4040",
+        ".npc=#40ff40"
+      ]
+    },
+    {
+      "id": "size",
+      "label": "Размер",
+      "type": "vec2",
+      "default": [
+        180,
+        180
+      ]
+    }
+  ],
+  "tags": [
+    "UI",
+    "карта"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

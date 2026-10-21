@@ -3,7 +3,7 @@
 Сгенерировано `python3 scripts/snippet_matrix.py` из §12 [ТЗ](SNIPPET_SYSTEM_PROJECT.md),
 каталога `snippets/` и `api.schema.json`. Руками не править.
 
-Реализовано: **343 из 500**. Строк с пробелом API: **0**.
+Реализовано: **383 из 500**. Строк с пробелом API: **0**.
 
 Колонка API: для реализованного пакета — фактические `requires`; для
 запланированного — опорные пространства `$` по префиксу ID (предварительно,
@@ -435,55 +435,55 @@
 | 339 | `feedback.quest-toast` | ✅ | `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.style`, `$.fn.text`, `$.off`, `$.on`, `$.quest.def`, `$.ui.markup`, `$.updateFor` | — |
 | 340 | `feedback.error-prompt` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.style`, `$.fn.text`, `$.off`, `$.on`, `$.ui.markup`, `$.updateFor` | — |
 
-## R. RmlUi-интерфейс и HUD — 0/20
+## R. RmlUi-интерфейс и HUD — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 341 | `ui.health-bar` | ⬜ | `$.ui` | — |
-| 342 | `ui.stamina-bar` | ⬜ | `$.ui` | — |
-| 343 | `ui.shield-bar` | ⬜ | `$.ui` | — |
-| 344 | `ui.weapon-panel` | ⬜ | `$.ui` | — |
-| 345 | `ui.quickbar` | ⬜ | `$.ui` | — |
-| 346 | `ui.inventory-screen` | ⬜ | `$.ui` | — |
-| 347 | `ui.equipment-screen` | ⬜ | `$.ui` | — |
-| 348 | `ui.party-panel` | ⬜ | `$.ui` | — |
-| 349 | `ui.quest-tracker` | ⬜ | `$.ui` | — |
-| 350 | `ui.quest-journal` | ⬜ | `$.ui` | — |
-| 351 | `ui.dialogue-box` | ⬜ | `$.ui` | — |
-| 352 | `ui.choice-list` | ⬜ | `$.ui` | — |
-| 353 | `ui.interaction-prompt` | ⬜ | `$.ui` | — |
-| 354 | `ui.objective-marker` | ⬜ | `$.ui` | — |
-| 355 | `ui.minimap-markers` | ⬜ | `$.ui` | — |
-| 356 | `ui.pause-menu` | ⬜ | `$.ui` | — |
-| 357 | `ui.settings-menu` | ⬜ | `$.ui` | — |
-| 358 | `ui.confirm-dialog` | ⬜ | `$.ui` | — |
-| 359 | `ui.loading-overlay` | ⬜ | `$.ui` | — |
-| 360 | `ui.result-screen` | ⬜ | `$.ui` | — |
+| 341 | `ui.health-bar` | ✅ | `$.fn.hp`, `$.fn.max`, `$.fn.min`, `$.fn.show`, `$.fn.style`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 342 | `ui.stamina-bar` | ✅ | `$.fn.data`, `$.fn.max`, `$.fn.min`, `$.fn.show`, `$.fn.style`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 343 | `ui.shield-bar` | ✅ | `$.fn.data`, `$.fn.max`, `$.fn.min`, `$.fn.show`, `$.fn.style`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 344 | `ui.weapon-panel` | ✅ | `$.fn.data`, `$.fn.show`, `$.fn.text`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor`, `$.weapons.of` | — |
+| 345 | `ui.quickbar` | ✅ | `$.fn.count`, `$.fn.data`, `$.fn.html`, `$.fn.map`, `$.fn.show`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 346 | `ui.inventory-screen` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.hide`, `$.fn.html`, `$.fn.map`, `$.fn.on`, `$.fn.show`, `$.input.pressed`, `$.items.get`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 347 | `ui.equipment-screen` | ✅ | `$.fn.data`, `$.fn.hide`, `$.fn.html`, `$.fn.map`, `$.fn.show`, `$.fn.text`, `$.input.pressed`, `$.items.get`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 348 | `ui.party-panel` | ✅ | `$.fn.data`, `$.fn.hp`, `$.fn.html`, `$.fn.map`, `$.fn.show`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 349 | `ui.quest-tracker` | ✅ | `$.fn.find`, `$.fn.show`, `$.fn.text`, `$.quest.definitions`, `$.quest.line`, `$.quest.status`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 350 | `ui.quest-journal` | ✅ | `$.fn.filter`, `$.fn.hide`, `$.fn.html`, `$.fn.map`, `$.fn.on`, `$.fn.show`, `$.input.pressed`, `$.quest.definitions`, `$.quest.line`, `$.quest.status`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 351 | `ui.dialogue-box` | ✅ | `$.dialog.isOpen`, `$.dialog.off`, `$.dialog.on`, `$.dialog.text`, `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.text`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 352 | `ui.choice-list` | ✅ | `$.dialog.choices`, `$.dialog.choose`, `$.dialog.isOpen`, `$.dialog.isTyping`, `$.emit`, `$.fn.emit`, `$.fn.hide`, `$.fn.html`, `$.fn.map`, `$.fn.on`, `$.fn.show`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 353 | `ui.interaction-prompt` | ✅ | `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.text`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.ui.markup` | — |
+| 354 | `ui.objective-marker` | ✅ | `$.camera.isOnScreen`, `$.camera.worldToScreen`, `$.fn.first`, `$.fn.max`, `$.fn.min`, `$.fn.pos`, `$.fn.show`, `$.fn.style`, `$.selection.get`, `$.store.get`, `$.ui.markup`, `$.updateFor` | — |
+| 355 | `ui.minimap-markers` | ✅ | `$.camera.minimap`, `$.fn.filter`, `$.fn.map` | — |
+| 356 | `ui.pause-menu` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.hide`, `$.fn.on`, `$.fn.pause`, `$.fn.show`, `$.input.pressed`, `$.scene.load`, `$.selection.get`, `$.store.get`, `$.time.pause`, `$.time.resume`, `$.ui.markup`, `$.updateFor` | — |
+| 357 | `ui.settings-menu` | ✅ | `$.audio.masterVolume`, `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.scale`, `$.fn.show`, `$.fn.value`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.store.set`, `$.ui.markup`, `$.ui.scale`, `$.window.toggleFullscreen` | — |
+| 358 | `ui.confirm-dialog` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.text`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.ui.markup` | — |
+| 359 | `ui.loading-overlay` | ✅ | `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.loading`, `$.loading.hide`, `$.loading.show`, `$.loading.title`, `$.off`, `$.on` | — |
+| 360 | `ui.result-screen` | ✅ | `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.text`, `$.off`, `$.on`, `$.scene.load`, `$.selection.get`, `$.store.get`, `$.ui.markup` | — |
 
-## S. Сохранения, настройки и доступность — 0/20
+## S. Сохранения, настройки и доступность — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 361 | `save.profile` | ⬜ | `$.save`, `$.store` | — |
-| 362 | `save.slot` | ⬜ | `$.save`, `$.store` | — |
-| 363 | `save.checkpoint` | ⬜ | `$.save`, `$.store` | — |
-| 364 | `save.inventory` | ⬜ | `$.save`, `$.store` | — |
-| 365 | `save.quest-state` | ⬜ | `$.save`, `$.store` | — |
-| 366 | `save.story-state` | ⬜ | `$.save`, `$.store` | — |
-| 367 | `save.world-state` | ⬜ | `$.save`, `$.store` | — |
-| 368 | `save.migration` | ⬜ | `$.save`, `$.store` | — |
-| 369 | `settings.controls` | ⬜ | `$.store`, `$.ui` | — |
-| 370 | `settings.audio` | ⬜ | `$.store`, `$.ui` | — |
-| 371 | `settings.video` | ⬜ | `$.store`, `$.ui` | — |
-| 372 | `settings.gameplay` | ⬜ | `$.store`, `$.ui` | — |
-| 373 | `accessibility.text-scale` | ⬜ | `$.ui`, `$.input` | — |
-| 374 | `accessibility.high-contrast` | ⬜ | `$.ui`, `$.input` | — |
-| 375 | `accessibility.color-cues` | ⬜ | `$.ui`, `$.input` | — |
-| 376 | `accessibility.hold-alternative` | ⬜ | `$.ui`, `$.input` | — |
-| 377 | `accessibility.reduce-motion` | ⬜ | `$.ui`, `$.input` | — |
-| 378 | `accessibility.subtitle` | ⬜ | `$.ui`, `$.input` | — |
-| 379 | `localization.string-table` | ⬜ | `$.i18n` | — |
-| 380 | `localization.number-time` | ⬜ | `$.i18n` | — |
+| 361 | `save.profile` | ✅ | `$.emit`, `$.fn.emit`, `$.save.profile`, `$.selection.get` | — |
+| 362 | `save.slot` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.save.autosave`, `$.save.slot`, `$.save.stopAutosave`, `$.time.now` | — |
+| 363 | `save.checkpoint` | ✅ | `$.fn.data`, `$.fn.hp`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.off`, `$.on`, `$.save.set`, `$.save.slot` | — |
+| 364 | `save.inventory` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.save.get`, `$.save.set`, `$.selection.get` | — |
+| 365 | `save.quest-state` | ✅ | `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.quest.load`, `$.quest.save`, `$.save.get`, `$.save.set`, `$.selection.get` | — |
+| 366 | `save.story-state` | ✅ | `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.save.get`, `$.save.set`, `$.selection.get`, `$.story.flags`, `$.story.set` | — |
+| 367 | `save.world-state` | ✅ | `$.fn.alpha`, `$.fn.at`, `$.fn.attr`, `$.fn.data`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.sensor`, `$.off`, `$.on`, `$.save.get`, `$.save.set`, `$.selection.each`, `$.selection.get` | — |
+| 368 | `save.migration` | ✅ | `$.fn.filter`, `$.fn.map`, `$.save.schema` | — |
+| 369 | `settings.controls` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.input.bind`, `$.input.bindings`, `$.input.loadBindings`, `$.input.markDefaults`, `$.input.rebind`, `$.input.saveBindings`, `$.off`, `$.on` | — |
+| 370 | `settings.audio` | ✅ | `$.audio.masterVolume`, `$.audio.musicVolume`, `$.audio.sfxVolume`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.store.set` | — |
+| 371 | `settings.video` | ✅ | `$.fn.off`, `$.fn.on`, `$.fn.scale`, `$.fn.size`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.store.set`, `$.ui.scale`, `$.window`, `$.window.fullscreen`, `$.window.size`, `$.window.vsync` | — |
+| 372 | `settings.gameplay` | ✅ | `$.dialog.speed`, `$.fn.damageFilter`, `$.fn.off`, `$.fn.on`, `$.fn.speed`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.store.set` | — |
+| 373 | `accessibility.text-scale` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.scale`, `$.selection.get`, `$.store`, `$.store.get`, `$.store.set`, `$.ui.scale` | — |
+| 374 | `accessibility.high-contrast` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.outline`, `$.selection.each`, `$.selection.get`, `$.store`, `$.store.get`, `$.updateFor` | — |
+| 375 | `accessibility.color-cues` | ✅ | `$.fn.add`, `$.fn.appendTo`, `$.fn.at`, `$.fn.filter`, `$.fn.has`, `$.fn.height`, `$.fn.map`, `$.fn.pos`, `$.fn.remove`, `$.selection.each`, `$.selection.get`, `$.updateFor`, `$.world` | — |
+| 376 | `accessibility.hold-alternative` | ✅ | `$.fn.add`, `$.fn.has`, `$.input.rawPressed`, `$.input.synthDown`, `$.input.synthRelease`, `$.selection.get`, `$.store.get`, `$.updateFor` | — |
+| 377 | `accessibility.reduce-motion` | ✅ | `$.emit`, `$.fn.emit`, `$.selection.get`, `$.store`, `$.store.get`, `$.store.set` | — |
+| 378 | `accessibility.subtitle` | ✅ | `$.dialog`, `$.dialog.off`, `$.dialog.on`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.text`, `$.off`, `$.on`, `$.ui.markup`, `$.updateFor` | — |
+| 379 | `localization.string-table` | ✅ | `$.emit`, `$.fn.add`, `$.fn.emit`, `$.fs.readJSON`, `$.i18n.add`, `$.i18n.lang`, `$.selection.get`, `$.store`, `$.store.get` | — |
+| 380 | `localization.number-time` | ✅ | `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.i18n.number`, `$.off`, `$.on` | — |
 
 ## T. Сессии и многопользовательский проект — 0/20
 

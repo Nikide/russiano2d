@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "accessibility.high-contrast",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Высокий контраст целей"
+  },
+  "description": {
+    "ru": "Интерактивные цели получают контрастную обводку и цвет."
+  },
+  "kind": "behavior",
+  "category": "Доступность и язык",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.outline"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": ".interactive, .enemy, .loot"
+    },
+    {
+      "id": "color",
+      "label": "Цвет обводки",
+      "type": "color",
+      "default": "#ffff00"
+    }
+  ],
+  "tags": [
+    "доступность",
+    "контраст"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

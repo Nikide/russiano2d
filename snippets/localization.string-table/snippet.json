@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "localization.string-table",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Таблица строк"
+  },
+  "description": {
+    "ru": "Таблица локализации из JSON-файла проекта в $.i18n; язык из настроек."
+  },
+  "kind": "behavior",
+  "category": "Доступность и язык",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fs.readJSON"
+    },
+    {
+      "api": "$.i18n.add"
+    },
+    {
+      "api": "$.i18n.lang"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.get"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "table",
+      "label": "Таблица (*.json: { lang: { key: text } })",
+      "type": "asset",
+      "assetKind": "data",
+      "required": true
+    },
+    {
+      "id": "lang",
+      "label": "Язык по умолчанию",
+      "type": "string",
+      "default": "ru"
+    }
+  ],
+  "tags": [
+    "локализация"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.settings-menu",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Меню настроек"
+  },
+  "description": {
+    "ru": "Настройки RmlUi-контролами: громкость, полноэкранный режим, масштаб интерфейса; сохраняются в $.store."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.masterVolume"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.scale"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.value"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.ui.scale"
+    },
+    {
+      "api": "$.window.toggleFullscreen"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "openEvent",
+      "label": "Открывается событием",
+      "type": "string",
+      "default": "settings:open"
+    }
+  ],
+  "tags": [
+    "UI",
+    "настройки"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

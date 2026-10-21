@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.pause-menu",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Меню паузы"
+  },
+  "description": {
+    "ru": "Пауза по клавише: продолжить, настройки, выход в меню."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pause"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.scene.load"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.time.pause"
+    },
+    {
+      "api": "$.time.resume"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "escape"
+    },
+    {
+      "id": "menuScene",
+      "label": "Сцена меню",
+      "type": "string",
+      "default": "menu"
+    }
+  ],
+  "tags": [
+    "UI",
+    "пауза"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.quest-journal",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Журнал заданий"
+  },
+  "description": {
+    "ru": "Экран журнала с фильтром: активные, готовые, выполненные."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.html"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.quest.definitions"
+    },
+    {
+      "api": "$.quest.line"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Открыть",
+      "type": "string",
+      "default": "j"
+    }
+  ],
+  "tags": [
+    "UI",
+    "журнал"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

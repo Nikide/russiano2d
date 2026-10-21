@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "save.world-state",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Мир в сейве"
+  },
+  "description": {
+    "ru": "Выбранные состояния мира: открытые двери, подобранные предметы, позиции (по селекторам)."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.sensor"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "track",
+      "label": "Что сохранять (селектор)",
+      "type": "list",
+      "default": [
+        ".door",
+        ".loot"
+      ]
+    },
+    {
+      "id": "key",
+      "label": "Ключ",
+      "type": "string",
+      "default": "world"
+    }
+  ],
+  "tags": [
+    "мир",
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

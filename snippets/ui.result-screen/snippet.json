@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.result-screen",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Экран итога"
+  },
+  "description": {
+    "ru": "Итог уровня (событие level:complete): время и тайники; кнопки «заново» и «дальше»."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.scene.load"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "retryScene",
+      "label": "Сцена для повтора",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "nextScene",
+      "label": "Следующая сцена",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "UI",
+    "итог"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

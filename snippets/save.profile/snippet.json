@@ -1,0 +1,59 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "save.profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Профиль игрока"
+  },
+  "description": {
+    "ru": "Именованный профиль ($.save.profile): имя и настройки, общие для всех слотов."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.save.profile"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Имя профиля",
+      "type": "string",
+      "default": "Игрок"
+    },
+    {
+      "id": "defaults",
+      "label": "Значения по умолчанию (ключ=значение)",
+      "type": "list",
+      "default": [
+        "lang=ru"
+      ]
+    }
+  ],
+  "tags": [
+    "профиль",
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "settings.controls",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Раскладка управления"
+  },
+  "description": {
+    "ru": "Действия и клавиши по умолчанию; переназначение событием rebind { action, key }, сохранение раскладки."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.input.bind"
+    },
+    {
+      "api": "$.input.bindings"
+    },
+    {
+      "api": "$.input.loadBindings"
+    },
+    {
+      "api": "$.input.markDefaults"
+    },
+    {
+      "api": "$.input.rebind"
+    },
+    {
+      "api": "$.input.saveBindings"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "bindings",
+      "label": "Действия (действие=клавиши через +)",
+      "type": "list",
+      "default": [
+        "jump=space",
+        "attack=j",
+        "interact=e"
+      ]
+    }
+  ],
+  "tags": [
+    "управление",
+    "настройки"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "values": {
+    "version": 2,
+    "renames": [
+      "2:hp=health"
+    ]
+  }
+}

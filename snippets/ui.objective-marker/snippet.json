@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.objective-marker",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Маркер цели на экране"
+  },
+  "description": {
+    "ru": "Стрелка у края экрана в сторону цели задания (объект с data objective)."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.isOnScreen"
+    },
+    {
+      "api": "$.camera.worldToScreen"
+    },
+    {
+      "api": "$.fn.first"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.style"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": ".objective"
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#ffd040"
+    }
+  ],
+  "tags": [
+    "UI",
+    "маркер"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

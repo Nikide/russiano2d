@@ -1,0 +1,100 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.stamina-bar",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Выносливость"
+  },
+  "description": {
+    "ru": "Полоса выносливости (data stamina) с восстановлением; рывок и перекат её тратят."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.style"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "who",
+      "label": "Чей",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "position",
+      "label": "Позиция (x, y)",
+      "type": "vec2",
+      "default": [
+        20,
+        20
+      ]
+    },
+    {
+      "id": "width",
+      "label": "Ширина",
+      "type": "int",
+      "default": 200,
+      "min": 20,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#40c060"
+    },
+    {
+      "id": "max",
+      "label": "Максимум",
+      "type": "number",
+      "default": 100,
+      "min": 1,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "HUD",
+    "выносливость"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

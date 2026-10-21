@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.loading-overlay",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Экран загрузки"
+  },
+  "description": {
+    "ru": "Текст и прогресс загрузки сцены — штатный $.loading."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.loading"
+    },
+    {
+      "api": "$.loading.hide"
+    },
+    {
+      "api": "$.loading.show"
+    },
+    {
+      "api": "$.loading.title"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "title",
+      "label": "Заголовок",
+      "type": "string",
+      "default": "Загрузка…"
+    }
+  ],
+  "tags": [
+    "UI",
+    "загрузка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

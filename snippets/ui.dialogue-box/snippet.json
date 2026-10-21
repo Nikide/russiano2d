@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ui.dialogue-box",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Окно реплики"
+  },
+  "description": {
+    "ru": "Окно реплики и имя говорящего на событиях $.dialog (своя вёрстка поверх стандартной)."
+  },
+  "kind": "behavior",
+  "category": "Интерфейс (RmlUi)",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.isOpen"
+    },
+    {
+      "api": "$.dialog.off"
+    },
+    {
+      "api": "$.dialog.on"
+    },
+    {
+      "api": "$.dialog.text"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "height",
+      "label": "Высота",
+      "type": "number",
+      "default": 140,
+      "min": 40,
+      "max": 1000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "UI",
+    "диалог"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

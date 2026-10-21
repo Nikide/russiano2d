@@ -1,0 +1,61 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "localization.number-time",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Числа и время"
+  },
+  "description": {
+    "ru": "Локализованные числа и таймер: глобальные события format:number/format:time с ответом."
+  },
+  "kind": "behavior",
+  "category": "Доступность и язык",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.i18n.number"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "clock",
+      "label": "Формат таймера",
+      "type": "enum",
+      "default": "mm:ss",
+      "options": [
+        "mm:ss",
+        "h:mm:ss"
+      ]
+    }
+  ],
+  "tags": [
+    "локализация",
+    "формат"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

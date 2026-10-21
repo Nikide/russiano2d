@@ -1,0 +1,66 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "save.story-state",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сюжет в сейве"
+  },
+  "description": {
+    "ru": "Сюжетные флаги, отношения и выбранные ветки в сейве."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.story.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Ключ",
+      "type": "string",
+      "default": "story"
+    }
+  ],
+  "tags": [
+    "сюжет",
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

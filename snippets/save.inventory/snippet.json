@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "save.inventory",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Инвентарь в сейве"
+  },
+  "description": {
+    "ru": "Содержимое инвентаря и кошелька игрока сохраняется и восстанавливается."
+  },
+  "kind": "behavior",
+  "category": "Сохранения и настройки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    }
+  ],
+  "tags": [
+    "инвентарь",
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}
