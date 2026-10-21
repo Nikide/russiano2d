@@ -113,3 +113,22 @@
   выбран OpenSSL 4. Рабочая настройка: `xmake f --ldflags='/opt/homebrew/opt/openssl@3/lib/libssl.dylib /opt/homebrew/opt/openssl@3/lib/libcrypto.dylib'`.
   После неё текущий бинарник — `build/macosx/arm64/release/r2d`;
   для Python-проверок явно задавать `R2D_BINARY`.
+
+### Шаг 2: каталог и функциональные контракты
+
+- `xmake test -v snippets_tests/catalog`: **PASS**, 500 пакетов, 290.893 с.
+  Цель использует фактический `targetfile()` текущей xmake-сборки.
+- Новый `tests/sdk_snippet_boundaries_test.py`: **PASS**, 500 пакетов,
+  1278 полей, 9210 случаев (границы, null, неверные типы, enum, vec2, списки,
+  цвета). Каждый неверный случай проверяется отдельно native validator.
+- Новый `tests/agent/snippets_sections_test.py`: **PASS**; наблюдаемое поведение
+  A/B/D–U дополняет combat/mechanics/genres: движение, регенерация, NPC,
+  respawn цели двери, inventory, деньги, XP/cooldown, задания, story,
+  последовательности, тайники, fade, animation, combo, HUD, save/settings,
+  host ready и replicated health; смена сцены снимает глобальные подписки,
+  возвращение устанавливает одну подписку.
+- Найден и исправлен `net.ready-check`: playerCount включает хоста; готовность
+  требуется от `n-1` клиентов, минимум сравнивается с `n`. Disconnect удаляет
+  готовность отключившегося peer.
+- `snippets_test.py`: **PASS**. Общий повторяемый запуск новых и существующих
+  suites: `xmake test snippets_regression_tests/contracts` (после UI шага).

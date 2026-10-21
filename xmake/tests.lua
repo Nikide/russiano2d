@@ -898,3 +898,42 @@ target("js_tests")
         print("js_tests: %d набор(ов) прошли", #files)
         return true
     end)
+
+-- Каталог и интеграционные проверки сниппетов используют текущий r2d.
+target("snippets_tests")
+    set_kind("phony")
+    set_default(false)
+    add_deps("r2d")
+    add_tests("catalog", {rundir = test_root})
+    on_test(function (target)
+        local binary = path.absolute(target:dep("r2d"):targetfile())
+        return os.execv("python3", {"tests/agent/snippets_catalog_test.py"}, {
+            try = true, curdir = test_root, envs = {R2D_BINARY = binary}
+        }) == 0
+    end)
+
+target("snippets_regression_tests")
+    set_kind("phony")
+    set_default(false)
+    add_deps("r2d")
+    add_tests("contracts", {rundir = test_root})
+    on_test(function (target)
+        local binary = path.absolute(target:dep("r2d"):targetfile())
+        local suites = {
+            "tests/sdk_snippet_boundaries_test.py",
+            "tests/sdk_snippet_migration_test.py",
+            "tests/agent/snippets_test.py",
+            "tests/agent/snippets_sections_test.py",
+            "tests/agent/snippets_mechanics_test.py",
+            "tests/agent/snippets_combat_test.py",
+            "tests/agent/editor_snippets_test.py",
+            "tests/agent/editor_snippets_ux_test.py",
+        }
+        for _, file in ipairs(suites) do
+            if os.execv("python3", {"-u", file}, {try = true, curdir = test_root,
+                    envs = {R2D_BINARY = binary}}) ~= 0 then
+                return false
+            end
+        end
+        return true
+    end)
