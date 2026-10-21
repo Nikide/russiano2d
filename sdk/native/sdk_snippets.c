@@ -654,6 +654,15 @@ static const SnipPkg *catalog_find(const SnipCatalog *c, const char *id)
     return hit;
 }
 
+static bool pkg_targets(const SnipPkg *p, const char *t)
+{
+    const R2dJson *targets = r2d_json_get(p->m, "targets");
+    if (!r2d_json_size(targets)) return !strcmp(t, "node");
+    for (int i = 0; i < r2d_json_size(targets); ++i)
+        if (!strcmp(r2d_json_str(r2d_json_at(targets, i), ""), t)) return true;
+    return false;
+}
+
 // Зависимости каталога: существование и отсутствие циклов (DFS с цветами).
 static int dep_visit(const SnipCatalog *c, int idx, char *color, SdkReport *rep)
 {
@@ -675,10 +684,54 @@ static int dep_visit(const SnipCatalog *c, int idx, char *color, SdkReport *rep)
                  "зависимость %s отсутствует в каталоге", did ? did : "?");
             continue;
         }
+        // Пакет уровня проекта не может требовать пакет «только на узел» на том же owner.
+        if (pkg_targets(&c->items[idx], "project") && !pkg_targets(dp, "project") && !strcmp(c->items[idx].kind, "behavior"))
+            diag(rep, SDK_ERROR, "SNIP083", c->items[idx].manifest_path, c->items[idx].id, "dependencies",
+                 "%s ставится на project, а зависимость %s — только на узел", c->items[idx].id, dp->id);
         bad = dep_visit(c, (int)(dp - c->items), color, rep);
     }
     color[idx] = 2;
     return bad;
+}
+
+// Состав набора на одном owner: behavior-участники (не «только проект») и их слоты.
+static void kit_collect(const SnipCatalog *c, const SnipPkg *p, const SnipPkg **out, int *n, int cap, int depth)
+{
+    if (depth > 16) return;
+    const R2dJson *deps = r2d_json_get(p->m, "dependencies");
+    for (int i = 0; i < r2d_json_size(deps); ++i) {
+        const R2dJson *d = r2d_json_at(deps, i);
+        const SnipPkg *dp = catalog_find(c, d && d->type == R2D_JSON_STR ? d->string : jstr(d, "id"));
+        if (!dp) continue;
+        bool seen = false;
+        for (int k = 0; k < *n; ++k) seen |= out[k] == dp;
+        if (seen) continue;
+        if (!strcmp(dp->kind, "kit")) { kit_collect(c, dp, out, n, cap, depth + 1); continue; }
+        if (pkg_targets(dp, "project") && !pkg_targets(dp, "node")) continue;
+        if (*n < cap) out[(*n)++] = dp;
+        kit_collect(c, dp, out, n, cap, depth + 1);
+    }
+}
+
+static void kit_slots(const SnipCatalog *c, const SnipPkg *kit, SdkReport *rep)
+{
+    const SnipPkg *list[256];
+    int n = 0;
+    kit_collect(c, kit, list, &n, 256, 0);
+    for (int i = 0; i < n; ++i) {
+        const R2dJson *slots = r2d_json_get(list[i]->m, "slots");
+        if (!r2d_json_size(slots)) continue;
+        const char *sid = jstr(r2d_json_at(slots, 0), "id");
+        const int cap = r2d_json_int(r2d_json_get(r2d_json_at(slots, 0), "capacity"), 1);
+        int used = 0;
+        for (int k = 0; k <= i; ++k) {
+            const R2dJson *s2 = r2d_json_get(list[k]->m, "slots");
+            if (r2d_json_size(s2) && !strcmp(jstr(r2d_json_at(s2, 0), "id") ? jstr(r2d_json_at(s2, 0), "id") : "", sid ? sid : "")) used++;
+        }
+        if (sid && used > cap)
+            diag(rep, SDK_ERROR, "SNIP084", kit->manifest_path, kit->id, "dependencies",
+                 "в наборе %s слот «%s» занят больше %d раз (%s)", kit->id, sid, cap, list[i]->id);
+    }
 }
 
 static void catalog_check(const SnipCatalog *c, const R2dJson *schema, SdkReport *rep)
@@ -688,6 +741,7 @@ static void catalog_check(const SnipCatalog *c, const R2dJson *schema, SdkReport
         if (!c->items[i].m) continue;
         dep_visit(c, i, color, rep);
         if (schema) { resolve_api(&c->items[i], schema, rep); check_source_api(&c->items[i], schema, rep); }
+        if (!strcmp(c->items[i].kind, "kit")) kit_slots(c, &c->items[i], rep);
     }
     free(color);
 }
@@ -1107,6 +1161,12 @@ static bool build_plan(const R2dJson *root, const char *dir, const SnipCatalog *
         "        bound = raw;\n"
         "        if (raw) dispose = attach(node) || null;\n"
         "    });\n"
+        "}\n"
+        "\n// Владелец «project»: служебный скрытый узел-якорь (переживает смену сцены),\n"
+        "// чтобы покадровые подписки проекта принадлежали узлу и снимались disposer'ом.\n"
+        "function projectNode() {\n"
+        "    const found = $('#__snippets');\n"
+        "    return found.length ? found : $('<snippets>', { id: '__snippets', persistent: true }).size(0, 0).hide().appendTo($.world);\n"
         "}\n");
     // Объекты, созданные в Editor: editor.graph, origin "graph", поле spawn.
     // Обычное создание узла через $ — второго графа сцены нет.
@@ -1175,7 +1235,7 @@ static bool build_plan(const R2dJson *root, const char *dir, const SnipCatalog *
         r2d_sb_puts(&cfg, nf ? "\n}" : "}");
         r2d_sb_printf(&sb, "\n// %s — %s@%s → %s\n", iid, p->id, p->version, owner ? owner : "?");
         if (owner && !strcmp(owner, "project")) {
-            r2d_sb_printf(&sb, "$.ready(() => %s(null, ", ident);
+            r2d_sb_printf(&sb, "$.ready(() => %s(projectNode(), ", ident);
             r2d_sb_puts(&sb, cfg.data);
             r2d_sb_puts(&sb, ", $));\n");
         } else if (pub) {
@@ -1552,11 +1612,13 @@ static void add_instance(R2dJson *sn, const SnipCatalog *cat, const SnipPkg *p, 
             const char *did = d && d->type == R2D_JSON_STR ? d->string : jstr(d, "id");
             const SnipPkg *dp = catalog_find(cat, did);
             if (!dp) { diag(rep, SDK_ERROR, "SNIP080", p->manifest_path, p->id, NULL, "зависимость %s отсутствует", did ? did : "?"); continue; }
-            const size_t before = added->len;
-            add_instance(sn, cat, dp, owner, NULL, NULL, added, rep, depth + 1);
-            (void)before;
+            // Участник «только для проекта» встаёт на project, остальные — на owner набора.
+            const char *mowner = (pkg_targets(dp, "project") && !pkg_targets(dp, "node")) ? "project" : owner;
+            const char *mshort = strchr(mowner, ':') ? strchr(mowner, ':') + 1 : mowner;
+            add_instance(sn, cat, dp, mowner, NULL, NULL, added, rep, depth + 1);
+            if (!strcmp(dp->kind, "kit")) continue;   // вложенный набор — свой set
             char mid[300];
-            snprintf(mid, sizeof mid, "snippet:%s:%s", short_owner, dp->id);
+            snprintf(mid, sizeof mid, "snippet:%s:%s", mshort, dp->id);
             if (members.len) r2d_sb_putc(&members, ',');
             r2d_sb_put_json_string(&members, mid);
         }
