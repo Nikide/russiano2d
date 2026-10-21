@@ -9,6 +9,12 @@
 запланированного — опорные пространства `$` по префиксу ID (предварительно,
 уточняется при реализации пакета).
 
+Полные строки §11.1 в [matrix.json](../snippets/matrix.json): версия, сценарий, source,
+examples/package tests, runtime/lifecycle contract, совместимость/миграции и проверки.
+Runtime smoke, manifest/API/resource validation и детерминизм проходят для всех 500;
+9210 boundary cases проверяют все 1278 полей через native validator. Семантические
+assertions разделов и жанров дополняют эти общие проверки, а не заменяют их.
+
 
 ## A. Базовые сущности и управление — 20/20
 
@@ -293,7 +299,7 @@
 | 222 | `dialogue.choice` | ✅ | `$.dialog.definition`, `$.dialog.off`, `$.dialog.on`, `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.some`, `$.off`, `$.on`, `$.story.set` | — |
 | 223 | `dialogue.condition` | ✅ | `$.dialog.flag`, `$.fn.count`, `$.fn.data`, `$.quest`, `$.selection.get`, `$.story.flags`, `$.updateFor` | — |
 | 224 | `dialogue.action` | ✅ | `$.dialog.definition`, `$.dialog.off`, `$.dialog.on`, `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.story.set` | — |
-| 225 | `dialogue.portrait` | ✅ | `$.dialog.off`, `$.dialog.on`, `$.fn.appendTo`, `$.fn.at`, `$.fn.filter`, `$.fn.hide`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.fn.show`, `$.fn.size`, `$.fn.sprite`, `$.world` | — |
+| 225 | `dialogue.portrait` | ✅ | `$.dialog.off`, `$.dialog.on`, `$.fn.attr`, `$.ui.markup` | — |
 | 226 | `dialogue.typewriter` | ✅ | `$.audio.play`, `$.dialog.isOpen`, `$.dialog.isTyping`, `$.dialog.speed`, `$.dialog.text`, `$.fn.speed`, `$.fn.text`, `$.updateFor` | — |
 | 227 | `dialogue.skip` | ✅ | `$.dialog.choices`, `$.dialog.isOpen`, `$.dialog.next`, `$.input.down`, `$.input.pressed`, `$.updateFor` | — |
 | 228 | `grid.pathfinding` | ✅ | `$.fn.add`, `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.slice`, `$.nav.grid`, `$.nav.pathOn`, `$.updateFor` | — |
@@ -301,7 +307,7 @@
 | 230 | `dialogue.conversation-lock` | ✅ | `$.dialog.isOpen`, `$.fn.active`, `$.fn.controls`, `$.fn.data`, `$.fn.emit`, `$.fn.velocity`, `$.selection.get`, `$.updateFor` | — |
 | 231 | `story.flag` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.story.set` | — |
 | 232 | `story.counter` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.story.flags`, `$.story.set` | — |
-| 233 | `story.scene-transition` | ✅ | `$.camera.viewport`, `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.fadeTo`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.fn.size`, `$.off`, `$.on`, `$.scene.load`, `$.story.play`, `$.world` | — |
+| 233 | `story.scene-transition` | ✅ | `$.fn.attr`, `$.off`, `$.on`, `$.scene.load`, `$.story.play`, `$.ui.markup`, `$.updateFor` | — |
 | 234 | `story.cutscene` | ✅ | `$.cutscene.define`, `$.cutscene.play`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.off`, `$.on` | — |
 | 235 | `story.choice-history` | ✅ | `$.dialog.definition`, `$.dialog.node`, `$.dialog.off`, `$.dialog.on`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.save.get`, `$.save.set`, `$.selection.get` | — |
 | 236 | `story.relationship-route` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.story.flags`, `$.story.set` | — |

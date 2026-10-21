@@ -23,40 +23,10 @@
       "api": "$.dialog.on"
     },
     {
-      "api": "$.fn.appendTo"
+      "api": "$.fn.attr"
     },
     {
-      "api": "$.fn.at"
-    },
-    {
-      "api": "$.fn.filter"
-    },
-    {
-      "api": "$.fn.hide"
-    },
-    {
-      "api": "$.fn.map"
-    },
-    {
-      "api": "$.fn.off"
-    },
-    {
-      "api": "$.fn.on"
-    },
-    {
-      "api": "$.fn.remove"
-    },
-    {
-      "api": "$.fn.show"
-    },
-    {
-      "api": "$.fn.size"
-    },
-    {
-      "api": "$.fn.sprite"
-    },
-    {
-      "api": "$.world"
+      "api": "$.ui.markup"
     }
   ],
   "dependencies": [],

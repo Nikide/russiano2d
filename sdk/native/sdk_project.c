@@ -39,6 +39,17 @@ static void check_ref(PV *pv, const char *from, const char *ref)
     if (!strncmp(ref, "http://", 7) || !strncmp(ref, "https://", 8) || !strncmp(ref, "data:", 5)) return;
     if (strstr(ref, "{{") || strchr(ref, '$')) return;
     if (!known_asset_ext(ref)) return;
+    // Декларативные cues/portraits используют "событие=путь". Сначала
+    // сохраняем возможность настоящего имени с '=', затем проверяем RHS.
+    char direct[2048];
+    snprintf(direct, sizeof direct, "%s/%s", pv->root, ref);
+    if (sdk_file_exists(direct)) return;
+    const char *eq = strchr(ref, '=');
+    if (eq && !memchr(ref, '/', (size_t)(eq - ref)) && !memchr(ref, '\\', (size_t)(eq - ref))) {
+        const char *value = eq + 1;
+        while (*value == ' ' || *value == '\t') value++;
+        if (known_asset_ext(value)) ref = value;
+    }
     char cand[2048];
     snprintf(cand, sizeof cand, "%s/%s", pv->root, ref);
     if (sdk_file_exists(cand)) return;

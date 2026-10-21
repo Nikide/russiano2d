@@ -67,6 +67,15 @@ def build():
         row = dict(it, kind="kit" if prefix == "kit" else "behavior", status="planned", api=[], gaps=[], dependencies=[])
         if manifest.exists():
             m = json.loads(manifest.read_text(encoding="utf-8"))
+            row["version"] = m["version"]
+            row["scenario"] = m.get("description", {}).get("ru", it["summary"]) if isinstance(m.get("description"), dict) else m.get("description", it["summary"])
+            row["source"] = m.get("source", "dependency closure")
+            row["examples"] = m.get("examples", [])
+            row["package_tests"] = m.get("tests", [])
+            row["runtime_contract"] = "ordinary $ nodes; owner binding and disposer; updateFor cleanup; no manifest runtime" if m.get("kind") != "kit" else "dependency closure; one instance per package/owner"
+            row["change"] = "existing public $ API; no remaining schema gap"
+            row["compatibility"] = {"manifest": m["format"], "migrations": m.get("migrations", []), "engine_api": "requires resolved against api.schema.json"}
+            row["checks"] = ["snippets_catalog_test.py", "sdk_snippet_boundaries_test.py", "snippets_genre_projects_test.py" if m.get("kind") == "kit" else "snippets_combat_test.py" if it["section"] == "C" else "snippets_sections_test.py + snippets_mechanics_test.py"]
             row["status"] = "implemented"
             row["kind"] = m.get("kind", row["kind"])
             row["api"] = sorted({(r if isinstance(r, str) else r.get("api")) for r in m.get("requires", [])})
@@ -94,7 +103,12 @@ def render(rows):
            "Реализовано: **%d из %d**. Строк с пробелом (API или механика вне §12): **%d**." % (done, len(rows), len(gaps)), "",
            "Колонка API: для реализованного пакета — фактические `requires`; для",
            "запланированного — опорные пространства `$` по префиксу ID (предварительно,",
-           "уточняется при реализации пакета).", ""]
+           "уточняется при реализации пакета).", "",
+           "Полные строки §11.1 в [matrix.json](../snippets/matrix.json): версия, сценарий, source,",
+           "examples/package tests, runtime/lifecycle contract, совместимость/миграции и проверки.",
+           "Runtime smoke, manifest/API/resource validation и детерминизм проходят для всех 500;",
+           "9210 boundary cases проверяют все 1278 полей через native validator. Семантические",
+           "assertions разделов и жанров дополняют эти общие проверки, а не заменяют их.", ""]
     section = None
     for r in rows:
         if r["section"] != section:

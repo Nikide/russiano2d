@@ -17,34 +17,7 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.camera.viewport"
-    },
-    {
-      "api": "$.fn.alpha"
-    },
-    {
-      "api": "$.fn.appendTo"
-    },
-    {
-      "api": "$.fn.at"
-    },
-    {
-      "api": "$.fn.color"
-    },
-    {
-      "api": "$.fn.fadeTo"
-    },
-    {
-      "api": "$.fn.off"
-    },
-    {
-      "api": "$.fn.on"
-    },
-    {
-      "api": "$.fn.remove"
-    },
-    {
-      "api": "$.fn.size"
+      "api": "$.fn.attr"
     },
     {
       "api": "$.off"
@@ -59,7 +32,10 @@
       "api": "$.story.play"
     },
     {
-      "api": "$.world"
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

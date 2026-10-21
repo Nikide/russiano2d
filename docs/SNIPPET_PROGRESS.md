@@ -176,3 +176,24 @@
 - Повторный VN/JRPG с этими assertions, lint, validate, Build и снимками:
   **PASS**. `snippet_matrix.py` обновил состав JRPG, 500/500 сохранено.
 - Genre acceptance включён в `snippets_regression_tests/contracts`.
+
+### Шаг 5: архитектура, resource validation, полная API-матрица
+
+- Найдены последние два `ui: true` world-элемента в игровых пакетах:
+  dialogue.portrait и story.scene-transition. Портрет теперь RmlUi image,
+  переход сцены использует штатный `$.scene.load` transition; затемнение story
+  использует RmlUi и owner-scoped update с disposer.
+- `snippets_sections_test.py`: **PASS** с настоящим portrait image, именем
+  говорящего в RmlUi dialogue box, субтитрами и сменой сцены через пакет.
+- Этот fixture выявил ложный R2D100 для строк вида `speaker=face.png`.
+  Общий native project validator теперь проверяет RHS такой ссылки; отдельный
+  отрицательный случай подтверждает R2D100 для действительно отсутствующего
+  `bell=missing-sound.ogg`. Существующие пути с '=' сначала проверяются целиком.
+- Матрица всех 500 строк теперь содержит version/scenario/source/examples/
+  package tests/runtime contract/change/compatibility/checks, а не только
+  предварительные API namespaces. `requires` сверяются с текущей schema;
+  незакрытых schema gaps нет. Требуемые проверки и их результаты различаются:
+  конкретные результаты этой приёмки перечислены в этом progress.
+- Повторный performance pass: 500 — 1.899 мс snippets против 1.718 мс manual;
+  2000 — 5.903 против 5.707 мс, ошибок 0. Metadata и сырые результаты —
+  `docs/benchmarks/snippets-acceptance.json`; C-перенос не требуется.

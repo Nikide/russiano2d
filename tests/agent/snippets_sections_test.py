@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import sys
 import socket
+import shutil
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,17 +44,23 @@ PLAN = [
     ('settings.audio', 'settings', {}),
     ('net.ready-check', 'ready', {'minPlayers': 1}),
     ('net.replicate-health', 'replica', {}),
+    ('dialogue.tree', 'dialog', {}),
+    ('dialogue.portrait', 'portrait', {'portraits': ['Стражник=face.png']}),
+    ('ui.dialogue-box', 'dialogbox', {}),
+    ('accessibility.subtitle', 'subtitles', {}),
+    ('story.scene-transition', 'transition', {'event': 'test:leave', 'scene': 'empty', 'fade': 0}),
 ]
 
 
 def main():
     with tempfile.TemporaryDirectory(prefix='r2d-snip-sections-') as tmp:
         root = Path(tmp)
+        shutil.copy(ROOT / 'assets/atlas.png', root / 'face.png')
         (root / 'main.js').write_text("""$.scene.add('first', () => {
     $.world.gravity(0, 0);
     $.items.define({id:'coin', title:'Монета', stack:99});
     $('<hero>', {id:'hero'}).at(100,100).size(16,16).appendTo($.world);
-""" + '\n'.join("    $('<thing>', {id:%s}).at(%d,100).size(16,16).body('dynamic').health(100).appendTo($.world);" % (json.dumps(owner), 120 if owner in ('door', 'secret') else 200) for _, owner, _ in PLAN) + """
+""" + '\n'.join("    $('<thing>', {id:%s}).at(%d,100).size(16,16).body('dynamic').health(100).appendTo($.world);" % (json.dumps(owner), 120 if owner == 'door' else 160 if owner == 'secret' else 200 if owner == 'chase' else 300 + index * 40) for index, (_, owner, _) in enumerate(PLAN)) + """
 });
 $.scene.add('empty', () => {});
 $.ready(() => $.scene.load('first', {transition:'none'}));
@@ -67,7 +74,12 @@ $.ready(() => $.scene.load('first', {transition:'none'}));
                 res = r2d('snippet', 'set', tmp, 'snippet:' + owner + ':' + package, *[k + '=' + json.dumps(v, ensure_ascii=False) for k, v in values.items()])
                 assert res['ok'], (package, res)
         assert r2d('snippet', 'generate', tmp, '--write')['ok']
-        assert r2d('validate', tmp)['ok']
+        validation = r2d('validate', tmp)
+        assert validation['ok'], validation.get('diagnostics')
+        (root / 'missing-cue.json').write_text('{"sound":"bell=missing-sound.ogg"}')
+        bad = r2d('validate', tmp)
+        assert not bad['ok'] and any(d['code'] == 'R2D100' and 'missing-sound.ogg' in d['message'] for d in bad['diagnostics']), 'missing cue asset must still be diagnosed'
+        (root / 'missing-cue.json').unlink()
         with Agent(game=tmp, seed=4) as a:
             a.step(8)
             def eq(code, expected, label):
@@ -119,7 +131,7 @@ $.ready(() => $.scene.load('first', {transition:'none'}));
             eq('solved', 0, 'M: wrong sequence does not solve')
             ev("$.emit('rune:b'); $.emit('rune:a'); $.emit('rune:b')")
             eq('solved', 1, 'M: correct sequence solves exactly once')
-            ev("$('#hero').at(120,100)"); a.step(3)
+            ev("$('#hero').at($('#secret').pos().x,$('#secret').pos().y)"); a.step(3)
             eq("$.save.get('secrets')", 1, 'N: secret found once')
             ev("globalThis.fades=0; $.on('fade:done-out',()=>fades++); $.emit('fade:out')"); a.step(10)
             eq('fades', 1, 'O: fade completes')
@@ -142,8 +154,14 @@ $.ready(() => $.scene.load('first', {transition:'none'}));
             eq('starts', 1, 'T: authority starts ready match')
             ev("$('#replica').damage(12)")
             eq("$('#replica').hp()", 88, 'U: offline authority can damage replicated health')
+            ev("$.emit('dialogue:play',{id:'guard'})"); a.step(2)
+            eq("$.ui.doc('snippets-portrait-portrait.rml').attr('portrait','src')", 'face.png', 'L: RmlUi portrait receives raw dialog payload')
+            eq("$.ui.doc('snippets/ui-dialogue.rml').content('who')", 'Стражник', 'R: dialog box shows speaker')
+            assert 'Стражник' in a.eval("$.ui.doc('snippets/subtitles.rml').content('s')"), 'S: dialog subtitles'
+            ev('$.dialog.close()')
             # Scene removal disposes global subscriptions and reattachment stays singular.
-            ev("$.scene.load('empty',{transition:'none'})"); a.step(5)
+            ev("$.emit('test:leave')"); a.step(5)
+            eq('$.scene.current()', 'empty', 'L: scene transition uses native scene API')
             before = a.eval('$.story.flags.trust')
             ev("$.emit('helped')")
             eq('$.story.flags.trust', before, 'scene cleanup removes global subscription')
