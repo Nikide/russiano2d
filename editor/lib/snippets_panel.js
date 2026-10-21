@@ -55,6 +55,7 @@ export function createSnippetsPanel($, doc, host) {
     const st = {
         catalog: [], loaded: false, query: '', owner: null, open: null,
         section: null, diags: [], gen: null, busy: false, tick: 0, renderedAt: -10,
+        category: '', undo: [], redo: [], snap: 0,
     };
     // Кадры: change от только что пересозданных полей (doc.html) приходит в
     // ближайшие кадры и не является правкой пользователя.
@@ -95,12 +96,43 @@ export function createSnippetsPanel($, doc, host) {
         return !!j.ok;
     }
 
+    // Отмена/повтор: снимок editor.snippets до правки → .r2d/snippets-undo/*.json;
+    // откат — тем же backend (r2d snippet restore), а не правкой файла из UI.
+    const MUTATING = new Set(['add', 'set', 'remove', 'entity', 'own', 'update', 'new']);
+    function snapshot() {
+        const path = host.root() + '/.r2d/snippets-undo/' + (st.snap++) + '.json';
+        $.fs.writeJSON(path, JSON.parse(JSON.stringify(section())));
+        return path;
+    }
+    async function restoreFrom(path, okText) {
+        const res = await host.tool(['snippet', 'restore', host.root(), '--from', path]);
+        const ok = report(res, okText);
+        if (res.json && res.json.written) host.projectChanged();
+        return ok;
+    }
+    async function undo() {
+        if (st.busy || !st.undo.length) return false;
+        st.busy = true;
+        try { const cur = snapshot(); const prev = st.undo.pop(); if (await restoreFrom(prev, 'отменено')) st.redo.push(cur); else st.undo.push(prev); }
+        finally { st.busy = false; render(); }
+        return true;
+    }
+    async function redo() {
+        if (st.busy || !st.redo.length) return false;
+        st.busy = true;
+        try { const cur = snapshot(); const next = st.redo.pop(); if (await restoreFrom(next, 'повторено')) st.undo.push(cur); else st.redo.push(next); }
+        finally { st.busy = false; render(); }
+        return true;
+    }
+
     async function run(args, okText, after) {
         if (st.busy) return false;
         if (host.manifestDirty()) { host.setStatus('сначала сохраните project.json: Кирпичики пишут его сами', 'err'); return false; }
         st.busy = true;
         try {
+            const before = MUTATING.has(args[1]) && args[1] !== 'new' ? snapshot() : null;
             const res = await host.tool(args);
+            if (before && res.json && res.json.written) { st.undo.push(before); if (st.undo.length > 50) st.undo.shift(); st.redo = []; }
             const ok = report(res, okText);
             if (res.json && res.json.written) host.projectChanged();
             if (after) after(res.json || {});
@@ -243,6 +275,8 @@ export function createSnippetsPanel($, doc, host) {
 
         // Генерация.
         const codeOwned = ((sec.generation || {}).ownership) === 'code';
+        html += '<div class="sn-row"><button class="st-btn" data-key="sn:undo">Отменить (' + st.undo.length + ')</button>' +
+            '<button class="st-btn" data-key="sn:redo">Повторить (' + st.redo.length + ')</button></div>';
         html += '<span class="sn-h">Код · владелец: ' + (codeOwned ? 'ручной JS (code-authored)' : 'генератор') + '</span><div class="sn-row">' +
             (codeOwned ? '' : '<button class="st-btn primary" data-key="sn:generate">Сгенерировать</button>') +
             '<button class="st-btn" data-key="sn:preview">Проверить</button>' +
@@ -264,11 +298,13 @@ export function createSnippetsPanel($, doc, host) {
 
         // Каталог.
         const q = lower(st.query);
-        const list = st.catalog.filter((p) => p.valid && (!q || lower(p.id + ' ' + p.title + ' ' + p.description + ' ' + p.category + ' ' + (p.tags || []).join(' ')).includes(q)));
+        const list = st.catalog.filter((p) => p.valid && (!st.category || p.category === st.category) && (!q || lower(p.id + ' ' + p.title + ' ' + p.description + ' ' + p.category + ' ' + (p.tags || []).join(' ')).includes(q)));
+        const cats = [...new Set(st.catalog.filter((p) => p.valid).map((p) => p.category))].sort((a, b) => a.localeCompare(b));
         html += '<span class="sn-h">Свой пакет</span><div class="sn-row"><input id="sn-pkg-id" class="st-in sn-half" type="text" value=""/>' +
             '<input id="sn-pkg-title" class="st-in sn-half" type="text" value=""/><button class="st-btn" data-key="sn:package">Создать пакет (id, название)</button></div>';
         html += '<span class="sn-h">Каталог (' + list.length + ' из ' + st.catalog.length + ')</span>' +
-            '<input id="sn-query" class="st-in" type="text" value="' + esc(st.query) + '"/>';
+            '<input id="sn-query" class="st-in" type="text" value="' + esc(st.query) + '"/>' +
+            '<select id="sn-cat" class="st-in">' + opt('', 'Все категории (' + cats.length + ')', st.category) + cats.map((c) => opt(c, c, st.category)).join('') + '</select>';
         let cat = '';
         for (const p of list.slice().sort((a, b) => (a.category + a.title).localeCompare(b.category + b.title))) {
             if (p.category !== cat) { cat = p.category; html += '<span class="sn-cat">' + esc(cat) + '</span>'; }
@@ -293,6 +329,8 @@ export function createSnippetsPanel($, doc, host) {
         else if (op === 'generate') await generate(false);
         else if (op === 'overwrite') await generate(true);
         else if (op === 'preview') await preview();
+        else if (op === 'undo') await undo();
+        else if (op === 'redo') await redo();
         else if (op === 'own') { await run(['snippet', 'own', host.root(), arg], arg === 'code' ? 'generated/snippets передан в ручное владение' : 'generated/snippets возвращён генератору'); await preview(); }
         else if (op === 'rollback') await run(['snippet', 'rollback', host.root()], 'project.json откатан к предыдущей записи', (j) => { if (j.rolled_back) host.projectChanged(); });
         else if (op === 'file') host.openFile(arg);
@@ -305,6 +343,11 @@ export function createSnippetsPanel($, doc, host) {
         if (target === 'sn-owner') {
             const v = doc.value('sn-owner') || 'project';
             if (v !== st.owner) { st.owner = v; st.open = null; render(); }
+            return;
+        }
+        if (target === 'sn-cat') {
+            const c = String(doc.value('sn-cat') || '');
+            if (c !== st.category) { st.category = c; render(); }
             return;
         }
         if (target === 'sn-query') {
@@ -322,7 +365,7 @@ export function createSnippetsPanel($, doc, host) {
     }
 
     return {
-        state: st, load, render, click, changed, domChanged, generate, add, createEntity, createPackage,
-        reset() { st.loaded = false; st.catalog = []; st.owner = null; st.open = null; st.gen = null; st.diags = []; },
+        state: st, load, render, click, changed, domChanged, generate, add, createEntity, createPackage, undo, redo,
+        reset() { st.loaded = false; st.catalog = []; st.owner = null; st.open = null; st.gen = null; st.diags = []; st.undo = []; st.redo = []; st.category = ''; },
     };
 }

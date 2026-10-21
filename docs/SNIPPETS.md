@@ -96,6 +96,7 @@ r2d snippet set <проект> snippet:hero:movement.top-down speed=240 'links.t
 r2d snippet remove <проект> <экземпляр|набор>
 r2d snippet update <проект> [пакет]
 r2d snippet generate <проект> [--write|--check|--overwrite|--print]
+r2d snippet restore <проект> --from <снимок.json>   # отмена/повтор панели: заменить editor.snippets снимком
 ```
 
 Все команды отвечают одним JSON с `diagnostics`; Editor и агент вызывают те же

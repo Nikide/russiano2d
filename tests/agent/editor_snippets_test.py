@@ -85,6 +85,23 @@ def test():
             run(a, E + ".snippets.click('add:game.spin')")
             run(a, E + ".snippets.click('generate')")
             check('$("<coin>", { id: "coin" })' in (root / 'generated/snippets/index.js').read_text(), 'generated создаёт объект #coin через $')
+            # Фильтр категорий.
+            a.eval("$.ui.doc('ui/editor.rml').setValue('sn-cat', 'Камера');1")
+            run(a, E + ".snippets.changed('sn-cat')")
+            cats = a.eval(E + ".snippets.state.catalog.filter(p => p.valid && (!" + E + ".snippets.state.category || p.category === " + E + ".snippets.state.category)).map(p => p.category)")
+            check(cats and set(cats) == {"Камера"}, 'фильтр категорий: только «Камера» (%d)' % len(cats or []))
+            # Отмена и повтор правки значения.
+            before = disk(root)['editor']['snippets']['instances'][0]['values'].get('speed')
+            a.eval("$.ui.doc('ui/editor.rml').setValue('sn-owner', 'object:hero');1")
+            run(a, E + ".snippets.changed('sn-owner')")
+            a.eval(E + ".snippets.click('open:snippet:hero:movement.top-down');1"); a.step(6)
+            a.eval("$.ui.doc('ui/editor.rml').setValue('sn-f-speed', '333');1")
+            run(a, E + ".snippets.changed('sn-f-speed')")
+            check(disk(root)['editor']['snippets']['instances'][0]['values'].get('speed') == 333, 'speed=333 записан')
+            run(a, E + ".snippets.undo()")
+            check(disk(root)['editor']['snippets']['instances'][0]['values'].get('speed') == before, 'отмена вернула %s' % before)
+            run(a, E + ".snippets.redo()")
+            check(disk(root)['editor']['snippets']['instances'][0]['values'].get('speed') == 333, 'повтор вернул 333')
             # Владение и откат — кнопками панели.
             run(a, E + ".snippets.click('own:code')")
             check(disk(root)['editor']['snippets']['generation'].get('ownership') == 'code', 'область передана в ручное владение')
@@ -108,7 +125,7 @@ def test():
             check(a.eval(E + ".snippets.state.section || 1") and a.eval(E + ".state.project.json.editor.snippets.instances.map(i => i.id).join()") == "snippet:hero:movement.top-down,snippet:coin:game.spin", 'композиция на месте после переоткрытия')
             a.eval(E + ".snippets.click('open:snippet:hero:movement.top-down');1")
             a.step(6)
-            check(a.eval("$.ui.doc('ui/editor.rml').value('sn-f-speed')") == '260', 'после переоткрытия форма показывает 260')
+            check(a.eval("$.ui.doc('ui/editor.rml').value('sn-f-speed')") == '333', 'после переоткрытия форма показывает 333')
 
 
 def main():

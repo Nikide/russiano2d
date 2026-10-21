@@ -2105,6 +2105,25 @@ static int cmd_own(const SdkArgs *a, const char *dir)
     return rc;
 }
 
+// restore <проект> --from <файл.json>: заменить editor.snippets снимком (undo/redo
+// панели Editor). Снимок — та же секция; проверка и запись — общие для всех правок.
+static int cmd_restore(const SdkArgs *a, const char *dir)
+{
+    SdkReport rep;
+    sdk_report_init(&rep);
+    const char *from = sdk_arg_value(a, "--from");
+    if (!from) return sdk_fail(&rep, "SDK_USAGE", "Использование: r2d snippet restore <проект> --from <снимок editor.snippets .json>");
+    R2dJson *root = load_v2(dir, &rep);
+    R2dJson *snap = root ? sdk_load_json(from, &rep) : NULL;
+    if (snap && snap->type != R2D_JSON_OBJ) diag(&rep, SDK_ERROR, "SNIP140", from, NULL, NULL, "снимок должен быть объектом editor.snippets");
+    if (root && snap && rep.errors == 0) { jobj_put(jensure(root, "editor", "{}"), "snippets", snap); snap = NULL; }
+    r2d_json_free(snap);
+    int rc = finish_edit(&rep, dir, root, !root || sdk_arg_flag(a, "--dry-run"), "\"restored\":true,");
+    r2d_json_free(root);
+    sdk_report_free(&rep);
+    return rc;
+}
+
 // rollback <проект>: вернуть project.json из project.json.bak (последняя запись
 // r2d). Текущая версия не теряется: меняется местами с .bak. Повтор — откат отката.
 static int cmd_rollback(const SdkArgs *a, const char *dir)
@@ -2389,6 +2408,7 @@ int sdk_cmd_snippet(const SdkArgs *a)
         if (!strcmp(sub, "new")) return cmd_new(a, dir);
         if (!strcmp(sub, "own")) return cmd_own(a, dir);
         if (!strcmp(sub, "rollback")) return cmd_rollback(a, dir);
+        if (!strcmp(sub, "restore")) return cmd_restore(a, dir);
     }
     return sdk_fail(&rep, "SDK_USAGE",
                     "Использование: r2d snippet catalog [--project P] [--query Q] [--id ID] [--strict] | "
@@ -2396,5 +2416,5 @@ int sdk_cmd_snippet(const SdkArgs *a)
                     "add <проект> <пакет> --owner KEY | set <проект> <экземпляр> поле=JSON | "
                     "remove <проект> <экземпляр|набор> | update <проект> [пакет] | "
                     "entity <проект> --id ID [--tag T --x --y --w --h --body] [--remove] | new <проект> <id> [--kind] [--title] | "
-                    "own <проект> code|generator | rollback <проект>");
+                    "own <проект> code|generator | rollback <проект> | restore <проект> --from <снимок>");
 }
