@@ -1,0 +1,46 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.top-down-shooter",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: top-down shooter"
+  },
+  "description": {
+    "ru": "Движение сверху, камера, здоровье и оружие с лучевым выстрелом."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.top-down"
+    },
+    {
+      "id": "camera.follow"
+    },
+    {
+      "id": "health.base"
+    },
+    {
+      "id": "weapon.base"
+    },
+    {
+      "id": "weapon.hitscan"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор",
+    "shooter"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

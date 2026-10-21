@@ -1,0 +1,6 @@
+{
+  "values": {
+    "range": 800,
+    "targets": ".enemy"
+  }
+}

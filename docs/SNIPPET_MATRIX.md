@@ -3,14 +3,14 @@
 Сгенерировано `python3 scripts/snippet_matrix.py` из §12 [ТЗ](SNIPPET_SYSTEM_PROJECT.md),
 каталога `snippets/` и `api.schema.json`. Руками не править.
 
-Реализовано: **22 из 500**. Строк с пробелом API: **0**.
+Реализовано: **28 из 500**. Строк с пробелом API: **0**.
 
 Колонка API: для реализованного пакета — фактические `requires`; для
 запланированного — опорные пространства `$` по префиксу ID (предварительно,
 уточняется при реализации пакета).
 
 
-## A. Базовые сущности и управление — 1/20
+## A. Базовые сущности и управление — 2/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
@@ -22,7 +22,7 @@
 | 006 | `projectile.base` | ⬜ | `$.fn`, `$.weapons`, `$.combat` | — |
 | 007 | `pickup.base` | ⬜ | `$.fn`, `$.items` | — |
 | 008 | `breakable.base` | ⬜ | `$.fn`, `$.combat` | — |
-| 009 | `trigger.base` | ⬜ | `$.triggers` | — |
+| 009 | `trigger.base` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.off`, `$.fn.on` | — |
 | 010 | `interactable.base` | ⬜ | `$.fn`, `$.input` | — |
 | 011 | `actor.faction` | ⬜ | `$.fn`, `$.prefab` | — |
 | 012 | `actor.identity` | ⬜ | `$.fn`, `$.prefab` | — |
@@ -60,14 +60,14 @@
 | 039 | `movement.platform-ride` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
 | 040 | `movement.vehicle-seat` | ⬜ | `$.fn`, `$.input`, `$.updateFor` | — |
 
-## C. Оружие и атаки — 0/20
+## C. Оружие и атаки — 4/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 041 | `weapon.base` | ⬜ | `$.weapons`, `$.combat` | — |
-| 042 | `weapon.melee` | ⬜ | `$.weapons`, `$.combat` | — |
-| 043 | `weapon.hitscan` | ⬜ | `$.weapons`, `$.combat` | — |
-| 044 | `weapon.projectile` | ⬜ | `$.weapons`, `$.combat` | — |
+| 041 | `weapon.base` | ✅ | `$.fn.emit`, `$.input.down`, `$.input.pressed`, `$.sound.play`, `$.updateFor`, `$.weapons.define`, `$.weapons.give`, `$.weapons.has` | — |
+| 042 | `weapon.melee` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.hp`, `$.fn.is`, `$.fn.pos`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
+| 043 | `weapon.hitscan` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.hp`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.input.vec`, `$.updateFor`, `$.weapons.falloff`, `$.world.raycastAll` | — |
+| 044 | `weapon.projectile` | ✅ | `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.hp`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.sprite`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
 | 045 | `weapon.spread` | ⬜ | `$.weapons`, `$.combat` | — |
 | 046 | `weapon.auto` | ⬜ | `$.weapons`, `$.combat` | — |
 | 047 | `weapon.burst` | ⬜ | `$.weapons`, `$.combat` | — |
@@ -560,11 +560,11 @@
 | 439 | `kit.level-challenge` | ⬜ | состав kit | — |
 | 440 | `kit.stage-select` | ⬜ | состав kit | — |
 
-## W. Пакеты shooter, action и roguelike — 0/20
+## W. Пакеты shooter, action и roguelike — 1/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 441 | `kit.top-down-shooter` | ⬜ | состав kit | — |
+| 441 | `kit.top-down-shooter` | ✅ | состав kit | — |
 | 442 | `kit.twin-stick-arena` | ⬜ | состав kit | — |
 | 443 | `kit.bullet-heaven` | ⬜ | состав kit | — |
 | 444 | `kit.arena-survival` | ⬜ | состав kit | — |

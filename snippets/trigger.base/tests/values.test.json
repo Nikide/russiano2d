@@ -1,0 +1,6 @@
+{
+  "values": {
+    "detect": "player",
+    "once": true
+  }
+}

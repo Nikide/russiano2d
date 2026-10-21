@@ -131,9 +131,12 @@
    "section": "A",
    "section_title": "Базовые сущности и управление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.triggers"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -637,10 +640,16 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.emit",
+    "$.input.down",
+    "$.input.pressed",
+    "$.sound.play",
+    "$.updateFor",
+    "$.weapons.define",
+    "$.weapons.give",
+    "$.weapons.has"
    ],
    "gaps": [],
    "dependencies": []
@@ -652,10 +661,17 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.fn.is",
+    "$.fn.pos",
+    "$.input.pressed",
+    "$.input.vec",
+    "$.updateFor",
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -667,13 +683,24 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.fn.is",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.input.vec",
+    "$.updateFor",
+    "$.weapons.falloff",
+    "$.world.raycastAll"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 44,
@@ -682,13 +709,27 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.at",
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.fn.is",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.fn.sprite",
+    "$.input.vec",
+    "$.updateFor",
+    "$.world.query"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 45,
@@ -6573,10 +6614,16 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.top-down",
+    "camera.follow",
+    "health.base",
+    "weapon.base",
+    "weapon.hitscan"
+   ]
   },
   {
    "n": 442,

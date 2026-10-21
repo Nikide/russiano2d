@@ -1,0 +1,162 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Оружие"
+  },
+  "description": {
+    "ru": "Ствол из $.weapons в руках объекта: темп, магазин, перезарядка; стреляет по клавише."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.weapons.has"
+    },
+    {
+      "api": "$.weapons.define"
+    },
+    {
+      "api": "$.weapons.give"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.sound.play"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "weapon",
+      "label": "ID ствола",
+      "type": "string",
+      "default": "pistol",
+      "required": true,
+      "hint": "Если ствола нет в $.weapons — описывается полями ниже"
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 20,
+      "min": 0,
+      "max": 10000
+    },
+    {
+      "id": "rpm",
+      "label": "Темп",
+      "type": "number",
+      "default": 300,
+      "min": 1,
+      "max": 3000,
+      "unit": "выстр./мин"
+    },
+    {
+      "id": "ammo",
+      "label": "Магазин",
+      "type": "int",
+      "default": 12,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "id": "reload",
+      "label": "Перезарядка",
+      "type": "number",
+      "default": 1.2,
+      "min": 0,
+      "max": 30,
+      "step": 0.1,
+      "unit": "с"
+    },
+    {
+      "id": "spread",
+      "label": "Разброс",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 90,
+      "unit": "°"
+    },
+    {
+      "id": "pellets",
+      "label": "Дробин",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 32
+    },
+    {
+      "id": "falloff",
+      "label": "Дистанция полного урона",
+      "type": "number",
+      "default": 400,
+      "min": 0,
+      "max": 100000,
+      "unit": "пикс."
+    },
+    {
+      "id": "mode",
+      "label": "Режим",
+      "type": "enum",
+      "default": "single",
+      "options": [
+        "single",
+        "auto",
+        "burst"
+      ]
+    },
+    {
+      "id": "fireKey",
+      "label": "Клавиша выстрела",
+      "type": "string",
+      "default": "j"
+    },
+    {
+      "id": "reloadKey",
+      "label": "Клавиша перезарядки",
+      "type": "string",
+      "default": "r"
+    },
+    {
+      "id": "sound",
+      "label": "Звук выстрела",
+      "type": "asset",
+      "assetKind": "audio"
+    }
+  ],
+  "tags": [
+    "оружие",
+    "ствол",
+    "стрельба"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

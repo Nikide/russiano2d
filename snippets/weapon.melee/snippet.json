@@ -1,0 +1,115 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.melee",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Ближняя атака"
+  },
+  "description": {
+    "ru": "Удар по клавише: урон целям в радиусе перед объектом, с перезарядкой."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "melee",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.world.query"
+    },
+    {
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша удара",
+      "type": "string",
+      "default": "k"
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 15,
+      "min": 0,
+      "max": 10000
+    },
+    {
+      "id": "reach",
+      "label": "Дальность",
+      "type": "number",
+      "default": 28,
+      "min": 1,
+      "max": 1000,
+      "unit": "пикс."
+    },
+    {
+      "id": "radius",
+      "label": "Радиус удара",
+      "type": "number",
+      "default": 20,
+      "min": 1,
+      "max": 1000,
+      "unit": "пикс."
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 400,
+      "min": 0,
+      "max": 20000,
+      "unit": "мс"
+    },
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": "",
+      "hint": "Селектор; пусто — любой узел со здоровьем"
+    }
+  ],
+  "tags": [
+    "оружие",
+    "удар",
+    "ближний бой"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.hitscan",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Лучевой выстрел"
+  },
+  "description": {
+    "ru": "Выстрел оружия — луч по направлению прицела; урон первой цели с затуханием."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon-delivery",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.world.raycastAll"
+    },
+    {
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.weapons.falloff"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "range",
+      "label": "Дальность",
+      "type": "number",
+      "default": 600,
+      "min": 10,
+      "max": 10000,
+      "unit": "пикс."
+    },
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": "",
+      "hint": "Селектор (.enemy); пусто — любой узел со здоровьем"
+    }
+  ],
+  "tags": [
+    "оружие",
+    "луч",
+    "hitscan"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

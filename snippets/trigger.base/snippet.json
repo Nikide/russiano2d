@@ -1,0 +1,76 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "trigger.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Зона-триггер"
+  },
+  "description": {
+    "ru": "Делает объект зоной $.triggers: вход и выход нужных узлов шлют глобальные события."
+  },
+  "kind": "behavior",
+  "category": "Базовые сущности",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "trigger",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "detect",
+      "label": "Кого ловить",
+      "type": "string",
+      "default": "#hero",
+      "hint": "Селектор или тег"
+    },
+    {
+      "id": "enterEvent",
+      "label": "Событие при входе",
+      "type": "string",
+      "default": "zone:enter"
+    },
+    {
+      "id": "leaveEvent",
+      "label": "Событие при выходе",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "once",
+      "label": "Один раз",
+      "type": "bool",
+      "default": false
+    }
+  ],
+  "tags": [
+    "зона",
+    "триггер",
+    "событие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

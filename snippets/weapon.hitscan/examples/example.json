@@ -1,0 +1,7 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "range": 800,
+    "targets": ".enemy"
+  }
+}

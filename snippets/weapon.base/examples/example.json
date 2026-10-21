@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "weapon": "smg",
+    "rpm": 900,
+    "mode": "auto"
+  }
+}
