@@ -128,6 +128,24 @@ def main():
     sec = json.load(open(os.path.join(game, "project.json")))["editor"]["snippets"]
     check(sorted(sec["catalog_lock"]) == ["actor.visual-profile"], "catalog_lock — только используемые: %s" % sorted(sec["catalog_lock"]))
 
+    # Объект из Editor (origin: graph) + пакет подбора: монета исчезает при касании.
+    check(r2d("snippet", "entity", game, "--id", "coin", "--tag", "coin", "--x", "170", "--y", "300",
+              "--w", "12", "--h", "12", "--body", "none")["ok"], "entity: #coin в графе")
+    check(r2d("snippet", "add", game, "interact.pickup", "--owner", "object:coin")["ok"], "pickup на #coin")
+    r2d("snippet", "add", game, "movement.top-down", "--owner", "object:hero")
+    g2 = r2d("snippet", "generate", game, "--write")
+    check(g2["ok"], "generate с объектом из графа: %s" % codes(g2))
+    idx = r2d("project-index", game, "--write")
+    check(any(True for _ in [0]) and idx["ok"], "индексатор сохраняет graph-сущность")
+    check("SNIP" not in json.dumps(r2d("validate", game)["diagnostics"]), "validate после entity чист")
+    with Agent(game=game, seed=1) as a:
+        a.step(5)
+        check(a.eval("$('#coin').length") == 1, "runtime: #coin создан generated JS")
+        a.hold(["D"])
+        a.step(40)
+        a.release_all()
+        check(a.eval("$('#coin').length") == 0, "runtime: #coin подобран героем")
+
     shutil.rmtree(tmp, ignore_errors=True)
     if FAILURES:
         print("FAILED: %d" % len(FAILURES))

@@ -1038,6 +1038,31 @@ static bool build_plan(const R2dJson *root, const char *dir, const SnipCatalog *
         "        if (raw) dispose = attach(node) || null;\n"
         "    });\n"
         "}\n");
+    // Объекты, созданные в Editor: editor.graph, origin "graph", поле spawn.
+    // Обычное создание узла через $ — второго графа сцены нет.
+    {
+        const R2dJson *ents = r2d_json_get(r2d_json_get(r2d_json_get(root, "editor"), "graph"), "entities");
+        int made = 0;
+        for (int i = 0; i < r2d_json_size(ents); ++i) {
+            const R2dJson *e = r2d_json_at(ents, i);
+            const R2dJson *sp = r2d_json_get(e, "spawn");
+            if (strcmp(r2d_json_str(r2d_json_get(e, "origin"), ""), "graph") || !sp || !jstr(e, "public_id")) continue;
+            if (!made++) r2d_sb_puts(&sb, "\n// Объекты, созданные в Editor (editor.graph, origin: graph)\n$.ready(() => {\n");
+            char tag[160];
+            snprintf(tag, sizeof tag, "<%s>", r2d_json_str(r2d_json_get(e, "tag"), "node"));
+            r2d_sb_puts(&sb, "    $(");
+            r2d_sb_put_json_string(&sb, tag);
+            r2d_sb_puts(&sb, ", { id: ");
+            r2d_sb_put_json_string(&sb, jstr(e, "public_id"));
+            r2d_sb_puts(&sb, " })");
+            r2d_sb_printf(&sb, ".at(%g, %g).size(%g, %g)", r2d_json_num(r2d_json_get(sp, "x"), 0), r2d_json_num(r2d_json_get(sp, "y"), 0),
+                          r2d_json_num(r2d_json_get(sp, "w"), 32), r2d_json_num(r2d_json_get(sp, "h"), 32));
+            const char *body = jstr(sp, "body");
+            if (body && strcmp(body, "none")) { r2d_sb_puts(&sb, ".body("); r2d_sb_put_json_string(&sb, body); r2d_sb_putc(&sb, ')'); }
+            r2d_sb_puts(&sb, ".appendTo($.world);\n");
+        }
+        if (made) r2d_sb_puts(&sb, "});\n");
+    }
     int blocks = 0;
     for (int i = 0; i < r2d_json_size(instances); ++i) {
         const R2dJson *inst = r2d_json_at(instances, i);
@@ -1097,7 +1122,7 @@ static bool build_plan(const R2dJson *root, const char *dir, const SnipCatalog *
         r2d_sb_free(&cfg);
         blocks++;
     }
-    if (!blocks) r2d_sb_puts(&sb, "\n// Подключённых сниппетов нет.\n");
+    if (!blocks && !strstr(sb.data ? sb.data : "", "origin: graph")) r2d_sb_puts(&sb, "\n// Подключённых сниппетов нет.\n");
     char rel[640];
     snprintf(rel, sizeof rel, "%s/index.js", out_rel);
     // index.js — первым в списке файлов.
@@ -1816,6 +1841,187 @@ static int cmd_update(const SdkArgs *a, const char *dir)
     return rc;
 }
 
+// entity <проект> --id hero [--tag hero] [--x --y --w --h] [--body dynamic|static|none] [--remove]
+// Новая сущность из Editor: запись editor.graph с origin "graph" и spawn;
+// создание узла пишет генератор (обычный $), индексатор её сохраняет.
+static int cmd_entity(const SdkArgs *a, const char *dir)
+{
+    SdkReport rep;
+    sdk_report_init(&rep);
+    const char *id = sdk_arg_value(a, "--id");
+    if (!id || !snip_key_ok(id) || strchr(id, ':') || strchr(id, '.'))
+        return sdk_fail(&rep, "SDK_USAGE", "Использование: r2d snippet entity <проект> --id <id: a-z0-9_-> [--tag T] [--x N --y N --w N --h N] [--body dynamic|static|none] [--remove]");
+    R2dJson *root = load_v2(dir, &rep);
+    char key[160];
+    snprintf(key, sizeof key, "object:%s", id);
+    if (root) {
+        R2dJson *graph = jensure(jensure(root, "editor", "{}"), "graph", "{\"format\": 1, \"status\": \"current\", \"sources\": [], \"diagnostics\": [], \"areas\": [], \"entities\": [], \"edges\": [], \"views\": {}}");
+        R2dJson *ents = jensure(graph, "entities", "[]");
+        R2dJson *areas = jensure(graph, "areas", "[]");
+        int found = -1;
+        for (int i = 0; i < ents->count; ++i)
+            if (!strcmp(r2d_json_str(r2d_json_get(ents->items[i], "key"), ""), key)) found = i;
+        if (sdk_arg_flag(a, "--remove")) {
+            if (found < 0) diag(&rep, SDK_ERROR, "SNIP060", "", NULL, key, "сущности %s нет", key);
+            else if (strcmp(r2d_json_str(r2d_json_get(ents->items[found], "origin"), ""), "graph"))
+                diag(&rep, SDK_ERROR, "SNIP065", "", NULL, key, "%s создана кодом — удалите её в JS", key);
+            else {
+                const R2dJson *sn = r2d_json_get(r2d_json_get(root, "editor"), "snippets");
+                const R2dJson *inst = r2d_json_get(sn, "instances");
+                for (int i = 0; i < r2d_json_size(inst); ++i)
+                    if (!strcmp(r2d_json_str(r2d_json_get(r2d_json_at(inst, i), "owner"), ""), key))
+                        diag(&rep, SDK_ERROR, "SNIP065", "", NULL, key, "на %s подключены сниппеты — сначала удалите их", key);
+                if (!rep.errors) {
+                    r2d_json_free(ents->items[found]);
+                    memmove(&ents->items[found], &ents->items[found + 1], sizeof(R2dJson *) * (size_t)(ents->count - found - 1));
+                    ents->count--;
+                }
+            }
+        } else if (found >= 0) {
+            diag(&rep, SDK_ERROR, "SNIP065", "", NULL, key, "сущность %s уже есть в графе", key);
+        } else {
+            // Область: первый world графа; без неё — world:main от Editor.
+            const char *area = NULL;
+            for (int i = 0; i < areas->count && !area; ++i)
+                if (!strcmp(r2d_json_str(r2d_json_get(areas->items[i], "type"), ""), "world")) area = jstr(areas->items[i], "key");
+            if (!area) {
+                jarr_push(areas, jnew("{\"key\": \"world:main\", \"type\": \"world\", \"label\": \"World\", \"runtime_root\": \"$.world\", \"origin\": \"graph\"}"));
+                area = "world:main";
+            }
+            const char *body = sdk_arg_value(a, "--body");
+            if (body && strcmp(body, "dynamic") && strcmp(body, "static") && strcmp(body, "kinematic") && strcmp(body, "none")) {
+                diag(&rep, SDK_ERROR, "SNIP025", "", NULL, "body", "body: dynamic | static | kinematic | none");
+            } else {
+                R2dSb e;
+                r2d_sb_init(&e);
+                r2d_sb_puts(&e, "{");
+                sdk_put_kv_str(&e, "key", key); r2d_sb_putc(&e, ',');
+                sdk_put_kv_str(&e, "area", area); r2d_sb_putc(&e, ',');
+                sdk_put_kv_str(&e, "type", "object"); r2d_sb_putc(&e, ',');
+                sdk_put_kv_str(&e, "origin", "graph"); r2d_sb_putc(&e, ',');
+                sdk_put_kv_str(&e, "tag", sdk_arg_value(a, "--tag") ? sdk_arg_value(a, "--tag") : id); r2d_sb_putc(&e, ',');
+                sdk_put_kv_str(&e, "public_id", id);
+                const char *nums[4] = { sdk_arg_value(a, "--x"), sdk_arg_value(a, "--y"), sdk_arg_value(a, "--w"), sdk_arg_value(a, "--h") };
+                r2d_sb_printf(&e, ",\"spawn\":{\"x\":%g,\"y\":%g,\"w\":%g,\"h\":%g,", nums[0] ? atof(nums[0]) : 0.0,
+                              nums[1] ? atof(nums[1]) : 0.0, nums[2] ? atof(nums[2]) : 32.0, nums[3] ? atof(nums[3]) : 32.0);
+                sdk_put_kv_str(&e, "body", body ? body : "dynamic");
+                r2d_sb_puts(&e, "}}");
+                jarr_push(ents, jnew(e.data));
+                r2d_sb_free(&e);
+            }
+        }
+    }
+    R2dSb extra;
+    r2d_sb_init(&extra);
+    r2d_sb_puts(&extra, "\"entity\":");
+    r2d_sb_put_json_string(&extra, key);
+    r2d_sb_putc(&extra, ',');
+    int rc = finish_edit(&rep, dir, root, !root || sdk_arg_flag(a, "--dry-run"), extra.data);
+    r2d_sb_free(&extra);
+    r2d_json_free(root);
+    sdk_report_free(&rep);
+    return rc;
+}
+
+// new <проект> <id> [--kind behavior|kit] [--title …] [--category …] [--deps a,b]
+// Автор пакета: каркас пакета проекта в <проект>/snippets/<id>/, тот же
+// контракт и та же проверка, что у встроенных.
+static int cmd_new(const SdkArgs *a, const char *dir)
+{
+    SdkReport rep;
+    sdk_report_init(&rep);
+    const char *id = sdk_arg_positional(a, 2);
+    const char *kind = sdk_arg_value(a, "--kind") ? sdk_arg_value(a, "--kind") : "behavior";
+    if (!id) return sdk_fail(&rep, "SDK_USAGE", "Использование: r2d snippet new <проект> <id> [--kind behavior|kit] [--title …] [--category …] [--deps a,b]");
+    char pdir[1400];
+    snprintf(pdir, sizeof pdir, "%s/snippets/%s", dir, id);
+    if (!snip_id_ok(id)) diag(&rep, SDK_ERROR, "SNIP003", "", id, "id", "id: сегменты a-z0-9_- через точку");
+    else if (strcmp(kind, "behavior") && strcmp(kind, "kit")) diag(&rep, SDK_ERROR, "SNIP006", "", id, "kind", "kind: behavior | kit");
+    else if (sdk_is_dir(pdir)) diag(&rep, SDK_ERROR, "SNIP008", pdir, id, NULL, "пакет %s уже есть в проекте", id);
+    const char *deps = sdk_arg_value(a, "--deps");
+    if (!rep.errors && !strcmp(kind, "kit") && (!deps || !deps[0]))
+        diag(&rep, SDK_ERROR, "SNIP080", "", id, "dependencies", "kit без состава — укажите --deps a,b");
+    bool written = false;
+    if (!rep.errors) {
+        char sub[1500];
+        SDL_CreateDirectory(pdir);
+        static const char *const dirs[] = { "src", "examples", "tests" };
+        for (int i = 0; i < 3; ++i) { snprintf(sub, sizeof sub, "%s/%s", pdir, dirs[i]); if (strcmp(kind, "kit") || i) SDL_CreateDirectory(sub); }
+        const char *title = sdk_arg_value(a, "--title") ? sdk_arg_value(a, "--title") : id;
+        R2dSb m;
+        r2d_sb_init(&m);
+        r2d_sb_puts(&m, "{\n  \"format\": \"r2d-snippet/1\",\n  \"id\": ");
+        r2d_sb_put_json_string(&m, id);
+        r2d_sb_puts(&m, ",\n  \"version\": \"1.0.0\",\n  \"title\": {\"ru\": ");
+        r2d_sb_put_json_string(&m, title);
+        r2d_sb_puts(&m, "},\n  \"description\": {\"ru\": \"\"},\n  \"kind\": ");
+        r2d_sb_put_json_string(&m, kind);
+        r2d_sb_puts(&m, ",\n  \"category\": ");
+        r2d_sb_put_json_string(&m, sdk_arg_value(a, "--category") ? sdk_arg_value(a, "--category") : "Пакеты проекта");
+        r2d_sb_puts(&m, ",\n  \"targets\": [\"node\"],\n  \"slots\": [],\n");
+        if (!strcmp(kind, "kit")) {
+            r2d_sb_puts(&m, "  \"requires\": [],\n  \"dependencies\": [");
+            char buf[1024];
+            snprintf(buf, sizeof buf, "%s", deps);
+            int n = 0;
+            for (char *tok = strtok(buf, ","); tok; tok = strtok(NULL, ",")) {
+                while (*tok == ' ') tok++;
+                r2d_sb_puts(&m, n++ ? ", {\"id\": " : "{\"id\": ");
+                r2d_sb_put_json_string(&m, tok);
+                r2d_sb_putc(&m, '}');
+            }
+            r2d_sb_puts(&m, "],\n  \"fields\": [],\n");
+        } else {
+            r2d_sb_puts(&m, "  \"requires\": [{\"api\": \"$.updateFor\"}],\n  \"dependencies\": [],\n"
+                            "  \"fields\": [\n    {\"id\": \"speed\", \"label\": \"Скорость\", \"type\": \"number\", \"default\": 100, \"min\": 0, \"max\": 1000}\n  ],\n"
+                            "  \"source\": \"src/behavior.js\",\n");
+            snprintf(sub, sizeof sub, "%s/src/behavior.js", pdir);
+            static const char k_src[] =
+                "// Поведение пакета проекта: обычная функция (docs/SNIPPETS.md).\n"
+                "// node — обёртка узла, config — значения полей Inspector, $ — API движка.\n"
+                "// Вернуть disposer: $.updateFor уже возвращает его.\n"
+                "export default function behavior(node, config, $) {\n"
+                "    return $.updateFor(node, (dt, self) => {\n"
+                "        // self.velocity(config.speed, self.velocity().y);\n"
+                "    });\n"
+                "}\n";
+            sdk_write_file(sub, k_src, sizeof k_src - 1);
+        }
+        r2d_sb_puts(&m, "  \"examples\": [\"examples/example.json\"],\n  \"tests\": [\"tests/values.test.json\"],\n  \"tags\": []\n}\n");
+        snprintf(sub, sizeof sub, "%s/snippet.json", pdir);
+        sdk_write_file(sub, m.data, m.len);
+        snprintf(sub, sizeof sub, "%s/examples/example.json", pdir);
+        sdk_write_file(sub, "{\"owner\": \"object:hero\", \"values\": {}}\n", 40);
+        snprintf(sub, sizeof sub, "%s/tests/values.test.json", pdir);
+        sdk_write_file(sub, "{\"values\": {}}\n", 15);
+        snprintf(sub, sizeof sub, "%s/README.md", pdir);
+        R2dSb rd;
+        r2d_sb_init(&rd);
+        r2d_sb_printf(&rd, "# %s\n\nПакет проекта. Описание, поля и поведение — в snippet.json и src/behavior.js.\n", title);
+        sdk_write_file(sub, rd.data, rd.len);
+        r2d_sb_free(&rd);
+        r2d_sb_free(&m);
+        SnipPkg p;
+        if (load_pkg(pdir, "project", &p, &rep)) r2d_json_free(p.m);
+        written = rep.errors == 0;
+    }
+    R2dSb out;
+    r2d_sb_init(&out);
+    r2d_sb_printf(&out, "{\"ok\":%s,\"written\":%s,", rep.errors == 0 ? "true" : "false", written ? "true" : "false");
+    sdk_put_kv_str(&out, "path", pdir);
+    r2d_sb_putc(&out, ',');
+    sdk_report_put_counts(&rep, &out);
+    r2d_sb_putc(&out, ',');
+    sdk_report_put(&rep, &out);
+    r2d_sb_putc(&out, '}');
+    puts(out.data);
+    fflush(stdout);
+    r2d_sb_free(&out);
+    const int rc = rep.errors == 0 ? 0 : 1;
+    sdk_report_free(&rep);
+    return rc;
+}
+
 // ---------------------------------------------------------------------------
 // catalog / validate / check
 // ---------------------------------------------------------------------------
@@ -1957,10 +2163,13 @@ int sdk_cmd_snippet(const SdkArgs *a)
         if (!strcmp(sub, "remove")) return cmd_remove(a, dir);
         if (!strcmp(sub, "update")) return cmd_update(a, dir);
         if (!strcmp(sub, "generate")) return cmd_generate(a, dir);
+        if (!strcmp(sub, "entity")) return cmd_entity(a, dir);
+        if (!strcmp(sub, "new")) return cmd_new(a, dir);
     }
     return sdk_fail(&rep, "SDK_USAGE",
                     "Использование: r2d snippet catalog [--project P] [--query Q] [--id ID] [--strict] | "
                     "validate <пакет> | check|generate [--write|--check|--overwrite|--print] <проект> | "
                     "add <проект> <пакет> --owner KEY | set <проект> <экземпляр> поле=JSON | "
-                    "remove <проект> <экземпляр|набор> | update <проект> [пакет]");
+                    "remove <проект> <экземпляр|набор> | update <проект> [пакет] | "
+                    "entity <проект> --id ID [--tag T --x --y --w --h --body] [--remove] | new <проект> <id> [--kind] [--title]");
 }

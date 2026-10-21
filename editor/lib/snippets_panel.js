@@ -114,6 +114,24 @@ export function createSnippetsPanel($, doc, host) {
     const toggle = (inst) => run(['snippet', 'set', host.root(), inst.id, inst.disabled ? 'disabled=' : 'disabled=true'],
         inst.disabled ? 'включено: ' + inst.id : 'отключено: ' + inst.id);
 
+    /** Новый объект из Editor: editor.graph (origin: graph); узел создаёт generated JS. */
+    async function createEntity(id, tag) {
+        id = String(id || '').trim(); tag = String(tag || '').trim() || id;
+        if (!id) { host.setStatus('укажите id объекта', 'err'); return false; }
+        const ok = await run(['snippet', 'entity', host.root(), '--id', id, '--tag', tag, '--x', '200', '--y', '200', '--w', '32', '--h', '32'],
+            'объект #' + id + ' создан', (j) => { if (j.written) { st.owner = 'object:' + id; st.open = null; } });
+        return ok;
+    }
+
+    /** Автор пакета: каркас пакета проекта и переход к его исходнику. */
+    async function createPackage(id, title) {
+        id = String(id || '').trim();
+        if (!id) { host.setStatus('укажите id пакета (например game.spin)', 'err'); return false; }
+        const ok = await run(['snippet', 'new', host.root(), id, '--title', String(title || '').trim() || id], 'пакет проекта ' + id + ' создан');
+        if (ok) { await load(true); host.filesChanged(); host.openFile('snippets/' + id + '/src/behavior.js'); }
+        return ok;
+    }
+
     async function generate(overwrite) {
         const args = ['snippet', 'generate', host.root(), '--write'];
         if (overwrite) args.push('--overwrite');
@@ -197,6 +215,8 @@ export function createSnippetsPanel($, doc, host) {
         const objs = objects();
         let html = '<div class="sn-owner"><span class="sn-h">Объект</span><select id="sn-owner" class="st-in">' +
             objs.map((o) => opt(o.key, o.label, st.owner)).join('') + '</select></div>';
+        html += '<div class="sn-row"><input id="sn-new-id" class="st-in sn-half" type="text" value=""/><input id="sn-new-tag" class="st-in sn-half" type="text" value=""/>' +
+            '<button class="st-btn" data-key="sn:entity">Новый объект (id, тег)</button></div>';
         if (objs.length === 1) html += '<div class="sn-note">В графе нет объектов с id. Создайте узел с id в коде ($(\'&lt;hero&gt;\', { id: \'hero\' })) и сохраните файл.</div>';
 
         // Подключённые к выбранному объекту.
@@ -240,6 +260,8 @@ export function createSnippetsPanel($, doc, host) {
         // Каталог.
         const q = lower(st.query);
         const list = st.catalog.filter((p) => p.valid && (!q || lower(p.id + ' ' + p.title + ' ' + p.description + ' ' + p.category + ' ' + (p.tags || []).join(' ')).includes(q)));
+        html += '<span class="sn-h">Свой пакет</span><div class="sn-row"><input id="sn-pkg-id" class="st-in sn-half" type="text" value=""/>' +
+            '<input id="sn-pkg-title" class="st-in sn-half" type="text" value=""/><button class="st-btn" data-key="sn:package">Создать пакет (id, название)</button></div>';
         html += '<span class="sn-h">Каталог (' + list.length + ' из ' + st.catalog.length + ')</span>' +
             '<input id="sn-query" class="st-in" type="text" value="' + esc(st.query) + '"/>';
         let cat = '';
@@ -267,6 +289,8 @@ export function createSnippetsPanel($, doc, host) {
         else if (op === 'overwrite') await generate(true);
         else if (op === 'preview') await preview();
         else if (op === 'file') host.openFile(arg);
+        else if (op === 'entity') await createEntity(doc.value('sn-new-id'), doc.value('sn-new-tag'));
+        else if (op === 'package') await createPackage(doc.value('sn-pkg-id'), doc.value('sn-pkg-title'));
     }
 
     async function changed(target) {
@@ -291,7 +315,7 @@ export function createSnippetsPanel($, doc, host) {
     }
 
     return {
-        state: st, load, render, click, changed, domChanged, generate, add,
+        state: st, load, render, click, changed, domChanged, generate, add, createEntity, createPackage,
         reset() { st.loaded = false; st.catalog = []; st.owner = null; st.open = null; st.gen = null; st.diags = []; },
     };
 }

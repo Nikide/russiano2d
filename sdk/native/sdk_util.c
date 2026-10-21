@@ -367,6 +367,7 @@ static bool takes_value(const char *flag)
         "--op", "--args", "--user-extensions", "--builtin-extensions",
         "--offset", "--limit", "--schema",
         "--catalog", "--query", "--owner", "--id", "--slot",
+        "--tag", "--kind", "--title", "--category", "--body", "--w", "--h", "--deps",
         NULL,
     };
     for (int i = 0; names[i]; ++i) {

@@ -1034,6 +1034,9 @@ static void index_core(const char *dir, bool write, bool check, SdkReport *rep_p
                 size_t size = 0;
                 char *text = sdk_read_file(full, &size);
                 if (!text) continue;
+                // generated/snippets принадлежит генератору: его сущности уже в
+                // editor.graph (origin: graph) и editor.snippets — второй раз не индексируем.
+                if (!strncmp(text, "// r2d-snippets: generated", 26)) { free(text); continue; }
                 if (g.src_n == g.src_cap) {
                     g.src_cap = g.src_cap ? g.src_cap * 2 : 32;
                     g.src_path = (char (*)[G_PATH])realloc(g.src_path, (size_t)g.src_cap * G_PATH);
