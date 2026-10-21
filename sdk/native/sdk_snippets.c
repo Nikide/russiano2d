@@ -492,6 +492,22 @@ static void check_source_api(const SnipPkg *p, const R2dJson *schema, SdkReport 
             path[n++] = *c++;
         path[n] = 0;
         while (n > 2 && path[n - 1] == '.') path[--n] = 0;
+        // Полный путь отсутствует, а его родитель — пространство $: такого метода нет.
+        if (!schema_has(names, path)) {
+            char parent[128];
+            snprintf(parent, sizeof parent, "%s", path);
+            char *dot = strrchr(parent, '.');
+            if (dot && dot != parent + 1) {
+                *dot = 0;
+                bool dupx = false;
+                for (int i = 0; i < nseen && !dupx; ++i) dupx = !strcmp(seen[i], path);
+                if (schema_has(names, parent) && !dupx) {
+                    if (nseen < 64) snprintf(seen[nseen++], 128, "%s", path);
+                    diag(rep, SDK_ERROR, "SNIP104", p->manifest_path, p->id, "source",
+                         "%s вызывает %s — такого имени нет в api.schema.json", src, path);
+                }
+            }
+        }
         while (!schema_has(names, path)) {
             char *dot = strrchr(path, '.');
             if (!dot || dot == path + 1) { path[0] = 0; break; }
