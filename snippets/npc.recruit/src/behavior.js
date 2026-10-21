@@ -1,7 +1,7 @@
 
 // Рядом ли actor и нажата ли клавиша действия.
-function nearPress($, self, config) {
-    const who = $(config.actor);
+function nearPress($, self, config, sel) {
+    const who = sel(config.actor);
     return who.length && self.distanceTo(who) <= config.radius && $.input.pressed(config.key) ? who : null;
 }
 
@@ -9,9 +9,12 @@ function nearPress($, self, config) {
 function partyOf(leader) { return (leader.data('party') || []).slice(); }
 
 export default function recruit(node, config, $) {
+    // Кэш принадлежит экземпляру; удалённая цель разрешается заново (respawn).
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const id = node.attr('id');
     return $.updateFor(node, (dt, self) => {
-        if (!nearPress($, self, config)) return;
+        if (!nearPress($, self, config, sel)) return;
         const l = $(config.leader), p = partyOf(l);
         if (p.includes(id)) return;
         if (p.length >= config.limit) { self.emit('recruit:full', { limit: config.limit }); return; }

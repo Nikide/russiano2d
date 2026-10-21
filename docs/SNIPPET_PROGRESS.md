@@ -99,3 +99,17 @@
 - Проверка каталога: `r2d snippet catalog --strict` (500/500), `python3 tests/agent/snippets_catalog_test.py` (~3 мин, все 500 в runtime).
 - Генераторы пакетов были одноразовыми скриптами вне репо: правьте пакеты прямо в `snippets/<id>/`, затем `python3 scripts/snippet_matrix.py`.
 - Остаток для §19: (1) кэш цели по селектору в 81 пакете — образец `snippets/ai.chase/src/behavior.js`; (2) функциональные тесты по разделам (образцы: `tests/agent/snippets_mechanics_test.py`, `snippets_combat_test.py`); (3) dogfood UX панели (focus/resize) и финальная сверка чек-листа выше.
+
+## Приёмка 2026-10-21 — продолжение
+
+- Кэш цели доведён с 67 до 81 пакета: 14 `nearPress` helpers получают `sel`
+  экземпляра; после удаления цели селектор разрешается заново.
+- `snippets_mechanics_test.py` прошёл после изменения (включая farming.crop).
+- Полный каталог запущен через новую цель `xmake test snippets_tests/catalog`;
+  результат будет записан следующим шагом.
+- В рабочем дереве обнаружено много посторонних изменений; в коммиты этой
+  приёмки включаются только перечисленные изменения сниппетов.
+- Локальная проблема сборки: libcurl из кэша требует OpenSSL 3, автоматически
+  выбран OpenSSL 4. Рабочая настройка: `xmake f --ldflags='/opt/homebrew/opt/openssl@3/lib/libssl.dylib /opt/homebrew/opt/openssl@3/lib/libcrypto.dylib'`.
+  После неё текущий бинарник — `build/macosx/arm64/release/r2d`;
+  для Python-проверок явно задавать `R2D_BINARY`.

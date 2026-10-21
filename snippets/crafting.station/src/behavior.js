@@ -1,6 +1,6 @@
 
-function nearPress($, self, config) {
-    const who = $(config.actor);
+function nearPress($, self, config, sel) {
+    const who = sel(config.actor);
     return who.length && self.distanceTo(who) <= config.radius && $.input.pressed(config.key) ? who : null;
 }
 
@@ -18,6 +18,9 @@ function canCraft(bag, r) { return r.need.every(([k, v]) => bag.count(k) >= v); 
 function bagOf(w) { const b = w && w.length ? w.data('inv') : null; return b && b.add ? b : null; }
 
 export default function station(node, config, $) {
+    // Кэш принадлежит экземпляру; удалённая цель разрешается заново (respawn).
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     node.addClass('interactive').data('prompt', 'Создать');
     const craft = (e) => {
         const d = e.data || {}, who = $(d.by || config.actor), bag = bagOf(who);
@@ -33,7 +36,7 @@ export default function station(node, config, $) {
     };
     node.on('craft', craft);
     const stop = $.updateFor(node, (dt, self) => {
-        const who = nearPress($, self, config);
+        const who = nearPress($, self, config, sel);
         if (!who) return;
         const bag = bagOf(who);
         $.emit('craft:menu', { station: self, by: who, recipes: (self.data('recipes') || []).map((r) => ({ ...r, ready: !!bag && canCraft(bag, r) })) });

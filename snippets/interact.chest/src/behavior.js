@@ -1,7 +1,7 @@
 
 // Рядом ли actor и нажата ли клавиша действия.
-function nearPress($, self, config) {
-    const who = $(config.actor);
+function nearPress($, self, config, sel) {
+    const who = sel(config.actor);
     return who.length && self.distanceTo(who) <= config.radius && $.input.pressed(config.key) ? who : null;
 }
 
@@ -12,6 +12,9 @@ function counts(list) {
 }
 
 export default function chest(node, config, $) {
+    // Кэш принадлежит экземпляру; удалённая цель разрешается заново (respawn).
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let opened = false;
     node.addClass('interactive').data('prompt', 'Открыть').data('locked', config.locked);
     const open = (who) => {
@@ -28,6 +31,6 @@ export default function chest(node, config, $) {
     };
     const onInteract = (e) => open(e.data.by);
     node.on('interact', onInteract);
-    const stop = $.updateFor(node, (dt, self) => { const who = nearPress($, self, config); if (who) open(who); });
+    const stop = $.updateFor(node, (dt, self) => { const who = nearPress($, self, config, sel); if (who) open(who); });
     return () => { stop(); node.off('interact', onInteract); };
 }

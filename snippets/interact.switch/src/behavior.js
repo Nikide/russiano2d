@@ -1,11 +1,14 @@
 
 // Рядом ли actor и нажата ли клавиша действия.
-function nearPress($, self, config) {
-    const who = $(config.actor);
+function nearPress($, self, config, sel) {
+    const who = sel(config.actor);
     return who.length && self.distanceTo(who) <= config.radius && $.input.pressed(config.key) ? who : null;
 }
 
 export default function switchToggle(node, config, $) {
+    // Кэш принадлежит экземпляру; удалённая цель разрешается заново (respawn).
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let on = false, used = false;
     const toggle = () => {
         if (config.once && used) return;
@@ -16,6 +19,6 @@ export default function switchToggle(node, config, $) {
     };
     node.addClass('interactive').data('prompt', 'Переключить');
     node.on('interact', toggle);
-    const stop = $.updateFor(node, (dt, self) => { if (nearPress($, self, config)) toggle(); });
+    const stop = $.updateFor(node, (dt, self) => { if (nearPress($, self, config, sel)) toggle(); });
     return () => { stop(); node.off('interact', toggle); };
 }
