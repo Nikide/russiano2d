@@ -1,9 +1,32 @@
 {
-  "format": 2,
-  "title": "Неоновый курьер",
-  "version": "1.0.0",
-  "width": 960,
-  "height": 640,
-  "entry": "main.js",
-  "scenes": { "list": [] }
+  "schema_version": 2,
+  "project": {"name": "Неоновый курьер", "version": "1.0.0"},
+  "runtime": {
+    "entry": "main.js",
+    "window": {"title": "Неоновый курьер", "width": 960, "height": 640}
+  },
+  "editor": {
+    "graph": {
+      "format": 1,
+      "status": "current",
+      "sources": [
+        {"path": "main.js", "hash": "d8711d3073d782be"}
+      ],
+      "diagnostics": [],
+      "areas": [
+        {"key": "project:main", "type": "project", "label": "Проект", "origin": "code"},
+        {"key": "world:main", "type": "world", "label": "World", "runtime_root": "$.world", "origin": "code"}
+      ],
+      "entities": [
+        {"key": "script:main.js", "area": "project:main", "type": "script", "origin": "code", "path": "main.js", "entry": true, "source": {"file": "main.js", "line": 1}},
+        {"key": "object:main:rect:1", "area": "world:main", "type": "object", "origin": "code", "tag": "rect", "source": {"file": "main.js", "line": 7}},
+        {"key": "object:main:particles:1", "area": "world:main", "type": "object", "origin": "code", "tag": "particles", "source": {"file": "main.js", "line": 52}}
+      ],
+      "edges": [
+        {"key": "edge:spatial_parent:world:main>object:main:rect:1", "type": "spatial_parent", "from": "world:main", "to": "object:main:rect:1", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 7}},
+        {"key": "edge:spatial_parent:world:main>object:main:particles:1", "type": "spatial_parent", "from": "world:main", "to": "object:main:particles:1", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 52}}
+      ],
+      "views": {}
+    }
+  }
 }

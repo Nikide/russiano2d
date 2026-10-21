@@ -16,7 +16,7 @@
 #
 # Запуск:
 #   python3 tests/sdk_validation_test.py
-#   R2D_SDK_BINARY=/path/to/r2d-sdk python3 tests/sdk_validation_test.py
+#   R2D_BINARY=/path/to/r2d python3 tests/sdk_validation_test.py
 # ===========================================================================
 
 import json
@@ -26,24 +26,12 @@ import sys
 import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-def _sdk_binary():
-    """Путь к r2d-sdk: переменная, затем сборка SDK, затем общая сборка.
-
-    В дереве две сборки: `build-sdk` (SDK и его тесты) и `build` (движок).
-    Раньше тест жёстко смотрел в `build`, поэтому после правки валидаторов он
-    мог проверять СТАРЫЙ бинарник и «проходить» на несуществующем коде.
-    """
-    env = os.environ.get("R2D_SDK_BINARY")
-    if env:
-        return env
-    for sub in ("build-sdk", "build"):
-        candidate = os.path.join(ROOT, sub, "r2d-sdk")
-        if os.path.exists(candidate):
-            return candidate
-    return os.path.join(ROOT, "build", "r2d-sdk")
+def _r2d_binary():
+    """Путь к единому r2d; задаётся AGENTS.md через R2D_BINARY."""
+    return os.environ.get("R2D_BINARY", os.path.join(ROOT, "build", "r2d"))
 
 
-SDK = _sdk_binary()
+R2D = _r2d_binary()
 FAILURES = []
 
 
@@ -223,7 +211,7 @@ def write_fixture(tmp, name, data, neighbours=()):
 def validate(path, type_name):
     """Запустить валидатор SDK и вернуть (ok, codes, raw)."""
     try:
-        out = subprocess.run([SDK, "validate", path, "--type", type_name],
+        out = subprocess.run([R2D, "validate", path, "--type", type_name],
                              capture_output=True, text=True, timeout=60)
     except Exception as exc:                          # noqa: BLE001
         return None, [], "не удалось запустить SDK: %s" % exc
@@ -237,15 +225,15 @@ def validate(path, type_name):
 
 def main():
     print("== §29: валидация ассетов SDK ==")
-    if not os.path.exists(SDK):
-        print("  пропуск: %s не собран" % os.path.relpath(SDK, ROOT))
+    if not os.path.exists(R2D):
+        print("  пропуск: %s не собран" % os.path.relpath(R2D, ROOT))
         return 0
 
     # Список типов берём у САМОГО SDK, а не из этого файла: иначе тест
     # «проверял» бы свою же таблицу, а новый тип валидатора остался бы без
     # проверки (именно так и расходятся backend и документация).
     try:
-        listed = json.loads(subprocess.run([SDK, "commands"], capture_output=True,
+        listed = json.loads(subprocess.run([R2D, "commands"], capture_output=True,
                                            text=True, timeout=30).stdout)
         commands = [c["name"] for c in listed.get("commands", [])]
     except Exception as exc:                          # noqa: BLE001
@@ -315,54 +303,57 @@ def main():
         check(ok is False and any(isinstance(c, str) and "AUDIO_FILE_MISSING" in c for c in codes),
               "отсутствующий звуковой файл выявляется валидатором (%s)" % codes)
 
-        # --- project.json v2: entry, scenes, roles (R2D201..R2D206) ---------
+        # --- project.json schema_version 2 (R2D201..R2D209, docs/PROJECT_JSON.md) --
         v2 = os.path.join(tmp, "v2")
         os.makedirs(os.path.join(v2, "src"), exist_ok=True)
         with open(os.path.join(v2, "src", "game.js"), "w", encoding="utf-8") as f:
             f.write("$.scene.add('menu', () => {});\n$.scene.add(\"level1\", () => {});\n")
-        with open(os.path.join(v2, "hud.rml"), "w", encoding="utf-8") as f:
-            f.write("<rml><head></head><body></body></rml>\n")
-        good_v2 = {"format": 2, "title": "v2", "entry": "src/game.js",
-                   "scenes": {"start": "menu", "list": ["menu", "level1"]},
-                   "roles": {"hud.rml": "rmlui"}}
+        good_v2 = {"schema_version": 2,
+                   "project": {"name": "v2", "version": "1.0.0"},
+                   "runtime": {"entry": "src/game.js", "start_scene": "menu",
+                               "window": {"title": "v2", "width": 640, "height": 360, "fullscreen": False}}}
         write_fixture(v2, "project.json", good_v2)
         ok, codes, raw = validate(os.path.join(v2, "project.json"), "project")
         check(ok is True and not codes, "project.json v2 без замечаний (%s)" % (codes or "чисто"))
 
         def v2_case(patch, want, label):
-            data = json.loads(json.dumps(good_v2)); data.update(patch)
+            data = json.loads(json.dumps(good_v2))
+            for key, value in patch.items():
+                node = data
+                parts = key.split(".")
+                for part in parts[:-1]:
+                    node = node.setdefault(part, {})
+                node[parts[-1]] = value
             write_fixture(v2, "project.json", data)
             ok_c, codes_c, raw_c = validate(os.path.join(v2, "project.json"), "project")
             check(want in codes_c, "%s → %s (%s)" % (label, want, codes_c or raw_c[:80]))
 
-        v2_case({"format": 3}, "R2D201", "неизвестный format")
-        v2_case({"entry": "нет.js"}, "R2D202", "точка входа не найдена")
-        v2_case({"entry": "../x.js"}, "R2D202", "entry вне проекта")
-        v2_case({"scenes": {"start": "boss", "list": ["menu", "level1"]}}, "R2D203", "start не в list")
-        v2_case({"scenes": {"list": ["menu", "menu", "level1"]}}, "R2D203", "сцена дважды")
-        v2_case({"scenes": {"list": ["menu", "level1", "ghost"]}}, "R2D204", "сцена без $.scene.add")
-        v2_case({"scenes": {"list": ["menu"]}}, "R2D204", "$.scene.add без индекса")
-        v2_case({"roles": {"нет.rml": "rmlui"}}, "R2D205", "роль для несуществующего файла")
-        v2_case({"roles": {"hud.rml": "банан"}}, "R2D206", "неизвестная роль")
-        data = dict(good_v2); del data["format"]
-        write_fixture(v2, "project.json", data)
-        ok, codes, raw = validate(os.path.join(v2, "project.json"), "project")
-        check("R2D201" in codes, "поля v2 без format=2 — предупреждение R2D201 (%s)" % codes)
+        v2_case({"schema_version": 3}, "R2D201", "неизвестная schema_version")
+        v2_case({"runtime.entry": "нет.js"}, "R2D202", "точка входа не найдена")
+        v2_case({"runtime.entry": "../x.js"}, "R2D202", "entry вне проекта")
+        v2_case({"runtime.window.width": 0}, "R2D203", "ширина окна вне диапазона")
+        v2_case({"runtime.window.fullscreen": "yes"}, "R2D203", "fullscreen не boolean")
+        v2_case({"project.name": 5}, "R2D203", "project.name не строка")
+        v2_case({"runtime.start_scene": "ghost"}, "R2D204", "start_scene без $.scene.add")
+        v2_case({"title": "лишнее"}, "R2D209", "плоское поле при schema_version 2")
+        v2_case({"editor.graph": {"format": 1, "status": "current", "areas": [], "entities": [],
+                                  "edges": [{"key": "e", "from": "a", "to": "b"}]}},
+                "R2D205", "ребро графа ссылается на неизвестную запись")
 
-        # migrate-project: v1 → v2, сцены из кода, --write.
+        # migrate-project: плоский манифест → schema_version 2; --write.
         write_fixture(v2, "project.json", {"title": "v1", "width": 320, "toolHost": False})
         with open(os.path.join(v2, "main.js"), "w", encoding="utf-8") as f:
             f.write("$.ready(() => {});\n")
-        mig = json.loads(subprocess.run([SDK, "migrate-project", v2], capture_output=True,
+        mig = json.loads(subprocess.run([R2D, "migrate-project", v2], capture_output=True,
                                         text=True, timeout=30).stdout or "{}")
         man = json.loads(mig.get("manifest") or "{}")
-        check(mig.get("written") is False and man.get("format") == 2 and man.get("width") == 320
-              and man.get("toolHost") is False
-              and sorted(man.get("scenes", {}).get("list", [])) == ["level1", "menu"],
-              "migrate-project строит v2 без записи (%s)" % man)
-        subprocess.run([SDK, "migrate-project", v2, "--write"], capture_output=True, timeout=30)
+        check(mig.get("written") is False and man.get("schema_version") == 2
+              and man.get("runtime", {}).get("window", {}).get("width") == 320
+              and man.get("project", {}).get("name") == "v1" and man.get("toolHost") is False,
+              "migrate-project строит schema_version 2 без записи (%s)" % man)
+        subprocess.run([R2D, "migrate-project", v2, "--write"], capture_output=True, timeout=30)
         with open(os.path.join(v2, "project.json"), encoding="utf-8") as f:
-            check(json.load(f).get("format") == 2, "migrate-project --write записывает v2")
+            check(json.load(f).get("schema_version") == 2, "migrate-project --write записывает schema_version 2")
         ok, codes, raw = validate(os.path.join(v2, "project.json"), "project")
         check(ok is True and not codes, "мигрированный проект проходит validate (%s)" % (codes or "чисто"))
 

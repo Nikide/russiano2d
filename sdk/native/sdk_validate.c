@@ -15,15 +15,8 @@
 #include <string.h>
 
 // ---------------------------------------------------------------------------
-// project.json (формат 1 и 2, docs/FORMATS.md)
+// project.json: минимальный манифест и schema_version 2 (docs/PROJECT_JSON.md)
 // ---------------------------------------------------------------------------
-
-// Роли v2 — id студий Editor (editor/studios/index.js) и общие роли.
-static const char *const k_project_roles[] = {
-    "atlas", "hammer", "narrative", "sprite-mesh", "tilemap", "particles", "collision",
-    "parallax", "fonts", "audio", "input", "re2dsprite", "rmlui",
-    "script", "data", "asset", NULL
-};
 
 typedef struct { char (*names)[128]; int count, cap; } SceneSet;
 
@@ -86,134 +79,182 @@ static bool safe_rel_path(const char *p)
     return strstr(p, "..") == NULL;
 }
 
+static bool json_is_int_range(const R2dJson *v, int lo, int hi)
+{
+    return v && v->type == R2D_JSON_NUM && v->number >= lo && v->number <= hi && v->number == floor(v->number);
+}
+
+static void field_err(SdkReport *rep, const char *code, const char *path, const char *field, const char *msg)
+{
+    char loc[128];
+    snprintf(loc, sizeof loc, "{\"field\":\"%s\"}", field);
+    sdk_diag(rep, SDK_ERROR, code, path, loc, NULL, "%s: %s", field, msg);
+}
+
+// editor.graph: внутренняя согласованность и актуальность индекса (R2D205/R2D206).
+static void validate_graph(const R2dJson *graph, const char *path, const char *dir, SdkReport *rep)
+{
+    if (graph->type != R2D_JSON_OBJ) { field_err(rep, "R2D205", path, "editor.graph", "ожидался объект"); return; }
+    const R2dJson *fmt = r2d_json_get(graph, "format");
+    if (!fmt || fmt->type != R2D_JSON_NUM || fmt->number != 1.0)
+        field_err(rep, "R2D205", path, "editor.graph.format", "поддерживается 1");
+    const char *status = r2d_json_str(r2d_json_get(graph, "status"), "");
+    if (strcmp(status, "current") && strcmp(status, "partial") && strcmp(status, "stale"))
+        field_err(rep, "R2D205", path, "editor.graph.status", "current | partial | stale");
+
+    static const char *const lists[] = { "sources", "areas", "entities", "edges", "diagnostics" };
+    for (int i = 0; i < 5; ++i) {
+        const R2dJson *l = r2d_json_get(graph, lists[i]);
+        if (l && l->type != R2D_JSON_ARR) {
+            char f[64];
+            snprintf(f, sizeof f, "editor.graph.%s", lists[i]);
+            field_err(rep, "R2D205", path, f, "ожидался массив");
+            return;
+        }
+    }
+    const R2dJson *areas = r2d_json_get(graph, "areas");
+    const R2dJson *ents = r2d_json_get(graph, "entities");
+    const R2dJson *edges = r2d_json_get(graph, "edges");
+    // Ключи уникальны; рёбра ссылаются на существующие записи.
+    for (int pass = 0; pass < 3; ++pass) {
+        const R2dJson *l = pass == 0 ? areas : pass == 1 ? ents : edges;
+        for (int i = 0; l && i < l->count; ++i) {
+            const char *key = r2d_json_str(r2d_json_get(l->items[i], "key"), "");
+            if (!key[0]) {
+                field_err(rep, "R2D205", path, "editor.graph", "запись без key");
+                continue;
+            }
+            const R2dJson *all[3] = { areas, ents, edges };
+            for (int q = 0; q < 3; ++q)
+                for (int j = 0; all[q] && j < all[q]->count; ++j) {
+                    if (q == pass && j >= i) break;
+                    if (!strcmp(r2d_json_str(r2d_json_get(all[q]->items[j], "key"), ""), key)) {
+                        char msg[256];
+                        snprintf(msg, sizeof msg, "повторный ключ «%s»", key);
+                        field_err(rep, "R2D205", path, "editor.graph", msg);
+                    }
+                }
+        }
+    }
+    for (int i = 0; edges && i < edges->count; ++i) {
+        const char *ends[2] = { r2d_json_str(r2d_json_get(edges->items[i], "from"), ""),
+                                r2d_json_str(r2d_json_get(edges->items[i], "to"), "") };
+        for (int e = 0; e < 2; ++e) {
+            bool found = false;
+            for (int j = 0; !found && ents && j < ents->count; ++j)
+                found = !strcmp(r2d_json_str(r2d_json_get(ents->items[j], "key"), ""), ends[e]);
+            for (int j = 0; !found && areas && j < areas->count; ++j)
+                found = !strcmp(r2d_json_str(r2d_json_get(areas->items[j], "key"), ""), ends[e]);
+            if (!found) {
+                char msg[256];
+                snprintf(msg, sizeof msg, "ребро %s ссылается на неизвестную запись «%s»",
+                         r2d_json_str(r2d_json_get(edges->items[i], "key"), "?"), ends[e]);
+                field_err(rep, "R2D205", path, "editor.graph.edges", msg);
+            }
+        }
+    }
+    for (int i = 0; ents && i < ents->count; ++i) {
+        const char *area = r2d_json_str(r2d_json_get(ents->items[i], "area"), "");
+        bool found = false;
+        for (int j = 0; !found && areas && j < areas->count; ++j)
+            found = !strcmp(r2d_json_str(r2d_json_get(areas->items[j], "key"), ""), area);
+        if (!found) {
+            char msg[256];
+            snprintf(msg, sizeof msg, "запись %s в неизвестной области «%s»",
+                     r2d_json_str(r2d_json_get(ents->items[i], "key"), "?"), area);
+            field_err(rep, "R2D205", path, "editor.graph.entities", msg);
+        }
+    }
+    // Актуальность: хеши исходников против диска. Индекс не переписывается молча.
+    const R2dJson *sources = r2d_json_get(graph, "sources");
+    for (int i = 0; sources && i < sources->count; ++i) {
+        const char *rel = r2d_json_str(r2d_json_get(sources->items[i], "path"), "");
+        const char *hash = r2d_json_str(r2d_json_get(sources->items[i], "hash"), "");
+        char full[1100];
+        sdk_join(dir, rel, full, sizeof full);
+        size_t size = 0;
+        char *text = safe_rel_path(rel) ? sdk_read_file(full, &size) : NULL;
+        char now[32] = "";
+        if (text) snprintf(now, sizeof now, "%016llx", (unsigned long long)sdk_deps_hash64(text, size));
+        free(text);
+        if (strcmp(now, hash)) {
+            sdk_diag(rep, SDK_WARNING, "R2D206", path, "{\"field\":\"editor.graph.sources\"}", NULL,
+                     "индекс графа устарел: «%s» изменён (r2d project-index --write)", rel);
+            break;
+        }
+    }
+}
+
 static void validate_project_v2(const R2dJson *root, const char *path, const char *dir, SdkReport *rep)
 {
-    // entry
-    const R2dJson *entry = r2d_json_get(root, "entry");
+    static const char *const flat[] = { "title", "width", "height", "version", "format", "entry", "scenes", "roles" };
+    for (int i = 0; i < (int)(sizeof flat / sizeof flat[0]); ++i)
+        if (r2d_json_get(root, flat[i])) {
+            char loc[64];
+            snprintf(loc, sizeof loc, "{\"field\":\"%s\"}", flat[i]);
+            sdk_diag(rep, SDK_WARNING, "R2D209", path, loc, NULL,
+                     "Поле %s на верхнем уровне при schema_version 2 игнорируется (см. project.* и runtime.*)", flat[i]);
+        }
+    const R2dJson *proj = r2d_json_get(root, "project");
+    if (proj) {
+        if (proj->type != R2D_JSON_OBJ) field_err(rep, "R2D203", path, "project", "ожидался объект");
+        else {
+            const R2dJson *n = r2d_json_get(proj, "name"), *v = r2d_json_get(proj, "version");
+            if (n && n->type != R2D_JSON_STR) field_err(rep, "R2D203", path, "project.name", "нужна строка");
+            if (v && v->type != R2D_JSON_STR) field_err(rep, "R2D203", path, "project.version", "нужна строка");
+        }
+    }
+    const R2dJson *rt = r2d_json_get(root, "runtime");
     const char *entry_name = "main.js";
-    if (entry) {
-        if (entry->type != R2D_JSON_STR || !safe_rel_path(entry->string)) {
-            sdk_diag(rep, SDK_ERROR, "R2D202", path, "{\"field\":\"entry\"}", NULL,
-                     "entry: нужен относительный путь внутри проекта (без «..»)");
-            entry_name = NULL;
-        } else {
-            entry_name = entry->string;
+    if (rt && rt->type != R2D_JSON_OBJ) {
+        field_err(rep, "R2D203", path, "runtime", "ожидался объект");
+        rt = NULL;
+    }
+    if (rt) {
+        const R2dJson *entry = r2d_json_get(rt, "entry");
+        if (entry) {
+            if (entry->type != R2D_JSON_STR || !safe_rel_path(entry->string)) {
+                field_err(rep, "R2D202", path, "runtime.entry", "нужен относительный путь внутри проекта (без «..»)");
+                entry_name = NULL;
+            } else {
+                entry_name = entry->string;
+            }
+        }
+        const R2dJson *start = r2d_json_get(rt, "start_scene");
+        if (start) {
+            if (start->type != R2D_JSON_STR || !start->string[0]) {
+                field_err(rep, "R2D203", path, "runtime.start_scene", "нужно непустое имя сцены");
+            } else {
+                char names[256][128];
+                SceneSet found = { names, 0, 256 };
+                SDL_EnumerateDirectory(dir, scenes_cb, &found);
+                if (!scene_known(&found, start->string))
+                    sdk_diag(rep, SDK_WARNING, "R2D204", path, "{\"field\":\"runtime.start_scene\"}", NULL,
+                             "start_scene «%s»: в коде нет $.scene.add('%s', …)", start->string, start->string);
+            }
+        }
+        const R2dJson *win = r2d_json_get(rt, "window");
+        if (win) {
+            if (win->type != R2D_JSON_OBJ) field_err(rep, "R2D203", path, "runtime.window", "ожидался объект");
+            else {
+                const R2dJson *t = r2d_json_get(win, "title"), *w = r2d_json_get(win, "width"),
+                              *h = r2d_json_get(win, "height"), *fs = r2d_json_get(win, "fullscreen");
+                if (t && t->type != R2D_JSON_STR) field_err(rep, "R2D203", path, "runtime.window.title", "нужна строка");
+                if (w && !json_is_int_range(w, 1, 16384)) field_err(rep, "R2D203", path, "runtime.window.width", "целое 1..16384");
+                if (h && !json_is_int_range(h, 1, 16384)) field_err(rep, "R2D203", path, "runtime.window.height", "целое 1..16384");
+                if (fs && fs->type != R2D_JSON_BOOL) field_err(rep, "R2D203", path, "runtime.window.fullscreen", "нужен boolean");
+            }
         }
     }
     if (entry_name) {
         char p[1100];
         sdk_join(dir, entry_name, p, sizeof p);
         if (!sdk_file_exists(p))
-            sdk_diag(rep, SDK_ERROR, "R2D202", path, "{\"field\":\"entry\"}", NULL,
-                     "Точка входа «%s» не найдена", entry_name);
+            field_err(rep, "R2D202", path, "runtime.entry", "точка входа не найдена");
     }
-
-    // scenes
-    const R2dJson *scenes = r2d_json_get(root, "scenes");
-    if (scenes) {
-        if (scenes->type != R2D_JSON_OBJ) {
-            sdk_diag(rep, SDK_ERROR, "R2D203", path, "{\"field\":\"scenes\"}", NULL,
-                     "scenes должен быть объектом { start, list }");
-        } else {
-            char names[256][128];
-            SceneSet found = { names, 0, 256 };
-            SDL_EnumerateDirectory(dir, scenes_cb, &found);
-
-            const R2dJson *list = r2d_json_get(scenes, "list");
-            const R2dJson *start = r2d_json_get(scenes, "start");
-            if (list && list->type != R2D_JSON_ARR) {
-                sdk_diag(rep, SDK_ERROR, "R2D203", path, "{\"field\":\"scenes.list\"}", NULL,
-                         "scenes.list должен быть массивом имён сцен");
-                list = NULL;
-            }
-            for (int i = 0; list && i < list->count; ++i) {
-                const R2dJson *it = list->items[i];
-                char loc[96];
-                snprintf(loc, sizeof loc, "{\"field\":\"scenes.list\",\"index\":%d}", i);
-                if (it->type != R2D_JSON_STR || !it->string[0]) {
-                    sdk_diag(rep, SDK_ERROR, "R2D203", path, loc, NULL,
-                             "scenes.list[%d]: нужно непустое имя сцены", i);
-                    continue;
-                }
-                for (int j = 0; j < i; ++j) {
-                    const R2dJson *o = list->items[j];
-                    if (o->type == R2D_JSON_STR && !strcmp(o->string, it->string)) {
-                        sdk_diag(rep, SDK_ERROR, "R2D203", path, loc, NULL,
-                                 "scenes.list: сцена «%s» указана дважды", it->string);
-                        break;
-                    }
-                }
-                if (!scene_known(&found, it->string))
-                    sdk_diag(rep, SDK_WARNING, "R2D204", path, loc, NULL,
-                             "Сцена «%s» есть в scenes.list, но ни один скрипт не вызывает $.scene.add('%s')",
-                             it->string, it->string);
-            }
-            // Сцены из кода, которых нет в индексе.
-            if (list) {
-                for (int i = 0; i < found.count; ++i) {
-                    bool listed = false;
-                    for (int j = 0; j < list->count && !listed; ++j)
-                        listed = list->items[j]->type == R2D_JSON_STR && !strcmp(list->items[j]->string, found.names[i]);
-                    bool dup = false;
-                    for (int k = 0; k < i && !dup; ++k) dup = !strcmp(found.names[k], found.names[i]);
-                    if (!listed && !dup)
-                        sdk_diag(rep, SDK_WARNING, "R2D204", path, "{\"field\":\"scenes.list\"}", NULL,
-                                 "Скрипт регистрирует сцену «%s», но её нет в scenes.list", found.names[i]);
-                }
-            }
-            if (start) {
-                if (start->type != R2D_JSON_STR || !start->string[0]) {
-                    sdk_diag(rep, SDK_ERROR, "R2D203", path, "{\"field\":\"scenes.start\"}", NULL,
-                             "scenes.start: нужно имя сцены");
-                } else {
-                    bool in_list = !list;
-                    for (int j = 0; list && j < list->count && !in_list; ++j)
-                        in_list = list->items[j]->type == R2D_JSON_STR && !strcmp(list->items[j]->string, start->string);
-                    if (!in_list)
-                        sdk_diag(rep, SDK_ERROR, "R2D203", path, "{\"field\":\"scenes.start\"}", NULL,
-                                 "scenes.start «%s» нет в scenes.list", start->string);
-                    else if (!scene_known(&found, start->string))
-                        sdk_diag(rep, SDK_WARNING, "R2D204", path, "{\"field\":\"scenes.start\"}", NULL,
-                                 "Стартовая сцена «%s» не зарегистрирована ни одним $.scene.add", start->string);
-                }
-            }
-        }
-    }
-
-    // roles
-    const R2dJson *roles = r2d_json_get(root, "roles");
-    if (roles) {
-        if (roles->type != R2D_JSON_OBJ) {
-            sdk_diag(rep, SDK_ERROR, "R2D205", path, "{\"field\":\"roles\"}", NULL,
-                     "roles должен быть объектом { \"путь\": \"роль\" }");
-        } else {
-            for (int i = 0; i < roles->count; ++i) {
-                const char *file = roles->keys[i];
-                const R2dJson *role = roles->items[i];
-                char loc[600];
-                snprintf(loc, sizeof loc, "{\"field\":\"roles\",\"key\":\"%.500s\"}", file);
-                if (!safe_rel_path(file)) {
-                    sdk_diag(rep, SDK_ERROR, "R2D205", path, loc, NULL,
-                             "roles: «%s» — нужен относительный путь внутри проекта", file);
-                    continue;
-                }
-                char p[1100];
-                sdk_join(dir, file, p, sizeof p);
-                if (!sdk_file_exists(p))
-                    sdk_diag(rep, SDK_ERROR, "R2D205", path, loc, NULL,
-                             "roles: файл «%s» не найден", file);
-                bool ok = role->type == R2D_JSON_STR;
-                if (ok) {
-                    ok = false;
-                    for (int k = 0; k_project_roles[k] && !ok; ++k) ok = !strcmp(k_project_roles[k], role->string);
-                }
-                if (!ok)
-                    sdk_diag(rep, SDK_ERROR, "R2D206", path, loc, NULL,
-                             "roles: неизвестная роль «%s» для «%s»",
-                             role->type == R2D_JSON_STR ? role->string : "?", file);
-            }
-        }
-    }
+    const R2dJson *ed = r2d_json_get(root, "editor");
+    if (ed && ed->type != R2D_JSON_OBJ) field_err(rep, "R2D203", path, "editor", "ожидался объект");
+    else if (ed && r2d_json_get(ed, "graph")) validate_graph(r2d_json_get(ed, "graph"), path, dir, rep);
 }
 
 static void validate_project(const char *path, SdkReport *rep)
@@ -225,6 +266,21 @@ static void validate_project(const char *path, SdkReport *rep)
         r2d_json_free(root);
         return;
     }
+    char dir[1024];
+    sdk_dirname(path, dir, sizeof dir);
+
+    const R2dJson *sv = r2d_json_get(root, "schema_version");
+    if (sv) {
+        if (sv->type == R2D_JSON_NUM && sv->number == 2.0) {
+            validate_project_v2(root, path, dir, rep);
+        } else {
+            field_err(rep, "R2D201", path, "schema_version", "поддерживается 2");
+        }
+        r2d_json_free(root);
+        return;
+    }
+
+    // Минимальный манифест без schema_version: title/width/height/version.
     static const char *const nums[] = { "width", "height" };
     for (int i = 0; i < 2; ++i) {
         const R2dJson *v = r2d_json_get(root, nums[i]);
@@ -246,39 +302,19 @@ static void validate_project(const char *path, SdkReport *rep)
                      "Поле %s должно быть строкой", strs[i]);
         }
     }
-
-    char dir[1024];
-    sdk_dirname(path, dir, sizeof dir);
-
-    int format = 1;
-    const R2dJson *fmt = r2d_json_get(root, "format");
-    if (fmt) {
-        if (fmt->type == R2D_JSON_NUM && (fmt->number == 1.0 || fmt->number == 2.0)) {
-            format = (int)fmt->number;
-        } else {
-            sdk_diag(rep, SDK_ERROR, "R2D201", path, "{\"field\":\"format\"}", NULL,
-                     "format: поддерживаются 1 и 2");
-            format = 0;
-        }
+    static const char *const v2only[] = { "format", "entry", "scenes", "roles" };
+    for (int i = 0; i < 4; ++i) {
+        if (!r2d_json_get(root, v2only[i])) continue;
+        char loc[64];
+        snprintf(loc, sizeof loc, "{\"field\":\"%s\"}", v2only[i]);
+        sdk_diag(rep, SDK_WARNING, "R2D209", path, loc, NULL,
+                 "Поле %s без schema_version 2 не читается (r2d migrate-project)", v2only[i]);
     }
-    if (format == 1) {
-        static const char *const v2only[] = { "entry", "scenes", "roles" };
-        for (int i = 0; i < 3; ++i) {
-            if (!r2d_json_get(root, v2only[i])) continue;
-            char loc[64];
-            snprintf(loc, sizeof loc, "{\"field\":\"%s\"}", v2only[i]);
-            sdk_diag(rep, SDK_WARNING, "R2D201", path, loc, NULL,
-                     "Поле %s читается только при \"format\": 2 — сейчас оно игнорируется (r2d migrate-project)",
-                     v2only[i]);
-        }
-        char main_js[1100];
-        sdk_join(dir, "main.js", main_js, sizeof main_js);
-        if (!sdk_file_exists(main_js)) {
-            sdk_diag(rep, SDK_WARNING, "SDK_PROJECT_NO_MAIN", path, NULL, NULL,
-                     "Рядом с project.json нет main.js — точка входа задаётся флагом --entry при сборке");
-        }
-    } else if (format == 2) {
-        validate_project_v2(root, path, dir, rep);
+    char main_js[1100];
+    sdk_join(dir, "main.js", main_js, sizeof main_js);
+    if (!sdk_file_exists(main_js)) {
+        sdk_diag(rep, SDK_WARNING, "SDK_PROJECT_NO_MAIN", path, NULL, NULL,
+                 "Рядом с project.json нет main.js — точка входа задаётся флагом --entry при сборке");
     }
     r2d_json_free(root);
 }

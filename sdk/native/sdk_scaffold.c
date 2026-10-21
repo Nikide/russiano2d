@@ -1,11 +1,11 @@
 // ===========================================================================
 // Шаблоны проектов и сборки движка (docs/SDK.md §3, §4).
 //
-//   r2d templates [--root sdk/templates]
-//   r2d new <шаблон> <каталог> [--name «Имя»] [--root sdk/templates]
+//   r2d templates [--root templates]
+//   r2d new <шаблон> <каталог> [--name «Имя»] [--root templates]
 //   r2d engines
 //
-// Шаблон — обычный каталог `sdk/templates/<id>/` с `template.json`
+// Шаблон — обычный каталог `templates/<id>/` с `template.json`
 // ({name, description, category}) и файлами проекта. `new` копирует файлы как
 // есть (никакой скрытой базы): после этого SDK проекту не нужен. В текстовых
 // файлах метка `{{name}}` заменяется именем проекта.
@@ -29,7 +29,7 @@ static void emit(R2dSb *out)
     fflush(stdout);
 }
 
-// Каталог шаблонов: --root, ./sdk/templates, рядом с бинарником.
+// Каталог шаблонов: --root, ./templates, рядом с бинарником.
 static bool templates_root(const SdkArgs *a, char *out, size_t cap)
 {
     const char *given = sdk_arg_value(a, "--root");
@@ -38,11 +38,16 @@ static bool templates_root(const SdkArgs *a, char *out, size_t cap)
         return sdk_is_dir(out);
     }
     char cand[1536];
-    snprintf(cand, sizeof cand, "sdk/templates");
+    snprintf(cand, sizeof cand, "templates");
     if (sdk_is_dir(cand)) { snprintf(out, cap, "%s", cand); return true; }
-    sdk_join(sdk_exe_dir(), "sdk/templates", cand, sizeof cand);
+    sdk_join(sdk_exe_dir(), "templates", cand, sizeof cand);
     if (sdk_is_dir(cand)) { snprintf(out, cap, "%s", cand); return true; }
-    sdk_join(sdk_exe_dir(), "../sdk/templates", cand, sizeof cand);
+    sdk_join(sdk_exe_dir(), "../templates", cand, sizeof cand);
+    if (sdk_is_dir(cand)) { snprintf(out, cap, "%s", cand); return true; }
+    // Development Xmake binary: build-xmake/<platform>/<target>/<arch>/<mode>/r2d.
+    // Packaged binaries find their sibling templates above; this fallback lets
+    // the same executable use the repository templates from a nested build.
+    sdk_join(sdk_exe_dir(), "../../../../../templates", cand, sizeof cand);
     if (sdk_is_dir(cand)) { snprintf(out, cap, "%s", cand); return true; }
     return false;
 }
@@ -115,7 +120,7 @@ int sdk_cmd_templates(const SdkArgs *a)
     char root[1536];
     if (!templates_root(a, root, sizeof root)) {
         const int rc = sdk_fail(&rep, "SDK_TEMPLATES_NOT_FOUND",
-                                "Каталог шаблонов не найден: укажите --root <каталог> (обычно sdk/templates)");
+                                "Каталог шаблонов не найден: укажите --root <каталог> (обычно templates)");
         sdk_report_free(&rep);
         return rc;
     }
@@ -311,7 +316,7 @@ int sdk_cmd_new(const SdkArgs *a)
     const char *dest = sdk_arg_positional(a, 1);
     if (!id || !dest) {
         const int rc = sdk_fail(&rep, "SDK_USAGE",
-            "Использование: r2d new <шаблон> <каталог проекта> [--name «Имя»] [--root sdk/templates]");
+            "Использование: r2d new <шаблон> <каталог проекта> [--name «Имя»] [--root templates]");
         sdk_report_free(&rep);
         return rc;
     }
@@ -349,6 +354,8 @@ int sdk_cmd_new(const SdkArgs *a)
         } else {
             CopyCtx c = { src, dest, name, &rep, &files, 0, false };
             SDL_EnumerateDirectory(src, on_copy, &c);
+            // schema_version 2: граф проекта строится сразу, а не при первом открытии в Editor.
+            if (!c.failed && rep.errors == 0) sdk_project_index_write(dest, &rep);
         }
     }
 

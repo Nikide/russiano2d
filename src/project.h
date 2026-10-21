@@ -11,12 +11,13 @@
 //     "version": "1.0.0"
 //   }
 //
-// Формат 2 ("format": 2) добавляет индекс проекта (docs/FORMATS.md):
-//   "entry":  "main.js"                       — точка входа (по умолчанию main.js)
-//   "scenes": { "start": "menu", "list": [...] } — сцена при запуске без --scene
-//   "roles":  { "путь": "роль" }               — для редактора и validate
-// Без поля format файл считается версией 1 и читается как раньше.
-//
+// schema_version 2 (docs/PROJECT_JSON.md) — вложенный манифест:
+//   "schema_version": 2,
+//   "project": { "name": "…", "version": "…" },
+//   "runtime": { "entry": "main.js", "start_scene": "menu",
+//                "window": { "title": "…", "width": 1280, "height": 720, "fullscreen": false } },
+//   "editor":  { "graph": { … } }       — граф проекта для Editor, рантайм его игнорирует
+// Манифест без schema_version — минимальный плоский (title/width/height/version).
 // Все поля необязательны: чего нет — берётся из значений по умолчанию.
 // Файл читается и из папки проекта, и из груза собранной игры, поэтому имя
 // окна попадает в собранный бинарник само, без пересборки движка.
@@ -49,9 +50,10 @@ typedef struct R2dProject {
     // не нужен и по умолчанию выключен.
     bool tool_host;
 
-    int  format;            // 1 (нет поля) или 2
-    char entry[512];        // v2 "entry", пусто — main.js
-    char start_scene[128];  // v2 "scenes.start", пусто — нет
+    bool fullscreen;        // v2 "runtime.window.fullscreen"
+    int  schema_version;    // 1 (нет поля) или 2
+    char entry[512];        // v2 "runtime.entry", пусто — main.js
+    char start_scene[128];  // v2 "runtime.start_scene", пусто — нет
 } R2dProject;
 
 // Значения по умолчанию (пустой манифест).

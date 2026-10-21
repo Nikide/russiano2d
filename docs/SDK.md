@@ -1,9 +1,19 @@
-# Russiano2D SDK
+# Архив: отдельная оболочка SDK
 
-Статус документа: описывает **фактическое** состояние SDK (не цель). Целевая
-архитектура и законы — спецификация «Следующая цель SDK AGENT.md»: она снята с
-текущей документации и удалена из репозитория, текст доступен только в истории
-Git (`git log --diff-filter=D -- "к удалению.md"`, файл удалён после f70762a).
+Этот документ — исторический снимок прежнего standalone SDK, а не актуальная
+инструкция и не описание текущего состояния репозитория. В нём сохранены старые
+имена команд, пути, упаковка и сценарии; их нельзя использовать как руководство
+для установки или разработки на текущей версии.
+
+Текущий пользовательский интерфейс — единый Project Manager/Editor в `r2d`:
+[docs/EDITOR.md](EDITOR.md). CLI-инструменты, GUI и агент вызывают native
+операции того же бинарника `r2d`; `sdk/native/` — исходный каталог общей
+реализации backend, а не отдельная поставляемая программа. Для актуальных
+команд и workflow см. [EDITOR.md](EDITOR.md), [BUILD.md](BUILD.md),
+[SDK_AGENT_TOOLING.md](SDK_AGENT_TOOLING.md) и `r2d commands`.
+
+Ниже приведён архивный материал для разбора старых проектов и кода. Он не
+подтверждает наличие удалённых оболочки, бинарников или release-компонентов.
 
 Как проверяется то, что здесь написано, — в `docs/TESTING.md` (гейты и тесты,
 в том числе по этому документу). Внутренние журналы работы над SDK и очередь
@@ -114,8 +124,10 @@ Re2D — `re2d-world-studio`, `world-editor`; отладка — `devtools`, `co
 | `assets <каталог> [--registry f]` | ассеты по реальной файловой структуре: путь, тип, размер, mtime, инструмент |
 | `project <каталог>` | `project.json` и `main.js`: название, версия, размер окна |
 | `projects <каталог>` | проекты (каталоги с `project.json`) под каталогом |
-| `validate [каталог] [--project dir] [--type t]` | проект (project.json v1/v2 `R2D200–206`/entry/asset refs/lint) или отдельный ассет |
-| `migrate-project [каталог] [--write]` | `project.json` v1 → v2: `entry`, `scenes.list` из `$.scene.add` ([FORMATS.md](FORMATS.md)) |
+| `validate [каталог] [--project dir] [--type t]` | проект (project.json: `R2D200–210`, entry, граф, asset refs, lint) или отдельный ассет |
+| `migrate-project [каталог] [--write]` | `project.json` без `schema_version` → schema 2 ([PROJECT_JSON.md](PROJECT_JSON.md)) |
+| `project-index [каталог] [--write] [--check]` | индексатор `editor.graph` из JS: сцены, объекты, `.appendTo`/`.sprite` (то же: `project index`) |
+| `project-set <каталог> путь=JSON …` | запись настроек schema 2 без переформатирования графа |
 | `api dump [--game dir] [--engine path]` | machine-readable снимок публичного `$` API из живого runtime |
 | `api check [--schema f]` | структурная проверка снимка + свежесть `api.schema.json` |
 | `api generate [--out-dir dir]` | записать `api.schema.json` и `russiano2d.d.ts` из runtime metadata |

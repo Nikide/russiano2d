@@ -70,6 +70,7 @@
                     <div id="code-text">
                         <div id="code-under"></div>
                         <div id="code-lines"></div>
+                        <div id="ime-preview" class="hidden"></div>
                         <div id="caret"></div>
                     </div>
                     <div id="code-vscroll"></div>
@@ -81,8 +82,39 @@
                         <span id="find-next" class="tb-btn icon"></span>
                         <span id="find-close" class="tb-btn icon"></span>
                     </div>
+                    <div id="code-completion" class="hidden"></div>
+                    <div id="api-hover" class="hidden"></div>
                 </div>
                 <div id="pane" class="pane hidden"></div>
+            </div>
+            <!-- Граф проекта (docs/PROJECT_JSON.md §6): read-only, из editor.graph в project.json -->
+            <div id="gp" class="hidden">
+                <div id="gp-resize"></div>
+                <div id="gp-head">
+                    <span class="gp-h-title">Граф проекта</span>
+                    <div id="gp-crumbs"></div>
+                    <span id="gp-warn" class="gp-warn hidden"></span>
+                    <input id="gp-search" type="text" class="field" value=""/>
+                    <span id="gp-view-overview" class="gp-vbtn">Обзор</span>
+                    <span id="gp-view-world" class="gp-vbtn">World</span>
+                    <span id="gp-view-scenes" class="gp-vbtn">Сцены</span>
+                    <span id="gp-view-resources" class="gp-vbtn">Ресурсы</span>
+                    <span id="gp-backbtn" class="tb-btn icon"></span>
+                    <span id="gp-zoomout" class="tb-btn icon"></span>
+                    <span id="gp-zoomin" class="tb-btn icon"></span>
+                    <span id="gp-fit" class="tb-btn icon"></span>
+                    <span id="gp-code" class="tb-btn icon"></span>
+                    <span id="gp-reindex" class="tb-btn icon"></span>
+                    <span id="gp-status" class="gp-stat"></span>
+                    <span id="gp-fullbtn" class="tb-btn icon"></span>
+                    <span id="gp-collapsebtn" class="tb-btn icon"></span>
+                </div>
+                <div id="gp-results" class="hidden"></div>
+                <div id="gp-body">
+                    <div id="gp-canvas"></div>
+                    <div id="gp-empty" class="hidden"></div>
+                    <div id="gp-mini"></div>
+                </div>
             </div>
         </div>
 
@@ -116,6 +148,34 @@
     <div id="palette" class="hidden">
         <input id="palette-input" type="text" value=""/>
         <div id="palette-list"></div>
+    </div>
+
+    <div id="close-confirm" class="hidden">
+        <div class="close-scrim"></div>
+        <div class="close-dialog" role="dialog" aria-modal="true" aria-labelledby="close-confirm-title">
+            <span id="close-confirm-title" class="close-title">Сохранить изменения?</span>
+            <span class="close-message">Документ <span id="close-confirm-path" class="close-path"></span> содержит несохранённые изменения.</span>
+            <div class="close-actions">
+                <button id="close-confirm-cancel" class="btn">Отмена</button>
+                <span class="grow"></span>
+                <button id="close-confirm-discard" class="btn danger">Закрыть без сохранения</button>
+                <button id="close-confirm-save" class="btn primary">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="file-conflict" class="hidden">
+        <div class="close-scrim"></div>
+        <div class="close-dialog" role="dialog" aria-modal="true" aria-labelledby="file-conflict-title">
+            <span id="file-conflict-title" class="close-title">Файл изменён вне Editor</span>
+            <span id="file-conflict-message" class="close-message"></span>
+            <div class="close-actions">
+                <button id="file-conflict-cancel" class="btn">Отмена</button>
+                <span class="grow"></span>
+                <button id="file-conflict-reload" class="btn">Загрузить с диска</button>
+                <button id="file-conflict-overwrite" class="btn danger">Записать версию Editor</button>
+            </div>
+        </div>
     </div>
 </div>
 </body>

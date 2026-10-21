@@ -177,8 +177,12 @@ int sdk_cmd_project(const SdkArgs *a)
     SdkReport rep;
     sdk_report_init(&rep);
     const char *dir = sdk_arg_positional(a, 0);
+    if (dir && !strcmp(dir, "index")) {            // `r2d project index <каталог>`
+        sdk_report_free(&rep);
+        return sdk_cmd_project_index(a);
+    }
     if (!dir) {
-        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d project <каталог проекта>");
+        const int rc = sdk_fail(&rep, "SDK_USAGE", "Использование: r2d project <каталог проекта> | r2d project index <каталог>");
         sdk_report_free(&rep);
         return rc;
     }
@@ -208,10 +212,19 @@ int sdk_cmd_project(const SdkArgs *a)
             free(text);
         }
         if (root && root->type == R2D_JSON_OBJ) {
-            title = r2d_json_str(r2d_json_get(root, "title"), NULL);
-            version = r2d_json_str(r2d_json_get(root, "version"), NULL);
-            width = r2d_json_int(r2d_json_get(root, "width"), 0);
-            height = r2d_json_int(r2d_json_get(root, "height"), 0);
+            if (r2d_json_int(r2d_json_get(root, "schema_version"), 0) == 2) {
+                const R2dJson *prj = r2d_json_get(root, "project");
+                const R2dJson *win = r2d_json_get(r2d_json_get(root, "runtime"), "window");
+                title = r2d_json_str(r2d_json_get(win, "title"), r2d_json_str(r2d_json_get(prj, "name"), NULL));
+                version = r2d_json_str(r2d_json_get(prj, "version"), NULL);
+                width = r2d_json_int(r2d_json_get(win, "width"), 0);
+                height = r2d_json_int(r2d_json_get(win, "height"), 0);
+            } else {
+                title = r2d_json_str(r2d_json_get(root, "title"), NULL);
+                version = r2d_json_str(r2d_json_get(root, "version"), NULL);
+                width = r2d_json_int(r2d_json_get(root, "width"), 0);
+                height = r2d_json_int(r2d_json_get(root, "height"), 0);
+            }
         }
     } else if (!has_main) {
         sdk_diag(&rep, SDK_WARNING, "SDK_NOT_A_PROJECT", dir, NULL, NULL,
@@ -343,7 +356,7 @@ static int run_engine(const SdkArgs *a, const char **eargv, int ecount, const ch
     char engine[1536];
     if (!sdk_find_engine(sdk_arg_value(a, "--engine"), engine, sizeof engine)) {
         const int rc = sdk_fail(&rep, "SDK_ENGINE_NOT_FOUND",
-                                "Бинарник движка не найден: соберите проект (cmake --build build) или укажите --engine <путь>");
+                                "Бинарник движка не найден: соберите проект (xmake build -y r2d) или укажите --engine <путь>");
         sdk_report_free(&rep);
         return rc;
     }
@@ -366,17 +379,25 @@ static int run_engine(const SdkArgs *a, const char **eargv, int ecount, const ch
                  "%s завершился с кодом %d", what, res.exit_code);
     }
 
-    // Хвост вывода: полный журнал сборки может быть большим.
-    const size_t keep = 8192;
+    // Build prints the authored package file list before its size summary.
+    // Keep enough for normal projects and say explicitly when a larger log is
+    // clipped so the Editor never presents a partial list as complete.
+    const size_t keep = 64 * 1024;
     const char *tail = res.out ? res.out : "";
-    if (res.out_size > keep) tail = res.out + (res.out_size - keep);
+    R2dSb tail_text;
+    r2d_sb_init(&tail_text);
+    if (res.out_size > keep) {
+        r2d_sb_puts(&tail_text, "… начало вывода обрезано; показан хвост последних 64 КиБ …\n");
+        tail = res.out + (res.out_size - keep);
+    }
+    r2d_sb_puts(&tail_text, tail);
 
     R2dSb out;
     r2d_sb_init(&out);
     r2d_sb_printf(&out, "{\"ok\":%s,\"exitCode\":%d,", res.exit_code == 0 ? "true" : "false", res.exit_code);
     sdk_put_kv_str(&out, "engine", engine);
     r2d_sb_putc(&out, ',');
-    sdk_put_kv_str(&out, "outputTail", tail);
+    sdk_put_kv_str(&out, "outputTail", tail_text.data ? tail_text.data : "");
     r2d_sb_putc(&out, ',');
     sdk_report_put_counts(&rep, &out);
     r2d_sb_putc(&out, ',');
@@ -386,6 +407,7 @@ static int run_engine(const SdkArgs *a, const char **eargv, int ecount, const ch
 
     const int rc = res.exit_code == 0 ? 0 : 1;
     r2d_sb_free(&out);
+    r2d_sb_free(&tail_text);
     sdk_proc_free(&res);
     sdk_report_free(&rep);
     return rc;

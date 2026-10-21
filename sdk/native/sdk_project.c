@@ -85,8 +85,13 @@ static SDL_EnumerationResult project_cb(void *user, const char *dir, const char 
         return SDL_ENUM_CONTINUE;
     }
     pv->files++;
-    if (has_ext(name, ".js") || has_ext(name, ".rml") || has_ext(name, ".rcss") ||
-        has_ext(name, ".json") || has_ext(name, ".re2dmap")) {
+    // project.json проверяет сам validate_project: ключи editor.graph — не пути ассетов.
+    size_t dlen = strlen(dir), rlen = strlen(pv->root);
+    while (dlen > 1 && dir[dlen - 1] == '/') dlen--;
+    while (rlen > 1 && pv->root[rlen - 1] == '/') rlen--;
+    const bool manifest = !strcmp(name, "project.json") && dlen == rlen && !strncmp(dir, pv->root, dlen);
+    if (!manifest && (has_ext(name, ".js") || has_ext(name, ".rml") || has_ext(name, ".rcss") ||
+        has_ext(name, ".json") || has_ext(name, ".re2dmap"))) {
         scan_text_refs(pv, full);
     }
     if (has_ext(name, ".rml") || has_ext(name, ".rcss") || has_ext(name, ".atlas.json") ||
@@ -109,7 +114,7 @@ void sdk_project_validate(const char *dir, const char *schema_path, SdkReport *r
         return;
     }
     sdk_validate_file(project, "project", rep);
-    // project.json v2 сам проверяет свою точку входа (R2D202).
+    // schema_version 2 сам проверяет свою точку входа (R2D202).
     bool v2 = false;
     {
         size_t size = 0;
@@ -117,7 +122,7 @@ void sdk_project_validate(const char *dir, const char *schema_path, SdkReport *r
         if (text) {
             char err[128];
             R2dJson *root = r2d_json_parse(text, err, sizeof err);
-            v2 = root && r2d_json_num(r2d_json_get(root, "format"), 1) == 2;
+            v2 = root && r2d_json_num(r2d_json_get(root, "schema_version"), 0) == 2;
             r2d_json_free(root);
             free(text);
         }
@@ -148,10 +153,20 @@ void sdk_project_validate(const char *dir, const char *schema_path, SdkReport *r
 }
 
 // ---------------------------------------------------------------------------
-// migrate-project [каталог] [--write]: project.json v1 → v2. Без --write только
-// печатает результат. Индекс сцен берётся из $.scene.add(...) в скриптах;
-// scenes.start не угадывается — его выбирает автор.
+// migrate-project [каталог] [--write]: манифест без schema_version (и прежний
+// "format": 2) → schema_version 2. Без --write только печатает результат.
+// Поля сохраняются; неизвестные верхнего уровня остаются на месте.
 // ---------------------------------------------------------------------------
+static void put_str_field(R2dSb *sb, const char *key, const char *val, const char *indent, bool *first)
+{
+    r2d_sb_puts(sb, *first ? "\n" : ",\n");
+    *first = false;
+    r2d_sb_puts(sb, indent);
+    r2d_sb_put_json_string(sb, key);
+    r2d_sb_puts(sb, ": ");
+    r2d_sb_put_json_string(sb, val);
+}
+
 int sdk_cmd_migrate_project(const SdkArgs *a)
 {
     const char *dir = sdk_arg_positional(a, 0);
@@ -171,36 +186,58 @@ int sdk_cmd_migrate_project(const SdkArgs *a)
         sdk_diag(&rep, SDK_ERROR, "R2D200", path, NULL, NULL, "project.json не найден в «%s»", dir);
     } else if ((root = sdk_load_json(path, &rep)) != NULL && root->type != R2D_JSON_OBJ) {
         sdk_diag(&rep, SDK_ERROR, "SDK_PROJECT_ROOT", path, NULL, NULL, "project.json должен быть объектом");
-    } else if (root && r2d_json_num(r2d_json_get(root, "format"), 1) == 2) {
-        // Уже v2: ничего не делаем.
+    } else if (root && r2d_json_num(r2d_json_get(root, "schema_version"), 0) == 2) {
+        // Уже schema_version 2: ничего не делаем.
     } else if (root) {
-        char names[256][128];
-        int n = sdk_project_scenes(dir, names, 256);
-        r2d_sb_puts(&text, "{\n  \"format\": 2");
+        const char *title = r2d_json_str(r2d_json_get(root, "title"), NULL);
+        const char *version = r2d_json_str(r2d_json_get(root, "version"), NULL);
+        const char *entry = r2d_json_str(r2d_json_get(root, "entry"), NULL);
+        const char *start = r2d_json_str(r2d_json_get(r2d_json_get(root, "scenes"), "start"), NULL);
+        const R2dJson *w = r2d_json_get(root, "width"), *h = r2d_json_get(root, "height");
+
+        r2d_sb_puts(&text, "{\n  \"schema_version\": 2,\n  \"project\": {");
+        bool first = true;
+        if (title) put_str_field(&text, "name", title, "    ", &first);
+        if (version) put_str_field(&text, "version", version, "    ", &first);
+        r2d_sb_puts(&text, first ? "},\n" : "\n  },\n");
+
+        r2d_sb_puts(&text, "  \"runtime\": {");
+        first = true;
+        put_str_field(&text, "entry", entry ? entry : "main.js", "    ", &first);
+        if (start) put_str_field(&text, "start_scene", start, "    ", &first);
+        if (title || w || h) {
+            r2d_sb_puts(&text, ",\n    \"window\": {");
+            bool wf = true;
+            if (title) put_str_field(&text, "title", title, "      ", &wf);
+            if (w && w->type == R2D_JSON_NUM) { r2d_sb_puts(&text, wf ? "\n      " : ",\n      "); wf = false; r2d_sb_printf(&text, "\"width\": %d", (int)w->number); }
+            if (h && h->type == R2D_JSON_NUM) { r2d_sb_puts(&text, wf ? "\n      " : ",\n      "); wf = false; r2d_sb_printf(&text, "\"height\": %d", (int)h->number); }
+            r2d_sb_puts(&text, "\n    }");
+        }
+        r2d_sb_puts(&text, "\n  }");
+
+        // Остальные поля (toolHost и пользовательские) — как были.
         for (int i = 0; i < root->count; ++i) {
             const char *k = root->keys[i];
-            if (!strcmp(k, "format") || !strcmp(k, "entry") || !strcmp(k, "scenes") || !strcmp(k, "roles")) continue;
+            static const char *const moved[] = { "title", "version", "width", "height", "format", "entry", "scenes", "roles" };
+            bool skip = false;
+            for (int m = 0; m < 8 && !skip; ++m) skip = !strcmp(k, moved[m]);
+            if (skip) continue;
             r2d_sb_puts(&text, ",\n  ");
             r2d_sb_put_json_string(&text, k);
             r2d_sb_puts(&text, ": ");
             sdk_json_put_compact(&text, root->items[i]);
         }
-        r2d_sb_puts(&text, ",\n  \"entry\": \"main.js\",\n  \"scenes\": { \"list\": [");
-        int written = 0;
-        for (int i = 0; i < n; ++i) {
-            bool dup = false;
-            for (int j = 0; j < i && !dup; ++j) dup = !strcmp(names[i], names[j]);
-            if (dup) continue;
-            r2d_sb_puts(&text, written++ ? ", " : "");
-            r2d_sb_put_json_string(&text, names[i]);
-        }
-        r2d_sb_puts(&text, "] }\n}\n");
+        r2d_sb_puts(&text, "\n}\n");
         changed = true;
-        char main_js[2048];
-        snprintf(main_js, sizeof main_js, "%s/main.js", dir);
-        if (!sdk_file_exists(main_js))
-            sdk_diag(&rep, SDK_WARNING, "R2D202", path, "{\"field\":\"entry\"}", NULL,
-                     "main.js нет — поправьте entry после миграции");
+
+        char entry_path[2048];
+        snprintf(entry_path, sizeof entry_path, "%s/%s", dir, entry ? entry : "main.js");
+        if (!sdk_file_exists(entry_path))
+            sdk_diag(&rep, SDK_WARNING, "R2D202", path, "{\"field\":\"runtime.entry\"}", NULL,
+                     "точки входа «%s» нет — поправьте runtime.entry после миграции", entry ? entry : "main.js");
+        if (r2d_json_get(root, "roles"))
+            sdk_diag(&rep, SDK_WARNING, "R2D209", path, "{\"field\":\"roles\"}", NULL,
+                     "roles в schema_version 2 нет: студия выбирается по расширению файла");
         if (write && !sdk_write_file(path, text.data, text.len))
             sdk_diag(&rep, SDK_ERROR, "SDK_IO", path, NULL, NULL, "не удалось записать project.json");
     }

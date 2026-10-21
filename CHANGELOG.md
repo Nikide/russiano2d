@@ -1,3 +1,19 @@
+> PROJECT.JSON SCHEMA 2 И ГРАФ ПРОЕКТА (2026-10-21; без тега/релиза).
+> `project.json` со `schema_version: 2` — `project.*`, `runtime.*` (`entry`,
+> `start_scene`, `window.{title,width,height,fullscreen}`) и `editor.graph`: сохранённый
+> граф сцен, `$.world`, объектов `$('<тег>')`, связей `.appendTo`/`.sprite` и ресурсов.
+> Новые команды: `r2d project-index [--write|--check]` (индексатор из поддержанного
+> поднабора JS, детерминированный, без дат; динамика → статус `partial`),
+> `r2d project-set` (запись настроек без переформатирования графа); `r2d migrate-project`
+> теперь переводит плоский манифест и прежний `format: 2` в schema 2; `r2d new`
+> индексирует созданный проект, шаблон `blank` — schema 2. `r2d validate`: `R2D201–R2D210`
+> (граф, устаревший индекс). Прежний `format: 2` (`entry`/`scenes`/`roles`) больше не
+> читается; манифест без `schema_version` работает как раньше, демо и фикстуры не
+> менялись. Editor: Project Settings (`Настройки | JSON`) и read-only панель графа под
+> кодом (обзор, World, сцены, ресурсы, breadcrumb, поиск, zoom/pan, миникарта),
+> индекс после Save `.js`. Рантайм: `runtime.window.fullscreen` применяется при старте.
+> Документация: `docs/PROJECT_JSON.md`; публичный `$` API и снимок API не менялись.
+
 > FS DIALOGS — системные окна выбора папки и файла (2026-10-20).
 > Новое: `$.fs.pickFolder`, `$.fs.pickFile`, `$.fs.saveFile` — Promise с путём,
 > `null` при отмене, reject `R2D_FS_DIALOG_FAILED` при отказе ОС. Нативная часть —
@@ -6,6 +22,24 @@
 > существующим API не решается, спецификация и тест (`tests/js/fs_dialog_test.mjs`)
 > и документация (`docs/highlevel/store.md`) — в этом же изменении. Снимок API
 > обновлён (+3 имени, существующие не менялись).
+
+> EDITOR IME — composition и candidate window (2026-10-20; без тега/релиза).
+> В `$.input` добавлены `ime()` и `textInputArea(...)`, проксирующие уже
+> существующий native SDL IME contract. Code view отображает composition
+> подчёркнутой поверх строки и размещает системное окно кандидатов у каретки;
+> составной текст остаётся временным до SDL text commit. Freeze snapshot
+> пополнен двумя новыми API и двумя русскими алиасами; прежние имена сохранены.
+
+> EDITOR TEMPLATE — Re2D boomer shooter (2026-10-20; без тега/релиза; отозван 2026-10-21).
+> Временно добавлялся standalone `templates/re2d-boomer` на базе Dust2, с Hammer картой,
+> `$` gameplay, world assets, Re2DSprite оружием, шрифтами и credits. Позиционный
+> звук выбирает нативный HRTF только при наличии backend; иначе HUD показывает
+> `PAN`. Tests проверяют Project Manager Create/Validate/Run/Build, запуск
+> пакета вне checkout, Hammer viewports, cell edit/undo и runtime preview.
+> Annex gameplay test проверяет позиционный звук, оружие, зомби и урон; image
+> captures по умолчанию выключены. Открыты 115 world warnings и ручная
+> визуальная приёмка. По прямому запросу пользователя жанровый шаблон удалён;
+> `demos/re2d_dust2` и Hammer workflow сохранены как отдельные возможности.
 
 > EDITOR NARRATIVE — VN Maker на общем каркасе (2026-10-20).
 > У каждой `.scene/.story` свои документ, история и dirty; Save/Undo/Redo и

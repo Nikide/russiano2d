@@ -22,7 +22,7 @@ static int cmd_version(const SdkArgs *a);
 static int cmd_commands(const SdkArgs *a);
 
 static const Command k_commands[] = {
-    { "version",  cmd_version,      "версия SDK и список команд" },
+    { "version",  cmd_version,      "версия r2d и список команд" },
     { "commands", cmd_commands,     "список команд" },
     { "help",     cmd_commands,     "псевдоним commands" },
     { "tools",    sdk_cmd_tools,    "реестр инструментов sdk_tools.json с проверкой" },
@@ -30,7 +30,9 @@ static const Command k_commands[] = {
     { "project",  sdk_cmd_project,  "сведения о проекте (project.json, main.js)" },
     { "projects", sdk_cmd_projects, "найти проекты под каталогом" },
     { "validate", sdk_cmd_validate, "проверить ассет, структурная диагностика" },
-    { "migrate-project", sdk_cmd_migrate_project, "project.json v1 → v2 (entry, scenes из $.scene.add); --write сохраняет" },
+    { "migrate-project", sdk_cmd_migrate_project, "project.json без schema_version → schema_version 2; --write сохраняет" },
+    { "project-set", sdk_cmd_project_set, "записать настройки project.json (schema 2): project-set <проект> project.name=\"…\" runtime.window.width=1280" },
+    { "project-index", sdk_cmd_project_index, "индексатор editor.graph из JS: [--write] [--check] (то же: project index)" },
     { "api",      sdk_cmd_api,      "machine-readable $ API: dump/check/generate" },
     { "lint",     sdk_cmd_lint,     "API-aware линтер JS: $ API, коды R2D001…" },
     { "docs",     cmd_docs_generate, "generated $ API reference (docs generate)" },
@@ -50,7 +52,7 @@ static const Command k_commands[] = {
     { "story", sdk_cmd_story, "VN: validate story/*.scene (labels, goto, speakers, assets, i18n)" },
     { "dialog", sdk_cmd_dialog, "VN: validate dialog RML/RCSS (semantic roles, fonts)" },
     { "agent", sdk_cmd_agent, "Нативный клиент существующего агентского протокола (JSON session)" },
-    { "templates", sdk_cmd_templates, "шаблоны проектов sdk/templates" },
+    { "templates", sdk_cmd_templates, "шаблоны проектов templates/" },
     { "new",       sdk_cmd_new,       "создать проект из шаблона (копирование файлов)" },
     { "engines",   sdk_cmd_engines,   "найденные сборки движка r2d" },
     { "run",      sdk_cmd_run,      "запустить игру движком" },

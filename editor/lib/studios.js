@@ -35,6 +35,7 @@ export function createStudioHost($, editor) {
             openWith: (path, id) => editor.openWith(path, id),
             typing: () => editor.typing(),
             preview: () => editor.fullPreview(tab),
+            extensions: editor.extensions,
         };
     }
 

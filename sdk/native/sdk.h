@@ -23,8 +23,8 @@
 extern "C" {
 #endif
 
-// Версия SDK = версия проекта: приходит определением из sdk/native/CMakeLists.txt
-// (PROJECT_VERSION корневого CMakeLists.txt). Запасное значение — только для
+// Версия нативного tooling backend = версия проекта: приходит определением
+// R2D_SDK_VERSION из xmake.lua. Запасное значение — только для
 // сборки вне CMake (например, ручной компиляции одного файла).
 #ifndef R2D_SDK_VERSION
 #define R2D_SDK_VERSION "0.0.0-dev"
@@ -363,6 +363,10 @@ int sdk_cmd_project(const SdkArgs *a);
 int sdk_cmd_projects(const SdkArgs *a);
 int sdk_cmd_validate(const SdkArgs *a);
 int sdk_cmd_migrate_project(const SdkArgs *a);
+// Индексатор editor.graph в project.json (sdk_project_graph.c, docs/PROJECT_JSON.md).
+int sdk_cmd_project_index(const SdkArgs *a);
+int sdk_cmd_project_set(const SdkArgs *a);   // project-set: запись настроек schema v2 без переформатирования графа
+bool sdk_project_index_write(const char *dir, SdkReport *rep);   // r2d new: индекс после копирования шаблона
 // Имена сцен из $.scene.add('…') во всех .js проекта (с повторами, в порядке обхода).
 int sdk_project_scenes(const char *dir, char (*names)[128], int cap);
 int sdk_cmd_api(const SdkArgs *a);

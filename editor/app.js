@@ -10,17 +10,25 @@
 
 import { createCodeModel } from './lib/code_model.js';
 import { createCodeView } from './lib/code_view.js';
+import { publicApiSymbols, javascriptSymbolAt, javascriptDocumentSymbols, nodeApiPathAt } from './lib/api_language.js';
 import { languageOf, escapeRml } from './lib/highlight.js';
 import { fuzzyFilter } from './lib/fuzzy.js';
 import { createStudioHost, studioFor, studioById, studiosFor } from './lib/studios.js';
 import { pickProjectFile } from './lib/studio_kit.js';
+import { createExtensionHost } from './lib/shared/extensions.js';
+import { createGraphPanel } from './lib/graph_panel.js';
+import { normalizeGraph, describe as describeGraph } from './lib/shared/graph_model.js';
 
 const DOC = 'ui/editor.rml';
 const STATE_FILE = 'state.local.json';
 const TEXT_EXT = ['.js', '.mjs', '.json', '.rml', '.rcss', '.css', '.md', '.txt', '.scene', '.glsl',
                   '.frag', '.vert', '.xml', '.csv', '.tsv', '.html', '.re2dmap', '.ini', '.yml', '.yaml'];
+const SEARCH_EXT = new Set(TEXT_EXT);
 const IMAGE_EXT = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif'];
 const MAX_LOG = 20000;
+const MAX_OUTPUT_ENTRIES = 500;
+const MAX_OUTPUT_ENTRY = 64 * 1024;
+let jsonDraftSequence = 0;
 
 const esc = escapeRml;
 const ext = (p) => { const m = /(\.[^./]+)$/.exec(String(p).toLowerCase()); return m ? m[1] : ''; };
@@ -29,13 +37,15 @@ const dirName = (p) => { const i = String(p).lastIndexOf('/'); return i < 0 ? ''
 
 export function createEditor($) {
     const doc = $.ui.doc(DOC);
-    const code = createCodeView($, doc);
+    const code = createCodeView($, doc, publicApiSymbols($));
+    let extensionHost = null;
     const icon = (name) => $.ui.icon(name) || '';
     const studios = createStudioHost($, {
         log: (t) => log(t), setStatus: (t, k) => setStatus(t, k),
         run: (opts) => run(opts), stop: () => stop(),
         projectRoot: () => (s.project ? s.project.abs : ''),
         fullPreview: (tab) => enterFullPreview(tab),
+        graphInfo: () => graphInfo(), reindex: () => reindex(), migrate: () => migrateProject(), projectChanged: () => refreshProjectJson(),
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
         // Студия Editor сообщила о правке/проверке: вкладка, Problems, статус.
         changed: (tab) => {
@@ -44,7 +54,8 @@ export function createEditor($) {
             renderBottom(); renderStatus();
         },
         // Набор текста (поле RmlUi, палитра, поиск) — горячие клавиши студий молчат.
-        typing: () => $.ui.typing() || !!s.palette || s.focus === 'find',
+        typing: () => $.ui.typing() || !!s.palette || s.focus === 'find' || s.focus === 'search',
+        get extensions() { return extensionHost; },
     });
 
     // Проигрывание студии на весь кадр (VN: $.story рисует под RmlUi):
@@ -72,18 +83,36 @@ export function createEditor($) {
         active: null,
         history: [], histAt: -1,
         diags: new Map(),       // путь (относительно проекта) → [diag]
-        projectDiags: [],
+        projectDiags: [], extensionDiags: [], agentDiags: [], agentReport: null, closeRequest: null, fileConflict: null,
         bottom: 'problems', bottomCollapsed: false, sidebarHidden: false,
         side: 'project',
         focus: 'none',          // 'code' | 'palette' | 'find' | 'search' | 'none'
         palette: null,          // { mode, items, list, sel, query }
         run: null,              // { handle, running, exit, output, polledAt }
-        output: '', consoleLog: '',
+        output: '', outputEntries: [], outputFilter: 'all', consoleLog: '',
         status: '', statusKind: '',
         recent: [], templates: [],
         busy: 0,
         lastTreeHtml: '',
+        searchQuery: '', searchResults: [], searchTruncated: false,
+        searchDraft: '', searchDelay: 0,
+        graphNorm: null, graphStale: false, graphSelected: null, indexing: false, indexAgain: false,
     };
+
+    // --- граф проекта (docs/PROJECT_JSON.md): панель под кодом ------------------------------
+    const graphPanel = createGraphPanel($, doc, {
+        graph: () => s.graphNorm,
+        state: () => ({
+            stale: s.graphStale,
+            unsaved: s.tabs.some((t) => t.model && t.model.dirty && t.lang === 'js'),
+            legacy: !!(s.project && s.project.meta && !s.project.meta.v2),
+        }),
+        openSource: (file, line) => { openFile(file, line, 1); focusCode(); },
+        select: (key) => { s.graphSelected = key; s.inspectorDirty = true; },
+        reindex: () => reindex(),
+        migrate: () => migrateProject(),
+        layout: () => renderLayout(),
+    });
 
     // --- состояние на диске ---------------------------------------------------
 
@@ -95,10 +124,32 @@ export function createEditor($) {
         $.fs.writeJSON(STATE_FILE, { version: 1, recent: s.recent.slice(0, 12) });
     }
 
+    extensionHost = createExtensionHost({
+        $,
+        addDiagnostic(severity, code, message, extra) {
+            const d = normalizeDiag(Object.assign({ severity, code, message }, extra || {}, { asset: null }));
+            d.extension = extra && extra.asset ? String(extra.asset) : '';
+            s.extensionDiags.push(d);
+            renderBottom(); renderStatus();
+            return d;
+        },
+    });
+
     function log(text) {
         s.consoleLog += text + '\n';
         if (s.consoleLog.length > MAX_LOG) s.consoleLog = s.consoleLog.slice(-MAX_LOG);
         if (s.bottom === 'console') renderBottom();
+    }
+    function appendOutput(source, text) {
+        let value = String(text === undefined || text === null ? '' : text);
+        if (!value) return;
+        if (value.length > MAX_OUTPUT_ENTRY)
+            value = value.slice(0, MAX_OUTPUT_ENTRY / 2) + '\n… output truncated …\n' + value.slice(-MAX_OUTPUT_ENTRY / 2);
+        s.outputEntries.push({ time: new Date().toISOString(), source: source || 'editor', text: value });
+        if (s.outputEntries.length > MAX_OUTPUT_ENTRIES)
+            s.outputEntries.splice(0, s.outputEntries.length - MAX_OUTPUT_ENTRIES);
+        s.output = tail((s.output || '') + value + (value.endsWith('\n') ? '' : '\n'));
+        if (s.bottom === 'output') renderBottom();
     }
     function setStatus(text, kind) {
         s.status = text; s.statusKind = kind || '';
@@ -111,6 +162,12 @@ export function createEditor($) {
         s.busy++;
         try {
             const res = await $.sdk.tool(args);
+            const source = args[0] === 'build' ? 'build' : 'editor';
+            const buildDetail = args[0] === 'build' && res.json && typeof res.json.outputTail === 'string'
+                ? res.json.outputTail + ((res.json.diagnostics || []).length
+                    ? '\nДиагностики:\n' + JSON.stringify(res.json.diagnostics, null, 2) : '') : '';
+            const resultText = buildDetail || res.output || res.error || (res.json ? JSON.stringify(res.json, null, 2) : 'готово');
+            appendOutput(source, '$ r2d ' + args.join(' ') + '\n' + resultText);
             if (!res.json) log('r2d ' + args.join(' ') + ' → ' + (res.error || 'нет JSON'));
             return res;
         } finally { s.busy--; }
@@ -131,7 +188,7 @@ export function createEditor($) {
     // --- Project Manager ------------------------------------------------------
 
     // Иконка шаблона: по id, иначе общая.
-    const TEMPLATE_ICONS = { blank: 'description', platformer: 'directions_run', 'tilemap-room': 'grid_on', 'ui-menu': 'web' };
+    const TEMPLATE_ICONS = { blank: 'description' };
 
     // Короткий путь для показа: от каталога запуска или с «~».
     function shortPath(abs) {
@@ -149,9 +206,9 @@ export function createEditor($) {
 
     function recentInfo(r) {
         const json = $.fs.readJSON(r.abs + '/project.json', null);
-        let title = (json && json.title) || r.title || baseName(r.abs);
+        let title = (json && projectMeta(json, r.abs).title) || r.title || baseName(r.abs);
         if (/\{\{.*\}\}/.test(title)) title = baseName(r.abs);   // шаблон, открытый как проект
-        return { abs: r.abs, title, missing: !json, v2: !!(json && json.format === 2) };
+        return { abs: r.abs, title, missing: !json, v2: !!(json && json.schema_version === 2) };
     }
 
     function showPM(error) {
@@ -162,10 +219,10 @@ export function createEditor($) {
         doc.text('pm-new-error', '');
         renderRecent();
         if (!s.pmNew) {
-            // Папка по умолчанию — рядом с последним живым проектом (не во временном каталоге).
-            const alive = s.recent.find((r) => !/^\/(private\/)?tmp\//.test(r.abs) && $.fs.exists(r.abs + '/project.json'));
             s.pmNew = { template: 'blank' };
-            s.pmNew.dir = alive ? parentOf(alive.abs) : String($.fs.basePath() || '').replace(/\/+$/, '');
+            // Новые проекты по умолчанию находятся в пользовательских документах,
+            // независимо от каталога запуска бинарника/приложения.
+            s.pmNew.dir = String($.fs.documentsPath() || $.fs.basePath() || '').replace(/[\\/]+$/, '');
         }
         renderTemplates();
         renderDest();
@@ -195,7 +252,7 @@ export function createEditor($) {
     function renderTemplates() {
         const sel = s.pmNew && s.pmNew.template;
         doc.html('pm-templates', s.templates.length ? s.templates.map((t) =>
-            '<div class="pm-tpl' + (t.id === sel ? ' selected' : '') + '" data-key="' + esc(t.id) + '">' +
+            '<div id="pm-template-' + esc(t.id) + '" class="pm-tpl' + (t.id === sel ? ' selected' : '') + '" data-key="' + esc(t.id) + '">' +
             '<span class="pm-ico">' + icon(TEMPLATE_ICONS[t.id] || 'folder_special') + '</span>' +
             '<div class="pm-info"><span class="pm-tpl-name">' + esc(t.name || t.id) + '</span>' +
             '<span class="pm-tpl-desc">' + esc(t.description || '') + '</span></div></div>').join('')
@@ -267,27 +324,106 @@ export function createEditor($) {
 
     // --- проект и дерево --------------------------------------------------------
 
-    // Индекс project.json v2 (docs/FORMATS.md): точка входа, сцены, роли файлов.
-    // Для v1 — значения по умолчанию; Editor не угадывает сцены по коду.
-    function manifest() {
-        const j = (s.project && s.project.json) || {};
-        const v2 = j.format === 2;
-        const sc = v2 && j.scenes && typeof j.scenes === 'object' ? j.scenes : {};
+    // Настройки project.json (docs/PROJECT_JSON.md): schema_version 2 — project.*/runtime.*,
+    // иначе минимальный плоский манифест. Сцены берутся из графа, а не угадываются.
+    function projectMeta(json, abs) {
+        const j = json && typeof json === 'object' ? json : {};
+        const v2 = j.schema_version === 2;
+        const rt = v2 && j.runtime && typeof j.runtime === 'object' ? j.runtime : {};
+        const win = rt.window && typeof rt.window === 'object' ? rt.window : {};
+        const pj = v2 && j.project && typeof j.project === 'object' ? j.project : {};
         return {
             v2,
-            entry: v2 && typeof j.entry === 'string' && j.entry ? j.entry : 'main.js',
-            start: typeof sc.start === 'string' ? sc.start : null,
-            scenes: Array.isArray(sc.list) ? sc.list.filter((x) => typeof x === 'string' && x) : [],
-            roles: v2 && j.roles && typeof j.roles === 'object' ? j.roles : {},
+            title: v2 ? (win.title || pj.name || baseName(abs || '')) : (j.title || baseName(abs || '')),
+            version: v2 ? (pj.version || '') : (j.version || ''),
+            width: v2 ? win.width : j.width, height: v2 ? win.height : j.height,
+            entry: typeof rt.entry === 'string' && rt.entry ? rt.entry : 'main.js',
+            start: typeof rt.start_scene === 'string' && rt.start_scene ? rt.start_scene : null,
         };
     }
 
-    // Роль из манифеста: id студии → студия, script/data → текст.
-    function roleStudio(path) {
-        const role = manifest().roles[path];
-        if (typeof role !== 'string') return undefined;
-        if (role === 'script' || role === 'data') return 'code';
-        return studioById(role) ? role : undefined;
+    function manifest() {
+        const m = (s.project && s.project.meta) || projectMeta({}, '');
+        const scenes = s.graphNorm ? s.graphNorm.scenes.map((e) => e.name) : [];
+        return { v2: m.v2, entry: m.entry, start: m.start, scenes };
+    }
+
+    function graphInfo() {
+        const g = s.graphNorm;
+        return {
+            has: !!g, status: g ? g.status : null, stale: s.graphStale,
+            scenes: g ? g.scenes.map((e) => e.name) : [], objects: g ? g.objects.length : 0,
+            edges: g ? g.edges.length : 0, sources: g ? g.sources.length : 0, diagnostics: g ? g.diagnostics : [],
+        };
+    }
+
+    // Перечитывает project.json: настройки проекта, граф и открытые вкладки Project Settings.
+    function refreshProjectJson() {
+        if (!s.project) return;
+        const json = $.fs.readJSON(full('project.json'), null);
+        if (!json) return;
+        s.project.json = json;
+        s.project.meta = projectMeta(json, s.project.abs);
+        Object.assign(s.project, { title: s.project.meta.title, version: s.project.meta.version, width: s.project.meta.width, height: s.project.meta.height });
+        s.graphNorm = normalizeGraph(json.editor && json.editor.graph);
+        doc.html('tb-project', esc(s.project.title) + ' ' + icon('expand_more'));
+        doc.text('st-project', esc(s.project.title));
+        renderAll();
+    }
+
+    // Нельзя затирать несохранённые пользовательские правки project.json (docs/PROJECT_JSON.md §5.2).
+    function manifestDirty() {
+        const t = s.tabs.find((x) => x.path === 'project.json');
+        return !!(t && (t.model ? t.model.dirty : studios.dirty(t)));
+    }
+
+    // После записи project.json самим Editor вкладки с этим файлом подтягивают новую версию.
+    function syncManifestTabs() {
+        const text = $.fs.readText(full('project.json'));
+        for (const t of s.tabs) {
+            if (t.path !== 'project.json') continue;
+            if (t.model && !t.model.dirty && typeof text === 'string') { t.model.setText(text); t.diskText = text; }
+            else if (t.kind === 'studio' && t.inst && t.inst.reload) t.inst.reload();
+        }
+    }
+
+    // Пересборка editor.graph из JS: после Save кода, по команде, из панели и Project Settings.
+    async function reindex() {
+        if (!s.project) return false;
+        if (!s.project.meta.v2) { setStatus('граф хранится в project.json со schema_version 2', 'err'); return false; }
+        if (s.indexing) { s.indexAgain = true; return false; }
+        if (manifestDirty()) { setStatus('граф не обновлён: сначала сохраните project.json', 'err'); return false; }
+        s.indexing = true;
+        try {
+            const res = await tool(['project-index', s.project.abs, '--write']);
+            const j = res.json || {};
+            if (!j.ok) {
+                const d = (j.diagnostics || [])[0] || {};
+                setStatus('граф не обновлён: ' + (d.message || res.error || 'ошибка индексатора'), 'err');
+                return false;
+            }
+            s.graphStale = false;
+            if (j.written) { syncManifestTabs(); refreshProjectJson(); }
+            else renderAll();
+            setStatus(j.written ? 'граф проекта обновлён (' + j.entities + ' сущностей, ' + j.edges + ' связей)' : 'граф проекта актуален', 'ok');
+            return true;
+        } finally {
+            s.indexing = false;
+            if (s.indexAgain) { s.indexAgain = false; reindex(); }
+        }
+    }
+
+    // Только проверка: не пишет project.json, помечает граф устаревшим.
+    async function checkIndex() {
+        if (!s.project || !s.project.meta.v2) return;
+        const res = await tool(['project-index', s.project.abs, '--check']);
+        s.graphStale = !!(res.json && res.json.ok !== false && res.json.changed);
+        graphPanel.head();
+    }
+
+    function graphVisible() {
+        const t = activeTab();
+        return !!(s.project && !s.fullPreview && t && (t.kind === 'code' || (t.kind === 'studio' && t.studio.id === 'project')));
     }
 
     async function openProject(input) {
@@ -296,7 +432,11 @@ export function createEditor($) {
         const json = $.fs.readJSON(abs + '/project.json', null);
         if (!json) { showPM('В «' + abs + '» нет project.json (или он не читается).'); return false; }
         closeAllTabs(true);
-        s.project = { abs, title: json.title || baseName(abs), version: json.version || '', width: json.width, height: json.height, json };
+        const meta = projectMeta(json, abs);
+        s.project = { abs, title: meta.title, version: meta.version, width: meta.width, height: meta.height, json, meta };
+        s.graphNorm = normalizeGraph(json.editor && json.editor.graph);
+        s.graphStale = false; s.graphSelected = null;
+        graphPanel.setView('overview', null, true);
         s.recent = [{ abs, title: s.project.title }].concat(s.recent.filter((r) => r.abs !== abs));
         saveState();
         doc.cls('pm', 'hidden', true);
@@ -305,11 +445,20 @@ export function createEditor($) {
         doc.text('st-project', esc(s.project.title));
         $.window.title(s.project.title + ' — Russiano2D Editor');
         await refreshTree();
+        const extResult = await tool(['extension', 'list', '--project', abs]);
+        s.extensionDiags = extResult.json && Array.isArray(extResult.json.diagnostics)
+            ? extResult.json.diagnostics.map((d) => {
+                const n = normalizeDiag(Object.assign({}, d, { asset: null }));
+                n.extension = d.asset || '';
+                return n;
+            }) : [];
+        await extensionHost.apply(extResult.json && Array.isArray(extResult.json.extensions) ? extResult.json.extensions : []);
         const entryName = manifest().entry;
         const entry = $.fs.exists(abs + '/' + entryName) ? entryName : null;
         if (entry) openFile(entry);
         renderAll();
         setStatus('проект открыт: ' + abs, 'ok');
+        checkIndex();
         return true;
     }
 
@@ -319,6 +468,7 @@ export function createEditor($) {
         s.entries = res.json && Array.isArray(res.json.entries) ? res.json.entries : [];
         if (res.json && res.json.truncated) log('Дерево проекта обрезано backend\'ом (truncated).');
         renderTree();
+        checkIndex();
     }
 
     function buildTree() {
@@ -350,6 +500,7 @@ export function createEditor($) {
 
     function renderTree() {
         if (!s.project) return;
+        if (s.side === 'search') { renderSearchResults(); return; }
         const rows = [];
         const openPaths = new Set(s.tabs.map((t) => t.path));
         const walk = (node, depth) => {
@@ -378,11 +529,98 @@ export function createEditor($) {
         if (html !== s.lastTreeHtml) { s.lastTreeHtml = html; doc.html('side-body', html); }
     }
 
+    function searchProject(query) {
+        const q = String(query || '').trim();
+        s.searchQuery = q;
+        s.searchDraft = q;
+        s.searchDelay = 0;
+        s.searchResults = [];
+        s.searchTruncated = false;
+        if (q.length < 2 || !s.project) { renderSearchResults(); return []; }
+        const needle = q.toLocaleLowerCase();
+        const maxBytes = 32 * 1024 * 1024;
+        let scannedBytes = 0;
+        const entries = s.entries.filter((e) => SEARCH_EXT.has(ext(e.path)) &&
+            !(e.path === 'node_modules' || e.path.startsWith('node_modules/')) &&
+            !(e.path === 'build' || e.path.startsWith('build/')) &&
+            !(e.path === 'dist' || e.path.startsWith('dist/')) &&
+            !(Number(e.size) > 1024 * 1024));
+        for (const entry of entries) {
+            const size = Number(entry.size) || 0;
+            if (scannedBytes + size > maxBytes) { s.searchTruncated = true; break; }
+            scannedBytes += size;
+            let source;
+            try { source = $.fs.readText(full(entry.path)); } catch (_) { continue; }
+            if (typeof source !== 'string') continue;
+            const lines = source.split(/\r?\n/);
+            for (let i = 0; i < lines.length && s.searchResults.length < 200; i++) {
+                if (lines[i].toLocaleLowerCase().includes(needle)) {
+                    s.searchResults.push({ path: entry.path, line: i + 1, text: lines[i].trim().slice(0, 220) });
+                }
+            }
+            if (s.searchResults.length >= 200) { s.searchTruncated = true; break; }
+        }
+        renderSearchResults();
+        return s.searchResults;
+    }
+
+    function renderSearchResults() {
+        if (s.searchQuery.trim().length < 2) {
+            doc.html('side-body', '<span class="empty">Введите не менее двух символов для поиска по файлам проекта.</span>');
+            return;
+        }
+        const rows = s.searchResults.map((r, i) => '<div id="search-result-' + i + '" class="search-result" data-key="search:' + i + '">' +
+            '<div class="search-result-head">' + esc(r.path) + '<span>:' + r.line + '</span></div>' +
+            '<div class="search-result-text">' + esc(r.text) + '</div></div>');
+        const notice = s.searchTruncated ? '<div class="search-limit">Выдача ограничена: достигнут лимит размера или 200 совпадений.</div>' : '';
+        doc.html('side-body', (rows.length ? rows.join('') : '<span class="empty">Совпадений нет</span>') + notice);
+    }
+
+    function openSearchResult(index) {
+        const result = s.searchResults[index];
+        if (!result) return false;
+        openFile(result.path, result.line, 1);
+        focusCode();
+        return true;
+    }
+
+    function showProjectSearch(initialQuery) {
+        if (!s.project) return openPalette('files');
+        s.side = 'search';
+        s.sidebarHidden = false;
+        s.focus = 'search';
+        if (initialQuery !== undefined) {
+            doc.setValue('search-input', String(initialQuery));
+            s.searchDraft = String(initialQuery);
+            searchProject(initialQuery);
+        }
+        renderSearchResults();
+        renderLayout();
+        doc.focus('search-input');
+    }
+
+    function findWordInProject() {
+        const t = activeTab();
+        if (!t || !t.model) return false;
+        const selected = String(t.model.selectedText() || '').trim();
+        let word = /^[\w$Ѐ-ӿ]+$/.test(selected) ? selected : '';
+        if (!word) {
+            const p = t.model.caret, line = t.model.lines[p.line] || '';
+            const re = /[\w$Ѐ-ӿ]+/g;
+            let match;
+            while ((match = re.exec(line))) {
+                const end = match.index + match[0].length;
+                if (match.index <= p.col && p.col <= end) { word = match[0]; break; }
+            }
+        }
+        if (word.length < 2) { setStatus('поставьте каретку на слово длиной от двух символов', 'err'); return false; }
+        showProjectSearch(word);
+        return true;
+    }
+
     // --- вкладки --------------------------------------------------------------
 
     function kindOf(path) {
-        const role = roleStudio(path);
-        if (role) return role === 'code' ? 'code' : 'studio';
         if (studioFor(path)) return 'studio';
         const x = ext(path);
         if (IMAGE_EXT.includes(x)) return 'image';
@@ -401,7 +639,6 @@ export function createEditor($) {
             if (want !== have) { closeTab(tab.id); if (s.tabs.includes(tab)) return tab; tab = null; }
         }
         if (!tab) {
-            if (!as) as = roleStudio(relPath);
             const asStudio = as && as !== 'code' ? studioById(as) : null;
             const kind = as === 'code' ? 'code' : asStudio ? 'studio' : kindOf(relPath);
             tab = { id: relPath, path: relPath, kind, scrollTop: 0 };
@@ -409,6 +646,7 @@ export function createEditor($) {
                 const text = $.fs.readText(full(relPath));
                 if (text === null || text === undefined) { setStatus('не удалось прочитать ' + relPath, 'err'); return null; }
                 tab.model = createCodeModel(text);
+                tab.diskText = text;
                 tab.lang = languageOf(relPath);
             }
             if (kind === 'studio') {
@@ -431,6 +669,7 @@ export function createEditor($) {
             }
             s.tabs.push(tab);
             if (kind === 'code' && tab.lang === 'js') lintFile(tab);
+            else if (kind === 'code' && tab.lang === 'json') validateJsonText(tab);
         }
         activate(tab.id, true);
         if (line && tab.model) {
@@ -465,18 +704,96 @@ export function createEditor($) {
         renderAll();
     }
 
+    function renderCloseConfirm() {
+        const tab = s.closeRequest && s.tabs.find((t) => t.id === s.closeRequest);
+        doc.cls('close-confirm', 'hidden', !tab);
+        if (tab) doc.text('close-confirm-path', tab.path);
+    }
+
+    function renderFileConflict() {
+        const conflict = s.fileConflict;
+        const tab = conflict && s.tabs.find((t) => t.id === conflict.tabId);
+        doc.cls('file-conflict', 'hidden', !tab);
+        if (!tab) return;
+        const exists = typeof conflict.diskText === 'string';
+        doc.html('file-conflict-message', exists
+            ? 'Файл <span class="close-path">' + esc(tab.path) + '</span> изменился на диске после открытия. Выберите, какую версию оставить.'
+            : 'Файл <span class="close-path">' + esc(tab.path) + '</span> удалён или недоступен на диске. Загрузить его версию нельзя.');
+        doc.cls('file-conflict-reload', 'hidden', !exists);
+        doc.text('file-conflict-overwrite', exists ? 'Записать версию Editor' : 'Создать файл из версии Editor');
+    }
+
+    function cancelFileConflict() {
+        s.fileConflict = null;
+        renderAll();
+        const tab = activeTab();
+        if (tab && tab.model) focusCode();
+    }
+
+    async function reloadFileConflict() {
+        const conflict = s.fileConflict;
+        const tab = conflict && s.tabs.find((t) => t.id === conflict.tabId);
+        if (!tab || typeof conflict.diskText !== 'string') return false;
+        tab.model.setText(conflict.diskText);
+        tab.diskText = conflict.diskText;
+        s.fileConflict = null;
+        if (s.closeRequest === tab.id) s.closeRequest = null;
+        renderAll();
+        if (tab.lang === 'js') await lintFile(tab);
+        else if (tab.lang === 'json') await validateJsonText(tab);
+        setStatus('загружена внешняя версия: ' + tab.path, 'ok');
+        return true;
+    }
+
+    async function overwriteFileConflict() {
+        const conflict = s.fileConflict;
+        const tab = conflict && s.tabs.find((t) => t.id === conflict.tabId);
+        if (!tab || !(await save(tab, { overwrite: true }))) return false;
+        const closeAfterSave = s.closeRequest === tab.id;
+        s.fileConflict = null;
+        if (closeAfterSave) s.closeRequest = null;
+        renderAll();
+        if (closeAfterSave) closeTab(tab.id, true);
+        else focusCode();
+        return true;
+    }
+
+    function cancelCloseConfirm() {
+        s.closeRequest = null;
+        renderCloseConfirm();
+        const tab = activeTab();
+        if (tab && tab.model) focusCode();
+    }
+
+    async function saveCloseConfirm() {
+        const id = s.closeRequest;
+        const tab = s.tabs.find((t) => t.id === id);
+        if (!tab) { cancelCloseConfirm(); return false; }
+        if (!(await save(tab))) return false;
+        s.closeRequest = null;
+        return closeTab(id, true);
+    }
+
+    function discardCloseConfirm() {
+        const id = s.closeRequest;
+        s.closeRequest = null;
+        return id ? closeTab(id, true) : false;
+    }
+
     function closeTab(id, force) {
         const i = s.tabs.findIndex((t) => t.id === id);
-        if (i < 0) return;
+        if (i < 0) return true;
         const tab = s.tabs[i];
-        if ((tab.model ? tab.model.dirty : tab.dirty) && !force) {
-            // Потеря правок — единственный случай подтверждения (ТЗ).
-            if (tab.confirmClose !== true) {
-                tab.confirmClose = true;
-                setStatus('«' + tab.path + '» не сохранён: Cmd/Ctrl+S — сохранить, повторное закрытие — выбросить правки', 'err');
-                return;
-            }
+        const isDirty = tab.model ? tab.model.dirty : tab.kind === 'studio' ? studios.dirty(tab) : tab.dirty;
+        if (isDirty && !force) {
+            s.closeRequest = id;
+            renderCloseConfirm();
+            doc.focus('close-confirm-save');
+            setStatus('«' + tab.path + '» содержит несохранённые изменения', 'err');
+            return false;
         }
+        if (s.closeRequest === id) s.closeRequest = null;
+        if (s.fileConflict && s.fileConflict.tabId === id) s.fileConflict = null;
         if (tab.kind === 'studio') studios.close(tab);
         s.tabs.splice(i, 1);
         s.history = s.history.filter((h) => h !== id);
@@ -486,11 +803,12 @@ export function createEditor($) {
             s.active = null;
             if (next) activate(next, false); else renderAll();
         } else renderAll();
+        return true;
     }
 
     function closeAllTabs(force) {
         for (const t of s.tabs.slice()) closeTab(t.id, force);
-        s.tabs = []; s.active = null; s.history = []; s.histAt = -1; s.diags.clear(); s.projectDiags = [];
+        s.tabs = []; s.active = null; s.history = []; s.histAt = -1; s.diags.clear(); s.projectDiags = []; s.extensionDiags = []; s.agentDiags = []; s.agentReport = null; s.closeRequest = null; s.fileConflict = null;
     }
 
     function navigate(delta) {
@@ -500,33 +818,52 @@ export function createEditor($) {
         activate(s.history[at], false);
     }
 
-    async function save(tab) {
+    async function save(tab, options) {
         tab=tab||activeTab();
         if(!tab)return false;
         if(tab.kind==='studio') {
             if(!tab.api){setStatus('студия ещё не открыта: '+tab.path,'err');return false;}
             const ok=await studios.save(tab);
-            if(ok)tab.confirmClose=false;
             setStatus(ok?'сохранено: '+tab.path:'не сохранено: '+tab.path,ok?'ok':'err');renderAll();return !!ok;
         }
         if(!tab.model)return false;
-        if(!tab.model.dirty)return true;
-        const ok=$.fs.write(full(tab.path),tab.model.text());
-        if(!ok){setStatus('не удалось записать '+tab.path,'err');return false;}
-        tab.model.markSaved();tab.confirmClose=false;
-        if(tab.lang==='js')await lintFile(tab);
-        if(tab.path==='project.json') {
-            const json=$.fs.readJSON(full('project.json'),null);
-            if(json)Object.assign(s.project,{title:json.title||s.project.title,version:json.version||'',width:json.width,height:json.height,json});
+        if (!(options && options.overwrite)) {
+            const diskText = $.fs.readText(full(tab.path));
+            if (diskText !== tab.diskText) {
+                s.fileConflict = { tabId: tab.id, diskText: typeof diskText === 'string' ? diskText : null };
+                renderAll();
+                doc.focus('file-conflict-overwrite');
+                setStatus('файл изменён вне Editor: выберите версию для ' + tab.path, 'err');
+                return false;
+            }
         }
-        renderAll();return true;
+        if(!tab.model.dirty && !(options && options.overwrite))return true;
+        const text = tab.model.text();
+        const ok=$.fs.write(full(tab.path),text);
+        if(!ok){setStatus('не удалось записать '+tab.path,'err');return false;}
+        tab.diskText = text;
+        tab.model.markSaved();
+        if(tab.lang==='js')await lintFile(tab);
+        else if(tab.lang==='json')await validateJsonText(tab);
+        if(tab.path==='project.json')refreshProjectJson();
+        renderAll();
+        if(tab.lang==='js'&&s.project.meta.v2)reindex();
+        return true;
     }
     async function saveAll() {
-        let saved=0,failed=0;
+        let saved=0;const failed=[];
         for(const t of s.tabs.slice())if((t.model&&t.model.dirty)||(t.kind==='studio'&&studios.dirty(t))) {
-            if(await save(t))saved++;else failed++;
+            if(await save(t))saved++;else failed.push(t);
         }
-        setStatus('сохранено: '+saved+(failed?' · ошибок: '+failed:''),failed?'err':'ok');return failed===0;
+        if(failed.length) {
+            const paths=failed.map((t)=>t.path);
+            appendOutput('editor','Save All: не сохранены документы: '+paths.join(', '));
+            setStatus('Save All: сохранено '+saved+' · ошибок '+failed.length+': '+paths.join(', '),'err');
+            const firstStudio=failed.find((t)=>t.kind==='studio');
+            if(firstStudio&&s.active!==firstStudio.id)activate(firstStudio.id,false);
+            return false;
+        }
+        setStatus('сохранено: '+saved,'ok');return true;
     }
 
     // --- диагностика ----------------------------------------------------------
@@ -550,38 +887,121 @@ export function createEditor($) {
         renderStatus();
     }
 
+    // Generic JSON text tabs use the existing native validator on a temporary
+    // buffer copy. Specialized asset studios keep their richer validators.
+    async function validateJsonText(tab) {
+        if (!tab || !tab.model || tab.lang !== 'json' || !s.tabs.includes(tab)) return false;
+        const request = (tab.jsonValidationRequest || 0) + 1;
+        tab.jsonValidationRequest = request;
+        tab.jsonValidationPending = 0;
+        const source = tab.model.text();
+        const directory = full(tab.path).replace(/[^/]*$/, '');
+        let draft = null;
+        try {
+            for (let attempt = 0; attempt < 32; attempt++) {
+                const candidate = directory + '.r2d-editor-json-' + (++jsonDraftSequence) + '.json';
+                if (!$.fs.exists(candidate)) { draft = candidate; break; }
+            }
+            if (!draft) throw Object.assign(new Error('Не удалось подобрать свободное имя для временного JSON'), { code: 'SDK_TEMP_FILE_COLLISION' });
+            if ($.fs.write(draft, source) === false) throw Object.assign(new Error('Не удалось записать временный JSON'), { code: 'SDK_WRITE_FAILED' });
+            const res = await tool(['validate', draft, '--type', 'json']);
+            if (request !== tab.jsonValidationRequest || !s.tabs.includes(tab) || tab.model.text() !== source) return false;
+            const list = res.json && Array.isArray(res.json.diagnostics)
+                ? res.json.diagnostics.map(normalizeDiag).map((d) => Object.assign(d, { file: tab.path }))
+                : [normalizeDiag({ code: 'SDK_BACKEND_NO_JSON', severity: 'error', message: 'Native JSON validate не вернул JSON' })];
+            s.diags.set(tab.path, list);
+            if (activeTab() === tab) code.setDiagnostics(list);
+            renderBottom(); renderStatus();
+            return !list.some((d) => d.severity === 'error');
+        } catch (e) {
+            if (request !== tab.jsonValidationRequest || !s.tabs.includes(tab)) return false;
+            const list = [normalizeDiag({ code: e.code || 'SDK_JSON_VALIDATE', severity: 'error', message: e.message || String(e) })];
+            list[0].file = tab.path;
+            s.diags.set(tab.path, list);
+            if (activeTab() === tab) code.setDiagnostics(list);
+            renderBottom(); renderStatus();
+            return false;
+        } finally { if (draft) $.fs.remove(draft); }
+    }
+
     async function validateProject() {
         if (!s.project) return;
         setStatus('проверка проекта…', '');
         const res = await tool(['validate', s.project.abs]);
         s.projectDiags = res.json ? (res.json.diagnostics || []).map(normalizeDiag) : [];
-        for (const tab of s.tabs) if (tab.lang === 'js') await lintFile(tab);
+        for (const tab of s.tabs) {
+            if (tab.lang === 'js') await lintFile(tab);
+            else if (tab.kind === 'code' && tab.lang === 'json') await validateJsonText(tab);
+        }
         s.bottom = 'problems'; s.bottomCollapsed = false;
         renderBottom();
         const errors = allProblems().filter((d) => d.severity === 'error').length;
         setStatus(errors ? 'проверка: ошибок ' + errors : 'проверка: ошибок нет', errors ? 'err' : 'ok');
     }
 
-    // project.json v1 → v2 через native `r2d migrate-project --write`, затем
-    // перечитать манифест и проверить проект.
+    // Run the existing native agent protocol for the selected .agent.json file.
+    // The runtime and r2d agent command remain the source of test behavior/results.
+    async function runAgentSession(path) {
+        if (!s.project) return null;
+        const tab = activeTab();
+        const session = rel(String(path || (tab && tab.path) || ''));
+        if (!session.endsWith('.agent.json') || !s.entries.some((e) => e.path === session)) {
+            setStatus('откройте файл сессии *.agent.json', 'err');
+            return null;
+        }
+        if (!(await saveAll())) {
+            appendOutput('editor', 'Agent session отменена: не удалось сохранить все документы.');
+            setStatus('тесты остановлены: не все файлы сохранены', 'err');
+            return null;
+        }
+        setStatus('agent session: ' + session + '…', '');
+        const res = await tool(['agent', full(session)]);
+        const report = res.json && typeof res.json === 'object' ? res.json : null;
+        s.agentReport = { session, report };
+        s.agentDiags = report && Array.isArray(report.diagnostics)
+            ? report.diagnostics.map((d) => {
+                const n = normalizeDiag(d);
+                n.file = d.asset ? rel(String(d.asset)) : session;
+                return n;
+            }) : [];
+        if (report && typeof report.ok === 'boolean') {
+            const failed = Math.max(0, Number(report.failed) || 0);
+            appendOutput('editor', 'Agent session ' + (report.ok ? 'завершена' : 'завершена с отказами') +
+                ': ответов ' + (Number(report.completed) || 0) + ', неуспешных запросов ' + failed + '.');
+            setStatus(report.ok ? 'agent session пройдена: ' + session :
+                'agent session: неуспешных запросов ' + failed + ' (подробности в Output)', report.ok ? 'ok' : 'err');
+        } else {
+            appendOutput('editor', 'Agent session не вернула структурированный отчёт; причина не определена.');
+            setStatus('нет структурированного отчёта agent session (см. Output)', 'err');
+        }
+        s.bottom = report && report.diagnostics && report.diagnostics.length ? 'problems' : 'output';
+        s.bottomCollapsed = false;
+        renderAll();
+        return report;
+    }
+
+    // project.json без schema_version → schema_version 2 через native `r2d migrate-project --write`,
+    // затем индекс графа и проверка проекта. Односторонний переход, без скрытой перезаписи.
     async function migrateProject() {
         if (!s.project) return;
-        const open = s.tabs.find((t) => t.path === 'project.json');
-        if (open && open.model && open.model.dirty) { setStatus('сначала сохраните project.json', 'err'); return; }
+        if (manifestDirty()) { setStatus('сначала сохраните project.json', 'err'); return; }
         const res = await tool(['migrate-project', s.project.abs, '--write']);
         const j = res.json || {};
         if (!j.ok) { setStatus('migrate-project: ' + (((j.diagnostics || [])[0] || {}).message || res.error || 'ошибка'), 'err'); return; }
-        if (!j.changed) { setStatus('project.json уже v2', 'ok'); return; }
+        if (!j.changed) { setStatus('project.json уже со schema_version 2', 'ok'); return; }
         const json = $.fs.readJSON(full('project.json'), null);
-        if (json) s.project.json = json;
-        if (open && open.model) { closeTab(open.id); openFile('project.json'); }
-        setStatus('project.json переведён на v2: проверьте scenes.start', 'ok');
+        if (json) { s.project.json = json; s.project.meta = projectMeta(json, s.project.abs); }
+        for (const t of s.tabs.slice()) if (t.path === 'project.json') closeTab(t.id, true);
+        await reindex();
+        refreshProjectJson();
+        openFile('project.json');
+        setStatus('project.json переведён на schema_version 2', 'ok');
         await validateProject();
         renderAll();
     }
 
     function allProblems() {
-        const out = s.projectDiags.slice();
+        const out = s.projectDiags.concat(s.extensionDiags, s.agentDiags);
         for (const list of s.diags.values()) out.push(...list);
         for (const t of s.tabs) if (t.kind === 'studio') {
             for (const d of studios.diagnostics(t)) {
@@ -598,24 +1018,39 @@ export function createEditor($) {
 
     // --- запуск ---------------------------------------------------------------
 
-    function run(opts) {
+    async function run(opts) {
         if (!s.project) return null;
+        // Run uses the same saved project state as Build. Wait for native studio
+        // writes as well as code buffers before starting the runtime.
+        if (!(await saveAll())) {
+            appendOutput('run', 'Run отменён: не удалось сохранить все документы.');
+            setStatus('запуск остановлен: не все файлы сохранены', 'err');
+            return null;
+        }
         if (s.run && s.run.running) stop();
-        const dirty = s.tabs.filter((t) => t.model && t.model.dirty);
-        for (const t of dirty) save(t);
-        s.output = '';
         const args = ['--game', s.project.abs];
         if (opts && opts.scene) args.push('--scene', String(opts.scene));
         if (opts && opts.frames) args.push('--frames', String(opts.frames));
         if (opts && opts.headless) args.push('--headless');
         const handle = $.sdk.launch(args);
-        s.run = { handle, running: true, exit: null, polledAt: 0 };
+        appendOutput('run', '$ r2d ' + args.join(' '));
+        s.run = { handle, running: true, stopRequested: false, exit: null, polledAt: 0, outputLength: 0 };
         handle.done.then((r) => {
             if (!s.run || s.run.handle !== handle) return;
+            const output = String(r.output || '');
+            if (output.length > s.run.outputLength) {
+                appendOutput('run', output.slice(s.run.outputLength));
+                s.run.outputLength = output.length;
+            }
             s.run.running = false;
             s.run.exit = r.exitCode;
-            if (r.output) s.output = tail(r.output);
-            setStatus('игра завершилась: код ' + r.exitCode, r.exitCode === 0 ? 'ok' : 'err');
+            if (s.run.stopRequested) {
+                appendOutput('run', 'Игра остановлена.');
+                setStatus('игра остановлена', 'ok');
+            } else {
+                appendOutput('run', 'Процесс завершился с кодом ' + r.exitCode + '.');
+                setStatus('игра завершилась: код ' + r.exitCode, r.exitCode === 0 ? 'ok' : 'err');
+            }
             renderAll();
         });
         s.bottom = 'output'; s.bottomCollapsed = false;
@@ -625,7 +1060,11 @@ export function createEditor($) {
     }
 
     function stop() {
-        if (s.run && s.run.running) { s.run.handle.kill(); setStatus('игра остановлена', ''); }
+        if (s.run && s.run.running) {
+            s.run.stopRequested = true;
+            appendOutput('run', 'Запрошена остановка игры.');
+            s.run.handle.kill(); setStatus('остановка игры…', '');
+        }
     }
 
     function tail(text) { return text.length > MAX_LOG ? text.slice(-MAX_LOG) : text; }
@@ -653,9 +1092,12 @@ export function createEditor($) {
         setStatus('сборка: validate → build…', '');
         const v = await tool(['validate', s.project.abs]);
         s.projectDiags = v.json ? (v.json.diagnostics || []).map(normalizeDiag) : [];
-        if (v.json && v.json.errors) { s.bottom = 'problems'; renderBottom(); setStatus('сборка остановлена: проект с ошибками', 'err'); return; }
+        if (v.json && v.json.errors) {
+            appendOutput('build', 'Сборка остановлена: validate обнаружил ' + v.json.errors + ' ошибок.');
+            s.bottom = 'problems'; renderBottom(); setStatus('сборка остановлена: проект с ошибками', 'err'); return;
+        }
         const res = await tool(['build', s.project.abs, '--out', out]);
-        s.output = (res.output || '') + '\n';
+        appendOutput('build', res.ok ? 'Пакет создан: ' + out : 'Сборка завершилась ошибкой: ' + (res.error || 'см. диагностику выше'));
         s.bottom = 'output'; s.bottomCollapsed = false;
         renderBottom();
         setStatus(res.ok ? 'собрано: ' + out : 'сборка не удалась (см. Output)', res.ok ? 'ok' : 'err');
@@ -665,17 +1107,22 @@ export function createEditor($) {
 
     const COMMANDS = [
         { id: 'quickOpen', label: 'Перейти к файлу…', keys: 'Cmd/Ctrl+P', run: () => openPalette('files') },
+        { id: 'symbols', label: 'Перейти к символу в файле…', keys: 'Cmd/Ctrl+Shift+O', run: () => openPalette('symbols') },
         { id: 'save', label: 'Файл: сохранить', keys: 'Cmd/Ctrl+S', run: () => save() },
         { id: 'saveAll', label: 'Файл: сохранить все', keys: 'Cmd/Ctrl+Shift+S', run: () => saveAll() },
         { id: 'close', label: 'Файл: закрыть вкладку', keys: 'Cmd/Ctrl+W', run: () => s.active && closeTab(s.active) },
         { id: 'find', label: 'Правка: найти в файле', keys: 'Cmd/Ctrl+F', run: () => openFind() },
+        { id: 'find-word-project', label: 'Поиск: найти слово под кареткой в проекте', keys: 'Shift+F12', run: () => findWordInProject() },
         { id: 'gotoLine', label: 'Правка: перейти к строке…', keys: 'Cmd/Ctrl+G', run: () => openPalette('line') },
         { id: 'undo', label: 'Правка: отменить', keys: 'Cmd/Ctrl+Z', run: () => { const t = activeTab(); if (t && t.inst) studios.undo(t); else if (t && t.model && t.model.undo()) changed(); } },
         { id: 'redo', label: 'Правка: повторить', keys: 'Cmd/Ctrl+Shift+Z', run: () => { const t = activeTab(); if (t && t.inst) studios.redo(t); else if (t && t.model && t.model.redo()) changed(); } },
         { id: 'run', label: 'Запуск: запустить игру', keys: 'F5', run: () => run() },
         { id: 'stop', label: 'Запуск: остановить', keys: 'Shift+F5', run: () => stop() },
         { id: 'validate', label: 'Проект: проверить (r2d validate)', keys: '', run: () => validateProject() },
-        { id: 'migrate-project', label: 'Проект: перевести project.json на v2', keys: '', run: () => migrateProject() },
+        { id: 'agent-session', label: 'Тесты: выполнить активную .agent.json сессию', keys: '', run: () => runAgentSession() },
+        { id: 'migrate-project', label: 'Проект: перейти на schema_version 2', keys: '', run: () => migrateProject() },
+        { id: 'reindex', label: 'Проект: перестроить связи проекта (граф)', keys: '', run: () => reindex() },
+        { id: 'graph', label: 'Вид: панель графа проекта', keys: '', run: () => { graphPanel.setCollapsed(!graphPanel.state.collapsed); } },
         { id: 'build', label: 'Проект: собрать игру (validate → build)', keys: 'Cmd/Ctrl+Shift+B', run: () => buildPackage() },
         { id: 'refresh', label: 'Проект: обновить дерево файлов', keys: '', run: () => refreshTree() },
         { id: 'projects', label: 'Проект: открыть другой (Project Manager)', keys: '', run: () => { closeAllTabs(true); s.project = null; showPM(); } },
@@ -704,6 +1151,12 @@ export function createEditor($) {
     function openPalette(mode) {
         const items = mode === 'commands'
             ? openAsCommands().concat(COMMANDS.map((c) => ({ label: c.label, detail: c.keys, cmd: c })))
+            : mode === 'symbols' ? (() => {
+                const t = activeTab();
+                return t && t.model && t.lang === 'js'
+                    ? javascriptDocumentSymbols(t.model.lines).map((symbol) => ({ label: symbol.label, detail: symbol.detail, symbol }))
+                    : [];
+            })()
             : mode === 'line' ? []
             : s.entries.map((e) => ({ label: e.path, detail: e.type, path: e.path }));
         s.palette = { mode, items, list: [], sel: 0, query: null };
@@ -767,7 +1220,8 @@ export function createEditor($) {
         if (!r) return;
         if (r.item.cmd) r.item.cmd.run();
         else if (r.item.path) openFile(r.item.path);
-        else if (r.item.line) { const t = activeTab(); if (t && t.model) { t.model.goto(r.item.line, 1); code.ensureCaretVisible(); focusCode(); } }
+        else if (r.item.symbol) { const t = activeTab(); if (t && t.model) { t.model.goto(r.item.symbol.line + 1, r.item.symbol.col + 1); code.ensureCaretVisible(); focusCode(); } }
+        else if (typeof r.item.line === 'number') { const t = activeTab(); if (t && t.model) { t.model.goto(r.item.line, 1); code.ensureCaretVisible(); focusCode(); } }
     }
 
     // --- поиск в файле ------------------------------------------------------------
@@ -802,7 +1256,7 @@ export function createEditor($) {
     function renderTabs() {
         doc.html('tabs', s.tabs.map((t) => {
             const [ic, cls] = fileIcon({ path: t.path, tool: null });
-            const dirty = t.model ? t.model.dirty : !!t.dirty;
+            const dirty = t.model ? t.model.dirty : t.kind === 'studio' ? studios.dirty(t) : !!t.dirty;
             return '<span class="tab' + (t.id === s.active ? ' on' : '') + '" data-key="t:' + esc(t.id) + '">' +
                 '<span class="tab-ico tree-ico ' + cls + '">' + icon(ic) + '</span>' + esc(baseName(t.path)) +
                 '<span class="tab-x' + (dirty ? ' tab-dirty' : '') + '" data-key="x:' + esc(t.id) + '">' + icon(dirty ? 'circle' : 'close') + '</span></span>';
@@ -843,6 +1297,23 @@ export function createEditor($) {
                 : '<span class="insp-value">' + esc(value) + '</span>');
     }
 
+    // Resolve the dotted expression beneath the caret to a public `$` API path.
+    function apiPathAt(lines, caret) {
+        const line = lines && lines[caret.line];
+        if (typeof line !== 'string') return '';
+        const candidates = [];
+        const re = /(?:\$|[A-Za-z_$Ѐ-ӿ][\w$Ѐ-ӿ]*)(?:\s*\.\s*[A-Za-z_$Ѐ-ӿ][\w$Ѐ-ӿ]*)*/g;
+        let match;
+        while ((match = re.exec(line))) {
+            const start = match.index, end = start + match[0].length;
+            if (start <= caret.col && caret.col <= end || start <= caret.col - 1 && caret.col - 1 < end) {
+                const path = match[0].replace(/\s+/g, '');
+                if (path.startsWith('$.')) candidates.push(path);
+            }
+        }
+        return candidates.sort((a, b) => b.length - a.length)[0] || '';
+    }
+
     function renderInspector() {
         if (!s.project) return;
         const t = activeTab();
@@ -852,16 +1323,16 @@ export function createEditor($) {
             html += inspectorField('Название', p.title) + inspectorField('Версия', p.version || '—') +
                 inspectorField('Окно', (p.width || 1280) + ' × ' + (p.height || 720)) +
                 inspectorField('Точка входа', manifest().entry, 'open:' + manifest().entry) +
-                inspectorField('Манифест', 'project.json' + (manifest().v2 ? ' (v2)' : ''), 'open:project.json') +
+                inspectorField('Манифест', 'project.json' + (manifest().v2 ? ' (schema 2)' : ''), 'open:project.json') +
                 inspectorField('Файлов', String(s.entries.length));
             const m = manifest();
             html += '</div><div class="insp-sec"><span class="insp-label">Сцены</span>';
             if (m.scenes.length) {
                 for (const name of m.scenes)
                     html += '<div class="tree-row" data-key="scene:' + esc(name) + '" style="padding-left: 4px;"><span class="tree-ico studio">' + icon('play_arrow') + '</span>' + esc(name) + (name === m.start ? '<span class="muted"> · старт</span>' : '') + '</div>';
-                html += '<span class="insp-note">Клик — запустить игру с этой сценой (--scene).</span>';
+                html += '<span class="insp-note">Клик — запустить игру с этой сценой (--scene). Список — из графа проекта.</span>';
             } else {
-                html += '<span class="insp-note">' + (m.v2 ? 'scenes.list пуст.' : 'Индекса сцен нет (project.json v1). Команда «Проект: перевести project.json на v2» построит его.') + '</span>';
+                html += '<span class="insp-note">' + (m.v2 ? 'В графе проекта сцен нет: добавьте $.scene.add(…) и сохраните код.' : 'Граф сцен строится для project.json со schema_version 2 (команда «Проект: перейти на schema_version 2»).') + '</span>';
             }
         } else if (t.model) {
             const m = t.model, c = m.caret, list = s.diags.get(t.path) || [];
@@ -894,6 +1365,14 @@ export function createEditor($) {
                 (entry.tool ? inspectorField('Студия', entry.tool + ' (ещё не встроена)') : '');
         }
         html += '</div>';
+        if (s.graphSelected && s.graphNorm && graphVisible()) {
+            const rows = describeGraph(s.graphNorm, s.graphSelected);
+            if (rows.length) {
+                html += '<div class="insp-sec"><span class="insp-label">Граф проекта</span>' +
+                    rows.map((r) => inspectorField(r[0], r[1], r[2] ? 'gsrc:' + r[2].file + ':' + r[2].line : null)).join('') +
+                    '<span class="insp-note">Граф только для чтения: связи берутся из editor.graph.</span></div>';
+            }
+        }
         doc.html('insp-body', html);
     }
 
@@ -914,7 +1393,15 @@ export function createEditor($) {
                 : '<span class="empty">Проблем нет. Проверка: сохранение .js (r2d lint) и команда «Проект: проверить».</span>');
             s.problemList = problems;
         } else if (s.bottom === 'output') {
-            doc.html('bottom-body', s.output ? '<div class="log">' + esc(s.output) + '</div>' : '<span class="empty">Вывод игры появится после запуска (F5).</span>');
+            const filters = [['all', 'Все'], ['run', 'Run'], ['build', 'Build'], ['editor', 'Editor']];
+            const buttons = filters.map(([id, label]) => '<button id="output-filter-' + id + '" class="out-filter' + (s.outputFilter === id ? ' on' : '') + '" data-key="output-filter:' + id + '">' + label + '</button>').join('');
+            const visible = s.outputEntries.filter((entry) => s.outputFilter === 'all' || entry.source === s.outputFilter);
+            const sourceLabel = (source) => source === 'run' ? 'Run' : source === 'build' ? 'Build' : 'Editor';
+            const rows = visible.map((entry) => '<div class="out-row"><span class="out-time">' + esc(entry.time.slice(11, 19)) +
+                '</span><span class="out-source">' + sourceLabel(entry.source) + '</span><span class="out-text">' + esc(entry.text) + '</span></div>').join('');
+            doc.html('bottom-body', '<div class="out-toolbar">' + buttons + '</div>' +
+                (rows ? '<div class="out-log">' + rows + '</div>' : '<span class="empty">' +
+                    (s.outputEntries.length ? 'Нет записей для выбранного фильтра.' : 'Вывод игры и команд r2d появится после запуска или проверки.') + '</span>'));
         } else {
             doc.html('bottom-body', s.consoleLog ? '<div class="log">' + esc(s.consoleLog) + '</div>' : '<span class="empty">Журнал Editor пуст.</span>');
         }
@@ -943,19 +1430,31 @@ export function createEditor($) {
         doc.cls('inspector', 'hidden', studioOn);
         doc.cls('center', 'studio-on', studioOn && !!t.api);
         doc.cls('sidebar', 'hidden', s.sidebarHidden);
+        doc.text('side-title', s.side === 'search' ? 'Поиск по проекту' : 'Проект');
+        doc.cls('side-search', 'hidden', s.side !== 'search');
         doc.cls('bottom', 'collapsed', s.bottomCollapsed);
+        // Граф проекта: под кодом и Project Settings; на весь центр — по кнопке «развернуть».
+        const gv = graphVisible(), gp = graphPanel.state;
+        doc.cls('gp', 'hidden', !gv);
+        doc.cls('center', 'gp-full', gv && gp.full);
+        if (gv) doc.style('gp', 'height', (gp.collapsed ? 40 : graphPanel.height()) + 'px');
+        if (t && t.kind === 'studio' && t.api && !s.palette) studios.show(t, !(gv && gp.full));
         for (const r of ['project', 'search', 'run', 'tools']) doc.cls('rail-' + r, 'on', s.side === r && !s.sidebarHidden);
         code.invalidate();
     }
 
     function renderAll() {
-        renderTabs(); renderHost(); renderInspector(); renderBottom(); renderStatus(); renderTree(); renderLayout();
+        renderTabs(); renderHost(); renderInspector(); renderBottom(); renderStatus(); renderTree(); renderLayout(); renderCloseConfirm(); renderFileConflict();
+        if (graphVisible()) graphPanel.render(true);
     }
 
     function changed() {
+        const tab = activeTab();
+        if (tab && tab.kind === 'code' && tab.lang === 'json') tab.jsonValidationPending = 0.35;
         code.ensureCaretVisible();
         renderTabs(); renderStatus();
         s.inspectorDirty = true;
+        if (graphVisible()) graphPanel.head();
     }
 
     function focusCode() {
@@ -970,7 +1469,7 @@ export function createEditor($) {
     function bind() {
         doc.text('tb-back', icon('arrow_back'));
         doc.text('tb-fwd', icon('arrow_forward'));
-        doc.html('tb-search', icon('search') + ' &#160;Поиск файлов и команд');
+        doc.html('tb-search', icon('search') + ' &#160;Поиск по проекту');
         doc.html('tb-run', icon('play_arrow') + ' Run');
         doc.html('tb-stop', icon('stop') + ' Stop');
         doc.text('rail-project', icon('description'));
@@ -991,22 +1490,31 @@ export function createEditor($) {
         doc.on('pm-templates', 'click', (id, ev, key) => { if (key && s.pmNew) { s.pmNew.template = key; renderTemplates(); } });
         doc.on('pm-new-name', 'change', () => renderDest());
         doc.on('pm-create', 'click', () => createProject());
+        doc.on('close-confirm-save', 'click', () => saveCloseConfirm());
+        doc.on('close-confirm-discard', 'click', () => discardCloseConfirm());
+        doc.on('close-confirm-cancel', 'click', () => cancelCloseConfirm());
+        doc.on('file-conflict-overwrite', 'click', () => overwriteFileConflict());
+        doc.on('file-conflict-reload', 'click', () => reloadFileConflict());
+        doc.on('file-conflict-cancel', 'click', () => cancelFileConflict());
 
-        doc.on('tb-search', 'click', () => openPalette('files'));
+        doc.on('tb-search', 'click', showProjectSearch);
         doc.on('tb-run', 'click', () => run());
         doc.on('tb-stop', 'click', () => stop());
         doc.on('tb-back', 'click', () => navigate(-1));
         doc.on('tb-fwd', 'click', () => navigate(1));
         doc.on('tb-project', 'click', () => openPalette('commands'));
 
-        doc.on('rail-project', 'click', () => { s.sidebarHidden = !s.sidebarHidden; renderLayout(); });
-        doc.on('rail-search', 'click', () => openPalette('files'));
+        doc.on('rail-project', 'click', () => { s.side = 'project'; s.sidebarHidden = !s.sidebarHidden; s.lastTreeHtml = ''; renderTree(); renderLayout(); });
+        doc.on('rail-search', 'click', showProjectSearch);
+        doc.on('search-input', 'change', () => searchProject(doc.value('search-input')));
         doc.on('rail-run', 'click', () => run());
         doc.on('rail-tools', 'click', () => openPalette('commands'));
 
         doc.on('side-body', 'click', (id, ev, key) => {
             if (!key) return;
-            if (key.startsWith('d:')) {
+            if (key.startsWith('search:')) {
+                openSearchResult(parseInt(key.slice(7), 10));
+            } else if (key.startsWith('d:')) {
                 const p = key.slice(2);
                 if (s.expanded.has(p)) s.expanded.delete(p); else s.expanded.add(p);
                 renderTree();
@@ -1020,10 +1528,18 @@ export function createEditor($) {
             if (key.startsWith('x:')) closeTab(key.slice(2));
             else if (key.startsWith('t:')) { activate(key.slice(2), true); focusCode(); }
         });
-        doc.on('code', 'mousedown', () => {
+        doc.on('code', 'mousedown', (id, ev, key) => {
+            if (key && key.startsWith('completion:')) { focusCode(); return; }
+            if (key && key.startsWith('fold:')) { focusCode(); return; }
             if (s.focus === 'find' || s.focus === 'palette') { doc.focus('find-input', false); }
             focusCode();
             code.mouseDown();
+        });
+        doc.on('code-gutter', 'click', (id, ev, key) => {
+            if (key && key.startsWith('fold:')) code.toggleFoldAt(parseInt(key.slice(5), 10));
+        });
+        doc.on('code-completion', 'click', (id, ev, key) => {
+            if (key && key.startsWith('completion:')) code.chooseCompletion(parseInt(key.slice(11), 10));
         });
         doc.on('find-prev', 'click', () => findStep(true));
         doc.on('find-next', 'click', () => findStep(false));
@@ -1033,6 +1549,10 @@ export function createEditor($) {
         doc.on('insp-body', 'click', (id, ev, key) => {
             if (!key) return;
             if (key.startsWith('open:')) { openFile(key.slice(5)); focusCode(); }
+            else if (key.startsWith('gsrc:')) {
+                const m = /^gsrc:(.*):(\d+)$/.exec(key);
+                if (m) { openFile(m[1], parseInt(m[2], 10), 1); focusCode(); }
+            }
             else if (key.startsWith('scene:')) run({ scene: key.slice(6) });
             else if (key.startsWith('line:')) { const t = activeTab(); if (t && t.model) { t.model.goto(parseInt(key.slice(5), 10), 1); code.ensureCaretVisible(); focusCode(); } }
         });
@@ -1040,6 +1560,11 @@ export function createEditor($) {
         for (const b of ['problems', 'output', 'console']) doc.on('bt-' + b, 'click', () => { s.bottom = b; s.bottomCollapsed = false; renderBottom(); renderLayout(); });
         doc.on('bt-toggle', 'click', () => { s.bottomCollapsed = !s.bottomCollapsed; renderBottom(); renderLayout(); });
         doc.on('bottom-body', 'click', (id, ev, key) => {
+            if (s.bottom === 'output' && key && key.startsWith('output-filter:')) {
+                s.outputFilter = key.slice('output-filter:'.length);
+                renderBottom();
+                return;
+            }
             if (s.bottom !== 'problems' || key === null || key === undefined || !s.problemList) return;
             const d = s.problemList[parseInt(key, 10)];
             if (d && d.file && s.entries.some((e) => e.path === d.file)) {
@@ -1053,7 +1578,21 @@ export function createEditor($) {
         doc.on('palette-list', 'click', (id, ev, key) => { if (key !== null && key !== undefined) acceptPalette(parseInt(key, 10)); });
 
         code.state.onChange = () => changed();
-        code.state.onCaret = () => { renderStatus(); };
+        code.state.onCaret = () => { renderStatus(); renderInspector(); };
+        code.state.onHover = (pos) => {
+            const t = activeTab();
+            const literalPath = pos && t && t.model && t.lang === 'js'
+                ? apiPathAt(t.model.lines, pos) : '';
+            const path = literalPath || (pos && t && t.model && t.lang === 'js'
+                ? nodeApiPathAt(t.model.lines, pos) : '');
+            const apiMeta = path && typeof $.__r2dApiDoc === 'function' ? $.__r2dApiDoc(path) : null;
+            const builtin = !apiMeta && pos && t && t.model && t.lang === 'js'
+                ? javascriptSymbolAt(t.model.lines, pos) : null;
+            const meta = apiMeta || (builtin && builtin.metadata) || null;
+            const next = apiMeta ? path : builtin ? builtin.path : '';
+            code.state.hoverApiPath = next;
+            code.setHoverHelp(next, meta);
+        };
     }
 
     // --- кадр: горячие клавиши и опрос ------------------------------------------------
@@ -1062,9 +1601,20 @@ export function createEditor($) {
 
     function shortcuts() {
         const mod = primary(), shift = $.input.shiftDown();
+        if (s.fileConflict) {
+            if ($.input.pressed('escape')) cancelFileConflict();
+            else if ($.input.pressed('enter')) overwriteFileConflict();
+            return;
+        }
+        if (s.closeRequest) {
+            if ($.input.pressed('escape')) cancelCloseConfirm();
+            else if ($.input.pressed('enter')) saveCloseConfirm();
+            return;
+        }
         if ($.input.pressed('escape')) {
             if (s.palette) { closePalette(); return; }
             if (s.focus === 'find') { closeFind(); return; }
+            if (s.focus === 'search') { s.side = 'project'; s.focus = 'none'; renderLayout(); return; }
         }
         if (s.palette) {
             if ($.input.pressed('down')) { s.palette.sel = Math.min(s.palette.list.length - 1, s.palette.sel + 1); renderPalette(); }
@@ -1079,8 +1629,11 @@ export function createEditor($) {
         const at = activeTab();
         const own = at && at.kind === 'studio' && !s.palette ? (at.studio.ownKeys || []) : [];
         if ($.input.pressed('f5') && !own.includes('f5')) { if (shift) stop(); else run(); }
+        if (shift && !$.ui.typing() && s.focus === 'code' && $.input.pressed('f12')) findWordInProject();
         if (!mod || !s.project) return;
         if ($.input.pressed('p')) openPalette(shift ? 'commands' : 'files');
+        if (shift && $.input.pressed('o')) openPalette('symbols');
+        if (shift && $.input.pressed('f')) showProjectSearch();
         if ($.input.pressed('s') && !own.includes('s')) { if (shift) saveAll(); else save(); }
         // История студии Editor ведёт Editor (в полях ввода — их собственная правка текста).
         if (at && at.inst && !$.ui.typing() && !s.palette) {
@@ -1103,7 +1656,19 @@ export function createEditor($) {
         }
         shortcuts();
         if (s.palette) filterPalette();
+        if (s.focus === 'search') {
+            const query = String(doc.value('search-input') || '');
+            if (query !== s.searchDraft) { s.searchDraft = query; s.searchDelay = 0.25; }
+            if (s.searchDelay > 0) {
+                s.searchDelay -= dt;
+                if (s.searchDelay <= 0) searchProject(query);
+            }
+        }
         const t = activeTab();
+        if (t && t.jsonValidationPending > 0) {
+            t.jsonValidationPending -= dt;
+            if (t.jsonValidationPending <= 0) validateJsonText(t);
+        }
         if (t && t.model) {
             code.update(dt, s.focus === 'code', {
                 find: openFind,
@@ -1112,6 +1677,7 @@ export function createEditor($) {
         }
         if (t && t.kind === 'studio' && t.api && !s.palette) studios.place(t, doc.rect('host'));
         if (t && t.inst && !s.palette) studios.update(t, dt);
+        if (graphVisible() && !s.palette) graphPanel.update(dt);
         if (s.inspectorDirty) { s.inspectorDirty = false; renderInspector(); }
         pollT += dt;
         if (pollT > 0.3) {
@@ -1129,9 +1695,9 @@ export function createEditor($) {
             }
             if (s.run && s.run.running) {
                 const p = s.run.handle.peek();
-                if (p && typeof p.output === 'string' && p.output.length !== (s.output || '').length) {
-                    s.output = tail(p.output);
-                    if (s.bottom === 'output') renderBottom();
+                if (p && typeof p.output === 'string' && p.output.length > s.run.outputLength) {
+                    appendOutput('run', p.output.slice(s.run.outputLength));
+                    s.run.outputLength = p.output.length;
                 }
             }
             renderStatus();
@@ -1155,8 +1721,9 @@ export function createEditor($) {
     doc.show();
     return {
         state: s, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
-        manifest, migrateProject, showPM, createProject, openProjectDialog, pickNewProjectDir, openFileDialog,
-        openPalette, closePalette, activeTab, closeTab, code, studios,
+        searchProject, openSearchResult, showProjectSearch, runAgentSession,
+        manifest, migrateProject, reindex, checkIndex, graphInfo, refreshProjectJson, graph: graphPanel, showPM, createProject, openProjectDialog, pickNewProjectDir, openFileDialog,
+        openPalette, closePalette, activeTab, closeTab, code, studios, extensions: extensionHost,
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
     };
 }

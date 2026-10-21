@@ -756,7 +756,9 @@ static bool r2d__find_editor(char *out, size_t cap)
     const char *base = SDL_GetBasePath();
     char dir[2048];
     SDL_snprintf(dir, sizeof dir, "%s", base ? base : "./");
-    for (int up = 0; up < 4; ++up) {
+    // Xmake places the executable under build-xmake/<platform>/<target>/...;
+    // allow walking from that nested development layout back to the repo root.
+    for (int up = 0; up < 8; ++up) {
         char probe[2300];
         SDL_snprintf(probe, sizeof probe, "%seditor/project.json", dir);
         SDL_PathInfo info;
@@ -968,7 +970,7 @@ int main(int argc, char **argv)
     R2dProject project;
     r2d_project_load(&project, opt_game, r2d_payload_entry());
 
-    // Точка входа выбранной игры: <--game>/<entry манифеста v2 | main.js>
+    // Точка входа выбранной игры: <--game>/<runtime.entry манифеста v2 | main.js>
     char entry_relative[1024];
     if (has_payload && r2d_payload_entry()[0]) {
         SDL_snprintf(entry_relative, sizeof entry_relative, "%s", r2d_payload_entry());
@@ -1003,8 +1005,10 @@ int main(int argc, char **argv)
     // Каталог игры для поиска ЕЁ ассетов: относительные пути сначала ищутся
     // здесь, и только потом в base_path (там встроенные шрифты движка).
     r2d_app_set_game_path(&app, opt_game);
+    r2d_app_set_window_icon(&app);
+    if (project.fullscreen && !opt_headless) r2d_app_set_fullscreen(&app, true);   // runtime.window.fullscreen
 
-    // --scene старше манифеста v2 ("scenes.start"); читается как engine.startScene.
+    // --scene старше манифеста v2 ("runtime.start_scene"); читается как engine.startScene.
     app.start_scene = opt_scene ? opt_scene : (project.start_scene[0] ? project.start_scene : NULL);
     app.fixed_dt = (float)opt_fixed_dt;
     app.take_screenshot = (opt_screenshot != NULL);

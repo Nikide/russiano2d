@@ -38,43 +38,32 @@
 4. **Незаявленное остаётся незаявленным.** Если поля нет в коде, оно не
    попадает в обещания профиля — тест печатает его как «ждёт», а не «ок».
 
-## project.json (формат 1 и 2)
+## project.json (минимальный и schema_version 2)
 
-`project.json` — манифест запуска, а не база проекта: правило 1 выше в силе.
-Формат 2 добавляет только **индекс** — что запускать и как открывать файлы;
-сами данные остаются в своих документах. Разбор: `src/project.c`, проверка:
-`sdk/native/sdk_validate.c`.
+`project.json` — манифест запуска и граф проекта для Editor, а не база данных:
+правило 1 выше в силе. Полное описание — [PROJECT_JSON.md](PROJECT_JSON.md).
+Разбор: `src/project.c`; проверка: `sdk/native/sdk_validate.c`; индексатор графа:
+`sdk/native/sdk_project_graph.c`.
 
 ```json
 {
-  "format": 2,
-  "title": "Неоновый курьер", "version": "1.0.0", "width": 960, "height": 640,
-  "entry": "main.js",
-  "scenes": { "start": "menu", "list": ["menu", "level1"] },
-  "roles": { "ui/hud.rml": "rmlui", "data/waves.json": "data" }
+  "schema_version": 2,
+  "project": {"name": "Неоновый курьер", "version": "1.0.0"},
+  "runtime": {"entry": "main.js", "start_scene": "menu",
+              "window": {"title": "Неоновый курьер", "width": 960, "height": 640}},
+  "editor": {"graph": {"…": "строит r2d project-index"}}
 }
 ```
 
 | Поле | Значение |
 |---|---|
-| `format` | `2`; нет поля — формат 1, файл читается как раньше |
-| `entry` | точка входа относительно проекта (по умолчанию `main.js`); её берут и запуск `--game`, и `build` без `--entry` |
-| `scenes.list` | сцены, которые регистрирует код через `$.scene.add('имя', …)` |
-| `scenes.start` | сцена при запуске без `--scene`; попадает в `$.startScene`. `--scene` старше |
-| `roles` | путь → роль: id студии Editor (`atlas`, `tilemap`, `rmlui`, `audio`, …) или `script`/`data`/`asset`. Editor открывает файл по роли; явное «Открыть как…» старше |
+| `schema_version` | `2`; нет поля — минимальный манифест (`title`, `width`, `height`, `version`, `toolHost`), читается как раньше |
+| `runtime.entry` | точка входа (по умолчанию `main.js`); её берут и запуск `--game`, и `build` без `--entry` |
+| `runtime.start_scene` | сцена при запуске без `--scene`; попадает в `$.startScene`. `--scene` старше |
+| `runtime.window` | `title`, `width`, `height`, `fullscreen` |
+| `editor.graph` | сохранённый граф проекта; рантайм его не читает |
 
-`r2d validate` (коды стабильны, `--json`):
-
-| Код | Что |
-|---|---|
-| `R2D201` | `format` не 1/2; поля v2 в файле без `"format": 2` (предупреждение) |
-| `R2D202` | `entry` вне проекта или файла нет |
-| `R2D203` | `scenes` неверной формы, повтор в `list`, `start` не из `list` |
-| `R2D204` | расхождение индекса и кода: сцена в `list` без `$.scene.add` или наоборот (предупреждение) |
-| `R2D205` | `roles`: путь вне проекта или файла нет |
-| `R2D206` | `roles`: неизвестная роль |
-
-`r2d migrate-project [каталог] [--write]` переводит v1 → v2: сохраняет поля,
-ставит `entry: "main.js"` и строит `scenes.list` из `$.scene.add`. `scenes.start`
-не угадывается. Без `--write` только печатает результат. В Editor — команда
-«Проект: перевести project.json на v2».
+Коды `r2d validate` (`R2D201`–`R2D210`, `--json`) и `r2d project-index` /
+`project-set` / `migrate-project` — в [PROJECT_JSON.md](PROJECT_JSON.md) §2 и §4.
+Прежний `"format": 2` с `entry`/`scenes`/`roles` больше не читается:
+`r2d migrate-project` переводит его в schema 2.

@@ -733,10 +733,10 @@ static bool write_relink(const char *dir, const uint8_t *container, size_t conta
     SDL_CloseIO(io);
 
     printf("\nГотово: %s\n", path);
-    printf("Пересоберите движок с грузом внутри:\n");
-    printf("  cmake -S . -B build-payload -DR2D_PAYLOAD_FILE=%s\n", path);
-    printf("  cmake --build build-payload -j\n");
-    printf("  ./build-payload/russiano2d\n");
+    printf("Пересоберите единственный executable r2d с этим файлом через Xmake:\n");
+    printf("  xmake f -y -o build-payload --payload_file=\"%s\"\n", path);
+    printf("  xmake build -y -j 8 r2d\n");
+    printf("  Путь к бинарнику: build-payload/<platform>/<arch>/release/r2d\n");
     return true;
 }
 
@@ -859,7 +859,7 @@ int r2d_build_main(int argc, char **argv)
     R2dProject manifest;
     r2d_project_defaults(&manifest);
     if (!entry && r2d_project_load_dir(&manifest, project) && manifest.entry[0]) {
-        entry = manifest.entry;   // project.json v2 "entry" вместо поиска main.js
+        entry = manifest.entry;   // project.json v2 "runtime.entry" вместо поиска main.js
     }
     if (entry) {
         SDL_snprintf(entry_buf, sizeof entry_buf, "%s", entry);
