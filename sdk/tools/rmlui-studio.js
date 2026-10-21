@@ -8,12 +8,12 @@
 // к окну просмотра. Закрытие студии удаляет черновики.
 // ===========================================================================
 
-import * as M from '../lib/rml_model.js';
-import { createHistory } from '../lib/history.js';
-import { escapeHtml, joinPath, dirOf, absolutePath, summarize } from '../lib/model.js';
+import * as M from '../../editor/lib/shared/rml_model.js';
+import { createHistory } from '../../editor/lib/shared/history.js';
+import { escapeHtml, joinPath, dirOf, absolutePath, summarize } from '../../editor/lib/shared/model.js';
 import { createPanel } from '../lib/panel_check.js';
-import * as views from '../lib/views.js';
-import { err, warn, parseNum } from '../lib/kit.js';
+import * as views from '../../editor/lib/shared/views.js';
+import { err, warn, parseNum } from '../../editor/lib/shared/kit.js';
 
 export const standalone = true;
 

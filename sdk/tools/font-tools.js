@@ -6,9 +6,9 @@
 // ===========================================================================
 
 import { openStudio } from '../lib/studio_host.js';
-import * as K from '../lib/kinds/fonts.js';
-import { escapeHtml, joinPath } from '../lib/model.js';
-import { button, fieldRow, parseNum, isObj } from '../lib/kit.js';
+import * as K from '../../editor/lib/shared/kinds/fonts.js';
+import { escapeHtml, joinPath } from '../../editor/lib/shared/model.js';
+import { button, fieldRow, parseNum, isObj } from '../../editor/lib/shared/kit.js';
 import { projectRoot } from './tilemap-studio.js';
 
 export const standalone = true;

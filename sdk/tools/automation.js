@@ -1,7 +1,7 @@
 // Thin RmlUi view of native batch and original engine agent protocol sessions.
-import { escapeHtml, absolutePath } from '../lib/model.js';
+import { escapeHtml, absolutePath } from '../../editor/lib/shared/model.js';
 import { createPanel } from '../lib/panel_check.js';
-import * as views from '../lib/views.js';
+import * as views from '../../editor/lib/shared/views.js';
 let singleton;
 export const standalone=true;
 export async function open(app,args){if(!singleton)singleton=create(app);return singleton.openAsset(args.assetAbs||null);}

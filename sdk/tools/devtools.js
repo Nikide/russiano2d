@@ -8,9 +8,9 @@
 // человека, игры и агента; второй реализации поиска нет.
 // ===========================================================================
 
-import { escapeHtml, joinPath, dirOf, absolutePath } from '../lib/model.js';
+import { escapeHtml, joinPath, dirOf, absolutePath } from '../../editor/lib/shared/model.js';
 import { createPanel } from '../lib/panel_check.js';
-import * as views from '../lib/views.js';
+import * as views from '../../editor/lib/shared/views.js';
 
 export const standalone = true;
 

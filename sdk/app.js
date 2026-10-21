@@ -15,15 +15,15 @@ import { createSplash } from './lib/splash.js';
 import {
     escapeHtml, normalizeDir, absolutePath, joinPath, pushRecent, filterAssets, countTypes,
     findTool, summarize,
-} from './lib/model.js';
-import * as views from './lib/views.js';
-import * as atlasModel from './lib/atlas_model.js';
+} from '../editor/lib/shared/model.js';
+import * as views from '../editor/lib/shared/views.js';
+import * as atlasModel from '../editor/lib/shared/atlas_model.js';
 
 const DOC = 'sdk/ui/shell.rml';
 const STATE_FILE = 'sdk/state.local.json';
 const REGISTRY_FILE = 'sdk_tools.json';
-// Версия SDK живёт в одном месте — корневом CMakeLists.txt (PROJECT_VERSION);
-// её печатает `r2d-sdk version`. Здесь только запасное значение на время, пока
+// Версия backend задаётся целью r2d в xmake.lua; её печатает `r2d version`.
+// Здесь только запасное значение на время, пока
 // мост не ответил, и для случая выключенного моста (toolHost).
 const SDK_VERSION_FALLBACK = '0.0.0-dev';
 let sdkVersion = SDK_VERSION_FALLBACK;

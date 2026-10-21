@@ -1,6 +1,6 @@
 // Code Check / API browser panel: thin GUI over native r2d-sdk doctor/lint/
 // validate and the generated API schema. No second linter/validator in JS.
-import { escapeHtml } from '../lib/model.js';
+import { escapeHtml } from '../../editor/lib/shared/model.js';
 
 let singleton;
 export const standalone = true;

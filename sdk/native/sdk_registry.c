@@ -155,7 +155,7 @@ bool sdk_registry_load(const char *path, SdkRegistry *reg, SdkReport *rep)
                 if (!sdk_file_exists(full)) {
                     char *loc = loc_json(i, id_for_diag, "binary");
                     sdk_diag(rep, SDK_WARNING, "SDK_REGISTRY_BINARY_MISSING", path, loc, NULL,
-                             "Бинарник «%s» не найден — соберите его (cmake --build build)", t->binary);
+                             "Бинарник «%s» не найден — соберите его (xmake build -y r2d)", t->binary);
                     free(loc);
                 }
             }

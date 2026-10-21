@@ -11,11 +11,11 @@
 // Человек и агент вызывают одни и те же методы (`app.studios.sprite.*`).
 // ===========================================================================
 
-import * as M from '../lib/atlas_model.js';
-import { openAtlasSession, createAtlasFromImage } from '../lib/atlas_session.js';
-import { escapeHtml, dirOf, joinPath } from '../lib/model.js';
+import * as M from '../../editor/lib/shared/atlas_model.js';
+import { openAtlasSession, createAtlasFromImage } from '../../editor/lib/shared/atlas_session.js';
+import { escapeHtml, dirOf, joinPath } from '../../editor/lib/shared/model.js';
 import { createPanel } from '../lib/panel_check.js';
-import * as views from '../lib/views.js';
+import * as views from '../../editor/lib/shared/views.js';
 
 const DOC = 'sdk/ui/sprite_studio.rml';
 const ZOOMS = [0.25, 0.5, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32];

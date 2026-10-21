@@ -12,9 +12,9 @@
 // ===========================================================================
 
 import { openStudio } from '../lib/studio_host.js';
-import * as K from '../lib/kinds/collision.js';
-import { escapeHtml } from '../lib/model.js';
-import { button, fieldRow, pairRow, parseNum } from '../lib/kit.js';
+import * as K from '../../editor/lib/shared/kinds/collision.js';
+import { escapeHtml } from '../../editor/lib/shared/model.js';
+import { button, fieldRow, pairRow, parseNum } from '../../editor/lib/shared/kit.js';
 
 export const standalone = true;
 

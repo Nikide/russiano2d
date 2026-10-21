@@ -12,11 +12,11 @@
 // кадровым шагом движка, а студия лишь рисует текущий кадр в окне просмотра.
 // ===========================================================================
 
-import * as M from '../lib/atlas_model.js';
-import { openAtlasSession } from '../lib/atlas_session.js';
-import { escapeHtml } from '../lib/model.js';
+import * as M from '../../editor/lib/shared/atlas_model.js';
+import { openAtlasSession } from '../../editor/lib/shared/atlas_session.js';
+import { escapeHtml } from '../../editor/lib/shared/model.js';
 import { createPanel } from '../lib/panel_check.js';
-import * as views from '../lib/views.js';
+import * as views from '../../editor/lib/shared/views.js';
 
 const DOC = 'sdk/ui/animation_studio.rml';
 const SPEEDS = [0.25, 0.5, 1, 2, 4];

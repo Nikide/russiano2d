@@ -22,9 +22,9 @@
 // ===========================================================================
 
 import { openDataSession, createDataFile } from './data_session.js';
-import { escapeHtml, joinPath, dirOf, summarize } from './model.js';
+import { escapeHtml, joinPath, dirOf, summarize } from '../../editor/lib/shared/model.js';
 import { createPanel, reportForKind } from './panel_check.js';
-import * as views from './views.js';
+import * as views from '../../editor/lib/shared/views.js';
 
 const DOC = 'sdk/ui/data_studio.rml';
 const hosts = new WeakMap();

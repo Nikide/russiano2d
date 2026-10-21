@@ -6,9 +6,9 @@
 // `r2d-sdk validate` (один код для GUI, CLI и агента).
 // ===========================================================================
 
-import { createHistory } from './history.js';
-import { canonicalJson, isObj } from './kit.js';
-import { joinPath, dirOf, normalizeDir } from './model.js';
+import { createHistory } from '../../editor/lib/shared/history.js';
+import { canonicalJson, isObj } from '../../editor/lib/shared/kit.js';
+import { joinPath, dirOf, normalizeDir } from '../../editor/lib/shared/model.js';
 
 function tag(list, asset) {
     return list.map((d) => Object.assign({}, d, { asset: d.asset || asset }));

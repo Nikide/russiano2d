@@ -6,9 +6,9 @@
 // ===========================================================================
 
 import { openStudio } from '../lib/studio_host.js';
-import * as K from '../lib/kinds/input.js';
-import { escapeHtml } from '../lib/model.js';
-import { button, fieldRow, parseNum } from '../lib/kit.js';
+import * as K from '../../editor/lib/shared/kinds/input.js';
+import { escapeHtml } from '../../editor/lib/shared/model.js';
+import { button, fieldRow, parseNum } from '../../editor/lib/shared/kit.js';
 
 const KEY_ALIASES = { ' ': 'space', return: 'enter', 'left shift': 'leftshift', 'right shift': 'rightshift', 'left ctrl': 'leftctrl',
     'right ctrl': 'rightctrl', 'left alt': 'leftalt', 'right alt': 'rightalt', 'page up': 'pageup', 'page down': 'pagedown', 'caps lock': 'capslock' };

@@ -10,9 +10,9 @@
 // ===========================================================================
 
 import { openStudio } from '../lib/studio_host.js';
-import * as K from '../lib/kinds/tilemap.js';
-import { escapeHtml, joinPath, dirOf } from '../lib/model.js';
-import { button, fieldRow, pairRow, parseNum, parseBool } from '../lib/kit.js';
+import * as K from '../../editor/lib/shared/kinds/tilemap.js';
+import { escapeHtml, joinPath, dirOf } from '../../editor/lib/shared/model.js';
+import { button, fieldRow, pairRow, parseNum, parseBool } from '../../editor/lib/shared/kit.js';
 
 export const standalone = true;
 

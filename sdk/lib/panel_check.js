@@ -18,7 +18,7 @@
 // проверяют заново (валидатор один — нативный).
 // ===========================================================================
 
-import { summarize } from './model.js';
+import { summarize } from '../../editor/lib/shared/model.js';
 
 const ERROR = 'error';
 

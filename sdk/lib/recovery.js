@@ -1,5 +1,5 @@
 // Recovery хранит отдельный JSON рядом с ассетом. Исходник меняет только Save.
-import { dirOf, joinPath } from './model.js';
+import { dirOf, joinPath } from '../../editor/lib/shared/model.js';
 
 export function createRecovery(app) {
     const $ = app.$, sessions = new Map();

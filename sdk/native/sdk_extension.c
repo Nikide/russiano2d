@@ -1160,7 +1160,7 @@ static int tool_run(const SdkArgs *a)
     char engine[1200];
     if (!sdk_find_engine(sdk_arg_value(a, "--engine"), engine, sizeof engine)) {
         sdk_diag(&rep, SDK_ERROR, "SDK_TOOL_ENGINE", target, NULL, NULL,
-                 "Бинарник движка russiano2d не найден: соберите проект (cmake --build build)");
+                 "Бинарник движка r2d не найден: соберите проект (xmake build -y r2d)");
     }
 
     // SDK-приложение читает запрос на открытие инструмента при старте (sdk/app.js).
@@ -1223,7 +1223,7 @@ static int tool_run(const SdkArgs *a)
         }
     } else {
         sdk_diag(&rep, SDK_ERROR, "SDK_TOOL_ENGINE_START", t->id, NULL, NULL,
-                 "Бинарник движка не найден: соберите проект (cmake --build build)");
+                 "Бинарник движка не найден: соберите проект (xmake build -y r2d)");
     }
 
     // Если движок не прочитал запрос (не стартовал), файл не должен висеть.

@@ -151,15 +151,13 @@ static int cmd_api_check(const SdkArgs *a)
                 sdk_diag(&rep, SDK_ERROR, "SDK_API_SCHEMA_STALE", schema_path, NULL, NULL,
                          "schema содержит %d имён, runtime — %d; запустите r2d api generate", ccount, count);
             } else {
-                for (int i = 0; i < count; ++i) {
-                    const char *rp = r2d_json_str(r2d_json_get(r2d_json_at(names, i), "path"), "");
-                    const char *cp = r2d_json_str(r2d_json_get(r2d_json_at(cnames, i), "path"), "");
-                    if (strcmp(rp, cp)) {
-                        sdk_diag(&rep, SDK_ERROR, "SDK_API_SCHEMA_STALE", schema_path, NULL, NULL,
-                                 "schema расходится с runtime на names[%d]: «%s» vs «%s»", i, cp, rp);
-                        break;
-                    }
+                R2dSb expected; r2d_sb_init(&expected);
+                sdk_api_schema_text(root, &expected);
+                if (!expected.data || expected.len != size || memcmp(expected.data, text, size) != 0) {
+                    sdk_diag(&rep, SDK_ERROR, "SDK_API_SCHEMA_STALE", schema_path, NULL, NULL,
+                             "schema, документация или граф API устарели; запустите r2d api generate");
                 }
+                r2d_sb_free(&expected);
             }
             r2d_json_free(cached);
         }
@@ -232,6 +230,13 @@ static const char *type_of(const R2dJson *item)
     return "any";
 }
 
+static int api_string_ptr_compare(const void *a, const void *b)
+{
+    const char *const *as = (const char *const *)a;
+    const char *const *bs = (const char *const *)b;
+    return strcmp(*as, *bs);
+}
+
 // api.schema.json: deterministic normalized snapshot with the settings the
 // generator/linter need. The runtime dump is still the source; this is a cached
 // artifact, and `api check` fails when it is stale.
@@ -248,6 +253,11 @@ void sdk_api_schema_text(const R2dJson *root, R2dSb *out)
         r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(item, "path"), ""));
         r2d_sb_puts(out, ", \"kind\": ");
         r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(item, "kind"), "any"));
+        const R2dJson *description = r2d_json_get(item, "description");
+        if (description && description->type == R2D_JSON_STR) {
+            r2d_sb_puts(out, ", \"description\": ");
+            r2d_sb_put_json_string(out, description->string);
+        }
         const R2dJson *arity = r2d_json_get(item, "arity");
         if (arity) r2d_sb_printf(out, ", \"arity\": %d", (int)arity->number);
         const R2dJson *args = r2d_json_get(item, "args");
@@ -259,6 +269,11 @@ void sdk_api_schema_text(const R2dJson *root, R2dSb *out)
                 r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(arg, "name"), "arg"));
                 r2d_sb_puts(out, ", \"type\": ");
                 r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(arg, "type"), "any"));
+                const R2dJson *arg_description = r2d_json_get(arg, "description");
+                if (arg_description && arg_description->type == R2D_JSON_STR) {
+                    r2d_sb_puts(out, ", \"description\": ");
+                    r2d_sb_put_json_string(out, arg_description->string);
+                }
                 r2d_sb_putc(out, '}');
             }
             r2d_sb_putc(out, ']');
@@ -276,7 +291,99 @@ void sdk_api_schema_text(const R2dJson *root, R2dSb *out)
         }
         r2d_sb_putc(out, '}');
     }
-    r2d_sb_puts(out, "\n  ]\n}\n");
+    r2d_sb_puts(out, "\n  ],\n  \"graph\": {\n    \"nodes\": [\n      {\"id\": \"$\", \"kind\": \"root\"},\n      {\"id\": \"engine\", \"kind\": \"root\"}");
+    for (int i = 0; i < r2d_json_size(names); ++i) {
+        const R2dJson *item = r2d_json_at(names, i);
+        r2d_sb_puts(out, ",\n      {\"id\": ");
+        r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(item, "path"), ""));
+        r2d_sb_puts(out, ", \"kind\": ");
+        r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(item, "kind"), "any"));
+        r2d_sb_putc(out, '}');
+    }
+    bool has_selection_root = false;
+    for (int i = 0; i < r2d_json_size(names); ++i) {
+        const char *path = r2d_json_str(r2d_json_get(r2d_json_at(names, i), "path"), "");
+        if (!strcmp(path, "$.selection")) { has_selection_root = true; break; }
+    }
+    if (!has_selection_root) r2d_sb_puts(out, ",\n      {\"id\": \"$.selection\", \"kind\": \"object\", \"synthetic\": true}");
+    // Type nodes are deduplicated and sorted so the graph stays deterministic.
+    size_t type_cap = 0;
+    for (int i = 0; i < r2d_json_size(names); ++i) {
+        const R2dJson *item = r2d_json_at(names, i);
+        if (!r2d_json_get(item, "description")) continue;
+        const R2dJson *args = r2d_json_get(item, "args");
+        type_cap += args && args->type == R2D_JSON_ARR ? (size_t)r2d_json_size(args) : 0;
+        if (r2d_json_get(item, "returns")) type_cap++;
+    }
+    const char **types = type_cap ? (const char **)calloc(type_cap, sizeof *types) : NULL;
+    size_t type_count = 0;
+    for (int i = 0; i < r2d_json_size(names); ++i) {
+        const R2dJson *item = r2d_json_at(names, i);
+        if (!r2d_json_get(item, "description")) continue;
+        const R2dJson *args = r2d_json_get(item, "args");
+        for (int a = 0; args && a < r2d_json_size(args); ++a) {
+            const char *type = r2d_json_str(r2d_json_get(r2d_json_at(args, a), "type"), NULL);
+            if (!type) continue;
+            bool found = false;
+            for (size_t t = 0; t < type_count; ++t) if (!strcmp(types[t], type)) { found = true; break; }
+            if (!found && types) types[type_count++] = type;
+        }
+        const char *returns = r2d_json_str(r2d_json_get(item, "returns"), NULL);
+        if (returns) {
+            bool found = false;
+            for (size_t t = 0; t < type_count; ++t) if (!strcmp(types[t], returns)) { found = true; break; }
+            if (!found && types) types[type_count++] = returns;
+        }
+    }
+    if (type_count > 1) qsort(types, type_count, sizeof *types, api_string_ptr_compare);
+    for (size_t i = 0; i < type_count; ++i) {
+        char id[512];
+        snprintf(id, sizeof id, "type:%s", types[i]);
+        r2d_sb_puts(out, ",\n      {\"id\": ");
+        r2d_sb_put_json_string(out, id);
+        r2d_sb_puts(out, ", \"kind\": \"type\"}");
+    }
+    r2d_sb_puts(out, "\n    ],\n    \"edges\": [");
+    bool first_edge = true;
+    for (int i = 0; i < r2d_json_size(names); ++i) {
+        const R2dJson *item = r2d_json_at(names, i);
+        const char *path = r2d_json_str(r2d_json_get(item, "path"), "");
+        const char *dot = strrchr(path, '.');
+        if (dot && (size_t)(dot - path) < 1024) {
+            char parent[1024];
+            memcpy(parent, path, (size_t)(dot - path)); parent[dot - path] = 0;
+            if (!first_edge) r2d_sb_puts(out, ",");
+            r2d_sb_puts(out, "\n      {\"from\": "); r2d_sb_put_json_string(out, parent);
+            r2d_sb_puts(out, ", \"to\": "); r2d_sb_put_json_string(out, path);
+            r2d_sb_puts(out, ", \"kind\": \"contains\"}");
+            first_edge = false;
+        }
+        if (r2d_json_get(item, "description")) {
+            const R2dJson *args = r2d_json_get(item, "args");
+            for (int a = 0; args && a < r2d_json_size(args); ++a) {
+                const R2dJson *arg = r2d_json_at(args, a);
+                const char *type = r2d_json_str(r2d_json_get(arg, "type"), NULL);
+                if (!type) continue;
+                if (!first_edge) r2d_sb_puts(out, ",");
+                r2d_sb_puts(out, "\n      {\"from\": "); r2d_sb_put_json_string(out, path);
+                char type_id[512]; snprintf(type_id, sizeof type_id, "type:%s", type);
+                r2d_sb_puts(out, ", \"to\": "); r2d_sb_put_json_string(out, type_id);
+                r2d_sb_puts(out, ", \"kind\": \"argument\", \"name\": ");
+                r2d_sb_put_json_string(out, r2d_json_str(r2d_json_get(arg, "name"), "arg"));
+                r2d_sb_putc(out, '}'); first_edge = false;
+            }
+            const char *returns = r2d_json_str(r2d_json_get(item, "returns"), NULL);
+            if (returns) {
+                if (!first_edge) r2d_sb_puts(out, ",");
+                r2d_sb_puts(out, "\n      {\"from\": "); r2d_sb_put_json_string(out, path);
+                char type_id[512]; snprintf(type_id, sizeof type_id, "type:%s", returns);
+                r2d_sb_puts(out, ", \"to\": "); r2d_sb_put_json_string(out, type_id);
+                r2d_sb_puts(out, ", \"kind\": \"returns\"}"); first_edge = false;
+            }
+        }
+    }
+    r2d_sb_puts(out, "\n    ]\n  }\n}\n");
+    free(types);
 }
 
 // Group methods of a namespace into a TypeScript interface. `prefix` is e.g.
@@ -386,8 +493,18 @@ void sdk_api_dts_text(const R2dJson *root, R2dSb *out)
 }
 
 
-// Generated API reference: structural (names/types/arity). Descriptions/since/
-// examples live in the registry/hand docs and are not invented here.
+static void markdown_cell(R2dSb *out, const char *text)
+{
+    if (!text) return;
+    for (const char *p = text; *p; ++p) {
+        if (*p == '|') r2d_sb_puts(out, "\\|");
+        else if (*p == '\n' || *p == '\r') r2d_sb_putc(out, ' ');
+        else r2d_sb_putc(out, *p);
+    }
+}
+
+// Generated API reference: structure and authored descriptions from the
+// metadata attached where each documented public method is created.
 void sdk_api_docs_text(const R2dJson *root, R2dSb *out)
 {
     const R2dJson *names = r2d_json_get(root, "names");
@@ -430,13 +547,24 @@ void sdk_api_docs_text(const R2dJson *root, R2dSb *out)
             const char *leaf = path + plen + 1;
             if (strchr(leaf, '.') || leaf[0] == '_') continue;
             const char *kind = r2d_json_str(r2d_json_get(item, "kind"), "any");
+            const char *description = r2d_json_str(r2d_json_get(item, "description"), "");
             r2d_sb_printf(out, "| `%s` | %s | ", leaf, kind);
             if (!strcmp(kind, "function")) {
                 const R2dJson *arity = r2d_json_get(item, "arity");
                 const int n = arity ? (int)arity->number : 0;
                 r2d_sb_puts(out, "`(");
-                for (int a = 0; a < n; ++a) r2d_sb_printf(out, "%sarg%d: any", a ? ", " : "", a);
-                r2d_sb_puts(out, ") -> any`");
+                const R2dJson *args = r2d_json_get(item, "args");
+                for (int a = 0; a < n; ++a) {
+                    const R2dJson *arg = args ? r2d_json_at(args, a) : NULL;
+                    if (description[0]) {
+                        const char *arg_name = r2d_json_str(r2d_json_get(arg, "name"), NULL);
+                        const char *arg_type = r2d_json_str(r2d_json_get(arg, "type"), "any");
+                        r2d_sb_printf(out, "%s%s: %s", a ? ", " : "", arg_name ? arg_name : "arg", arg_type);
+                    } else r2d_sb_printf(out, "%sarg%d: any", a ? ", " : "", a);
+                }
+                r2d_sb_puts(out, ") -> ");
+                r2d_sb_puts(out, description[0] ? r2d_json_str(r2d_json_get(item, "returns"), "any") : "any");
+                r2d_sb_puts(out, "`");
             } else {
                 const R2dJson *value = r2d_json_get(item, "value");
                 if (value) {
@@ -446,6 +574,7 @@ void sdk_api_docs_text(const R2dJson *root, R2dSb *out)
                     else r2d_sb_puts(out, "—");
                 } else r2d_sb_puts(out, "—");
             }
+            if (description[0]) { r2d_sb_puts(out, " — "); markdown_cell(out, description); }
             r2d_sb_puts(out, " |\n");
         }
         r2d_sb_putc(out, '\n');

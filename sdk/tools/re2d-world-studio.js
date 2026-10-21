@@ -8,9 +8,9 @@
 // world из `$.re2dWorld.fromJSON(...)`, отрисованный `renderToSprite`.
 // ===========================================================================
 
-import { createWorldSession, sections } from '../lib/world_model.js';
-import { escapeHtml as esc, dirOf, joinPath } from '../lib/model.js';
-import * as views from '../lib/views.js';
+import { createWorldSession, sections } from '../../editor/lib/shared/world_model.js';
+import { escapeHtml as esc, dirOf, joinPath } from '../../editor/lib/shared/model.js';
+import * as views from '../../editor/lib/shared/views.js';
 
 let singleton;
 
