@@ -556,14 +556,12 @@ void sdk_api_docs_text(const R2dJson *root, R2dSb *out)
                 const R2dJson *args = r2d_json_get(item, "args");
                 for (int a = 0; a < n; ++a) {
                     const R2dJson *arg = args ? r2d_json_at(args, a) : NULL;
-                    if (description[0]) {
-                        const char *arg_name = r2d_json_str(r2d_json_get(arg, "name"), NULL);
-                        const char *arg_type = r2d_json_str(r2d_json_get(arg, "type"), "any");
-                        r2d_sb_printf(out, "%s%s: %s", a ? ", " : "", arg_name ? arg_name : "arg", arg_type);
-                    } else r2d_sb_printf(out, "%sarg%d: any", a ? ", " : "", a);
+                    const char *arg_name = r2d_json_str(r2d_json_get(arg, "name"), NULL);
+                    const char *arg_type = r2d_json_str(r2d_json_get(arg, "type"), "any");
+                    r2d_sb_printf(out, "%s%s: %s", a ? ", " : "", arg_name ? arg_name : "arg", arg_type);
                 }
                 r2d_sb_puts(out, ") -> ");
-                r2d_sb_puts(out, description[0] ? r2d_json_str(r2d_json_get(item, "returns"), "any") : "any");
+                r2d_sb_puts(out, r2d_json_str(r2d_json_get(item, "returns"), "any"));
                 r2d_sb_puts(out, "`");
             } else {
                 const R2dJson *value = r2d_json_get(item, "value");
@@ -597,13 +595,6 @@ int cmd_docs_generate(const SdkArgs *a)
     R2dSb sb; r2d_sb_init(&sb);
     sdk_api_docs_text(root, &sb);
     const bool ok = sdk_write_file(path, sb.data, sb.len);
-    char docs_dir[2048], docs_path[2048];
-    snprintf(docs_dir, sizeof docs_dir, "%s/docs/api", dir);
-    SDL_CreateDirectory(docs_dir);
-    snprintf(docs_path, sizeof docs_path, "%s/API_REFERENCE.md", docs_dir);
-    r2d_sb_free(&sb); r2d_sb_init(&sb);
-    sdk_api_docs_text(root, &sb);
-    const bool docs_ok = sdk_write_file(docs_path, sb.data, sb.len);
     const int count = r2d_json_size(r2d_json_get(root, "names"));
     r2d_sb_free(&sb);
     R2dSb out; r2d_sb_init(&out);
