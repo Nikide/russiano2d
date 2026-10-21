@@ -29,7 +29,6 @@ zig-out/
 .ninja_log
 build.ninja
 rules.ninja
-CMakeUserPresets.json
 Testing/
 
 out/
@@ -47,7 +46,6 @@ save.json
 settings.json
 # Прогресс демо-новеллы: у неё свой файл, чтобы не путаться с save.json игры.
 demos/vn_save.json
-cmake-build-*/
 # .web/ — рабочая площадка веб-сборки: там лежит клон SDL с WebGPU-бэкендом
 # (ветка PR libsdl-org/SDL#16020). Это чужая многомегабайтная зависимость, а не
 # код движка, поэтому в репозиторий она не попадает — см. docs/WEB_EXPORT.md.
@@ -59,14 +57,6 @@ cmake-build-*/
 *.dll
 *.exe
 *.pdb
-
-# --- CMake ---
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-CTestTestfile.cmake
-_deps/
-compile_commands.json
 
 # --- Generated shader / bytecode artifacts ---
 src/generated/

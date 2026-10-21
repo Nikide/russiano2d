@@ -28,28 +28,26 @@ engine-level возможности принимаются только по п�
 
 ## Собрать и запустить
 
-Каноническая сборка — **Xmake** (CMake остаётся только внутри сторонних
-пакетов и вспомогательных инструментов).
+Каноническая и единственная сборка — **Xmake**.
 
 ```bash
 # macOS arm64; для других платформ см. docs/BUILD.md
 xmake f -p macosx -a arm64 -m release -o build-xmake/macos-arm64
 xmake build -y
 
-./build-xmake/macos-arm64/macosx/arm64/release/russiano2d --game game
-./build-xmake/macos-arm64/macosx/arm64/release/russiano2d --game sdk   # SDK
-open "build-xmake/macos-arm64/macosx/arm64/release/Russiano2D SDK.app" # Finder app
+./build-xmake/macos-arm64/macosx/arm64/release/r2d                  # Project Manager / Editor
+./build-xmake/macos-arm64/macosx/arm64/release/r2d edit game        # открыть проект
+./build-xmake/macos-arm64/macosx/arm64/release/r2d --game game     # запустить игру
 ```
 
-Xmake собирает CLI-бинарники и Finder-приложение `Russiano2D SDK.app` с
-вложенными SDK-ресурсами и нативным backend. Целевую сборку приложения можно
-запустить отдельно: `xmake build -y russiano2d-sdk-app`.
+Xmake собирает единственный executable `r2d`: он открывает Editor, запускает
+игры и выполняет проектные CLI-команды. Игры остаются обычными JavaScript-
+проектами на публичном `$` API и запускаются напрямую через `r2d --game`.
 
 В репозитории `game/` — платформер (рабочий пример). В **релизных пакетах**
 игра по умолчанию — демо визуальной новеллы «Руси-тян: Бака!» (`game_vn/`).
 
-Зависимости для локальной сборки: `xmake`, `mingw-w64` (Windows),
-`CMake 3.31` и `m4` для autotools-зависимостей; `zig` нужен только для
+Зависимости для локальной сборки: `xmake`, `mingw-w64` (Windows), `m4` для autotools-зависимостей; `zig` нужен только для
 opt-in Linux-кросс-сборки (`R2D_BUILD_LINUX=1`).
 Docker и VM не используются.
 
@@ -76,11 +74,11 @@ GitHub Releases.
 
 | Документ | О чём |
 |---|---|
-| [docs/BUILD.md](docs/BUILD.md) | сборка движка, SDK и упаковка игр |
+| [docs/BUILD.md](docs/BUILD.md) | сборка `r2d`, Editor и запуск/упаковка игр |
 | [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md) | философия и константы проекта |
 | [docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md) | справочник `$` API |
 | [docs/tutorial-platformer.md](docs/tutorial-platformer.md) | первый платформер шаг за шагом |
-| [docs/SDK.md](docs/SDK.md) | SDK, инструменты и World Editor |
+| [docs/EDITOR.md](docs/EDITOR.md) | Project Manager, Editor и встроенные студии |
 | [docs/VN_MAKER.md](docs/VN_MAKER.md) | Visual Novel Maker |
 | [docs/FEATURE_FREEZE.md](docs/FEATURE_FREEZE.md) | feature freeze и правила новых engine-возможностей |
 | [docs/RELEASING.md](docs/RELEASING.md) | локальный релизный процесс |

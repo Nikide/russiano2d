@@ -41,14 +41,17 @@ package("libsdl3_image")
         }
         table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
         table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
-                if package:is_plat("linux") then
-            table.insert(configs, "-DCMAKE_FIND_ROOT_PATH=" .. (os.getenv("XMAKE_GLOBALDIR") or (os.getenv("HOME") .. "/.xmake")) .. "/.xmake/packages")
+        if package:is_plat("linux") and package:is_cross() then
+            local globaldir = os.getenv("XMAKE_GLOBALDIR")
+            local packageroot = globaldir and path.join(globaldir, ".xmake", "packages")
+                or path.join(os.getenv("HOME"), ".xmake", "packages")
+            table.insert(configs, "-DCMAKE_FIND_ROOT_PATH=" .. packageroot)
             table.insert(configs, "-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER")
             table.insert(configs, "-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY")
             table.insert(configs, "-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY")
             table.insert(configs, "-DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY")
         end
-import("package.tools.cmake").install(package, configs)
+        import("package.tools.cmake").install(package, configs, {packagedeps = {"libsdl3"}})
     end)
 
     on_test(function (package)

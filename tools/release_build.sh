@@ -7,12 +7,11 @@
 # Linux x86_64 — только opt-in R2D_BUILD_LINUX=1: локальная Zig-кросс-сборка
 # на машине релиза виснет, Linux-пользователи собирают движок на своей ОС.
 #
-# Выход: dist/<platform>/{russiano2d,r2d-sdk,russiano2d-sdk}[.exe] и
-# macOS app bundle Russiano2D SDK.app.
+# Выход: dist/<platform>/r2d[.exe]. Один executable содержит runtime,
+# команды разработки и Project Manager/Editor.
 # Финальные архивы собирает tools/release.py (--package-only) в dist/.
 #
-# Пока xmake.lua отсутствует (миграция не завершена), скрипт честно падает с
-# кодом 3 ДО коммита/тега: релиз не может быть собран без канонического builder.
+# Xmake — единственный builder проекта.
 # ===========================================================================
 set -euo pipefail
 
@@ -30,22 +29,12 @@ command -v xmake >/dev/null 2>&1 || fail "xmake не найден в PATH (brew 
 if [ "${R2D_BUILD_LINUX:-0}" = "1" ]; then
     command -v zig >/dev/null 2>&1 || fail "zig не найден в PATH (brew install zig) для Linux cross"
 fi
-# CMake 4.x ломает try_compile у кросс-пакетов; для Windows нужен CMake 3.31.
-if [ -d /tmp/cmake331/CMake.app/Contents/bin ]; then
-    export PATH="/tmp/cmake331/CMake.app/Contents/bin:$PATH"
-fi
 # host tools for autotools X11 stack (target libraries are still built by Zig)
 if [ -d /opt/homebrew/opt/libtool/libexec/gnubin ]; then
     export PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH"
 fi
 if [ -d /opt/homebrew/opt/m4/bin ]; then
     export PATH="/opt/homebrew/opt/m4/bin:$PATH"
-fi
-if command -v cmake >/dev/null 2>&1; then
-    cmake_major=$(cmake --version | head -1 | sed -E 's/.* ([0-9]+)\..*/\1/')
-    if [ "${cmake_major:-0}" -ge 4 ]; then
-        fail "для кросс-пакетов нужен CMake 3.31, найден $(cmake --version | head -1)"
-    fi
 fi
 if ! command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
     if [ -d /opt/homebrew/opt/mingw-w64/bin ]; then
@@ -83,33 +72,21 @@ build_target() {
         echo "$cfg" | grep -B2 -A2 'install failed' | tail -20
         fail "зависимость не собралась для $platform"
     fi
-    if ! xmake build -y -r; then
+    if ! xmake build -y -r r2d; then
         fail "build $platform"
     fi
     local suffix=""
     case "$platform" in windows-*) suffix=".exe" ;; esac
     mkdir -p "dist/$platform"
-    local found=0
-    for name in russiano2d r2d-sdk russiano2d-sdk; do
-        local src
-        src="$(find "$builddir" -maxdepth 7 -type f -name "${name}${suffix}" | head -1 || true)"
-        if [ -z "$src" ]; then
-            fail "не найден ${name}${suffix} после сборки $platform"
-        fi
-        cp -f "$src" "dist/$platform/${name}${suffix}"
-        found=$((found + 1))
-    done
-    if [[ "$platform" == macos-* ]]; then
-        local app
-        app="$(find "$builddir" -type d -name 'Russiano2D SDK.app' -prune -print -quit)"
-        if [ -z "$app" ]; then
-            fail "не найден Russiano2D SDK.app после сборки $platform"
-        fi
-        rm -rf "dist/$platform/Russiano2D SDK.app"
-        cp -R "$app" "dist/$platform/Russiano2D SDK.app"
-        found=$((found + 1))
-    fi
-    echo "  ok  $platform: $found артефакта -> dist/$platform"
+    local src
+    src="$(find "$builddir" -maxdepth 7 -type f -name "r2d${suffix}" | head -1 || true)"
+    if [ -z "$src" ]; then fail "не найден r2d${suffix} после сборки $platform"; fi
+    cp -f "$src" "dist/$platform/r2d${suffix}"
+    rm -f "dist/$platform/russiano2d" "dist/$platform/russiano2d.exe" \
+          "dist/$platform/r2d-sdk" "dist/$platform/r2d-sdk.exe" \
+          "dist/$platform/russiano2d-sdk" "dist/$platform/russiano2d-sdk.exe"
+    rm -rf "dist/$platform/Russiano2D SDK.app"
+    echo "  ok  $platform: r2d${suffix} -> dist/$platform"
 }
 
 if [ "$DRY_RUN" = "1" ]; then

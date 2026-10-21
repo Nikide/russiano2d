@@ -130,7 +130,7 @@ def resolve_binary(binary: Optional[str] = None) -> str:
 
     raise AgentError(
         "не найден бинарник движка. Искали:\n  %s\n"
-        "Соберите проект (например: cmake --build build) "
+        "Соберите проект (например: xmake build -y r2d) "
         "или задайте путь через переменную R2D_BINARY." % "\n  ".join(tried)
     )
 

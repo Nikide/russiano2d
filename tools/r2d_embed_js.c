@@ -92,7 +92,7 @@ int main(int argc, char **argv)
     const char *out_path = argv[2];
 
     // Необязательный список исключений: модули, которых в этой сборке нет.
-    // Так сборка без RE2D (R2D_ENABLE_RE2D=OFF, src/CMakeLists.txt) не носит в
+    // Так сборка без RE2D (R2D_ENABLE_RE2D=OFF, xmake.lua) не носит в
     // бинарнике исходники 3D-модулей: их нечем обслужить, а нативный слой
     // (`engine.re2d`) в такой сборке не создаётся, поэтому api.js их и не
     // устанавливает. Имена — как у файлов: re2d.js, rotsprite.js, …

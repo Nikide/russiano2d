@@ -80,14 +80,14 @@ package("libsdl3")
         end
         if package:is_plat("linux", "bsd", "cross") and package:config("x11") then
             local deplibs = {"libx11", "libxcb", "libxext", "libxcursor", "libxfixes", "libxi", "libxrandr", "libxrender", "libxss"}
-            local depconfig = package:config("x11_shared") and {private = true, configs = {shared = true}} or nil
+            local depconfig = package:config("x11_shared") and {configs = {shared = true}} or nil
             for _, lib in ipairs(deplibs) do
                 package:add("deps", lib, depconfig)
             end
         end
         if package:is_plat("linux", "bsd", "cross") and package:config("wayland") then
             if package:config("wayland_shared") then
-                package:add("deps", "wayland", {private = true, configs = {shared = true}})
+                package:add("deps", "wayland", {configs = {shared = true}})
             else
                 package:add("deps", "wayland")
             end
@@ -168,8 +168,11 @@ package("libsdl3")
                 table.insert(cflags, "-I" .. includedir)
             end
         end
-                if package:is_plat("linux") then
-            table.insert(configs, "-DCMAKE_FIND_ROOT_PATH=" .. (os.getenv("XMAKE_GLOBALDIR") or (os.getenv("HOME") .. "/.xmake")) .. "/.xmake/packages")
+        if package:is_plat("linux") and package:is_cross() then
+            local globaldir = os.getenv("XMAKE_GLOBALDIR")
+            local packageroot = globaldir and path.join(globaldir, ".xmake", "packages")
+                or path.join(os.getenv("HOME"), ".xmake", "packages")
+            table.insert(configs, "-DCMAKE_FIND_ROOT_PATH=" .. packageroot)
             table.insert(configs, "-DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER")
             table.insert(configs, "-DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY")
             table.insert(configs, "-DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY")

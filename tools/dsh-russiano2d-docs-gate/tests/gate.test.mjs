@@ -173,7 +173,7 @@ test('shellMutates ловит запись и пропускает чтение/
     assert.notEqual(policy.shellMutates(command, patterns), undefined, `должна блокироваться: ${command}`)
   }
   const allowed = [
-    'cmake --build build -j8 2>&1 | tail -20',
+    'xmake build -y -j 8 r2d 2>&1 | tail -20',
     'python3 tools/run_tests.py',
     'grep -rn "installVfx" src/highlevel',
     'ls -la src/highlevel',
@@ -403,7 +403,7 @@ test('bash: изменяющая команда блокируется до фи
   apply(ctx, undefined)
   const agent = makeAgent('s5', root)
 
-  assert.equal(guardReason(guards, execFor('bash', { command: 'cmake --build build -j8' }, agent)), undefined)
+  assert.equal(guardReason(guards, execFor('bash', { command: 'xmake build -y -j 8 r2d' }, agent)), undefined)
   assert.equal(guardReason(guards, execFor('bash', { command: 'git status --short' }, agent)), undefined)
   const denied = guardReason(guards, execFor('bash', { command: 'cat > src/highlevel/vfx.js <<EOF' }, agent))
   assert.ok(denied)

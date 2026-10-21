@@ -2,7 +2,7 @@
 """Подготовка и выпуск релиза russiano2d.
 
 Скрипт делает всю механическую часть релиза: поднимает версию в
-``CMakeLists.txt``, собирает Release, прогоняет тесты без окна, раскладывает
+    ``VERSION``, собирает Release через Xmake, прогоняет тесты без окна, раскладывает
 ``dist/<os>-<arch>/``, считает SHA256SUMS и (по желанию) ставит тег.
 
 Главное правило — **ничего не делать без явного согласия**:
@@ -26,7 +26,7 @@
 
     # Только упаковка уже собранного бинарника (режим CI)
     python3 tools/release.py --package-only --platform linux-x86_64 \\
-        --binary build-gcc/russiano2d --out dist
+        --binary build-xmake/linux/x86_64/release/r2d --out dist
 
 Аргументы разбираются вручную через ``sys.argv`` (без argparse) — как в
 остальных инструментах проекта. Внешних зависимостей нет.
@@ -53,11 +53,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 #: Абсолютный путь к корню репозитория.
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-#: Файл, в котором живёт версия проекта.
-CMAKE_FILE = os.path.join(ROOT, "CMakeLists.txt")
-
-#: Регулярное выражение версии в CMakeLists.txt (строка `VERSION x.y.z`).
-VERSION_RE = re.compile(r"(VERSION\s+)(\d+\.\d+\.\d+)")
+#: Единственный файл, в котором живёт версия проекта.
+VERSION_FILE_PATH = os.path.join(ROOT, "VERSION")
 
 #: Каталог сборки Release по умолчанию.
 DEFAULT_BUILD_DIR = "build-release"
@@ -90,8 +87,7 @@ from public_docs import (  # noqa: E402  (импорт после правки s
 )
 
 #: Корневые элементы пакета (кладутся рядом с бинарником).
-PACKAGE_ROOT_ENTRIES = ("sdk", "sdk_tools.json", "SDK_HANDOFF.md",
-                        "Следующая цель SDK AGENT.md", "docs",
+PACKAGE_ROOT_ENTRIES = ("editor", "templates", "docs",
                         # Generated $ API artifacts: SDK consumers get the same
                         # schema/typings the CLI/lint/doctor use.
                         "api.schema.json", "russiano2d.d.ts")
@@ -150,29 +146,44 @@ def host_platform() -> str:
 
 def binary_name(platform_name: str) -> str:
     """Имя исполняемого файла для платформы."""
-    return "russiano2d" + PLATFORMS[platform_name][1]
+    return "r2d" + PLATFORMS[platform_name][1]
+
+
+def xmake_binary_path(build_dir: str, platform_name: str) -> str:
+    """Путь к единственной цели r2d в дереве Xmake."""
+    system, arch = platform_name.split("-", 1)
+    xmake_system = {"macos": "macosx", "linux": "linux", "windows": "mingw"}[system]
+    return os.path.join(build_dir, xmake_system, arch, "release", binary_name(platform_name))
 
 
 def read_version() -> str:
-    """Прочитать текущую версию из CMakeLists.txt."""
-    with open(CMAKE_FILE, encoding="utf-8") as handle:
-        text = handle.read()
-    match = VERSION_RE.search(text)
-    if not match:
-        raise SystemExit("ошибка: не нашёл VERSION x.y.z в %s" % CMAKE_FILE)
-    return match.group(2)
+    """Прочитать текущую версию из VERSION."""
+    with open(VERSION_FILE_PATH, encoding="utf-8") as handle:
+        version = handle.read().strip()
+    if not check_version(version):
+        raise SystemExit("ошибка: VERSION должен содержать x.y.z")
+    with open(os.path.join(ROOT, "xmake.lua"), encoding="utf-8") as handle:
+        xmake_source = handle.read()
+    if not re.search(r'local version = "' + re.escape(version) + r'"', xmake_source):
+        raise SystemExit("ошибка: версия в xmake.lua должна совпадать с VERSION (%s)" % version)
+    return version
 
 
 def write_version(new_version: str) -> str:
-    """Заменить версию в CMakeLists.txt, вернуть прежнюю."""
-    with open(CMAKE_FILE, encoding="utf-8") as handle:
-        text = handle.read()
-    match = VERSION_RE.search(text)
-    if not match:
-        raise SystemExit("ошибка: не нашёл VERSION x.y.z в %s" % CMAKE_FILE)
-    old_version = match.group(2)
-    updated = text[: match.start(2)] + new_version + text[match.end(2):]
-    with open(CMAKE_FILE, "w", encoding="utf-8") as handle:
+    """Записать версию в VERSION и вернуть прежнюю."""
+    old_version = read_version()
+    if not check_version(new_version):
+        raise SystemExit("ошибка: версия %r должна иметь формат x.y.z" % new_version)
+    with open(VERSION_FILE_PATH, "w", encoding="utf-8") as handle:
+        handle.write(new_version + "\n")
+    xmake_path = os.path.join(ROOT, "xmake.lua")
+    with open(xmake_path, encoding="utf-8") as handle:
+        source = handle.read()
+    updated, count = re.subn(r'local version = "[^"]+"',
+                             'local version = "%s"' % new_version, source, count=1)
+    if count != 1:
+        raise SystemExit("ошибка: не найдено единственное значение версии в xmake.lua")
+    with open(xmake_path, "w", encoding="utf-8") as handle:
         handle.write(updated)
     return old_version
 
@@ -224,7 +235,7 @@ def bump_version(current: str, kind: str = "patch") -> str:
 
 
 def run_bump(options: "Options") -> int:
-    """Режим ``--bump``: поднять патч-версию в CMakeLists.txt.
+    """Режим ``--bump``: поднять патч-версию в VERSION.
 
     В stdout уходит ТОЛЬКО новая версия — её подхватывает build_and_push.command:
     ``NEW=$(python3 tools/release.py --bump)``. Человеческое сообщение идёт в
@@ -239,7 +250,7 @@ def run_bump(options: "Options") -> int:
         print(new_version)
         return 0
     write_version(new_version)
-    print("Версия в CMakeLists.txt: %s → %s" % (current, new_version),
+    print("Версия: %s → %s" % (current, new_version),
           file=sys.stderr)
     print(new_version)
     return 0
@@ -304,7 +315,7 @@ def print_state(version: str, platform_name: str, out_dir: str) -> None:
             % len(dirty.splitlines()))
     else:
         log("  рабочее дерево: чистое")
-    log("  версия в CMakeLists.txt: %s" % version)
+    log("  версия: %s" % version)
     log("  платформа пакета: %s (%s)" % (platform_name, PLATFORM_TITLES[platform_name]))
     log("  каталог артефактов: %s" % os.path.join(ROOT, out_dir))
 
@@ -337,36 +348,23 @@ def build_steps(runner: Runner, build_dir: str) -> None:
     """Конфигурация и сборка Release."""
     log("")
     log("2. Сборка Release")
-    path = os.path.join(ROOT, build_dir)
     runner.run(
-        ["cmake", "-S", ".", "-B", build_dir,
-         "-DCMAKE_BUILD_TYPE=Release"],
+        ["xmake", "f", "-y", "-m", "release", "-o", build_dir],
         what="конфигурация",
     )
-    runner.run(["cmake", "--build", build_dir, "-j"], what="сборка")
-    log("    бинарник: %s" % path)
+    runner.run(["xmake", "build", "-y", "-j", "8", "r2d"], what="сборка")
+    log("    бинарник: %s" % os.path.join(build_dir, "<platform>", "<arch>", "release", binary_name(host_platform())))
 
 
 def test_steps(runner: Runner, build_dir: str, skip_tests: bool) -> None:
-    """Тесты без окна: C-тесты и юнит-тесты логики $ под qjs."""
+    """Unity и JavaScript тесты, зарегистрированные в Xmake."""
     log("")
     log("3. Тесты без окна")
     if skip_tests:
         log("    пропущены ключом --skip-tests (осознанное решение)")
         return
-    suffix = PLATFORMS[host_platform()][1]
-    tests_dir = os.path.join(build_dir, "tests")
-    for test in ("r2d_json_test", "r2d_crypto_test"):
-        runner.run([os.path.join(tests_dir, test + suffix)])
-    qjs = os.path.join(build_dir, "_deps", "quickjs-build", "qjs" + suffix)
-    if not runner.dry_run and not os.path.exists(os.path.join(ROOT, qjs)):
-        log("    предупреждение: не нашёл %s — qjs-тесты пропущены" % qjs)
-        return
-    for name in sorted(os.listdir(os.path.join(ROOT, "tests", "js"))):
-        if name.endswith("_test.mjs"):
-            runner.run([qjs, os.path.join("tests", "js", name)])
-    log("    оконные и агентские тесты не запускаются: нужен SDL_GPU-драйвер;")
-    log("    локально — python3 tools/run_tests.py")
+    runner.run(["xmake", "test", "-y", "-j", "8"], what="Unity + JavaScript")
+    log("    оконные и агентские тесты запускаются отдельно на машине с SDL_GPU")
 
 
 def collect_runtime_files(
@@ -380,16 +378,6 @@ def collect_runtime_files(
     """
     files: List[Tuple[str, str]] = []
     files.append((binary, os.path.basename(binary)))
-    suffix = '.exe' if binary.lower().endswith('.exe') else ''
-    sdk_binary = os.path.join(os.path.dirname(binary), 'r2d-sdk' + suffix)
-    files.append((sdk_binary, 'r2d-sdk' + suffix))
-    # Кликабельный запуск SDK (двойной клик): тот же runtime, `--game sdk`.
-    launcher = os.path.join(os.path.dirname(binary), 'russiano2d-sdk' + suffix)
-    if os.path.exists(launcher):
-        files.append((launcher, 'russiano2d-sdk' + suffix))
-    macos_app = os.path.join(os.path.dirname(binary), 'Russiano2D SDK.app')
-    if os.path.isdir(macos_app):
-        files.append((macos_app, 'Russiano2D SDK.app'))
     for name in package_root_entries():
         files.append((name, name))
     for name in DOC_FILES:
@@ -570,7 +558,7 @@ def bundle_macos_libs(target: str, binaries: Sequence[str]) -> None:
 
     Без этого собранный движок запускается только на машине, где уже стоит
     Homebrew с теми же библиотеками: «Library not loaded: /opt/homebrew/...».
-    Целевой rpath (@loader_path/lib) задан при сборке в CMakeLists.txt.
+    Целевой rpath (@loader_path/lib) задан в xmake.lua.
     """
     if not shutil.which("otool") or not shutil.which("install_name_tool"):
         log("    внимание: нет otool/install_name_tool — библиотеки не упакованы")
@@ -779,20 +767,10 @@ def package_platform(
 
     # Не выдавать runtime-only архив за SDK и не стирать старый пакет до
     # проверки обязательного нативного backend.
-    suffix = PLATFORMS[platform_name][1]
-    sdk_binary = os.path.join(ROOT, os.path.dirname(binary), 'r2d-sdk' + suffix)
-    if not os.path.isfile(sdk_binary):
-        raise SystemExit('ошибка: SDK backend не найден: %s; соберите r2d-sdk' % sdk_binary)
-    if PLATFORMS[platform_name][0] == 'macos':
-        app_bundle = os.path.join(ROOT, os.path.dirname(binary), 'Russiano2D SDK.app')
-        if not os.path.isdir(app_bundle):
-            raise SystemExit('ошибка: macOS app не найден: %s; соберите russiano2d-sdk-app' % app_bundle)
     if not runner.dry_run:
-        executables = [os.path.join(ROOT, binary), sdk_binary]
-        for executable in executables:
-            actual = binary_platform(executable)
-            if actual != platform_name:
-                raise SystemExit('ошибка: %s имеет архитектуру %s, запрошена %s' % (executable, actual, platform_name))
+        actual = binary_platform(os.path.join(ROOT, binary))
+        if actual != platform_name:
+            raise SystemExit('ошибка: %s имеет архитектуру %s, запрошена %s' % (binary, actual, platform_name))
 
     # build_and_push передаёт бинарник из dist/<platform>, а target — тот же
     # каталог. Не удаляем источник вместе с target: сначала копируем бинарники
@@ -802,17 +780,13 @@ def package_platform(
     binary_abs = os.path.abspath(os.path.join(ROOT, binary))
     if binary_abs.startswith(target_abs + os.sep):
         staged = tempfile.mkdtemp(prefix='r2d-package-')
-        for name in (os.path.basename(binary), 'r2d-sdk' + suffix, 'russiano2d-sdk' + suffix):
+        for name in (os.path.basename(binary),):
             source = os.path.join(os.path.dirname(binary_abs), name)
             if os.path.isfile(source):
                 shutil.copy2(source, os.path.join(staged, name))
         source_lib = os.path.join(os.path.dirname(binary_abs), 'lib')
         if os.path.isdir(source_lib):
             shutil.copytree(source_lib, os.path.join(staged, 'lib'), dirs_exist_ok=True)
-        source_app = os.path.join(os.path.dirname(binary_abs), 'Russiano2D SDK.app')
-        if os.path.isdir(source_app):
-            shutil.copytree(source_app, os.path.join(staged, 'Russiano2D SDK.app'),
-                            dirs_exist_ok=True)
         binary = os.path.join(staged, os.path.basename(binary))
 
     if os.path.isdir(target) and os.listdir(target) and not force:
@@ -837,7 +811,7 @@ def package_platform(
                             ignore=package_ignore)
         else:
             shutil.copy2(source_path, dest_path)
-            if source == binary or dest == 'r2d-sdk' + suffix:
+            if dest == os.path.basename(binary):
                 os.chmod(dest_path, 0o755)
 
     # Если сборка положила рядом с бинарником каталог lib/ (внешние
@@ -871,7 +845,7 @@ def package_platform(
 
     render_platform_docs(target, platform_name, version)
 
-    # Manifest версии: одна строка с версией из CMakeLists.txt, рядом с
+    # Manifest версии: одна строка с версией из VERSION, рядом с
     # SHA256SUMS. Пакет называет свою версию сам, не только в README.
     with open(os.path.join(target, VERSION_FILE), "w", encoding="utf-8") as handle:
         handle.write(version + "\n")
@@ -1170,13 +1144,13 @@ def usage() -> str:
         "  --check-junk         проверить dist/ на мусор (.DS_Store, __pycache__,\n"
         "                       Thumbs.db) в дереве, SHA256SUMS.txt и архивах;\n"
         "                       выход 1 — релиз должен падать ЛОКАЛЬНО, а не в CI\n"
-        "  --bump               поднять патч-версию в CMakeLists.txt на 1\n"
+        "  --bump               поднять патч-версию на 1\n"
         "                       (0.1.0 → 0.1.1) и напечатать её; больше ничего\n"
         "                       не делает — этим пользуется build_and_push.command\n"
         "  --yes                не спрашивать подтверждение (для скриптов)\n"
         "\n"
         "Ключи:\n"
-        "  --version X.Y.Z      версия релиза (поднимается в CMakeLists.txt)\n"
+        "  --version X.Y.Z      версия релиза (записывается в VERSION)\n"
         "  --platform СПИСОК    платформы через запятую; по умолчанию — текущая.\n"
         "                       Доступны: %s\n"
         "  --build-dir DIR      каталог сборки (по умолчанию %s)\n"
@@ -1278,7 +1252,7 @@ def main(argv: List[str]) -> int:
         print(read_version())
         return 0
 
-    # --bump ничего не собирает и не проверяет: только версия в CMakeLists.txt.
+    # --bump ничего не собирает и не проверяет: только файл VERSION.
     if options.bump:
         return run_bump(options)
 
@@ -1306,7 +1280,7 @@ def main(argv: List[str]) -> int:
     log("")
     log("1. Версия")
     if options.version and options.version != current:
-        log("    %s → %s (CMakeLists.txt)" % (current, options.version))
+        log("    %s → %s (VERSION)" % (current, options.version))
     else:
         log("    остаётся %s" % current)
 
@@ -1361,7 +1335,7 @@ def main(argv: List[str]) -> int:
 
     if options.version and options.version != current:
         old = write_version(options.version)
-        log("Версия в CMakeLists.txt: %s → %s" % (old, options.version))
+        log("Версия: %s → %s" % (old, options.version))
 
     real = Runner(False)
     if not options.skip_build:
@@ -1369,7 +1343,7 @@ def main(argv: List[str]) -> int:
     test_steps(real, options.build_dir, options.skip_tests)
 
     for name in options.platforms:
-        binary = options.binary or os.path.join(options.build_dir, binary_name(name))
+        binary = options.binary or xmake_binary_path(options.build_dir, name)
         package_platform(
             real, name, binary, options.out_dir,
             options.with_demos, version, force=options.force, extras=options.extras,
@@ -1402,9 +1376,7 @@ def run_package_only(options: Options, version: str) -> int:
     # Упаковка — не публикация: без лицензии только предупреждаем.
     license_blocker(hard=False)
     for name in options.platforms:
-        binary = options.binary or os.path.join(
-            options.build_dir, binary_name(name)
-        )
+        binary = options.binary or xmake_binary_path(options.build_dir, name)
         if not options.dry_run and not os.path.exists(os.path.join(ROOT, binary)):
             raise SystemExit("ошибка: не нашёл бинарник %s" % binary)
         package_platform(

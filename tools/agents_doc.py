@@ -126,7 +126,7 @@ def main(argv: List[str]) -> int:
     parser.add_argument("--all", action="store_true",
                         help="обновить README.md и AGENTS.md во всех dist/<платформа>/")
     parser.add_argument("--dir", default="dist", help="каталог сборок (по умолчанию dist)")
-    parser.add_argument("--version", default=None, help="версия (по умолчанию из CMakeLists.txt)")
+    parser.add_argument("--version", default=None, help="версия (по умолчанию из VERSION)")
     parser.add_argument("--list", action="store_true", help="показать список документов")
     options = parser.parse_args(argv)
 

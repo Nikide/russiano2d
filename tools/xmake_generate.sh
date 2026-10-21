@@ -13,14 +13,17 @@ CXX="${CXX:-c++}"
 
 build_tool() {
     local name="$1"
-    if [ ! -x "$OUT/tools/$name" ] || [ "$ROOT/tools/$name.c" -nt "$OUT/tools/$name" ]; then
-        "$CC" -O2 -o "$OUT/tools/$name" "tools/$name.c"
-    fi
+    # The generated directory is shared by platform builds. A cached host tool
+    # may therefore belong to another architecture (for example macOS arm64
+    # when generating Linux x86_64 resources). Rebuild these tiny host tools
+    # every time so the generator is always executable on the current host.
+    "$CC" -O2 -o "$OUT/tools/$name" "tools/$name.c"
 }
 
 build_tool r2d_embed_js
 build_tool r2d_embed_icons
 build_tool r2d_embed_assets
+build_tool r2d_embed_shaders
 
 echo "generated: JS"
 "$OUT/tools/r2d_embed_js" src/highlevel "$OUT/r2d_js_data.h"
@@ -31,9 +34,9 @@ echo "generated: icons"
 
 echo "generated: splash"
 "$OUT/tools/r2d_embed_assets" "$OUT/r2d_splash_data.h" \
-    sdk/assets/splash.jpg sdk/assets/splash.jpg \
-    sdk/ui/splash.rml sdk/ui/splash.rml \
-    sdk/ui/splash.rcss sdk/ui/splash.rcss
+    editor/assets/splash.jpg editor/assets/splash.jpg \
+    editor/ui/splash.rml editor/ui/splash.rml \
+    editor/ui/splash.rcss editor/ui/splash.rcss
 
 GLSLANG="${GLSLANG:-glslangValidator}"
 SPIRV_CROSS="${SPIRV_CROSS:-spirv-cross}"
@@ -49,7 +52,7 @@ shader() {
     "$GLSLANG" -V --target-env vulkan1.1 --quiet "$@" -o "$spv" "$src"
     "$SPIRV_CROSS" "$spv" --msl --msl-version 20100 --msl-decoration-binding --output "$msl"
     if { [ "$name" = world ] || [ "$name" = world_batch ]; } && [ "$stage" = frag ]; then
-        cmake -DINPUT="$msl" -P cmake/WorldMetalBindings.cmake >/dev/null
+        "$OUT/tools/r2d_embed_shaders" --remap-metal "$msl" >/dev/null
     fi
     ENTRIES="$ENTRIES$base,"
     echo "generated: shader $base"
@@ -70,7 +73,6 @@ shader world frag shaders/world.frag.glsl
 shader world_batch vert shaders/world.vert.glsl -DR2D_BATCH_SSBO=1
 shader world_batch frag shaders/world.frag.glsl -DR2D_BATCH_SSBO=1
 
-cmake -DSHADER_DIR="$OUT/shaders" -DSHADER_ENTRIES="$ENTRIES" \
-      -DSHADER_MODE=glsl -DOUTPUT="$OUT/shaders/r2d_shaders.h" \
-      -P cmake/EmbedShader.cmake
+"$OUT/tools/r2d_embed_shaders" --dir "$OUT/shaders" --entries "$ENTRIES" \
+      --mode glsl --output "$OUT/shaders/r2d_shaders.h"
 echo "generated: $OUT"

@@ -22,14 +22,14 @@ REQUIRED = (
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "api.schema.json",
-    "sdk/main.js",
-    "sdk/ui/shell.rml",
-    "sdk/tools/world-editor.js",
+    "editor/project.json",
+    "editor/main.js",
+    "templates/blank/template.json",
 )
 BINARIES = {
-    "linux": ("russiano2d", "r2d-sdk", "russiano2d-sdk"),
-    "macos": ("russiano2d", "r2d-sdk", "russiano2d-sdk"),
-    "windows": ("russiano2d.exe", "r2d-sdk.exe", "russiano2d-sdk.exe"),
+    "linux": ("r2d",),
+    "macos": ("r2d",),
+    "windows": ("r2d.exe",),
 }
 FORBIDDEN_PARTS = (".DS_Store", "__pycache__", ".pyc", ".git/", "build-autobuild/",
                    "dist-ci/", "/.cache/")
@@ -65,7 +65,7 @@ def main():
     p.add_argument("--archive", required=True)
     p.add_argument("--platform", choices=("linux-x86_64", "linux-aarch64", "macos-arm64", "macos-x86_64", "windows-x86_64"),
                    help="платформа: выбирает имена бинарников")
-    p.add_argument("--version", default=None, help="ожидаемая версия (по умолчанию из CMakeLists)")
+    p.add_argument("--version", default=None, help="ожидаемая версия (по умолчанию из VERSION)")
     args = p.parse_args()
 
     failures = []
@@ -107,28 +107,26 @@ def main():
         check(binary in flat, "исполняемый файл %s в корне" % binary)
     for required in REQUIRED:
         check(required in flat, "обязательный файл %s" % required)
-    if (args.platform or "").startswith("macos"):
-        for required in ("Russiano2D SDK.app/Contents/Info.plist",
-                         "Russiano2D SDK.app/Contents/MacOS/russiano2d-sdk",
-                         "Russiano2D SDK.app/Contents/MacOS/russiano2d",
-                         "Russiano2D SDK.app/Contents/MacOS/r2d-sdk",
-                         "Russiano2D SDK.app/Contents/Resources/r2d-sdk",
-                         "Russiano2D SDK.app/Contents/Resources/build/r2d-sdk",
-                         "Russiano2D SDK.app/Contents/Resources/sdk/project.json"):
-            check(required in flat, "Finder SDK app содержит %s" % required)
+    forbidden_apps = sorted(n for n in flat if "SDK.app/" in n or PurePosixPath(n).name in {
+        "r2d-sdk", "r2d-sdk.exe", "russiano2d-sdk", "russiano2d-sdk.exe"
+    })
+    check(not forbidden_apps, "в архиве нет второго приложения/backend" +
+          (" (%s)" % ", ".join(forbidden_apps[:5]) if forbidden_apps else ""))
+    executable_names = {"r2d", "r2d.exe", "russiano2d", "russiano2d.exe",
+                        "r2d-sdk", "r2d-sdk.exe", "russiano2d-sdk", "russiano2d-sdk.exe"}
+    bundled_executables = sorted(n for n in flat if PurePosixPath(n).name in executable_names)
+    check(bundled_executables == [binaries[0]],
+          "в пакете ровно один движковый executable r2d" +
+          (" (%s)" % ", ".join(bundled_executables) if bundled_executables else ""))
 
     junk = sorted(n for n in flat if any(part in n for part in FORBIDDEN_PARTS))
     check(not junk, "в пакете нет мусора ОС/сборки" + (" (%s)" % ", ".join(junk[:5]) if junk else ""))
 
-    # Архив не должен быть «сплющен»: standalone-бинарники лежат в корне,
-    # а не в подпапке. macOS .app — отдельный обязательный дубликат runtime
-    # внутри bundle, поэтому его вложенные executable здесь допустимы.
+    # Архив не должен быть «сплющен»: единственный standalone-бинарник лежит в корне.
     nested_binaries = [
         n for n in flat
         if PurePosixPath(n).name in binaries
         and "/" in n
-        and not ((args.platform or "").startswith("macos")
-                 and n.startswith("Russiano2D SDK.app/"))
     ]
     check(not nested_binaries,
           "бинарники лежат в корне архива, а не во вложенном каталоге")

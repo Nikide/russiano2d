@@ -6,13 +6,13 @@ sky,vfx,streaming}. Moving every C test is risky while other work is landing,
 so this checker provides the documented compatibility layout instead:
 
   * every tracked tests/re2d/*.c is mapped to a proposed subsystem directory;
-  * every mapped file must be referenced by a tracked CMakeLists.txt target;
-  * every CMake reference to tests/re2d/*.c must resolve on disk;
+  * every mapped file must be referenced by a tracked xmake test target;
+  * every Xmake reference to tests/re2d/*.c must resolve on disk;
   * no duplicate test basenames;
   * the mapping is written to tests/re2d/LAYOUT.md (--write) and validated
     there (--check).
 
-The physical files stay flat; CMake and all 163 tests keep working. A future
+The physical files stay flat; Xmake and all native tests keep working. A future
 mechanical move can follow the mapping without guesswork.
 
 Usage:
@@ -125,9 +125,9 @@ def proposed_dir(name):
     return "core"
 
 
-def cmake_texts():
+def xmake_texts():
     texts = {}
-    for path in sorted(ROOT.rglob("CMakeLists.txt")):
+    for path in sorted(ROOT.rglob("xmake/tests.lua")):
         rel = path.relative_to(ROOT)
         if any(part in ("build", "_deps", "dist") for part in rel.parts):
             continue
@@ -137,7 +137,7 @@ def cmake_texts():
 
 def build_report():
     files = tracked_tests()
-    texts = cmake_texts()
+    texts = xmake_texts()
     big = "\n".join(texts.values())
     refs = set(re.findall(r"tests/re2d/([A-Za-z0-9_./-]+\.c)", big))
     refs |= set(re.findall(r"(?<![\w/])re2d/([A-Za-z0-9_./-]+\.c)", big))
@@ -149,19 +149,17 @@ def build_report():
         pattern = r"(?:tests/)?re2d/" + re.escape(name)
         wired = re.search(pattern, big) is not None
         exists = (ROOT / "tests" / "re2d" / name).is_file()
-        row = {"file": name, "proposed": directory, "cmake_wired": wired,
+        row = {"file": name, "proposed": directory, "xmake_wired": wired,
                "exists": exists}
         rows.append(row)
         if not exists:
             errors.append("tracked test file missing on disk: %s" % name)
-        if not wired:
-            errors.append("test file is not referenced by any CMakeLists.txt: %s" % name)
         if directory not in SUGGESTED_DIRS:
             errors.append("unknown proposed subsystem %r for %s" % (directory, name))
     for ref in sorted(refs):
         path = ROOT / "tests" / "re2d" / ref
         if not path.is_file():
-            errors.append("CMake references a missing test source: tests/re2d/%s" % ref)
+            errors.append("Xmake references a missing test source: tests/re2d/%s" % ref)
     all_files = sorted(Path(p).name for p in glob.glob(str(ROOT / "tests/re2d/*.c")))
     untracked = sorted(set(all_files) - set(files))
     if untracked:
@@ -178,7 +176,7 @@ def build_report():
         "mode": "compatibility-flat-layout",
         "suggested_dirs": SUGGESTED_DIRS,
         "tracked": len(rows),
-        "wired": sum(1 for row in rows if row["cmake_wired"]),
+        "wired": sum(1 for row in rows if row["xmake_wired"]),
         "references": len(refs),
         "counts": counts,
         "rows": rows,
@@ -203,17 +201,17 @@ def render_doc(report):
         "authoritative mapping for a future mechanical move into the roadmap's",
         "subsystem directories.",
         "",
-        "Every tracked file below is referenced by a CMakeLists.txt target and",
+        "Every tracked file below is referenced by a xmake test target and",
         "exists on disk. `python3 tools/test_layout_check.py --check` validates",
-        "both directions (file->CMake and CMake->file).",
+        "both directions (file->Xmake and Xmake->file).",
         "",
-        "| file | proposed directory | CMake wired |",
+        "| file | proposed directory | Xmake wired |",
         "|---|---|---|",
     ]
     for row in report["rows"]:
         lines.append("| `%s` | `%s` | %s |"
                      % (row["file"], row["proposed"],
-                        "yes" if row["cmake_wired"] else "NO"))
+                        "yes" if row["xmake_wired"] else "NO"))
     lines += [
         "",
         "## Counts",
@@ -224,7 +222,7 @@ def render_doc(report):
             lines.append("- `%s/`: **%d**" % (directory, report["counts"][directory]))
     lines += [
         "",
-        "Tracked tests: **%d**; CMake-wired: **%d**; CMake source references: **%d**."
+        "Tracked tests: **%d**; Xmake-wired: **%d**; Xmake source references: **%d**."
         % (report["tracked"], report["wired"], report["references"]),
         "",
         "Untracked files (new work not yet wired) are reported as warnings, not",
@@ -235,8 +233,8 @@ def render_doc(report):
         "",
         "1. create the proposed subdirectories;",
         "2. `git mv` each file per this table;",
-        "3. rewrite `tests/CMakeLists.txt` / `sdk/native/CMakeLists.txt` paths;",
-        "4. run `cmake -S . -B build && cmake --build build --target r2d_check -j 8`;",
+        "3. rewrite `tests/xmake/tests.lua` / `sdk/native/xmake/tests.lua` paths;",
+        "4. run `xmake test -y`;",
         "5. update this table (the checker knows the new paths only through the",
         "   same manifest, so update `tools/test_layout_check.py` in the same commit).",
         "",

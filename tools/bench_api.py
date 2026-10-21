@@ -65,12 +65,7 @@ def percentile(values, q=0.95):
 
 
 def metadata(binary,args):
-    cache=Path(args.cache).resolve()
-    config={}
-    if cache.is_file():
-        for line in cache.read_text().splitlines():
-            if line.startswith(('CMAKE_BUILD_TYPE:', 'CMAKE_C_COMPILER:', 'CMAKE_C_FLAGS_RELEASE:', 'R2D_')) and '=' in line:
-                key,value=line.split('=',1);config[key]=value
+    config={'build_system': 'xmake', 'target': 'r2d'}
     hardware={'cpu':platform.processor() or platform.machine(),'model':None,'logical_cpus':os.cpu_count(),'ram_bytes':None,'gpu':None}
     if platform.system()=='Darwin':
         raw_machine=optional(['system_profiler','SPHardwareDataType','-json'])
@@ -94,8 +89,8 @@ def metadata(binary,args):
             'timezone':'UTC',
             'os':platform.platform(),'architecture':platform.machine(),'hardware':hardware,
             'commit':command(['git','rev-parse','HEAD']),'dirty':bool(dirty),'dirty_paths':dirty.splitlines(),
-            'binary':str(binary),'binary_sha256':sha(binary),'cmake_cache':str(cache),'build':config,
-            'compiler':optional([next((v for k,v in config.items() if k.startswith('CMAKE_C_COMPILER:')),'cc'),'--version']), 'python':sys.version.split()[0],
+            'binary':str(binary),'binary_sha256':sha(binary),'build':config,
+            'compiler':optional(['xcrun','--find','clang']) if platform.system() == 'Darwin' else optional(['cc','--version']), 'python':sys.version.split()[0],
             'workload_sha256':hashlib.sha256(CASES.read_bytes()+(ROOT/'tests/fixtures/bench_api/main.js').read_bytes()+(ROOT/'tests/fixtures/bench/main.js').read_bytes()).hexdigest(),
             'parameters':{'seed':17,'fixed_dt':1/60,'headless':True,'resolution':[1280,720],
                           'warm_frames':args.warm,'measurement_frames':args.frames,'samples':args.samples,
@@ -248,8 +243,7 @@ def markdown(report):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--binary',default=os.environ.get('R2D_BINARY','build/russiano2d'))
-    parser.add_argument('--cache',default='build/CMakeCache.txt')
+    parser.add_argument('--binary',default=os.environ.get('R2D_BINARY','build-xmake/macos-arm64/macosx/arm64/release/r2d'))
     parser.add_argument('--samples',type=int,default=7);parser.add_argument('--warm',type=int,default=40)
     parser.add_argument('--frames',type=int,default=120);parser.add_argument('--target-ms',type=float,default=20)
     parser.add_argument('--only');parser.add_argument('--baseline');parser.add_argument('--threshold',type=float,default=20)

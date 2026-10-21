@@ -20,8 +20,8 @@ GitHub Releases — CI (§4.8). Если релиза по тегу ещё не�
     python3 tools/attach_macos_release.py             # спросит подтверждение
     python3 tools/attach_macos_release.py --yes       # без вопросов (CI/скрипт)
 
-Архивы берутся из ``dist/`` (их кладёт ``tools/autobuild.py`` локальной
-macOS-сборкой). Перед загрузкой проверяется архитектура бинарника внутри
+Архивы берутся из ``dist/`` (их кладёт ``tools/release_build.sh`` через
+Xmake). Перед загрузкой проверяется архитектура бинарника внутри
 пакета: перепутать arm64 и x86_64 в релизе нельзя.
 """
 
@@ -99,11 +99,11 @@ def main(argv: List[str]) -> int:
         archive = dist / release.archive_name(platform_name, version)
         if not archive.is_file():
             raise SystemExit("ошибка: нет локального архива %s; соберите macOS "
-                             "локально (tools/autobuild.py --platforms %s)"
+                             "локально (tools/release_build.sh; платформы: %s)"
                              % (archive, ",".join(MACOS_PLATFORMS)))
         # Архитектура внутри пакета: имя артефакта не должно врать.
         binary = (dist / platform_name
-                  / ("russiano2d" + release.PLATFORMS[platform_name][1]))
+                  / ("r2d" + release.PLATFORMS[platform_name][1]))
         if binary.is_file():
             actual = release.binary_platform(str(binary))
             if actual != platform_name:

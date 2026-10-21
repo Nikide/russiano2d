@@ -60,17 +60,16 @@ Release version [1.2.14]:
 * Zig — opt-in кросс-компиляция Linux x86_64 (`R2D_BUILD_LINUX=1`);
   локальная Zig-сборка Linux временно не входит в релиз (зависает на машине
   релиза — Linux собирается на целевой ОС).
-* CMake — только внутри сторонних пакетов/переходного периода; второй
-  релизной сборки Russiano2D из CMake нет.
+* Проектные сборка и тестовые цели определены в Xmake; отдельной CMake-сборки проекта нет.
 * Docker не используется.
 
 `tools/release_build.sh` собирает три платформы в `dist/<platform>/`:
 
 ```text
 dist/
-    macos-arm64/      {russiano2d, r2d-sdk, russiano2d-sdk, Russiano2D SDK.app}
-    macos-x86_64/     {russiano2d, r2d-sdk, russiano2d-sdk, Russiano2D SDK.app}
-    windows-x86_64/   {*.exe}
+    macos-arm64/      {r2d, editor/, templates/, docs/}
+    macos-x86_64/     {r2d, editor/, templates/, docs/}
+    windows-x86_64/   {r2d.exe, editor/, templates/, docs/}
     russiano2d-vX.Y.Z-macos-arm64.tar.gz
     russiano2d-vX.Y.Z-macos-x86_64.tar.gz
     russiano2d-vX.Y.Z-windows-x86_64.zip
@@ -82,9 +81,9 @@ Linux x86_64 из локального релиза временно исклю�
 `xmake f -p linux -a x86_64 -m release -o build-linux && xmake build -y`.
 
 Имена архивов сохраняют существующий контракт `release.archive_name()`.
-macOS-архив также содержит `Russiano2D SDK.app`: Finder-запускатель включает
-runtime, native backend и копию SDK-ресурсов. CLI-бинарники остаются в корне
-пакета для запуска игр и автоматизации.
+Каждый архив содержит единственный executable `r2d` в корне и ресурсы Editor,
+шаблоны, публичную документацию и runtime данные. Этот бинарник открывает
+Project Manager/Editor, запускает игру и выполняет CLI-команды.
 
 В пакетах игра по умолчанию — демо VN `game_vn/` (внутри пакета это `game/`); платформер из корневого `game/` в релиз не попадает.
 
@@ -96,11 +95,10 @@ runtime, native backend и копию SDK-ресурсов. CLI-бинарник
    (провал любой — стоп, тег не создаётся); Linux — сборка на целевой ОС;
 2. `tools/release.py --package-only` собрал архивы в `dist/`;
 3. `tools/ci_package_check.py` проверил каждый архив: открывается, `VERSION`,
-   бинарники, `sdk/`, лицензии, отсутствие `.DS_Store`/`__pycache__`/сборочного
+   единственный `r2d` executable, Editor, шаблоны, лицензии, отсутствие `.DS_Store`/`__pycache__`/сборочного
    мусора;
 4. `SHA256SUMS.txt` сгенерирован по трём архивам;
-5. Unity tests прошли (`tools/release_tests.sh`: `xmake test`; в переходный
-   период — нативный macOS CTest-набор CMake, тот же Unity).
+5. Unity tests прошли (`tools/release_tests.sh`: `xmake test`).
 
 Только после этого создаются commit и annotated tag `vX.Y.Z`.
 
@@ -171,30 +169,13 @@ GitHub Actions — **только валидация**:
 Релизных workflow нет. Тег, созданный локально, не запускает сборку пакетов в
 CI; GitLab/GitVerse пайплайны тоже не создают релизы (только проверяют сборку).
 
-## Статус миграции
+## Сборка
 
-Инструменты: `xmake 3.1.2`, `zig 0.17.0`, `glslang 16.6.0`,
-`spirv-cross 1.4.363`. `xmake.lua` уже собирает **macOS arm64 и x86_64** из
-чистого build-каталога: движок, `r2d-sdk` и `russiano2d-sdk`, с генерацией
-JS/иконок/сплэша/шейдеров через `tools/xmake_generate.sh`.
+`xmake.lua` собирает одну пользовательскую цель `r2d`. Корневой `VERSION`
+подаётся и в бинарник, и в релизный пакет. Native тестовые цели объявлены в
+`xmake/tests.lua` и запускаются командой `xmake test`.
 
-**Windows x86_64 собирается локально** связкой Homebrew `mingw-w64` + CMake 3.31
-(`xmake f -p mingw -a x86_64`): `russiano2d.exe`, `r2d-sdk.exe`,
-`russiano2d-sdk.exe`; пакет `dist/russiano2d-v1.2.13-windows-x86_64.zip`
-проходит `ci_package_check`. Zig для Windows не подходит: его `cc` не умеет
-RC/`windows.h`.
-
-**Linux x86_64 — сборка на целевой ОС (временное решение 2026-10-20).**
-Локальная Zig-кросс-сборка на машине релиза зависает, поэтому платформа
-исключена из `build_and_push` по умолчанию. Linux-пользователь собирает
-движок сам:
-
-```bash
-xmake f -p linux -a x86_64 -m release -o build-linux
-xmake build -y
-./build-linux/linux/x86_64/release/russiano2d --game game
-```
-
-Вернуть платформу в локальный релиз: `R2D_BUILD_LINUX=1 build_and_push`
-(и `R2D_BUILD_LINUX=1 tools/release_build.sh`). Linux-специфичный код и CI
-валидация сохраняются; это ограничение именно локального релизного пайплайна.
+macOS/Windows/Linux сборочные конфигурации выбираются через Xmake. Внешние
+зависимости могут вызывать собственные сборочные инструменты внутри рецептов
+Xmake; конфигурация, компиляция и тестовые цели самого Russiano2D выполняются
+через Xmake.

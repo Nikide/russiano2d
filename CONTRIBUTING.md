@@ -45,15 +45,18 @@
 
 ## Если всё-таки форкаете — как собрать
 
-Нужны CMake 3.24+, компилятор с C11 и C++20, Git. Зависимости тянутся через
-`FetchContent` при первой конфигурации.
+Нужны Xmake, компилятор с C11 и C++20, Git. Зависимости собираются
+рецептами Xmake при первой конфигурации.
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j
-./build/russiano2d              # игра из каталога game/
-./build/russiano2d --game demos # меню со всеми демо
+xmake f -m debug -o build-xmake/dev
+xmake build -y -j 8 r2d
+./build-xmake/dev/macosx/arm64/debug/r2d
 ```
+
+Платформенные значения `-p/-a` и точное расположение бинарника зависят от
+целевого Xmake toolchain. `xmake.lua` — единственная конфигурация сборки
+проекта; пользовательский бинарник называется `r2d`.
 
 Тесты:
 

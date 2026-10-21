@@ -1,8 +1,4 @@
-name: CI - native build validation (no releases)
-# CI VALIDATION ONLY (docs/RELEASING.md). Релизы собирает и публикует локальный
-# build_and_push (Xmake, все 4 платформы). GitHub Actions проверяет, что код
-# собирается нативно на Linux/Windows и Unity-тесты проходят; тег здесь ничего
-# не публикует и не собирает релизные артефакты.
+name: CI - Xmake build validation
 on:
   push:
     branches: ['**']
@@ -18,85 +14,51 @@ env:
   SDL_AUDIODRIVER: dummy
 jobs:
   linux-build-test:
-    name: Linux x86_64 - build + Unity tests (RE2D on/off)
+    name: Linux x86_64 - r2d + native tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: latest
       - name: Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config libfreetype-dev patchelf \
+          sudo apt-get install -y ninja-build pkg-config m4 libfreetype-dev patchelf \
+            glslang-tools spirv-cross \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev \
             libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev \
             libgl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
             libcurl4-openssl-dev mesa-vulkan-drivers
-      - name: Configure (RE2D on)
-        run: cmake -S . -B build-ci -G Ninja -DCMAKE_BUILD_TYPE=Release -DR2D_ENABLE_RE2D=ON
-      - name: Build (RE2D on)
-        run: cmake --build build-ci --parallel "$(nproc)"
-      - name: Unity tests (RE2D on)
-        run: ctest --test-dir build-ci --output-on-failure --parallel "$(nproc)"
-      - name: Configure (RE2D off)
-        run: cmake -S . -B build-2d-ci -G Ninja -DCMAKE_BUILD_TYPE=Release -DR2D_ENABLE_RE2D=OFF
-      - name: Build (RE2D off)
-        run: cmake --build build-2d-ci --parallel "$(nproc)"
-      - name: Unity tests (RE2D off)
-        run: ctest --test-dir build-2d-ci --output-on-failure --parallel "$(nproc)"
+      - name: Configure and build the only executable
+        run: |
+          xmake f -y -p linux -a x86_64 -m release -o build-xmake/linux-x86_64
+          xmake build -y -j 4 r2d
+      - name: Unity and JavaScript tests
+        run: xmake test -y -j 4
+      - name: Editor entry and code-first smoke
+        env:
+          R2D_BINARY: build-xmake/linux-x86_64/linux/x86_64/release/r2d
+        run: |
+          "$R2D_BINARY" commands --json
+          "$R2D_BINARY" lint game --json
+          "$R2D_BINARY" validate game --json
 
   windows-cross-build:
-    name: Windows x86_64 - MinGW cross-build (validation only)
+    name: Windows x86_64 - Xmake MinGW cross-build
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: Dependencies (MinGW + host shader tools + FreeType)
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: latest
+      - name: Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build cmake pkg-config mingw-w64 xz-utils zip \
-            glslang-tools spirv-cross
-          curl -fL --connect-timeout 10 --max-time 300 --retry 5 --retry-delay 3 \
-            -o /tmp/freetype.tar.xz \
-            "https://archive.ubuntu.com/ubuntu/pool/main/f/freetype/freetype_2.13.2+dfsg.orig.tar.xz"
-          echo "48c78a4194adfcd15a4d089f3206dab8454c311f5577f3ef7eaef95f777f86e6  /tmp/freetype.tar.xz" | sha256sum -c -
-          mkdir -p /tmp/freetype && tar -xJf /tmp/freetype.tar.xz -C /tmp/freetype --strip-components=1
-          ( cd /tmp/freetype
-            ./configure --host=x86_64-w64-mingw32 --prefix=/usr/x86_64-w64-mingw32 \
-              --without-harfbuzz --without-bzip2 --without-brotli --without-png --without-zlib \
-              --enable-static --disable-shared >/tmp/freetype.log 2>&1
-            make -j"$(nproc)" >>/tmp/freetype.log 2>&1 && sudo make install >>/tmp/freetype.log 2>&1 )
-      - name: Configure (Windows cross, MinGW)
+          sudo apt-get install -y mingw-w64 ninja-build pkg-config m4 zip glslang-tools spirv-cross
+      - name: Configure and build r2d.exe
         run: |
-          cmake -S . -B build-win-ci -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DR2D_BUNDLED_FREETYPE=ON \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
-            -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
-            -DCMAKE_FIND_ROOT_PATH=/usr/x86_64-w64-mingw32 \
-            -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
-            -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-            -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY
-      - name: Build (Windows cross)
-        run: cmake --build build-win-ci --parallel "$(nproc)"
-
-  windows-msvc-diagnostic:
-    name: Windows MSVC - diagnostic (non-blocking)
-    # Наблюдение за родным MSVC: сейчас CL.exe падает внутренней ошибкой в
-    # кодогенерации, поэтому job необязателен. Релизный Windows-артефакт
-    # собирается локально build_and_push (Xmake + Zig), здесь — только проверка компиляции.
-    runs-on: windows-2022
-    timeout-minutes: 60
-    continue-on-error: true
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure (MSVC, Release)
-        run: |
-          cmake -S . -B build-msvc -DCMAKE_BUILD_TYPE=Release \
-            -DR2D_BUNDLED_FREETYPE=ON \
-            '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>'
-      - name: Build engine (MSVC)
-        run: cmake --build build-msvc --config Release --parallel 2
+          xmake f -y -p mingw -a x86_64 -m release -o build-xmake/windows-x86_64
+          xmake build -y -j 4 r2d

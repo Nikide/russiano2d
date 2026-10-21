@@ -149,7 +149,7 @@ def glob_site(*parts: str, pattern: str = "*.md", skip_underscore: bool = False,
 
 #: Что выкидывать из копируемых каталогов (мусор ОС и рабочие файлы).
 PACKAGE_IGNORE = (".DS_Store", "__pycache__", "*.pyc", "*.pyo",
-                  "state.local.json", "native", "CMakeLists.txt")
+                  "state.local.json", "native")
 
 
 def repo_root() -> Path:

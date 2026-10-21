@@ -36,9 +36,9 @@ DOC = ROOT / "docs" / "ROADMAP_COVERAGE.md"
 DEFAULT_ROADMAP = Path("/Users/nikitademcev/Downloads/RUSSIANO2D_VN_AND_RE2D_RENDER_ROADMAP.md")
 AUDIT_DATE = "2026-10-17"
 ACCEPTANCE = {
-    "build": "`cmake --build build -j 8` PASS",
-    "native CTest": "`r2d_check` 163/163 passed, 12.89 s",
-    "ci_verify": "PASS (RE2D=on, 4052 API names, schema/typings/docs fresh, lint/validate/doctor green)",
+    "build": "`xmake build -y -j 8 r2d` PASS",
+    "native tests": "Xmake native/JS targets; see current test gate",
+    "xmake": "single r2d executable; see docs/BUILD.md",
     "site build": "`python3 site/build-doc.py` PASS",
     "docs/API guards": "doc_claims, doc_coverage, api_docs_sync, api_freeze, site_prune PASS",
     "BASHNYA repro": "exit 0; packaged runtime reports `large_save` serialization error, repo build succeeds with 4097 spans",
@@ -170,7 +170,7 @@ GROUPS = {
                    "src/re2d_world_mover.c", "src/re2d_world_material_anim.c",
                    "src/re2d_world_portal_visual.c", "src/re2d_world_polywall.c",
                    "src/re2d_world_polygon.c", "src/re2d_world_controller.c"],
-    "tests_policy": ["tests/CMakeLists.txt", "CMakeLists.txt", "docs/TESTING.md",
+    "tests_policy": ["xmake/tests.lua", "xmake.lua", "docs/TESTING.md",
                      "tests/re2d", "tests/js"],
     "debug": ["docs/RE2D_DEBUG_VIEWS.md", "tests/agent/re2d_budget_test.py",
               "src/highlevel/re2d.js"],
@@ -323,7 +323,7 @@ add([129, 130], "done", ["tests_policy"],
     "Unity for native, JS/agent for high-level/VN; no new Python core tests.")
 add([131], "done", ["tests_policy", "tests/re2d", "tests/re2d/LAYOUT.md",
                     "tools/test_layout_check.py", "tests/agent/native_test_layout_test.py"],
-    "Documented compatibility layout: flat files mapped to roadmap subsystem dirs, every tracked test CMake-wired in both directions, accepted by native_test_layout_test.")
+    "Documented compatibility layout: flat files mapped to roadmap subsystem dirs, tracked test files are mapped, Xmake-referenced sources resolve, accepted by native_test_layout_test.")
 add([132], "done", ["tests_policy", "handoff"],
     "r2d_check/CTest fast suite: 158/158 in ~10 s.")
 add([133], "done", ["render_tests"],
@@ -629,9 +629,8 @@ def render_doc(report):
     lines.append("## Acceptance commands")
     lines.append("")
     lines.append("```bash")
-    lines.append("cmake --build build -j 8")
-    lines.append("cmake --build build --target r2d_check -j 8")
-    lines.append("python3 tools/ci_verify.py --build-dir build")
+    lines.append("xmake build -y -j 8 r2d")
+    lines.append("xmake test -y -j 8")
     lines.append("python3 tests/doc_claims_test.py")
     lines.append("python3 tests/doc_coverage_test.py")
     lines.append("python3 tests/api_docs_sync_test.py")

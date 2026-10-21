@@ -21,10 +21,7 @@ report = dict(machine=platform.platform(), processor=platform.machine(),
               dirty=bool(subprocess.check_output(['git', 'diff', '--name-only'], text=True).strip()),
               timing='wall clock agent step, includes command overhead; not presented FPS',
               frames=args.frames, samples=args.samples, scenarios={})
-cache = Path('build/CMakeCache.txt')
-if cache.exists():
-    report['build_config'] = [line for line in cache.read_text().splitlines()
-                              if line.startswith(('CMAKE_BUILD_TYPE:', 'CMAKE_C_FLAGS_RELEASE:'))]
+report['build_system'] = 'xmake'
 if platform.system() == 'Darwin':
     report['cpu'] = subprocess.check_output(['sysctl', '-n', 'machdep.cpu.brand_string'], text=True).strip()
 for mode in ('stationary', 'turning', 'walking'):
