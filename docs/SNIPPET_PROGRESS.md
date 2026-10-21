@@ -8,12 +8,12 @@
 | Раздел | Статус |
 |---|---|
 | §20.1 baseline (schema 2, `editor.graph`, API schema) | ✅ было до работы |
-| §20.2 матрица 500 ID и API gaps | ⬜ |
+| §20.2 матрица 500 ID и API gaps | ✅ `58e89db` ([SNIPPET_MATRIX.md](SNIPPET_MATRIX.md); пробелы — предварительно по пространствам $, уточняются при реализации) |
 | §20.3 контракты: manifest, поля, слоты, ID, `editor.snippets`, ownership, коды SNIP | ✅ `a3200d5` (миграция данных пакетов — 🟡 только `snippet update`) |
 | §20.4 C/$ API: `$.updateFor` + schema/typings/reference | ✅ `eb84756` · остальные gaps ⬜ (нужна матрица) |
-| §20.5 native r2d: scan/validate/catalog/diff/transaction/migration/recovery | 🟡 `a3200d5` |
-| §20.6 Editor: каталог, Inspector, Save/Run | 🟡 `e4b9566` |
-| §20.7 500 пакетов | 🟡 22 из 500 (`2613cbf`) |
+| §20.5 native r2d: scan/validate/catalog/diff/transaction/migration/recovery | 🟡 `a3200d5`, `5dd6ff3`, `841a104` (entity/new/own/rollback; миграции значений между версиями пакета — ⬜) |
+| §20.6 Editor: каталог, Inspector, Save/Run | 🟡 `e4b9566`, `5dd6ff3`, `841a104` (нет: фильтр категорий, undo/redo панели) |
+| §20.7 500 пакетов | 🟡 28 из 500 (`2613cbf`, `c94beb2`) |
 | §20.8–11 dogfood, полный прогон, доки со скриншотами, DoD | ⬜ |
 
 ## Сделано (коммиты)
@@ -21,26 +21,30 @@
 - `eb84756` — `$.updateFor(node, fn)`: подписка узла, авто-снятие при удалении, disposer; schema/typings/reference/каталог Editor; тест `tests/agent/update_for_test.py`.
 - `a3200d5` — `sdk/native/sdk_snippets.c`: `r2d snippet catalog|validate|check|add|set|remove|update|generate`; `editor.snippets` в project.json schema 2 и в `r2d validate`; генератор `generated/snippets/` (vendored пакеты, привязка к узлу по id, хеш тела → SNIP120, транзакционная запись, одна строка подключения в `runtime.entry`); атомарная запись project.json + `.bak`; `docs/SNIPPETS.md`; фикстура и `tests/agent/snippets_test.py`.
 - `e4b9566` — панель «Кирпичики» в Editor (`editor/lib/snippets_panel.js`): каталог с поиском, выбор объекта графа, формы полей, отключение/удаление, генерация и конфликт; фикс индексатора графа («//» в путях); `tests/agent/editor_snippets_test.py`.
+- `58e89db` — матрица 500 ID: `scripts/snippet_matrix.py` → `docs/SNIPPET_MATRIX.md`, `snippets/matrix.json`; проверка в тесте каталога.
+- `5dd6ff3` — `snippet entity` (объект из Editor, origin graph, создание через `$`), `snippet new` (автор пакета проекта); кнопки в панели; индексатор не учитывает generated дважды.
+- `c94beb2` — weapon.base/hitscan/projectile/melee, trigger.base, kit.top-down-shooter; `tests/agent/snippets_combat_test.py`.
+- `841a104` — `snippet own code|generator`, `snippet rollback`; владелец каждого файла; Build-проверка.
 - `2613cbf` — ID по разделу 12, 22 пакета, `tests/agent/snippets_catalog_test.py` (все пакеты в настоящем runtime).
 
 ## Осталось по §19 Definition of Done
 
 ### Каталог и пакеты
-- [ ] ровно 500 уникальных встроенных ID (сейчас 22)
-- [x] у каждого: manifest, схема Inspector, JS, зависимости, example, README, тест — для имеющихся 22
-- [x] kits раскрываются в состав (kit.platformer-core, kit.platformer-combat)
+- [ ] ровно 500 уникальных встроенных ID (сейчас 28)
+- [x] у каждого: manifest, схема Inspector, JS, зависимости, example, README, тест — для имеющихся 28
+- [x] kits раскрываются в состав (kit.platformer-core, kit.platformer-combat, kit.top-down-shooter)
 - [ ] русский поиск/фильтры на полном каталоге (поиск есть; фильтры по категории в UI — нет)
-- [ ] package authoring в Editor (создать свой behavior/kit из UI)
+- [x] package authoring: `snippet new` + «Создать пакет» в панели (kit — через CLI `--kind kit --deps`)
 
 ### Пользовательский процесс
-- [ ] Player/NPC/weapon/pickup/trigger/kit командами Editor (нет weapon/trigger; создание новой сущности из Editor — нет)
+- [x] Player/NPC/weapon/pickup/trigger/kit командами Editor (объект — «Новый объект», поведение — каталог)
 - [x] Inspector: числа, enum, bool, цвет, vec2, ресурсы (asset picker списком файлов), slots, зависимости
 - [x] поведение не хардкодится в main.js (одна строка подключения)
 - [x] generated JS видим, проходит lint, запускается runtime
-- [ ] передача в code-authored из UI и показ владельца каждого файла (в backend есть `generation.ownership`)
+- [x] передача в code-authored из UI и показ владельца каждого файла
 
 ### C/$ API и архитектура
-- [ ] API gap matrix на 500 пакетов
+- [x] API gap matrix на 500 пакетов (предварительная; уточняется по мере реализации)
 - [ ] прочие подтверждённые API-изменения
 - [x] удаление узла снимает подписки `$.updateFor` и привязки generated (смена сцены — покрыта через удаление узлов; отдельный тест ⬜)
 - [x] пакеты не обращаются к `engine.*` (SNIP101)
@@ -51,12 +55,12 @@
 ### Надёжность и проекты
 - [x] неизвестные поля project.json сохраняются; запись атомарная
 - [x] catalog_lock; `snippet update` показывает изменения
-- [ ] rollback/recovery как операция (`.bak` и `.r2d-user` есть, команды отката нет)
+- [x] rollback project.json (`snippet rollback`), recovery ручной версии generated (`*.r2d-user`)
 - [x] детерминизм; конфликт ручной правки не перезаписывается молча
 - [x] одни коды SNIP в CLI/Editor/агенте
 - [ ] dogfood UX (focus, resize, undo/redo в панели)
 - [ ] жанровые проекты целиком через Editor (Platformer, Witch, top-down, VN, JRPG, roguelike, co-op)
-- [ ] Build проверяет состав поставки с generated
+- [x] Build: generated и только использованные пакеты в поставке
 - [ ] документация со скриншотами `docs/snippets/images/`
 
 ## Известные проблемы вне работы
