@@ -659,6 +659,85 @@ test_target("r2d_world_hint_test", {
     sanitize = "address,undefined",
 })
 
+test_target("r2d_world_hint_visibility_test", {
+    includedirs = { "sdk/native" },
+    sources = {
+        "tests/re2d/hint_visibility_test.c",
+        "sdk/native/sdk_brush.c",
+        "src/re2d_world_polygon.c",
+        "src/re2d_world_hint.c",
+        "src/re2d_world_region.c",
+        "src/re2d_world.c",
+        "src/re2d_math.c",
+        "src/re2d_world_topology.c",
+        "src/re2d_world_visibility.c",
+        "src/re2d_world_light.c",
+        "src/re2d_world_material.c",
+        "src/re2d_world_bake.c",
+        "src/re2d_world_semantic.c",
+        "src/re2d_world_metadata.c",
+        "src/json.c",
+        "src/bsp.c",
+        "src/re2d_world_render_features.c",
+    },
+    packages = { "libsdl3" },
+    links = { "m" },
+    sanitize = "address,undefined",
+})
+
+test_target("r2d_world_volume_entity_test", {
+    sources = {
+        "tests/re2d/volume_entity_test.c",
+        "src/re2d_world_terrain.c",
+        "src/re2d_world_volume.c",
+        "src/re2d_world_hint.c",
+        "src/re2d_world_region.c",
+        "src/re2d_world.c",
+        "src/re2d_math.c",
+        "src/re2d_world_topology.c",
+        "src/re2d_world_visibility.c",
+        "src/re2d_world_light.c",
+        "src/re2d_world_material.c",
+        "src/re2d_world_bake.c",
+        "src/re2d_world_semantic.c",
+        "src/re2d_world_metadata.c",
+        "src/json.c",
+        "src/bsp.c",
+        "src/re2d_world_render_features.c",
+    },
+    packages = { "libsdl3" },
+    links = { "m" },
+    sanitize = "address,undefined",
+})
+
+test_target("r2d_world_brush_entity_test", {
+    includedirs = { "sdk/native" },
+    sources = {
+        "tests/re2d/brush_entity_smoke_test.c",
+        "sdk/native/sdk_brush.c",
+        "src/re2d_world_polygon.c",
+        "src/re2d_world_mover.c",
+        "src/re2d_world_trigger.c",
+        "src/re2d_world_hint.c",
+        "src/re2d_world_region.c",
+        "src/re2d_world.c",
+        "src/re2d_math.c",
+        "src/re2d_world_topology.c",
+        "src/re2d_world_visibility.c",
+        "src/re2d_world_light.c",
+        "src/re2d_world_material.c",
+        "src/re2d_world_bake.c",
+        "src/re2d_world_semantic.c",
+        "src/re2d_world_metadata.c",
+        "src/json.c",
+        "src/bsp.c",
+        "src/re2d_world_render_features.c",
+    },
+    packages = { "libsdl3" },
+    links = { "m" },
+    sanitize = "address,undefined",
+})
+
 test_target("r2d_postprocess_test", {
     sources = {
         "tests/re2d/postprocess_test.c",
