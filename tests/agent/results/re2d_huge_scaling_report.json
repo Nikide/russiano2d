@@ -7,7 +7,7 @@
    "x": 1040,
    "y": 1698.8491177665785
   },
-  "crossingFrameMs": 1.044,
+  "crossingFrameMs": 0.311375,
   "fallback": {
    "blocked": true,
    "npc": 6,
@@ -28,9 +28,9 @@
  "maps": [
   {
    "cells": 39,
-   "frameMs": 0.3575,
-   "frameMsMax": 0.47862499999999997,
-   "frameMsP95": 0.44979166666666665,
+   "frameMs": 0.15972916666666664,
+   "frameMsMax": 0.32579166666666665,
+   "frameMsP95": 0.2720416666666667,
    "gpuDraws": 4,
    "map": "1x",
    "path": "tests/agent/results/scaling/openworld_1x.re2dworld",
@@ -40,16 +40,16 @@
    "regionPreload": 4,
    "region_multiplier": 1,
    "sampleFrames": 24,
-   "surfaceMs": 0.32539583333333333,
-   "visibilityMs": 0.016041666666666666,
+   "surfaceMs": 0.14158333333333334,
+   "visibilityMs": 0.008666666666666666,
    "visibleSurfaces": 36,
    "walls": 124
   },
   {
    "cells": 78,
-   "frameMs": 0.28691666666666665,
-   "frameMsMax": 0.4723333333333333,
-   "frameMsP95": 0.419875,
+   "frameMs": 0.22672916666666665,
+   "frameMsMax": 0.44808333333333333,
+   "frameMsP95": 0.37074999999999997,
    "gpuDraws": 4,
    "map": "2x",
    "path": "tests/agent/results/scaling/openworld_2x.re2dworld",
@@ -59,16 +59,16 @@
    "regionPreload": 4,
    "region_multiplier": 2,
    "sampleFrames": 24,
-   "surfaceMs": 0.2625416666666667,
-   "visibilityMs": 0.014562499999999999,
+   "surfaceMs": 0.19674999999999998,
+   "visibilityMs": 0.016854166666666667,
    "visibleSurfaces": 36,
    "walls": 248
   },
   {
    "cells": 156,
-   "frameMs": 0.2785625,
-   "frameMsMax": 0.6155833333333333,
-   "frameMsP95": 0.40170833333333333,
+   "frameMs": 0.22602083333333334,
+   "frameMsMax": 0.37195833333333334,
+   "frameMsP95": 0.371875,
    "gpuDraws": 4,
    "map": "4x",
    "path": "tests/agent/results/scaling/openworld_4x.re2dworld",
@@ -78,8 +78,8 @@
    "regionPreload": 4,
    "region_multiplier": 4,
    "sampleFrames": 24,
-   "surfaceMs": 0.22522916666666665,
-   "visibilityMs": 0.02020833333333333,
+   "surfaceMs": 0.18927083333333333,
+   "visibilityMs": 0.023,
    "visibleSurfaces": 36,
    "walls": 496
   }
