@@ -24,7 +24,10 @@ from agent_client import Agent   # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 HL_DIR = os.path.join(ROOT, "src", "highlevel")
-HEADER = os.path.join(ROOT, "build", "generated", "r2d_js_data.h")
+HEADER = next((p for p in (os.path.join(ROOT, "build-xmake", "generated", "r2d_js_data.h"),
+                           os.path.join(ROOT, "build", "generated", "r2d_js_data.h"))
+               if os.path.exists(p)),
+              os.path.join(ROOT, "build-xmake", "generated", "r2d_js_data.h"))
 
 FAILURES = []
 
