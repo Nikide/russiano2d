@@ -1,6 +1,6 @@
 {
   "owner": "object:hero",
   "values": {
-    "slot": 2
+    "player": 2
   }
 }

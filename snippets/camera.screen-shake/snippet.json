@@ -16,13 +16,16 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.camera.shake"
     },
     {
       "api": "$.fn.hp"
     },
     {
-      "api": "$.camera.shake"
+      "api": "$.fn.shake"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

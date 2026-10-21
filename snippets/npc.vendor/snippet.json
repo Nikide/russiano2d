@@ -1,0 +1,91 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.vendor",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Торговец"
+  },
+  "description": {
+    "ru": "Торговец: рядом по клавише открывает лавку (событие shop:open с ассортиментом)."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "economy.shop"
+    }
+  ],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "title",
+      "label": "Название лавки",
+      "type": "string",
+      "default": "Лавка"
+    }
+  ],
+  "tags": [
+    "торговля",
+    "магазин"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

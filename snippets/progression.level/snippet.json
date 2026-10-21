@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.level",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Уровень"
+  },
+  "description": {
+    "ru": "Уровень растёт на порогах опыта; рост может лечить и предлагает выбор награды."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "progression.xp"
+    }
+  ],
+  "fields": [
+    {
+      "id": "healOnLevel",
+      "label": "Лечить при росте",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": "choices",
+      "label": "Награды на выбор",
+      "type": "list",
+      "default": [
+        "strength+1",
+        "agility+1"
+      ]
+    }
+  ],
+  "tags": [
+    "уровень",
+    "прокачка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "equipment.slots",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Слоты экипировки"
+  },
+  "description": {
+    "ru": "Надевание по событию equip { item } через $.inv.wear, только в разрешённые слоты."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.get"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "allowed",
+      "label": "Разрешённые слоты",
+      "type": "list",
+      "default": [
+        "armor",
+        "helmet",
+        "rig",
+        "pack",
+        "back"
+      ]
+    }
+  ],
+  "tags": [
+    "экипировка",
+    "слоты"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

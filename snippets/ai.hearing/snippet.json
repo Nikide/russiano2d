@@ -16,19 +16,25 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.on"
+      "api": "$.fn.data"
     },
     {
-      "api": "$.off"
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
     },
     {
       "api": "$.fn.pos"
     },
     {
-      "api": "$.fn.data"
+      "api": "$.off"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.on"
     }
   ],
   "dependencies": [],

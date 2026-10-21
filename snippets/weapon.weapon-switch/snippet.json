@@ -21,16 +21,13 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.emit"
     },
     {
-      "api": "$.weapons.has"
+      "api": "$.fn.has"
     },
     {
-      "api": "$.weapons.of"
-    },
-    {
-      "api": "$.weapons.give"
+      "api": "$.fn.max"
     },
     {
       "api": "$.input.pressed"
@@ -39,7 +36,19 @@
       "api": "$.input.wheel"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.weapons"
+    },
+    {
+      "api": "$.weapons.give"
+    },
+    {
+      "api": "$.weapons.has"
+    },
+    {
+      "api": "$.weapons.of"
     }
   ],
   "dependencies": [

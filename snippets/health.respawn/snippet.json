@@ -6,7 +6,7 @@
     "ru": "Возрождение"
   },
   "description": {
-    "ru": "После гибели возвращает объект в точку возрождения через паузу."
+    "ru": "После гибели возвращает объект в точку возрождения (или последнюю контрольную) через паузу."
   },
   "kind": "behavior",
   "category": "Бой и здоровье",
@@ -16,16 +16,19 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.alive"
     },
     {
-      "api": "$.fn.alive"
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.respawn"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

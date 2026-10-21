@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ability.cooldown",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Перезарядка способности"
+  },
+  "description": {
+    "ru": "Способность недоступна, пока идёт перезарядка; готовность 0..1 в data."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "ability.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID способности",
+      "type": "string",
+      "default": "fireball"
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 3000,
+      "min": 0,
+      "max": 3600000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "перезарядка",
+    "способность"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

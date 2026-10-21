@@ -1,0 +1,103 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.daily-needs",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Потребности"
+  },
+  "description": {
+    "ru": "Голод, сон и общение убывают; NPC идёт к месту самой срочной потребности."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "needs",
+      "label": "Потребности (имя=x,y)",
+      "type": "list",
+      "default": [
+        "food=200,300",
+        "sleep=100,300",
+        "social=400,300"
+      ]
+    },
+    {
+      "id": "decay",
+      "label": "Убывание",
+      "type": "number",
+      "default": 2,
+      "min": 0,
+      "max": 100,
+      "unit": "%/с"
+    },
+    {
+      "id": "refill",
+      "label": "Восполнение",
+      "type": "number",
+      "default": 25,
+      "min": 0,
+      "max": 100,
+      "unit": "%/с"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 70,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "потребности",
+    "симуляция"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

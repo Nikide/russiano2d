@@ -16,19 +16,19 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.flip"
+      "api": "$.fn.data"
     },
     {
       "api": "$.fn.distanceTo"
     },
     {
-      "api": "$.fn.data"
+      "api": "$.fn.emit"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.fn.flip"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

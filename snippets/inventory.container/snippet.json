@@ -1,0 +1,130 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "inventory.container",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Контейнер"
+  },
+  "description": {
+    "ru": "Сундук или тайник со своим $.inv; по клавише рядом — событие container:open с двумя списками."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "inventory",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.inv.create"
+    },
+    {
+      "api": "$.items.has"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "cols",
+      "label": "Колонок",
+      "type": "int",
+      "default": 6,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "id": "rows",
+      "label": "Рядов",
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "id": "contents",
+      "label": "Содержимое (id=число)",
+      "type": "list",
+      "default": []
+    }
+  ],
+  "tags": [
+    "сундук",
+    "тайник"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

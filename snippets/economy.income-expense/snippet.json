@@ -1,0 +1,57 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.income-expense",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Журнал денег"
+  },
+  "description": {
+    "ru": "Журнал изменений кошелька: последние записи в data('ledger')."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.time.now"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "economy.wallet"
+    }
+  ],
+  "fields": [
+    {
+      "id": "keep",
+      "label": "Хранить записей",
+      "type": "int",
+      "default": 50,
+      "min": 1,
+      "max": 10000
+    }
+  ],
+  "tags": [
+    "журнал",
+    "финансы"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -16,28 +16,34 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.fn.show"
-    },
-    {
-      "api": "$.fn.hide"
-    },
-    {
       "api": "$.fn.active"
-    },
-    {
-      "api": "$.on"
-    },
-    {
-      "api": "$.off"
     },
     {
       "api": "$.fn.emit"
     },
     {
-      "api": "$.updateFor"
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
     },
     {
       "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

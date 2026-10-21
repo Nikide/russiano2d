@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.civilian-rescue",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Эвакуация"
+  },
+  "description": {
+    "ru": "Гражданский идёт за спасителем после касания и спасается в безопасной зоне."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "safe",
+      "label": "Безопасная зона",
+      "type": "string",
+      "default": ".safe-zone"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 160,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "removeOnSafe",
+      "label": "Убрать после спасения",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "спасение",
+    "эскорт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

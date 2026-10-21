@@ -21,13 +21,16 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.velocity"
     },
     {
       "api": "$.input.padAxis"
     },
     {
-      "api": "$.fn.velocity"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

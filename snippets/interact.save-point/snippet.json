@@ -1,0 +1,89 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.save-point",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Точка сохранения"
+  },
+  "description": {
+    "ru": "У объекта по клавише — ручное сохранение в слот $.save."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.save.slot"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "saveSlot",
+      "label": "Слот сохранения",
+      "type": "string",
+      "default": "1"
+    }
+  ],
+  "tags": [
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

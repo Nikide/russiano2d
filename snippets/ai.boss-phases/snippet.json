@@ -19,19 +19,25 @@
       "api": "$.fn.addClass"
     },
     {
-      "api": "$.fn.removeClass"
+      "api": "$.fn.data"
     },
     {
-      "api": "$.updateFor"
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
     },
     {
       "api": "$.fn.hp"
     },
     {
-      "api": "$.fn.data"
+      "api": "$.fn.map"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

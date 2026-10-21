@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.mastery",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Мастерство"
+  },
+  "description": {
+    "ru": "Уровень владения растёт от числа применений (событие) по порогам."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "event",
+      "label": "Событие применения (на объекте)",
+      "type": "string",
+      "default": "weapon:fire"
+    },
+    {
+      "id": "name",
+      "label": "Навык",
+      "type": "string",
+      "default": "pistol"
+    },
+    {
+      "id": "thresholds",
+      "label": "Пороги",
+      "type": "list",
+      "default": [
+        "10",
+        "50",
+        "200"
+      ]
+    }
+  ],
+  "tags": [
+    "мастерство",
+    "прогресс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

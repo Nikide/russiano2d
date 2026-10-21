@@ -24,22 +24,22 @@
       "api": "$.fn.addClass"
     },
     {
-      "api": "$.fn.removeClass"
-    },
-    {
-      "api": "$.updateFor"
+      "api": "$.fn.at"
     },
     {
       "api": "$.fn.distanceTo"
     },
     {
+      "api": "$.fn.moveTowards"
+    },
+    {
       "api": "$.fn.pos"
     },
     {
-      "api": "$.fn.at"
+      "api": "$.fn.removeClass"
     },
     {
-      "api": "$.fn.moveTowards"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

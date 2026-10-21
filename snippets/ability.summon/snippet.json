@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ability.summon",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Призыв"
+  },
+  "description": {
+    "ru": "Способность создаёт временного союзника из $.prefab у цели."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.prefab.has"
+    },
+    {
+      "api": "$.prefab.instantiate"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "ability.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID способности",
+      "type": "string",
+      "default": "summon"
+    },
+    {
+      "id": "prefab",
+      "label": "Prefab",
+      "type": "string",
+      "default": "",
+      "hint": "Имя из $.prefab"
+    },
+    {
+      "id": "lifetime",
+      "label": "Время жизни",
+      "type": "int",
+      "default": 10000,
+      "min": 100,
+      "max": 3600000,
+      "unit": "мс"
+    },
+    {
+      "id": "max",
+      "label": "Одновременно",
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 100
+    }
+  ],
+  "tags": [
+    "призыв",
+    "союзник"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

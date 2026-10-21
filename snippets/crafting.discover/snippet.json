@@ -1,0 +1,71 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "crafting.discover",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Открытие рецептов"
+  },
+  "description": {
+    "ru": "Рецепт становится известным после события или подбора предмета: «триггер=рецепт»."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "rules",
+      "label": "Правила (событие или предмет=рецепт)",
+      "type": "list",
+      "default": [
+        "herb=potion"
+      ]
+    }
+  ],
+  "tags": [
+    "рецепт",
+    "открытие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

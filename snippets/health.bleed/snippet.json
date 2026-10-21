@@ -16,10 +16,10 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.fn.on"
+      "api": "$.fn.alive"
     },
     {
-      "api": "$.fn.off"
+      "api": "$.fn.damage"
     },
     {
       "api": "$.fn.data"
@@ -28,13 +28,16 @@
       "api": "$.fn.emit"
     },
     {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
       "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.alive"
-    },
-    {
-      "api": "$.fn.damage"
     }
   ],
   "dependencies": [

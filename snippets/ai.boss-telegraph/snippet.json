@@ -16,34 +16,43 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.alpha"
     },
     {
-      "api": "$.fn.pos"
+      "api": "$.fn.appendTo"
     },
     {
       "api": "$.fn.at"
     },
     {
-      "api": "$.fn.size"
-    },
-    {
       "api": "$.fn.color"
-    },
-    {
-      "api": "$.fn.alpha"
-    },
-    {
-      "api": "$.fn.emit"
-    },
-    {
-      "api": "$.world.query"
     },
     {
       "api": "$.fn.damage"
     },
     {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
       "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    },
+    {
+      "api": "$.world.query"
     }
   ],
   "dependencies": [],

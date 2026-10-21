@@ -21,7 +21,16 @@
   ],
   "requires": [
     {
-      "api": "$.weapons.has"
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
     },
     {
       "api": "$.weapons.define"
@@ -30,13 +39,7 @@
       "api": "$.weapons.give"
     },
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.input.pressed"
-    },
-    {
-      "api": "$.fn.emit"
+      "api": "$.weapons.has"
     }
   ],
   "dependencies": [],

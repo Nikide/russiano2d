@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.loot-table",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Таблица добычи"
+  },
+  "description": {
+    "ru": "Событие loot:roll на объекте даёт добычу по весам (событие loot с результатом)."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.random.int"
+    },
+    {
+      "api": "$.random.seed"
+    },
+    {
+      "api": "$.random.weighted"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "table",
+      "label": "Таблица (id=вес=мин-макс)",
+      "type": "list",
+      "default": [
+        "coin=10=1-5",
+        "gem=1=1"
+      ]
+    },
+    {
+      "id": "rolls",
+      "label": "Бросков",
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 100
+    }
+  ],
+  "tags": [
+    "лут",
+    "вероятность"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

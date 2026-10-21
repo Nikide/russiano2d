@@ -17,7 +17,19 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
     },
     {
       "api": "$.prefab.has"
@@ -26,7 +38,10 @@
       "api": "$.prefab.instantiate"
     },
     {
-      "api": "$.emit"
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
     }
   ],
   "dependencies": [],

@@ -1,0 +1,6 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "interval": 30000
+  }
+}

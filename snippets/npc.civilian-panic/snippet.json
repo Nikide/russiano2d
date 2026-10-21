@@ -1,0 +1,114 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.civilian-panic",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Паника"
+  },
+  "description": {
+    "ru": "Гражданский бежит от опасности (селектор или взрыв рядом) и успокаивается."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hasClass"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "danger",
+      "label": "Опасность",
+      "type": "string",
+      "default": ".enemy"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 160,
+      "min": 0,
+      "max": 5000,
+      "unit": "пикс."
+    },
+    {
+      "id": "calm",
+      "label": "Успокоение",
+      "type": "int",
+      "default": 3000,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 180,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "гражданские",
+    "паника"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

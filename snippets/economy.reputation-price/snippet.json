@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.reputation-price",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Скидки по репутации"
+  },
+  "description": {
+    "ru": "Множитель цен лавки для покупателя по его репутации у фракции лавки."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "economy.shop"
+    }
+  ],
+  "fields": [
+    {
+      "id": "faction",
+      "label": "Фракция лавки",
+      "type": "string",
+      "default": "town"
+    },
+    {
+      "id": "buyer",
+      "label": "Покупатель",
+      "type": "entity",
+      "default": "#hero"
+    },
+    {
+      "id": "perPoint",
+      "label": "Скидка за очко",
+      "type": "number",
+      "default": 0.002,
+      "min": 0,
+      "max": 0.1,
+      "step": 0.001
+    },
+    {
+      "id": "maxDiscount",
+      "label": "Максимум скидки",
+      "type": "number",
+      "default": 0.3,
+      "min": 0,
+      "max": 0.9,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "скидка",
+    "репутация"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

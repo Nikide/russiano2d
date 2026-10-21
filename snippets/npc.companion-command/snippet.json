@@ -1,0 +1,121 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.companion-command",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Спутник: команды"
+  },
+  "description": {
+    "ru": "Команды спутнику клавишами: следовать, ждать, атаковать ближайшего врага."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "npc.companion-follow"
+    }
+  ],
+  "fields": [
+    {
+      "id": "followKey",
+      "label": "Следовать",
+      "type": "string",
+      "default": "1"
+    },
+    {
+      "id": "waitKey",
+      "label": "Ждать",
+      "type": "string",
+      "default": "2"
+    },
+    {
+      "id": "attackKey",
+      "label": "Атаковать",
+      "type": "string",
+      "default": "3"
+    },
+    {
+      "id": "enemies",
+      "label": "Враги",
+      "type": "string",
+      "default": ".enemy"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 200,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 6,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка удара",
+      "type": "int",
+      "default": 800,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "спутник",
+    "команды"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.weighted-drop",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Выпадение по весам"
+  },
+  "description": {
+    "ru": "При гибели выпадает один предмет из таблицы весов (или ничего)."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.random.int"
+    },
+    {
+      "api": "$.random.seed"
+    },
+    {
+      "api": "$.random.weighted"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "table",
+      "label": "Таблица (id=вес=мин-макс)",
+      "type": "list",
+      "default": [
+        "coin=8=1-3",
+        "medkit=2=1"
+      ]
+    },
+    {
+      "id": "nothing",
+      "label": "Вес «ничего»",
+      "type": "number",
+      "default": 2,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "collector",
+      "label": "Кто подбирает",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "лут",
+    "дроп"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

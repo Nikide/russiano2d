@@ -16,9 +16,6 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
       "api": "$.fn.onFloor"
     },
     {
@@ -26,6 +23,9 @@
     },
     {
       "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

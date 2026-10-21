@@ -1,0 +1,91 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.dialogue-anchor",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Диалог у персонажа"
+  },
+  "description": {
+    "ru": "По клавише рядом запускает диалог $.dialog."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.dialog.has"
+    },
+    {
+      "api": "$.dialog.isOpen"
+    },
+    {
+      "api": "$.dialog.play"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "dialog",
+      "label": "ID диалога",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.dialog.define"
+    },
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    }
+  ],
+  "tags": [
+    "диалог",
+    "VN"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

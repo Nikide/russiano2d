@@ -1,0 +1,65 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.skill-points",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Очки навыков"
+  },
+  "description": {
+    "ru": "Очки развития за уровень; остаток в data('skillPoints')."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "progression.level"
+    }
+  ],
+  "fields": [
+    {
+      "id": "perLevel",
+      "label": "За уровень",
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 100
+    },
+    {
+      "id": "start",
+      "label": "Стартовые",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000
+    }
+  ],
+  "tags": [
+    "навыки",
+    "очки"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

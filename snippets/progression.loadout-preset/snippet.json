@@ -1,0 +1,66 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.loadout-preset",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Пресеты навыков"
+  },
+  "description": {
+    "ru": "Сохранение и загрузка набора навыков: события preset:save / preset:load { name }."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.slice"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "progression.skill-tree"
+    }
+  ],
+  "fields": [
+    {
+      "id": "max",
+      "label": "Пресетов",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 50
+    }
+  ],
+  "tags": [
+    "билд",
+    "пресет"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -21,19 +21,22 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.distanceTo"
+      "api": "$.emit"
     },
     {
       "api": "$.fn.data"
     },
     {
-      "api": "$.emit"
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
     },
     {
       "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

@@ -1,0 +1,80 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.pressure-plate",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Нажимная плита"
+  },
+  "description": {
+    "ru": "Плита нажата, пока на ней нужное число узлов; события нажатия и отпускания."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "who",
+      "label": "Кто нажимает",
+      "type": "string",
+      "default": ".player, .crate"
+    },
+    {
+      "id": "need",
+      "label": "Нужно узлов",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "id": "pressEvent",
+      "label": "Событие нажатия",
+      "type": "string",
+      "default": "plate:down"
+    },
+    {
+      "id": "releaseEvent",
+      "label": "Событие отпускания",
+      "type": "string",
+      "default": "plate:up"
+    }
+  ],
+  "tags": [
+    "головоломка",
+    "плита"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

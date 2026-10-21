@@ -21,19 +21,19 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.pos"
-    },
-    {
       "api": "$.fn.flip"
     },
     {
       "api": "$.fn.moveTowards"
     },
     {
+      "api": "$.fn.pos"
+    },
+    {
       "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],
@@ -46,7 +46,7 @@
       "required": true
     },
     {
-      "id": "slot",
+      "id": "position",
       "label": "Место в строю",
       "type": "int",
       "default": 1,

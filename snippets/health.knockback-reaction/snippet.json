@@ -16,16 +16,19 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.fn.on"
+      "api": "$.fn.externalVelocity"
+    },
+    {
+      "api": "$.fn.min"
     },
     {
       "api": "$.fn.off"
     },
     {
-      "api": "$.fn.pos"
+      "api": "$.fn.on"
     },
     {
-      "api": "$.fn.externalVelocity"
+      "api": "$.fn.pos"
     }
   ],
   "dependencies": [

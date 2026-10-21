@@ -21,16 +21,19 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.emit"
     },
     {
       "api": "$.fn.distanceTo"
     },
     {
-      "api": "$.emit"
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.remove"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

@@ -21,10 +21,7 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.pos"
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.flip"
@@ -33,7 +30,10 @@
       "api": "$.fn.moveTowards"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

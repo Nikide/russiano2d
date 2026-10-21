@@ -1,0 +1,60 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.perk",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Перк"
+  },
+  "description": {
+    "ru": "Пассивное свойство: при открытом навыке (или флаге data) действует модификатор урона."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damageFilter"
+    },
+    {
+      "api": "$.fn.data"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "skill",
+      "label": "Навык-условие",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "flag",
+      "label": "Или ключ data",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "damageTaken",
+      "label": "Получаемый урон ×",
+      "type": "number",
+      "default": 0.9,
+      "min": 0,
+      "max": 10,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "перк",
+    "пассив"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "equipment.armor",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Надетая броня"
+  },
+  "description": {
+    "ru": "Класс надетой брони ($.inv.armorClass) снижает каждый удар."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damageFilter"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.inv"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "equipment.slots"
+    },
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "perClass",
+      "label": "Снижение за класс",
+      "type": "number",
+      "default": 2,
+      "min": 0,
+      "max": 1000
+    },
+    {
+      "id": "minimum",
+      "label": "Минимальный урон",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "броня"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

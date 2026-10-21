@@ -103,13 +103,16 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.fn.add",
     "$.fn.at",
     "$.fn.damage",
     "$.fn.emit",
+    "$.fn.has",
     "$.fn.overlaps",
     "$.fn.pos",
     "$.fn.remove",
     "$.selection.each",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -126,6 +129,7 @@
    "api": [
     "$.emit",
     "$.fn.distanceTo",
+    "$.fn.emit",
     "$.fn.remove",
     "$.updateFor"
    ],
@@ -145,12 +149,14 @@
     "$.fn.alive",
     "$.fn.emit",
     "$.fn.fadeOut",
+    "$.fn.has",
     "$.fn.health",
     "$.fn.pos",
     "$.fn.remove",
     "$.prefab.has",
     "$.prefab.instantiate",
-    "$.updateFor"
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -166,8 +172,10 @@
    "api": [
     "$.emit",
     "$.fn.attr",
+    "$.fn.emit",
     "$.fn.off",
-    "$.fn.on"
+    "$.fn.on",
+    "$.triggers"
    ],
    "gaps": [],
    "dependencies": []
@@ -184,6 +192,7 @@
     "$.emit",
     "$.fn.data",
     "$.fn.distanceTo",
+    "$.fn.emit",
     "$.input.pressed",
     "$.updateFor"
    ],
@@ -306,7 +315,8 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.data"
+    "$.fn.data",
+    "$.fn.slice"
    ],
    "gaps": [],
    "dependencies": []
@@ -323,6 +333,8 @@
     "$.fn.active",
     "$.fn.emit",
     "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
     "$.fn.remove",
     "$.fn.show",
     "$.off",
@@ -342,9 +354,11 @@
    "status": "implemented",
    "api": [
     "$.fn.emit",
+    "$.fn.has",
     "$.fn.pos",
     "$.prefab.has",
-    "$.prefab.instantiate"
+    "$.prefab.instantiate",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -412,6 +426,7 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.fn.min",
     "$.fn.velocity",
     "$.input.padAxis",
     "$.updateFor"
@@ -449,6 +464,9 @@
    "status": "implemented",
    "api": [
     "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
     "$.fn.moveTowards",
     "$.fn.pos",
     "$.fn.velocity",
@@ -621,6 +639,7 @@
    "status": "implemented",
    "api": [
     "$.fn.emit",
+    "$.fn.max",
     "$.fn.overlaps",
     "$.fn.some",
     "$.fn.velocity",
@@ -707,6 +726,7 @@
     "$.fn.pos",
     "$.fn.width",
     "$.selection.each",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -748,12 +768,14 @@
    "api": [
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.has",
     "$.fn.off",
     "$.fn.on",
     "$.input.down",
     "$.input.pressed",
     "$.sound.play",
     "$.updateFor",
+    "$.weapons",
     "$.weapons.define",
     "$.weapons.give",
     "$.weapons.has"
@@ -772,11 +794,13 @@
    "api": [
     "$.fn.damage",
     "$.fn.emit",
+    "$.fn.filter",
     "$.fn.hp",
     "$.fn.is",
     "$.fn.pos",
     "$.input.pressed",
     "$.input.vec",
+    "$.selection.get",
     "$.updateFor",
     "$.world.query"
    ],
@@ -794,12 +818,15 @@
    "api": [
     "$.fn.damage",
     "$.fn.emit",
+    "$.fn.find",
     "$.fn.hp",
     "$.fn.is",
+    "$.fn.max",
     "$.fn.off",
     "$.fn.on",
     "$.fn.pos",
     "$.input.vec",
+    "$.selection.get",
     "$.updateFor",
     "$.weapons.falloff",
     "$.world.raycastAll"
@@ -818,9 +845,11 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.damage",
     "$.fn.emit",
+    "$.fn.find",
     "$.fn.hp",
     "$.fn.is",
     "$.fn.off",
@@ -830,7 +859,9 @@
     "$.fn.size",
     "$.fn.sprite",
     "$.input.vec",
+    "$.selection.get",
     "$.updateFor",
+    "$.world",
     "$.world.query"
    ],
    "gaps": [],
@@ -847,8 +878,10 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.damage",
+    "$.fn.find",
     "$.fn.is",
     "$.fn.off",
     "$.fn.on",
@@ -856,7 +889,9 @@
     "$.fn.remove",
     "$.fn.size",
     "$.input.vec",
+    "$.selection.get",
     "$.updateFor",
+    "$.world",
     "$.world.query"
    ],
    "gaps": [],
@@ -915,6 +950,9 @@
    "api": [
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
     "$.input.down",
     "$.input.pressed",
     "$.updateFor",
@@ -936,10 +974,12 @@
    "api": [
     "$.fn.damage",
     "$.fn.emit",
+    "$.fn.find",
     "$.fn.is",
     "$.fn.pos",
     "$.input.down",
     "$.input.vec",
+    "$.selection.get",
     "$.updateFor",
     "$.world.raycastAll"
    ],
@@ -955,16 +995,21 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.fn.add",
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.damage",
     "$.fn.emit",
+    "$.fn.has",
     "$.fn.is",
     "$.fn.pos",
     "$.fn.remove",
     "$.fn.size",
     "$.input.pressed",
     "$.input.vec",
+    "$.selection.get",
     "$.updateFor",
+    "$.world",
     "$.world.query"
    ],
    "gaps": [],
@@ -980,10 +1025,14 @@
    "status": "implemented",
    "api": [
     "$.emit",
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.body",
     "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.filter",
     "$.fn.is",
+    "$.fn.max",
     "$.fn.pos",
     "$.fn.remove",
     "$.fn.size",
@@ -991,6 +1040,7 @@
     "$.input.pressed",
     "$.input.vec",
     "$.updateFor",
+    "$.world",
     "$.world.query"
    ],
    "gaps": [],
@@ -1006,14 +1056,21 @@
    "status": "implemented",
    "api": [
     "$.emit",
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.filter",
     "$.fn.is",
+    "$.fn.max",
     "$.fn.pos",
     "$.fn.remove",
     "$.fn.size",
+    "$.fn.some",
     "$.input.pressed",
+    "$.selection.get",
     "$.updateFor",
+    "$.world",
     "$.world.query"
    ],
    "gaps": [],
@@ -1029,6 +1086,7 @@
    "status": "implemented",
    "api": [
     "$.fn.emit",
+    "$.fn.has",
     "$.input.pressed",
     "$.updateFor",
     "$.weapons.define",
@@ -1051,11 +1109,14 @@
     "$.camera.zoomTo",
     "$.fn.damage",
     "$.fn.emit",
+    "$.fn.filter",
     "$.fn.is",
     "$.fn.pos",
+    "$.fn.slice",
     "$.input.down",
     "$.input.pressed",
     "$.input.vec",
+    "$.selection.get",
     "$.updateFor",
     "$.world.raycastAll"
    ],
@@ -1073,15 +1134,22 @@
    "api": [
     "$.emit",
     "$.fn.angle",
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.filter",
     "$.fn.is",
+    "$.fn.max",
+    "$.fn.min",
     "$.fn.pos",
+    "$.fn.reduce",
     "$.fn.remove",
     "$.fn.size",
     "$.input.pressed",
     "$.input.vec",
     "$.updateFor",
+    "$.world",
     "$.world.query"
    ],
    "gaps": [],
@@ -1096,8 +1164,10 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.fn.add",
     "$.fn.damage",
     "$.fn.emit",
+    "$.fn.has",
     "$.fn.pos",
     "$.input.pressed",
     "$.updateFor"
@@ -1115,6 +1185,7 @@
    "status": "implemented",
    "api": [
     "$.fn.alpha",
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.color",
     "$.fn.damage",
@@ -1125,7 +1196,9 @@
     "$.input.pressed",
     "$.input.vec",
     "$.selection.each",
-    "$.updateFor"
+    "$.selection.get",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -1140,9 +1213,12 @@
    "status": "implemented",
    "api": [
     "$.fn.emit",
+    "$.fn.has",
+    "$.fn.max",
     "$.input.pressed",
     "$.input.wheel",
     "$.updateFor",
+    "$.weapons",
     "$.weapons.give",
     "$.weapons.has",
     "$.weapons.of"
@@ -1163,6 +1239,8 @@
    "api": [
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.max",
+    "$.fn.min",
     "$.fn.off",
     "$.fn.on",
     "$.updateFor",
@@ -1220,7 +1298,8 @@
    "status": "implemented",
    "api": [
     "$.fn.damageFilter",
-    "$.fn.data"
+    "$.fn.data",
+    "$.fn.slice"
    ],
    "gaps": [],
    "dependencies": [
@@ -1236,7 +1315,8 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.damageFilter"
+    "$.fn.damageFilter",
+    "$.fn.max"
    ],
    "gaps": [],
    "dependencies": [
@@ -1252,7 +1332,10 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
-    "$.fn.damageFilter"
+    "$.fn.damageFilter",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.slice"
    ],
    "gaps": [],
    "dependencies": [
@@ -1271,6 +1354,7 @@
     "$.fn.damageFilter",
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.min",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1345,6 +1429,7 @@
    "status": "implemented",
    "api": [
     "$.fn.externalVelocity",
+    "$.fn.min",
     "$.fn.off",
     "$.fn.on",
     "$.fn.pos"
@@ -1365,6 +1450,7 @@
    "api": [
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.max",
     "$.fn.off",
     "$.fn.on",
     "$.fn.velocity",
@@ -1388,6 +1474,7 @@
     "$.fn.damage",
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.min",
     "$.fn.off",
     "$.fn.on",
     "$.updateFor"
@@ -1410,6 +1497,7 @@
     "$.fn.damage",
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.min",
     "$.fn.off",
     "$.fn.on",
     "$.fn.overlaps",
@@ -1475,6 +1563,7 @@
     "$.fn.damage",
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.min",
     "$.fn.off",
     "$.fn.on",
     "$.updateFor"
@@ -1496,6 +1585,7 @@
     "$.fn.data",
     "$.fn.off",
     "$.fn.on",
+    "$.fn.slice",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1514,6 +1604,7 @@
     "$.fn.alive",
     "$.fn.alpha",
     "$.fn.controls",
+    "$.fn.emit",
     "$.fn.fadeOut",
     "$.fn.flash",
     "$.fn.remove",
@@ -1535,6 +1626,7 @@
    "status": "implemented",
    "api": [
     "$.fn.alive",
+    "$.fn.data",
     "$.fn.emit",
     "$.fn.respawn",
     "$.updateFor"
@@ -1558,6 +1650,7 @@
     "$.fn.distanceTo",
     "$.fn.emit",
     "$.fn.hp",
+    "$.fn.min",
     "$.input.down",
     "$.updateFor"
    ],
@@ -1576,14 +1669,17 @@
    "status": "implemented",
    "api": [
     "$.fn.alpha",
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.color",
     "$.fn.height",
+    "$.fn.max",
     "$.fn.off",
     "$.fn.on",
     "$.fn.pos",
     "$.fn.remove",
-    "$.updateFor"
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -1615,6 +1711,9 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
     "$.fn.moveTowards",
     "$.fn.onWall",
     "$.fn.pos",
@@ -1669,6 +1768,7 @@
    "status": "implemented",
    "api": [
     "$.fn.alive",
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.damage",
     "$.fn.emit",
@@ -1678,7 +1778,8 @@
     "$.fn.remove",
     "$.fn.size",
     "$.fn.velocity",
-    "$.updateFor"
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -1763,6 +1864,8 @@
    "api": [
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
     "$.fn.pos",
     "$.off",
     "$.on"
@@ -1825,6 +1928,7 @@
     "$.fn.data",
     "$.fn.distanceTo",
     "$.fn.height",
+    "$.fn.max",
     "$.fn.moveTowards",
     "$.fn.pos",
     "$.fn.velocity",
@@ -1883,7 +1987,9 @@
     "$.fn.addClass",
     "$.fn.data",
     "$.fn.emit",
+    "$.fn.filter",
     "$.fn.hp",
+    "$.fn.map",
     "$.fn.removeClass",
     "$.updateFor"
    ],
@@ -1902,6 +2008,7 @@
    "status": "implemented",
    "api": [
     "$.fn.alpha",
+    "$.fn.appendTo",
     "$.fn.at",
     "$.fn.color",
     "$.fn.damage",
@@ -1909,7 +2016,9 @@
     "$.fn.pos",
     "$.fn.remove",
     "$.fn.size",
+    "$.selection.get",
     "$.updateFor",
+    "$.world",
     "$.world.query"
    ],
    "gaps": [],
@@ -1925,12 +2034,16 @@
    "status": "implemented",
    "api": [
     "$.fn.emit",
+    "$.fn.has",
+    "$.fn.off",
+    "$.fn.on",
     "$.fn.pos",
     "$.off",
     "$.on",
     "$.prefab.has",
     "$.prefab.instantiate",
-    "$.updateFor"
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -1945,9 +2058,14 @@
    "status": "implemented",
    "api": [
     "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
     "$.prefab.has",
     "$.prefab.instantiate",
-    "$.updateFor"
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -1976,10 +2094,16 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.time.now",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -1991,10 +2115,14 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.time.now",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2006,10 +2134,17 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.data",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2021,10 +2156,12 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.max",
+    "$.fn.min"
    ],
    "gaps": [],
    "dependencies": []
@@ -2036,10 +2173,16 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.removeClass"
    ],
    "gaps": [],
    "dependencies": []
@@ -2051,10 +2194,18 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -2066,10 +2217,16 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.camera.isOnScreen",
+    "$.fn.at",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2081,13 +2238,24 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.alive",
+    "$.fn.damage",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.input.pressed",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "npc.companion-follow"
+   ]
   },
   {
    "n": 109,
@@ -2096,10 +2264,15 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.alive",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.fn.moveTowards",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2111,10 +2284,17 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.slice"
    ],
    "gaps": [],
    "dependencies": []
@@ -2126,13 +2306,21 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.flip",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.fn.slice",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "npc.party-member"
+   ]
   },
   {
    "n": 112,
@@ -2141,10 +2329,15 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.addClass",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.pos",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2156,10 +2349,17 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2171,10 +2371,22 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.hasClass",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.removeClass",
+    "$.fn.velocity",
+    "$.off",
+    "$.on",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2186,10 +2398,17 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.overlaps",
+    "$.fn.remove",
+    "$.fn.some",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2201,13 +2420,20 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "economy.shop"
+   ]
   },
   {
    "n": 117,
@@ -2216,10 +2442,15 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.quest.accept",
+    "$.quest.status",
+    "$.quest.turnIn",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2231,10 +2462,16 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.dialog.has",
+    "$.dialog.isOpen",
+    "$.dialog.play",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2246,10 +2483,20 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.fn.moveTowards",
+    "$.fn.overlaps",
+    "$.fn.some",
+    "$.fn.velocity",
+    "$.selection.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2261,10 +2508,16 @@
    "section": "F",
    "section_title": "NPC, союзники и группы",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.nav"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.slice",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2276,11 +2529,13 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2292,11 +2547,15 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.min",
+    "$.input.down",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2308,11 +2567,22 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.height",
+    "$.fn.hide",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.show",
+    "$.fn.text",
+    "$.selection.each",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -2342,11 +2612,19 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.addClass",
+    "$.fn.alpha",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.sensor",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2358,11 +2636,17 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2374,11 +2658,18 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2390,11 +2681,15 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.overlaps",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2406,11 +2701,20 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.attr",
+    "$.fn.color",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.flip",
+    "$.fn.off",
+    "$.fn.on",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2422,11 +2726,22 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.emit",
+    "$.fn.add",
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.input.pressed",
+    "$.items.has",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2438,11 +2753,20 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.flash",
+    "$.fn.health",
+    "$.fn.hp",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove"
    ],
    "gaps": [],
    "dependencies": []
@@ -2454,11 +2778,16 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.at",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.fn.width",
+    "$.updateFor",
+    "$.world.castShape"
    ],
    "gaps": [],
    "dependencies": []
@@ -2470,11 +2799,19 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.addClass",
+    "$.fn.at",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.flip",
+    "$.fn.gravity",
+    "$.fn.height",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2486,11 +2823,16 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.addClass",
+    "$.fn.at",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.pos",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2502,11 +2844,21 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.addClass",
+    "$.fn.at",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.height",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.width",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2518,11 +2870,16 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.at",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.time.now",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2534,11 +2891,14 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.emit",
+    "$.fn.overlaps",
+    "$.scene.load",
+    "$.store",
+    "$.store.set",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2550,11 +2910,18 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.addClass",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.selection.get",
+    "$.store.set",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2566,11 +2933,16 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.addClass",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.save.slot",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2582,11 +2954,12 @@
    "section": "G",
    "section_title": "Взаимодействие и объекты мира",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.input"
+    "$.fn.damage",
+    "$.fn.overlaps",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2598,9 +2971,10 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items"
+    "$.items",
+    "$.items.define"
    ],
    "gaps": [],
    "dependencies": []
@@ -2612,12 +2986,19 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items"
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.max",
+    "$.items.define",
+    "$.items.get",
+    "$.selection.get"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "item.definition"
+   ]
   },
   {
    "n": 143,
@@ -2626,10 +3007,21 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.inv",
-    "$.items"
+    "$.fn.add",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.inv.create",
+    "$.items.has",
+    "$.off",
+    "$.on",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -2641,13 +3033,18 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.inv",
-    "$.items"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.slice",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 145,
@@ -2656,13 +3053,19 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.mass",
+    "$.fn.velocity",
     "$.inv",
-    "$.items"
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 146,
@@ -2671,10 +3074,24 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
+    "$.emit",
+    "$.fn.add",
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.input.pressed",
     "$.inv",
-    "$.items"
+    "$.inv.create",
+    "$.items.has",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -2686,13 +3103,22 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.inv",
-    "$.items"
+    "$.fn.add",
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.inv"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 148,
@@ -2701,13 +3127,22 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
     "$.inv",
-    "$.items"
+    "$.items.get",
+    "$.selection.get"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 149,
@@ -2716,13 +3151,24 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
+    "$.fn.add",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.input.pressed",
     "$.inv",
-    "$.items"
+    "$.items.get",
+    "$.selection.get",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 150,
@@ -2731,13 +3177,20 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.inv"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.inv",
+    "$.items.get",
+    "$.selection.get"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 151,
@@ -2746,13 +3199,23 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.inv"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.off",
+    "$.fn.on",
+    "$.inv",
+    "$.items.get",
+    "$.selection.get",
+    "$.weapons.give",
+    "$.weapons.has"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 152,
@@ -2761,13 +3224,18 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
+    "$.fn.damageFilter",
+    "$.fn.data",
+    "$.fn.max",
     "$.inv"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "equipment.slots",
+    "health.base"
+   ]
   },
   {
    "n": 153,
@@ -2776,13 +3244,23 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.inv"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.inv",
+    "$.items.has",
+    "$.weapons.mod",
+    "$.weapons.of"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 154,
@@ -2791,13 +3269,21 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.inv"
+    "$.fn.add",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.inv",
+    "$.items.has"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 155,
@@ -2806,12 +3292,24 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.find",
+    "$.fn.has",
+    "$.fn.heal",
+    "$.fn.remove",
+    "$.input.pressed",
+    "$.inv",
+    "$.items.get",
+    "$.selection.get",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 156,
@@ -2820,12 +3318,22 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.find",
+    "$.fn.max",
+    "$.fn.off",
+    "$.fn.on",
+    "$.inv",
+    "$.items.get",
+    "$.selection.get"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "equipment.slots"
+   ]
   },
   {
    "n": 157,
@@ -2834,12 +3342,22 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items"
+    "$.fn.add",
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.inv",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 158,
@@ -2848,9 +3366,15 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -2862,12 +3386,28 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items"
+    "$.emit",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.random.chance",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 160,
@@ -2876,12 +3416,22 @@
    "section": "H",
    "section_title": "Подбор, инвентарь и экипировка",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items"
+    "$.fn.add",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.remove",
+    "$.input.pressed",
+    "$.inv",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 161,
@@ -2890,10 +3440,13 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -2905,13 +3458,19 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.filter",
+    "$.fn.map",
+    "$.items.define",
+    "$.items.get",
+    "$.items.ids",
+    "$.selection.get"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "item.definition"
+   ]
   },
   {
    "n": 163,
@@ -2920,10 +3479,22 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.add",
+    "$.fn.attr",
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.max",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.inv",
+    "$.items.get",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -2935,13 +3506,18 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "economy.shop"
+   ]
   },
   {
    "n": 165,
@@ -2950,13 +3526,24 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.add",
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.reduce",
+    "$.fn.remove",
+    "$.inv",
+    "$.items.get",
+    "$.selection.get"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 166,
@@ -2965,13 +3552,18 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.max",
+    "$.fn.min",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "economy.shop"
+   ]
   },
   {
    "n": 167,
@@ -2980,10 +3572,21 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.emit",
+    "$.fn.add",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.inv",
+    "$.items.has",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -2995,10 +3598,17 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.random.int",
+    "$.random.seed",
+    "$.random.weighted"
    ],
    "gaps": [],
    "dependencies": []
@@ -3010,13 +3620,31 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.emit",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.random.int",
+    "$.random.seed",
+    "$.random.weighted",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 170,
@@ -3025,13 +3653,24 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.add",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.inv",
+    "$.items.has",
+    "$.random.int",
+    "$.random.seed",
+    "$.random.weighted"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.container"
+   ]
   },
   {
    "n": 171,
@@ -3040,10 +3679,14 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.inv"
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map"
    ],
    "gaps": [],
    "dependencies": []
@@ -3055,13 +3698,30 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.inv"
+    "$.emit",
+    "$.fn.add",
+    "$.fn.addClass",
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.find",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.input.pressed",
+    "$.inv",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "crafting.recipe"
+   ]
   },
   {
    "n": 173,
@@ -3070,13 +3730,26 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.inv"
+    "$.fn.add",
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.inv",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "crafting.station"
+   ]
   },
   {
    "n": 174,
@@ -3085,13 +3758,23 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.fn.some",
     "$.inv"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "item.durability"
+   ]
   },
   {
    "n": 175,
@@ -3100,13 +3783,26 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
+    "$.fn.add",
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.find",
+    "$.fn.has",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.fn.some",
     "$.inv"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 176,
@@ -3115,13 +3811,23 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
+    "$.fn.add",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
     "$.inv"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 177,
@@ -3130,10 +3836,18 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.inv"
+    "$.fn.add",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -3145,13 +3859,17 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.data",
+    "$.fn.off",
+    "$.fn.on",
+    "$.time.now"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "economy.wallet"
+   ]
   },
   {
    "n": 179,
@@ -3160,10 +3878,19 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.emit",
+    "$.fn.add",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.off",
+    "$.fn.on",
+    "$.inv",
+    "$.items.has",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -3175,10 +3902,16 @@
    "section": "I",
    "section_title": "Экономика, торговля и ремесло",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.items",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -3190,10 +3923,12 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.state"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map"
    ],
    "gaps": [],
    "dependencies": []
@@ -3205,13 +3940,17 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.state"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "stats.base"
+   ]
   },
   {
    "n": 183,
@@ -3220,13 +3959,20 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.state"
+    "$.fn.data",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.maxHp",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.speed"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "stats.base"
+   ]
   },
   {
    "n": 184,
@@ -3235,10 +3981,14 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -3250,13 +4000,20 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.slice",
+    "$.selection.get"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "progression.xp"
+   ]
   },
   {
    "n": 186,
@@ -3265,13 +4022,17 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "progression.level"
+   ]
   },
   {
    "n": 187,
@@ -3280,13 +4041,22 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.fn.add",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.some"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "progression.skill-points"
+   ]
   },
   {
    "n": 188,
@@ -3295,10 +4065,10 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.fn.damageFilter",
+    "$.fn.data"
    ],
    "gaps": [],
    "dependencies": []
@@ -3310,10 +4080,12 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.combat",
-    "$.time"
+    "$.fn.emit",
+    "$.fn.pos",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -3325,13 +4097,19 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.combat",
-    "$.time"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.max",
+    "$.fn.off",
+    "$.fn.on",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ability.base"
+   ]
   },
   {
    "n": 191,
@@ -3340,13 +4118,18 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.combat",
-    "$.time"
+    "$.fn.data",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ability.base"
+   ]
   },
   {
    "n": 192,
@@ -3355,13 +4138,18 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.combat",
-    "$.time"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ability.base"
+   ]
   },
   {
    "n": 193,
@@ -3370,13 +4158,18 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.combat",
-    "$.time"
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.input.mouseWorld",
+    "$.selection.each"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ability.base"
+   ]
   },
   {
    "n": 194,
@@ -3385,13 +4178,21 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.combat",
-    "$.time"
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.heal",
+    "$.fn.is",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.world.query"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ability.base"
+   ]
   },
   {
    "n": 195,
@@ -3400,13 +4201,23 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.combat",
-    "$.time"
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.prefab.has",
+    "$.prefab.instantiate",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ability.base"
+   ]
   },
   {
    "n": 196,
@@ -3415,10 +4226,19 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.store.set",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -3430,10 +4250,14 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -3445,10 +4269,15 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.time.now"
    ],
    "gaps": [],
    "dependencies": []
@@ -3460,13 +4289,20 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.slice"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "progression.skill-tree"
+   ]
   },
   {
    "n": 200,
@@ -3475,13 +4311,18 @@
    "section": "J",
    "section_title": "Характеристики, уровни и способности",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.state",
-    "$.store"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.reduce"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "progression.skill-tree"
+   ]
   },
   {
    "n": 201,
@@ -4788,6 +5629,7 @@
    "api": [
     "$.camera.shake",
     "$.fn.hp",
+    "$.fn.shake",
     "$.updateFor"
    ],
    "gaps": [],

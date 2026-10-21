@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "inventory.quickbar",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Быстрые слоты"
+  },
+  "description": {
+    "ru": "Быстрые слоты 1…N с предметами; активный — в data('activeItem')."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "slots",
+      "label": "Слоты (id предметов)",
+      "type": "list",
+      "default": [
+        "medkit",
+        "grenade"
+      ]
+    },
+    {
+      "id": "first",
+      "label": "Первая клавиша",
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 9
+    }
+  ],
+  "tags": [
+    "слоты",
+    "хотбар"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "recipes": [
+      "arrow=10: wood=1, stone=1"
+    ]
+  }
+}

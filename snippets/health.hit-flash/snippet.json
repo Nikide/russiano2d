@@ -16,13 +16,13 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.flash"
     },
     {
       "api": "$.fn.hp"
     },
     {
-      "api": "$.fn.flash"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

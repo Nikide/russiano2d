@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.lock",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Замок"
+  },
+  "description": {
+    "ru": "Состояние «заперто» в данных; открывается событием или условием и шлёт unlock."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "locked",
+      "label": "Заперто",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": "unlockEvent",
+      "label": "Отпирающее событие",
+      "type": "string",
+      "default": "",
+      "hint": "Глобальное событие"
+    },
+    {
+      "id": "requires",
+      "label": "Условие: ключ data игрока",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "замок",
+    "условие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

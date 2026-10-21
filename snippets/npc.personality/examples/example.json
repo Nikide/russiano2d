@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "traits": [
+      "bravery=0.9"
+    ]
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "item.loot-pickup",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сбор из контейнера"
+  },
+  "description": {
+    "ru": "Клавиша рядом с контейнером (data inv) переносит всё содержимое в инвентарь актора."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "containers",
+      "label": "Контейнеры",
+      "type": "string",
+      "default": ".interactive"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    }
+  ],
+  "tags": [
+    "лут",
+    "сбор"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

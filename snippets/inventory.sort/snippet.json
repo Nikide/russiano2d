@@ -1,0 +1,86 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "inventory.sort",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сортировка"
+  },
+  "description": {
+    "ru": "Сортировка инвентаря клавишей или событием inv:sort: по цене, имени или виду."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.get"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "t"
+    },
+    {
+      "id": "by",
+      "label": "Порядок",
+      "type": "enum",
+      "default": "value",
+      "options": [
+        "value",
+        "name",
+        "kind"
+      ]
+    }
+  ],
+  "tags": [
+    "сортировка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

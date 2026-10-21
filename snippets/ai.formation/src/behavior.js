@@ -7,7 +7,7 @@ function offset(shape, slot, spacing) {
 }
 
 export default function formation(node, config, $) {
-    const off = offset(config.shape, config.slot, config.spacing);
+    const off = offset(config.shape, config.position, config.spacing);
     return $.updateFor(node, (dt, self) => {
         const l = $(config.leader);
         if (!l.length) return;

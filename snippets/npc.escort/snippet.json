@@ -1,0 +1,106 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.escort",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сопровождаемый"
+  },
+  "description": {
+    "ru": "Идёт за игроком; дошёл до точки — escort:done, погиб — escort:failed."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "destination",
+      "label": "Точка назначения",
+      "type": "string",
+      "default": ".escort-goal"
+    },
+    {
+      "id": "distance",
+      "label": "Дистанция",
+      "type": "number",
+      "default": 50,
+      "min": 0,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 150,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "эскорт",
+    "миссия"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -16,25 +16,28 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.pos"
+      "api": "$.fn.at"
     },
     {
       "api": "$.fn.height"
     },
     {
-      "api": "$.fn.width"
+      "api": "$.fn.onFloor"
     },
     {
-      "api": "$.fn.onFloor"
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.width"
     },
     {
       "api": "$.selection.each"
     },
     {
-      "api": "$.fn.at"
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

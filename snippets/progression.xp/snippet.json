@@ -1,0 +1,62 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.xp",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Опыт"
+  },
+  "description": {
+    "ru": "Опыт копится событием xp { amount }; пороги шлют xp:threshold."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "thresholds",
+      "label": "Пороги",
+      "type": "list",
+      "default": [
+        "100",
+        "250",
+        "500",
+        "1000"
+      ]
+    }
+  ],
+  "tags": [
+    "опыт",
+    "прокачка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

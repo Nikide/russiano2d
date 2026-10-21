@@ -21,40 +21,49 @@
   ],
   "requires": [
     {
-      "api": "$.input.vec"
+      "api": "$.fn.alpha"
     },
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.input.pressed"
-    },
-    {
-      "api": "$.fn.pos"
+      "api": "$.fn.appendTo"
     },
     {
       "api": "$.fn.at"
     },
     {
-      "api": "$.fn.size"
-    },
-    {
       "api": "$.fn.color"
     },
     {
-      "api": "$.fn.alpha"
-    },
-    {
-      "api": "$.fn.remove"
-    },
-    {
-      "api": "$.selection.each"
+      "api": "$.fn.damage"
     },
     {
       "api": "$.fn.overlaps"
     },
     {
-      "api": "$.fn.damage"
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
     }
   ],
   "dependencies": [],

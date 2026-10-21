@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "stats.derived",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Производные показатели"
+  },
+  "description": {
+    "ru": "Линейные производные: «цель=источник*k+b» (например maxHp=strength*10+50); hp — в здоровье."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.maxHp"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.speed"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "stats.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "formulas",
+      "label": "Формулы",
+      "type": "list",
+      "default": [
+        "maxHp=strength*10+50",
+        "speed=agility*5+150"
+      ]
+    }
+  ],
+  "tags": [
+    "статы",
+    "формулы"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.trade",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Обмен"
+  },
+  "description": {
+    "ru": "Обмен предметами: событие trade { with, give: {id: n}, get: {id: n} } — всё или ничего."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.count"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.reduce"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.get"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "allowUnfair",
+      "label": "Разрешить неравный обмен",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "обмен",
+    "бартер"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

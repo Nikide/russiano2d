@@ -1,0 +1,9 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "cols": 10,
+    "start": [
+      "medkit=1"
+    ]
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.auction",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Аукцион"
+  },
+  "description": {
+    "ru": "Лот с минимальным шагом и таймером: события auction:bid { by, amount }; победитель получает предмет."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.has"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "item",
+      "label": "Лот",
+      "type": "string",
+      "default": "rare_gem"
+    },
+    {
+      "id": "start",
+      "label": "Стартовая цена",
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 1000000000
+    },
+    {
+      "id": "step",
+      "label": "Шаг",
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 1000000
+    },
+    {
+      "id": "duration",
+      "label": "Длительность",
+      "type": "int",
+      "default": 30000,
+      "min": 1000,
+      "max": 86400000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "аукцион",
+    "торговля"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.quest-payment",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Оплата этапов задания"
+  },
+  "description": {
+    "ru": "Выплата по этапам: «событие=сумма»; часть удерживается до финального события."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "to",
+      "label": "Получатель",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "stages",
+      "label": "Этапы (событие=сумма)",
+      "type": "list",
+      "default": [
+        "relay:found=100",
+        "relay:off=400"
+      ]
+    },
+    {
+      "id": "hold",
+      "label": "Удержание до финала",
+      "type": "number",
+      "default": 0.25,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "id": "final",
+      "label": "Финальное событие",
+      "type": "string",
+      "default": "relay:off"
+    }
+  ],
+  "tags": [
+    "квест",
+    "оплата"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

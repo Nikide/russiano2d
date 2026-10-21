@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ability.charge",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Заряды способности"
+  },
+  "description": {
+    "ru": "Несколько зарядов с восстановлением по одному."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "ability.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID способности",
+      "type": "string",
+      "default": "dash"
+    },
+    {
+      "id": "charges",
+      "label": "Зарядов",
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 100
+    },
+    {
+      "id": "recharge",
+      "label": "Восстановление заряда",
+      "type": "int",
+      "default": 2500,
+      "min": 50,
+      "max": 3600000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "заряды",
+    "способность"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

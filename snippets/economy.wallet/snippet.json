@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.wallet",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Кошелёк"
+  },
+  "description": {
+    "ru": "Баланс data('money'): событие money { delta } меняет, в минус не уходит (money:denied)."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "wallet",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "start",
+      "label": "Стартовый баланс",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000000000
+    },
+    {
+      "id": "max",
+      "label": "Максимум",
+      "type": "int",
+      "default": 1000000,
+      "min": 1,
+      "max": 1000000000
+    }
+  ],
+  "tags": [
+    "деньги",
+    "баланс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.skill-tree",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Дерево навыков"
+  },
+  "description": {
+    "ru": "Узлы «id:цена:требования|…»; событие skill:unlock { id } тратит очки при выполненных требованиях."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.some"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "progression.skill-points"
+    }
+  ],
+  "fields": [
+    {
+      "id": "nodes",
+      "label": "Узлы",
+      "type": "list",
+      "default": [
+        "dash:1:",
+        "double-dash:2:dash"
+      ]
+    }
+  ],
+  "tags": [
+    "навыки",
+    "дерево"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -21,16 +21,22 @@
   ],
   "requires": [
     {
+      "api": "$.emit"
+    },
+    {
       "api": "$.fn.attr"
     },
     {
-      "api": "$.fn.on"
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.off"
     },
     {
-      "api": "$.emit"
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.triggers"
     }
   ],
   "dependencies": [],

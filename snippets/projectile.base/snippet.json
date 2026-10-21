@@ -21,13 +21,25 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.pos"
+      "api": "$.fn.add"
     },
     {
       "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.pos"
     },
     {
       "api": "$.fn.remove"
@@ -36,13 +48,10 @@
       "api": "$.selection.each"
     },
     {
-      "api": "$.fn.overlaps"
+      "api": "$.selection.get"
     },
     {
-      "api": "$.fn.damage"
-    },
-    {
-      "api": "$.fn.emit"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

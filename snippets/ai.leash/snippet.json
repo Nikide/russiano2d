@@ -16,16 +16,16 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.pos"
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.moveTowards"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

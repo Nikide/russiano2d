@@ -21,13 +21,10 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.emit"
     },
     {
-      "api": "$.input.mousePressed"
-    },
-    {
-      "api": "$.input.mouseWorld"
+      "api": "$.fn.moveTowards"
     },
     {
       "api": "$.fn.pos"
@@ -36,10 +33,13 @@
       "api": "$.fn.velocity"
     },
     {
-      "api": "$.fn.moveTowards"
+      "api": "$.input.mousePressed"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

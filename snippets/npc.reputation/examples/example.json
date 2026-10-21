@@ -1,0 +1,9 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "factions": [
+      "town=10",
+      "bandits=-20"
+    ]
+  }
+}

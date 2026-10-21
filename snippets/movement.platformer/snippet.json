@@ -21,22 +21,22 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.input.vec"
-    },
-    {
-      "api": "$.input.pressed"
-    },
-    {
-      "api": "$.fn.velocity"
+      "api": "$.fn.jump"
     },
     {
       "api": "$.fn.onFloor"
     },
     {
-      "api": "$.fn.jump"
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

@@ -16,22 +16,25 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.fn.on"
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.max"
     },
     {
       "api": "$.fn.off"
     },
     {
-      "api": "$.updateFor"
+      "api": "$.fn.on"
     },
     {
       "api": "$.fn.velocity"
     },
     {
-      "api": "$.fn.data"
-    },
-    {
-      "api": "$.fn.emit"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

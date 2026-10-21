@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "crafting.queue",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Очередь производства"
+  },
+  "description": {
+    "ru": "Станция делает предметы по очереди со временем изготовления."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.count"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "crafting.station"
+    }
+  ],
+  "fields": [
+    {
+      "id": "time",
+      "label": "Время на предмет",
+      "type": "int",
+      "default": 3000,
+      "min": 100,
+      "max": 3600000,
+      "unit": "мс"
+    },
+    {
+      "id": "max",
+      "label": "Длина очереди",
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 100
+    }
+  ],
+  "tags": [
+    "производство",
+    "очередь"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

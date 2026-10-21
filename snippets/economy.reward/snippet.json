@@ -1,0 +1,113 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.reward",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Награда за событие"
+  },
+  "description": {
+    "ru": "Глобальное событие выдаёт награду: деньги, предметы и опыт получателю."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.has"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "event",
+      "label": "Событие",
+      "type": "string",
+      "default": "quest:done"
+    },
+    {
+      "id": "to",
+      "label": "Получатель",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "money",
+      "label": "Деньги",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000000000
+    },
+    {
+      "id": "items",
+      "label": "Предметы (id=число)",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "xp",
+      "label": "Опыт",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000000000
+    },
+    {
+      "id": "once",
+      "label": "Один раз",
+      "type": "bool",
+      "default": false
+    }
+  ],
+  "tags": [
+    "награда"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

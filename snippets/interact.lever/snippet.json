@@ -1,0 +1,114 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.lever",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Рычаг"
+  },
+  "description": {
+    "ru": "Рычаг с визуальными состояниями: отражение и цвет; глобальные события."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.flip"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "onColor",
+      "label": "Цвет «вкл»",
+      "type": "color",
+      "default": "#40d080"
+    },
+    {
+      "id": "offColor",
+      "label": "Цвет «выкл»",
+      "type": "color",
+      "default": "#d04040"
+    },
+    {
+      "id": "event",
+      "label": "Событие",
+      "type": "string",
+      "default": "lever"
+    }
+  ],
+  "tags": [
+    "рычаг",
+    "головоломка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

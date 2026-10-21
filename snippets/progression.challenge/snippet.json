@@ -1,0 +1,90 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.challenge",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Испытание"
+  },
+  "description": {
+    "ru": "Повторяемое испытание: N событий за время → награда (событие challenge:done)."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.time.now"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "event",
+      "label": "Считать событие (глобальное)",
+      "type": "string",
+      "default": "explosion"
+    },
+    {
+      "id": "count",
+      "label": "Сколько",
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 100000
+    },
+    {
+      "id": "window",
+      "label": "За время (0 — без лимита)",
+      "type": "int",
+      "default": 30000,
+      "min": 0,
+      "max": 86400000,
+      "unit": "мс"
+    },
+    {
+      "id": "rewardEvent",
+      "label": "Событие награды",
+      "type": "string",
+      "default": "challenge:reward"
+    },
+    {
+      "id": "repeat",
+      "label": "Повторяемое",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "испытание",
+    "достижение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

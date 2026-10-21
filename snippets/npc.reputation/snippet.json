@@ -1,0 +1,87 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.reputation",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Репутация у фракций"
+  },
+  "description": {
+    "ru": "Репутация игрока по фракциям: глобальное событие reputation { faction, delta }."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "factions",
+      "label": "Начальные (фракция=число)",
+      "type": "list",
+      "default": [
+        "town=0"
+      ]
+    },
+    {
+      "id": "min",
+      "label": "Минимум",
+      "type": "int",
+      "default": -100,
+      "min": -100000,
+      "max": 0
+    },
+    {
+      "id": "max",
+      "label": "Максимум",
+      "type": "int",
+      "default": 100,
+      "min": 1,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "репутация",
+    "фракции"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

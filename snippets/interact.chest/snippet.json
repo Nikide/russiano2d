@@ -1,0 +1,116 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.chest",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сундук"
+  },
+  "description": {
+    "ru": "Открывается один раз: содержимое уходит в инвентарь актора (data inv) или событием pickup."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.items.has"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "contents",
+      "label": "Содержимое (id=число)",
+      "type": "list",
+      "default": [
+        "coin=10"
+      ]
+    },
+    {
+      "id": "locked",
+      "label": "Заперт",
+      "type": "bool",
+      "default": false
+    }
+  ],
+  "tags": [
+    "сундук",
+    "лут"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

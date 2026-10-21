@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.checkpoint",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Контрольная точка"
+  },
+  "description": {
+    "ru": "Касание запоминает точку возрождения актора (data checkpoint) и базовые значения."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "heal",
+      "label": "Лечить до максимума",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": "store",
+      "label": "Записать в $.store",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "checkpoint",
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

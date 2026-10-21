@@ -21,10 +21,10 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.data"
     },
     {
-      "api": "$.input.vec"
+      "api": "$.fn.lookAt"
     },
     {
       "api": "$.fn.velocity"
@@ -33,10 +33,10 @@
       "api": "$.input.mouseWorld"
     },
     {
-      "api": "$.fn.data"
+      "api": "$.input.vec"
     },
     {
-      "api": "$.fn.lookAt"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

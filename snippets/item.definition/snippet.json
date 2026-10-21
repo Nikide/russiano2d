@@ -1,0 +1,116 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "item.definition",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Описание предмета"
+  },
+  "description": {
+    "ru": "Регистрирует тип предмета в $.items: имя, вид, размер, вес, цена, стопка, иконка."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.items"
+    },
+    {
+      "api": "$.items.define"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID",
+      "type": "string",
+      "default": "medkit"
+    },
+    {
+      "id": "title",
+      "label": "Название",
+      "type": "string",
+      "default": "Аптечка"
+    },
+    {
+      "id": "kind",
+      "label": "Вид",
+      "type": "enum",
+      "default": "other",
+      "options": [
+        "weapon",
+        "part",
+        "ammo",
+        "med",
+        "other",
+        "food",
+        "armor",
+        "loot"
+      ]
+    },
+    {
+      "id": "size",
+      "label": "Размер в клетках",
+      "type": "vec2",
+      "default": [
+        1,
+        1
+      ]
+    },
+    {
+      "id": "mass",
+      "label": "Вес",
+      "type": "number",
+      "default": 0.5,
+      "min": 0,
+      "max": 1000,
+      "unit": "кг"
+    },
+    {
+      "id": "value",
+      "label": "Цена",
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100000000
+    },
+    {
+      "id": "stack",
+      "label": "Стопка",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 10000
+    },
+    {
+      "id": "heal",
+      "label": "Лечение",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "icon",
+      "label": "Иконка",
+      "type": "asset",
+      "assetKind": "image"
+    }
+  ],
+  "tags": [
+    "предмет",
+    "данные"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

@@ -21,25 +21,10 @@
   ],
   "requires": [
     {
-      "api": "$.fn.health"
-    },
-    {
       "api": "$.fn.addClass"
     },
     {
-      "api": "$.updateFor"
-    },
-    {
       "api": "$.fn.alive"
-    },
-    {
-      "api": "$.fn.pos"
-    },
-    {
-      "api": "$.prefab.has"
-    },
-    {
-      "api": "$.prefab.instantiate"
     },
     {
       "api": "$.fn.emit"
@@ -48,7 +33,28 @@
       "api": "$.fn.fadeOut"
     },
     {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.health"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
       "api": "$.fn.remove"
+    },
+    {
+      "api": "$.prefab.has"
+    },
+    {
+      "api": "$.prefab.instantiate"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
     }
   ],
   "dependencies": [],

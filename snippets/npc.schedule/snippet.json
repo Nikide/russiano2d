@@ -1,0 +1,90 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.schedule",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Расписание NPC"
+  },
+  "description": {
+    "ru": "По игровым часам идёт к точке расписания: «час=x,y»."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.time.now"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "entries",
+      "label": "Расписание (час=x,y)",
+      "type": "list",
+      "default": [
+        "8=100,200",
+        "18=400,200"
+      ]
+    },
+    {
+      "id": "dayLength",
+      "label": "Длина суток",
+      "type": "number",
+      "default": 240,
+      "min": 10,
+      "max": 86400,
+      "unit": "с"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 80,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "расписание",
+    "город"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "values": {
+    "id": "bandage",
+    "kind": "med",
+    "heal": 15
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.companion-revive",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Спутник спасает игрока"
+  },
+  "description": {
+    "ru": "Если игрок пал, спутник подбегает и поднимает его за время; лимит спасений."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "time",
+      "label": "Время подъёма",
+      "type": "int",
+      "default": 2500,
+      "min": 100,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "hp",
+      "label": "Здоровье после",
+      "type": "int",
+      "default": 25,
+      "min": 1,
+      "max": 100000
+    },
+    {
+      "id": "uses",
+      "label": "Спасений",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 100
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 220,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "спутник",
+    "спасение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

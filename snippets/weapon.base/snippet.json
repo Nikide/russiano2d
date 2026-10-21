@@ -21,7 +21,34 @@
   ],
   "requires": [
     {
-      "api": "$.weapons.has"
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.sound.play"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.weapons"
     },
     {
       "api": "$.weapons.define"
@@ -30,28 +57,7 @@
       "api": "$.weapons.give"
     },
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.input.pressed"
-    },
-    {
-      "api": "$.input.down"
-    },
-    {
-      "api": "$.fn.emit"
-    },
-    {
-      "api": "$.fn.on"
-    },
-    {
-      "api": "$.fn.off"
-    },
-    {
-      "api": "$.fn.data"
-    },
-    {
-      "api": "$.sound.play"
+      "api": "$.weapons.has"
     }
   ],
   "dependencies": [],

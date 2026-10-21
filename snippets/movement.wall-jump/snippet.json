@@ -16,7 +16,10 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.flip"
     },
     {
       "api": "$.fn.onFloor"
@@ -25,19 +28,16 @@
       "api": "$.fn.onWall"
     },
     {
+      "api": "$.fn.velocity"
+    },
+    {
       "api": "$.input.pressed"
     },
     {
       "api": "$.input.vec"
     },
     {
-      "api": "$.fn.flip"
-    },
-    {
-      "api": "$.fn.velocity"
-    },
-    {
-      "api": "$.fn.emit"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

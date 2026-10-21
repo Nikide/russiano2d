@@ -1,0 +1,9 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "nodes": [
+      "a:1:",
+      "b:1:a"
+    ]
+  }
+}

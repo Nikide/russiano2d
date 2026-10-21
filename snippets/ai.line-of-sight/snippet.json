@@ -16,22 +16,22 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.pos"
-    },
-    {
       "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.flip"
     },
     {
-      "api": "$.world.lineOfSight"
+      "api": "$.fn.pos"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world.lineOfSight"
     }
   ],
   "dependencies": [],

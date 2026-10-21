@@ -17,6 +17,9 @@
   "requires": [
     {
       "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.slice"
     }
   ],
   "dependencies": [],

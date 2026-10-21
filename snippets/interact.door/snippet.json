@@ -1,0 +1,106 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.door",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Дверь"
+  },
+  "description": {
+    "ru": "Дверь открывается по interact или клавише рядом; может требовать ключ (предмет или данные)."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.sensor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "keyItem",
+      "label": "Ключ",
+      "type": "string",
+      "default": "",
+      "hint": "id предмета в $.inv актора или ключ data; пусто — без ключа"
+    },
+    {
+      "id": "startOpen",
+      "label": "Открыта",
+      "type": "bool",
+      "default": false
+    }
+  ],
+  "tags": [
+    "дверь",
+    "ключ"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

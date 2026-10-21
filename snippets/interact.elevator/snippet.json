@@ -1,0 +1,111 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.elevator",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Лифт"
+  },
+  "description": {
+    "ru": "Лифт между этажами: вызов событием elevator:call { floor } или клавишами внутри."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "floors",
+      "label": "Этажи (y)",
+      "type": "list",
+      "default": [
+        "400",
+        "250",
+        "100"
+      ]
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 90,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "up",
+      "label": "Вверх",
+      "type": "string",
+      "default": "w"
+    },
+    {
+      "id": "down",
+      "label": "Вниз",
+      "type": "string",
+      "default": "s"
+    }
+  ],
+  "tags": [
+    "лифт",
+    "этажи"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

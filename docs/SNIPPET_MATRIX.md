@@ -3,7 +3,7 @@
 Сгенерировано `python3 scripts/snippet_matrix.py` из §12 [ТЗ](SNIPPET_SYSTEM_PROJECT.md),
 каталога `snippets/` и `api.schema.json`. Руками не править.
 
-Реализовано: **108 из 500**. Строк с пробелом API: **0**.
+Реализовано: **207 из 500**. Строк с пробелом API: **0**.
 
 Колонка API: для реализованного пакета — фактические `requires`; для
 запланированного — опорные пространства `$` по префиксу ID (предварительно,
@@ -19,11 +19,11 @@
 | 003 | `npc.base` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass`, `$.fn.team` | — |
 | 004 | `enemy.base` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.health`, `$.fn.removeClass`, `$.fn.team` | — |
 | 005 | `companion.base` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.removeClass`, `$.updateFor` | — |
-| 006 | `projectile.base` | ✅ | `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.selection.each`, `$.updateFor` | — |
-| 007 | `pickup.base` | ✅ | `$.emit`, `$.fn.distanceTo`, `$.fn.remove`, `$.updateFor` | — |
-| 008 | `breakable.base` | ✅ | `$.fn.addClass`, `$.fn.alive`, `$.fn.emit`, `$.fn.fadeOut`, `$.fn.health`, `$.fn.pos`, `$.fn.remove`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor` | — |
-| 009 | `trigger.base` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.off`, `$.fn.on` | — |
-| 010 | `interactable.base` | ✅ | `$.emit`, `$.fn.data`, `$.fn.distanceTo`, `$.input.pressed`, `$.updateFor` | — |
+| 006 | `projectile.base` | ✅ | `$.fn.add`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.has`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
+| 007 | `pickup.base` | ✅ | `$.emit`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.remove`, `$.updateFor` | — |
+| 008 | `breakable.base` | ✅ | `$.fn.addClass`, `$.fn.alive`, `$.fn.emit`, `$.fn.fadeOut`, `$.fn.has`, `$.fn.health`, `$.fn.pos`, `$.fn.remove`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor`, `$.world` | — |
+| 009 | `trigger.base` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.triggers` | — |
+| 010 | `interactable.base` | ✅ | `$.emit`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.updateFor` | — |
 | 011 | `actor.faction` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass` | — |
 | 012 | `actor.identity` | ✅ | `$.fn.data` | — |
 | 013 | `actor.spawn-profile` | ✅ | `$.fn.angle`, `$.fn.at`, `$.fn.size` | — |
@@ -31,9 +31,9 @@
 | 015 | `actor.control-profile` | ✅ | `$.fn.controls` | — |
 | 016 | `actor.player-slot` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass` | — |
 | 017 | `actor.tags` | ✅ | `$.fn.addClass`, `$.fn.addTag`, `$.fn.removeClass`, `$.fn.removeTag` | — |
-| 018 | `actor.attributes` | ✅ | `$.fn.data` | — |
-| 019 | `actor.lifecycle` | ✅ | `$.fn.active`, `$.fn.emit`, `$.fn.hide`, `$.fn.remove`, `$.fn.show`, `$.off`, `$.on`, `$.updateFor` | — |
-| 020 | `actor.prefab-variant` | ✅ | `$.fn.emit`, `$.fn.pos`, `$.prefab.has`, `$.prefab.instantiate` | — |
+| 018 | `actor.attributes` | ✅ | `$.fn.data`, `$.fn.slice` | — |
+| 019 | `actor.lifecycle` | ✅ | `$.fn.active`, `$.fn.emit`, `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.fn.show`, `$.off`, `$.on`, `$.updateFor` | — |
+| 020 | `actor.prefab-variant` | ✅ | `$.fn.emit`, `$.fn.has`, `$.fn.pos`, `$.prefab.has`, `$.prefab.instantiate`, `$.world` | — |
 
 ## B. Движение и перемещение — 20/20
 
@@ -42,9 +42,9 @@
 | 021 | `movement.top-down` | ✅ | `$.fn.velocity`, `$.input.vec`, `$.updateFor` | — |
 | 022 | `movement.platformer` | ✅ | `$.fn.jump`, `$.fn.onFloor`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
 | 023 | `movement.twin-stick` | ✅ | `$.fn.data`, `$.fn.lookAt`, `$.fn.velocity`, `$.input.mouseWorld`, `$.input.vec`, `$.updateFor` | — |
-| 024 | `movement.analog` | ✅ | `$.fn.velocity`, `$.input.padAxis`, `$.updateFor` | — |
+| 024 | `movement.analog` | ✅ | `$.fn.min`, `$.fn.velocity`, `$.input.padAxis`, `$.updateFor` | — |
 | 025 | `movement.click-to-move` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.input.mousePressed`, `$.input.mouseWorld`, `$.updateFor` | — |
-| 026 | `movement.follow-path` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 026 | `movement.follow-path` | ✅ | `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
 | 027 | `movement.dash` | ✅ | `$.fn.emit`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
 | 028 | `movement.dodge-roll` | ✅ | `$.fn.emit`, `$.fn.invulnerable`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
 | 029 | `movement.coyote-jump` | ✅ | `$.fn.jump`, `$.fn.onFloor`, `$.input.pressed`, `$.updateFor` | — |
@@ -53,36 +53,36 @@
 | 032 | `movement.wall-slide` | ✅ | `$.fn.onFloor`, `$.fn.onWall`, `$.fn.velocity`, `$.updateFor` | — |
 | 033 | `movement.wall-jump` | ✅ | `$.fn.emit`, `$.fn.flip`, `$.fn.onFloor`, `$.fn.onWall`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
 | 034 | `movement.climb` | ✅ | `$.fn.emit`, `$.fn.gravity`, `$.fn.overlaps`, `$.fn.some`, `$.fn.velocity`, `$.input.vec`, `$.updateFor` | — |
-| 035 | `movement.swim` | ✅ | `$.fn.emit`, `$.fn.overlaps`, `$.fn.some`, `$.fn.velocity`, `$.input.vec`, `$.updateFor` | — |
+| 035 | `movement.swim` | ✅ | `$.fn.emit`, `$.fn.max`, `$.fn.overlaps`, `$.fn.some`, `$.fn.velocity`, `$.input.vec`, `$.updateFor` | — |
 | 036 | `movement.crouch` | ✅ | `$.fn.emit`, `$.fn.height`, `$.fn.size`, `$.fn.velocity`, `$.fn.width`, `$.input.down`, `$.updateFor` | — |
 | 037 | `movement.prone` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.height`, `$.fn.size`, `$.fn.velocity`, `$.fn.width`, `$.input.pressed`, `$.updateFor` | — |
 | 038 | `movement.knockback` | ✅ | `$.fn.closest`, `$.fn.externalVelocity`, `$.fn.first`, `$.fn.hp`, `$.fn.pos`, `$.updateFor` | — |
-| 039 | `movement.platform-ride` | ✅ | `$.fn.at`, `$.fn.height`, `$.fn.onFloor`, `$.fn.pos`, `$.fn.width`, `$.selection.each`, `$.updateFor` | — |
+| 039 | `movement.platform-ride` | ✅ | `$.fn.at`, `$.fn.height`, `$.fn.onFloor`, `$.fn.pos`, `$.fn.width`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
 | 040 | `movement.vehicle-seat` | ✅ | `$.fn.active`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.height`, `$.fn.hide`, `$.fn.pos`, `$.fn.show`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
 
 ## C. Оружие и атаки — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 041 | `weapon.base` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.input.down`, `$.input.pressed`, `$.sound.play`, `$.updateFor`, `$.weapons.define`, `$.weapons.give`, `$.weapons.has` | — |
-| 042 | `weapon.melee` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.hp`, `$.fn.is`, `$.fn.pos`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
-| 043 | `weapon.hitscan` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.hp`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.input.vec`, `$.updateFor`, `$.weapons.falloff`, `$.world.raycastAll` | — |
-| 044 | `weapon.projectile` | ✅ | `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.hp`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.sprite`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
-| 045 | `weapon.spread` | ✅ | `$.fn.at`, `$.fn.damage`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
+| 041 | `weapon.base` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.input.down`, `$.input.pressed`, `$.sound.play`, `$.updateFor`, `$.weapons`, `$.weapons.define`, `$.weapons.give`, `$.weapons.has` | — |
+| 042 | `weapon.melee` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.filter`, `$.fn.hp`, `$.fn.is`, `$.fn.pos`, `$.input.pressed`, `$.input.vec`, `$.selection.get`, `$.updateFor`, `$.world.query` | — |
+| 043 | `weapon.hitscan` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.find`, `$.fn.hp`, `$.fn.is`, `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.input.vec`, `$.selection.get`, `$.updateFor`, `$.weapons.falloff`, `$.world.raycastAll` | — |
+| 044 | `weapon.projectile` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.find`, `$.fn.hp`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.sprite`, `$.input.vec`, `$.selection.get`, `$.updateFor`, `$.world`, `$.world.query` | — |
+| 045 | `weapon.spread` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.find`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.vec`, `$.selection.get`, `$.updateFor`, `$.world`, `$.world.query` | — |
 | 046 | `weapon.auto` | ✅ | `$.fn.emit`, `$.input.down`, `$.input.pressed`, `$.updateFor`, `$.weapons.of` | — |
 | 047 | `weapon.burst` | ✅ | `$.fn.emit`, `$.input.down`, `$.input.pressed`, `$.updateFor`, `$.weapons.of` | — |
-| 048 | `weapon.charge` | ✅ | `$.fn.data`, `$.fn.emit`, `$.input.down`, `$.input.pressed`, `$.updateFor`, `$.weapons.of` | — |
-| 049 | `weapon.beam` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.is`, `$.fn.pos`, `$.input.down`, `$.input.vec`, `$.updateFor`, `$.world.raycastAll` | — |
-| 050 | `weapon.boomerang` | ✅ | `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.is`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
-| 051 | `weapon.grenade` | ✅ | `$.emit`, `$.fn.at`, `$.fn.body`, `$.fn.damage`, `$.fn.is`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
-| 052 | `weapon.mine` | ✅ | `$.emit`, `$.fn.at`, `$.fn.damage`, `$.fn.is`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.updateFor`, `$.world.query` | — |
-| 053 | `weapon.shotgun` | ✅ | `$.fn.emit`, `$.input.pressed`, `$.updateFor`, `$.weapons.define`, `$.weapons.give`, `$.weapons.has` | — |
-| 054 | `weapon.sniper` | ✅ | `$.camera.zoom`, `$.camera.zoomTo`, `$.fn.damage`, `$.fn.emit`, `$.fn.is`, `$.fn.pos`, `$.input.down`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.raycastAll` | — |
-| 055 | `weapon.rocket` | ✅ | `$.emit`, `$.fn.angle`, `$.fn.at`, `$.fn.damage`, `$.fn.is`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
-| 056 | `weapon.chain-lightning` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.pos`, `$.input.pressed`, `$.updateFor` | — |
-| 057 | `weapon.area-denial` | ✅ | `$.fn.alpha`, `$.fn.at`, `$.fn.color`, `$.fn.damage`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.input.vec`, `$.selection.each`, `$.updateFor` | — |
-| 058 | `weapon.weapon-switch` | ✅ | `$.fn.emit`, `$.input.pressed`, `$.input.wheel`, `$.updateFor`, `$.weapons.give`, `$.weapons.has`, `$.weapons.of` | — |
-| 059 | `weapon.ammo` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.updateFor`, `$.weapons.of` | — |
+| 048 | `weapon.charge` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.input.down`, `$.input.pressed`, `$.updateFor`, `$.weapons.of` | — |
+| 049 | `weapon.beam` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.find`, `$.fn.is`, `$.fn.pos`, `$.input.down`, `$.input.vec`, `$.selection.get`, `$.updateFor`, `$.world.raycastAll` | — |
+| 050 | `weapon.boomerang` | ✅ | `$.fn.add`, `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.has`, `$.fn.is`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.input.vec`, `$.selection.get`, `$.updateFor`, `$.world`, `$.world.query` | — |
+| 051 | `weapon.grenade` | ✅ | `$.emit`, `$.fn.appendTo`, `$.fn.at`, `$.fn.body`, `$.fn.damage`, `$.fn.emit`, `$.fn.filter`, `$.fn.is`, `$.fn.max`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world`, `$.world.query` | — |
+| 052 | `weapon.mine` | ✅ | `$.emit`, `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.filter`, `$.fn.is`, `$.fn.max`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.some`, `$.input.pressed`, `$.selection.get`, `$.updateFor`, `$.world`, `$.world.query` | — |
+| 053 | `weapon.shotgun` | ✅ | `$.fn.emit`, `$.fn.has`, `$.input.pressed`, `$.updateFor`, `$.weapons.define`, `$.weapons.give`, `$.weapons.has` | — |
+| 054 | `weapon.sniper` | ✅ | `$.camera.zoom`, `$.camera.zoomTo`, `$.fn.damage`, `$.fn.emit`, `$.fn.filter`, `$.fn.is`, `$.fn.pos`, `$.fn.slice`, `$.input.down`, `$.input.pressed`, `$.input.vec`, `$.selection.get`, `$.updateFor`, `$.world.raycastAll` | — |
+| 055 | `weapon.rocket` | ✅ | `$.emit`, `$.fn.angle`, `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.filter`, `$.fn.is`, `$.fn.max`, `$.fn.min`, `$.fn.pos`, `$.fn.reduce`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world`, `$.world.query` | — |
+| 056 | `weapon.chain-lightning` | ✅ | `$.fn.add`, `$.fn.damage`, `$.fn.emit`, `$.fn.has`, `$.fn.pos`, `$.input.pressed`, `$.updateFor` | — |
+| 057 | `weapon.area-denial` | ✅ | `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.damage`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.input.vec`, `$.selection.each`, `$.selection.get`, `$.updateFor`, `$.world` | — |
+| 058 | `weapon.weapon-switch` | ✅ | `$.fn.emit`, `$.fn.has`, `$.fn.max`, `$.input.pressed`, `$.input.wheel`, `$.updateFor`, `$.weapons`, `$.weapons.give`, `$.weapons.has`, `$.weapons.of` | — |
+| 059 | `weapon.ammo` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.updateFor`, `$.weapons.of` | — |
 | 060 | `weapon.reload` | ✅ | `$.fn.emit`, `$.input.pressed`, `$.updateFor`, `$.weapons.of` | — |
 
 ## D. Здоровье, защита и состояния — 20/20
@@ -90,175 +90,175 @@
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 061 | `health.base` | ✅ | `$.fn.fadeOut`, `$.fn.health`, `$.fn.off`, `$.fn.on`, `$.fn.remove` | — |
-| 062 | `health.damage-types` | ✅ | `$.fn.damageFilter`, `$.fn.data` | — |
-| 063 | `health.armor` | ✅ | `$.fn.damageFilter` | — |
-| 064 | `health.resistance` | ✅ | `$.fn.damageFilter` | — |
-| 065 | `health.shield` | ✅ | `$.fn.damageFilter`, `$.fn.data`, `$.fn.emit`, `$.updateFor` | — |
+| 062 | `health.damage-types` | ✅ | `$.fn.damageFilter`, `$.fn.data`, `$.fn.slice` | — |
+| 063 | `health.armor` | ✅ | `$.fn.damageFilter`, `$.fn.max` | — |
+| 064 | `health.resistance` | ✅ | `$.fn.damageFilter`, `$.fn.max`, `$.fn.min`, `$.fn.slice` | — |
+| 065 | `health.shield` | ✅ | `$.fn.damageFilter`, `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.updateFor` | — |
 | 066 | `health.regeneration` | ✅ | `$.fn.alive`, `$.fn.heal`, `$.fn.hp`, `$.updateFor` | — |
 | 067 | `health.invulnerability` | ✅ | `$.fn.alive`, `$.fn.alpha`, `$.fn.hp`, `$.fn.invulnerable`, `$.updateFor` | — |
 | 068 | `health.hit-flash` | ✅ | `$.fn.flash`, `$.fn.hp`, `$.updateFor` | — |
-| 069 | `health.knockback-reaction` | ✅ | `$.fn.externalVelocity`, `$.fn.off`, `$.fn.on`, `$.fn.pos` | — |
-| 070 | `health.stagger` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.velocity`, `$.updateFor` | — |
-| 071 | `health.poison` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
-| 072 | `health.burning` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.some`, `$.updateFor` | — |
+| 069 | `health.knockback-reaction` | ✅ | `$.fn.externalVelocity`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.pos` | — |
+| 070 | `health.stagger` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.fn.velocity`, `$.updateFor` | — |
+| 071 | `health.poison` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 072 | `health.burning` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.some`, `$.updateFor` | — |
 | 073 | `health.freeze` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.velocity`, `$.updateFor` | — |
 | 074 | `health.slow` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.onFloor`, `$.fn.velocity`, `$.updateFor` | — |
-| 075 | `health.bleed` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
-| 076 | `health.buff-debuff` | ✅ | `$.fn.data`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
-| 077 | `health.death` | ✅ | `$.emit`, `$.fn.alive`, `$.fn.alpha`, `$.fn.controls`, `$.fn.fadeOut`, `$.fn.flash`, `$.fn.remove`, `$.fn.velocity`, `$.updateFor` | — |
-| 078 | `health.respawn` | ✅ | `$.fn.alive`, `$.fn.emit`, `$.fn.respawn`, `$.updateFor` | — |
-| 079 | `health.revive` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.input.down`, `$.updateFor` | — |
-| 080 | `health.damage-number` | ✅ | `$.fn.alpha`, `$.fn.at`, `$.fn.color`, `$.fn.height`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.updateFor` | — |
+| 075 | `health.bleed` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 076 | `health.buff-debuff` | ✅ | `$.fn.data`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.updateFor` | — |
+| 077 | `health.death` | ✅ | `$.emit`, `$.fn.alive`, `$.fn.alpha`, `$.fn.controls`, `$.fn.emit`, `$.fn.fadeOut`, `$.fn.flash`, `$.fn.remove`, `$.fn.velocity`, `$.updateFor` | — |
+| 078 | `health.respawn` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.emit`, `$.fn.respawn`, `$.updateFor` | — |
+| 079 | `health.revive` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.fn.min`, `$.input.down`, `$.updateFor` | — |
+| 080 | `health.damage-number` | ✅ | `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.height`, `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.updateFor`, `$.world` | — |
 
 ## E. Поведение врагов — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 081 | `ai.idle` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.flip`, `$.updateFor` | — |
-| 082 | `ai.waypoint-patrol` | ✅ | `$.fn.moveTowards`, `$.fn.onWall`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 082 | `ai.waypoint-patrol` | ✅ | `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.moveTowards`, `$.fn.onWall`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
 | 083 | `ai.chase` | ✅ | `$.fn.distanceTo`, `$.fn.moveTowards`, `$.updateFor` | — |
 | 084 | `ai.melee-attack` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.updateFor` | — |
-| 085 | `ai.ranged-attack` | ✅ | `$.fn.alive`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.velocity`, `$.updateFor` | — |
+| 085 | `ai.ranged-attack` | ✅ | `$.fn.alive`, `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.velocity`, `$.updateFor`, `$.world` | — |
 | 086 | `ai.flee` | ✅ | `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
 | 087 | `ai.guard-post` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
 | 088 | `ai.follow-target` | ✅ | `$.fn.distanceTo`, `$.fn.moveTowards`, `$.updateFor` | — |
 | 089 | `ai.line-of-sight` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.flip`, `$.fn.pos`, `$.updateFor`, `$.world.lineOfSight` | — |
-| 090 | `ai.hearing` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.pos`, `$.off`, `$.on` | — |
+| 090 | `ai.hearing` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.off`, `$.on` | — |
 | 091 | `ai.investigate` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
 | 092 | `ai.search` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.updateFor` | — |
-| 093 | `ai.cover` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.height`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.fn.width`, `$.selection.each`, `$.updateFor` | — |
+| 093 | `ai.cover` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.height`, `$.fn.max`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.fn.width`, `$.selection.each`, `$.updateFor` | — |
 | 094 | `ai.flank` | ✅ | `$.fn.emit`, `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.updateFor` | — |
 | 095 | `ai.formation` | ✅ | `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
-| 096 | `ai.boss-phases` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.hp`, `$.fn.removeClass`, `$.updateFor` | — |
-| 097 | `ai.boss-telegraph` | ✅ | `$.fn.alpha`, `$.fn.at`, `$.fn.color`, `$.fn.damage`, `$.fn.emit`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.updateFor`, `$.world.query` | — |
-| 098 | `ai.spawner` | ✅ | `$.fn.emit`, `$.fn.pos`, `$.off`, `$.on`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor` | — |
-| 099 | `ai.wave-director` | ✅ | `$.emit`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor` | — |
+| 096 | `ai.boss-phases` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.hp`, `$.fn.map`, `$.fn.removeClass`, `$.updateFor` | — |
+| 097 | `ai.boss-telegraph` | ✅ | `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.damage`, `$.fn.emit`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.selection.get`, `$.updateFor`, `$.world`, `$.world.query` | — |
+| 098 | `ai.spawner` | ✅ | `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.off`, `$.on`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor`, `$.world` | — |
+| 099 | `ai.wave-director` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor`, `$.world` | — |
 | 100 | `ai.leash` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.updateFor` | — |
 
-## F. NPC, союзники и группы — 0/20
+## F. NPC, союзники и группы — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 101 | `npc.schedule` | ⬜ | `$.fn`, `$.nav` | — |
-| 102 | `npc.home-routine` | ⬜ | `$.fn`, `$.nav` | — |
-| 103 | `npc.daily-needs` | ⬜ | `$.fn`, `$.nav` | — |
-| 104 | `npc.personality` | ⬜ | `$.fn`, `$.nav` | — |
-| 105 | `npc.relationship` | ⬜ | `$.fn`, `$.nav` | — |
-| 106 | `npc.reputation` | ⬜ | `$.fn`, `$.nav` | — |
-| 107 | `npc.companion-follow` | ⬜ | `$.fn`, `$.nav` | — |
-| 108 | `npc.companion-command` | ⬜ | `$.fn`, `$.nav` | — |
-| 109 | `npc.companion-revive` | ⬜ | `$.fn`, `$.nav` | — |
-| 110 | `npc.party-member` | ⬜ | `$.fn`, `$.nav` | — |
-| 111 | `npc.party-formation` | ⬜ | `$.fn`, `$.nav` | — |
-| 112 | `npc.squad-leader` | ⬜ | `$.fn`, `$.nav` | — |
-| 113 | `npc.squad-order` | ⬜ | `$.fn`, `$.nav` | — |
-| 114 | `npc.civilian-panic` | ⬜ | `$.fn`, `$.nav` | — |
-| 115 | `npc.civilian-rescue` | ⬜ | `$.fn`, `$.nav` | — |
-| 116 | `npc.vendor` | ⬜ | `$.fn`, `$.nav` | — |
-| 117 | `npc.quest-giver` | ⬜ | `$.fn`, `$.nav` | — |
-| 118 | `npc.dialogue-anchor` | ⬜ | `$.fn`, `$.nav` | — |
-| 119 | `npc.escort` | ⬜ | `$.fn`, `$.nav` | — |
-| 120 | `npc.recruit` | ⬜ | `$.fn`, `$.nav` | — |
+| 101 | `npc.schedule` | ✅ | `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.moveTowards`, `$.fn.pos`, `$.time.now`, `$.updateFor` | — |
+| 102 | `npc.home-routine` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.time.now`, `$.updateFor` | — |
+| 103 | `npc.daily-needs` | ✅ | `$.fn.data`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.max`, `$.fn.min`, `$.fn.moveTowards`, `$.fn.pos`, `$.updateFor` | — |
+| 104 | `npc.personality` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.max`, `$.fn.min` | — |
+| 105 | `npc.relationship` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.removeClass` | — |
+| 106 | `npc.reputation` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
+| 107 | `npc.companion-follow` | ✅ | `$.camera.isOnScreen`, `$.fn.at`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 108 | `npc.companion-command` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.input.pressed`, `$.selection.each`, `$.updateFor` | — |
+| 109 | `npc.companion-revive` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.fn.moveTowards`, `$.updateFor` | — |
+| 110 | `npc.party-member` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.slice` | — |
+| 111 | `npc.party-formation` | ✅ | `$.fn.attr`, `$.fn.data`, `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.slice`, `$.fn.velocity`, `$.updateFor` | — |
+| 112 | `npc.squad-leader` | ✅ | `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.pos`, `$.selection.each`, `$.updateFor` | — |
+| 113 | `npc.squad-order` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 114 | `npc.civilian-panic` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hasClass`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.removeClass`, `$.fn.velocity`, `$.off`, `$.on`, `$.selection.each`, `$.updateFor` | — |
+| 115 | `npc.civilian-rescue` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.overlaps`, `$.fn.remove`, `$.fn.some`, `$.updateFor` | — |
+| 116 | `npc.vendor` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.updateFor` | — |
+| 117 | `npc.quest-giver` | ✅ | `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.quest.accept`, `$.quest.status`, `$.quest.turnIn`, `$.updateFor` | — |
+| 118 | `npc.dialogue-anchor` | ✅ | `$.dialog.has`, `$.dialog.isOpen`, `$.dialog.play`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.has`, `$.input.pressed`, `$.updateFor` | — |
+| 119 | `npc.escort` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.fn.moveTowards`, `$.fn.overlaps`, `$.fn.some`, `$.fn.velocity`, `$.selection.get`, `$.updateFor` | — |
+| 120 | `npc.recruit` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.slice`, `$.input.pressed`, `$.updateFor` | — |
 
-## G. Взаимодействие и объекты мира — 1/20
+## G. Взаимодействие и объекты мира — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 121 | `interact.press-action` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 122 | `interact.hold-action` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 123 | `interact.context-prompt` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
+| 121 | `interact.press-action` | ✅ | `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.selection.each`, `$.updateFor` | — |
+| 122 | `interact.hold-action` | ✅ | `$.emit`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.min`, `$.input.down`, `$.updateFor` | — |
+| 123 | `interact.context-prompt` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.height`, `$.fn.hide`, `$.fn.pos`, `$.fn.remove`, `$.fn.show`, `$.fn.text`, `$.selection.each`, `$.updateFor`, `$.world` | — |
 | 124 | `interact.pickup` | ✅ | `$.audio.play`, `$.fn.overlaps`, `$.fn.remove`, `$.fn.trigger`, `$.updateFor` | — |
-| 125 | `interact.door` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 126 | `interact.lock` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 127 | `interact.switch` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 128 | `interact.pressure-plate` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 129 | `interact.lever` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 130 | `interact.chest` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 131 | `interact.breakable` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 132 | `interact.pushable` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 133 | `interact.movable-crate` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 134 | `interact.moving-platform` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 135 | `interact.elevator` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 136 | `interact.teleporter` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 137 | `interact.portal` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 138 | `interact.checkpoint` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 139 | `interact.save-point` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
-| 140 | `interact.hazard` | ⬜ | `$.fn`, `$.triggers`, `$.input` | — |
+| 125 | `interact.door` | ✅ | `$.fn.addClass`, `$.fn.alpha`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.sensor`, `$.input.pressed`, `$.updateFor` | — |
+| 126 | `interact.lock` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.updateFor` | — |
+| 127 | `interact.switch` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.updateFor` | — |
+| 128 | `interact.pressure-plate` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.overlaps`, `$.selection.each`, `$.updateFor` | — |
+| 129 | `interact.lever` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.attr`, `$.fn.color`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.flip`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.updateFor` | — |
+| 130 | `interact.chest` | ✅ | `$.emit`, `$.fn.add`, `$.fn.addClass`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.items.has`, `$.updateFor` | — |
+| 131 | `interact.breakable` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.flash`, `$.fn.health`, `$.fn.hp`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove` | — |
+| 132 | `interact.pushable` | ✅ | `$.fn.at`, `$.fn.emit`, `$.fn.height`, `$.fn.pos`, `$.fn.velocity`, `$.fn.width`, `$.updateFor`, `$.world.castShape` | — |
+| 133 | `interact.movable-crate` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.flip`, `$.fn.gravity`, `$.fn.height`, `$.fn.pos`, `$.fn.velocity`, `$.input.pressed`, `$.updateFor` | — |
+| 134 | `interact.moving-platform` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.pos`, `$.updateFor` | — |
+| 135 | `interact.elevator` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.emit`, `$.fn.filter`, `$.fn.height`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.input.pressed`, `$.updateFor` | — |
+| 136 | `interact.teleporter` | ✅ | `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.velocity`, `$.time.now`, `$.updateFor` | — |
+| 137 | `interact.portal` | ✅ | `$.fn.emit`, `$.fn.overlaps`, `$.scene.load`, `$.store`, `$.store.set`, `$.updateFor` | — |
+| 138 | `interact.checkpoint` | ✅ | `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.hp`, `$.fn.overlaps`, `$.fn.pos`, `$.selection.get`, `$.store.set`, `$.updateFor` | — |
+| 139 | `interact.save-point` | ✅ | `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.save.slot`, `$.updateFor` | — |
+| 140 | `interact.hazard` | ✅ | `$.fn.damage`, `$.fn.overlaps`, `$.selection.each`, `$.updateFor` | — |
 
-## H. Подбор, инвентарь и экипировка — 0/20
-
-| № | ID | Статус | API | Пробел |
-|---|---|---|---|---|
-| 141 | `item.definition` | ⬜ | `$.items` | — |
-| 142 | `item.stack` | ⬜ | `$.items` | — |
-| 143 | `inventory.grid` | ⬜ | `$.inv`, `$.items` | — |
-| 144 | `inventory.quickbar` | ⬜ | `$.inv`, `$.items` | — |
-| 145 | `inventory.weight` | ⬜ | `$.inv`, `$.items` | — |
-| 146 | `inventory.container` | ⬜ | `$.inv`, `$.items` | — |
-| 147 | `inventory.transfer` | ⬜ | `$.inv`, `$.items` | — |
-| 148 | `inventory.filter` | ⬜ | `$.inv`, `$.items` | — |
-| 149 | `inventory.sort` | ⬜ | `$.inv`, `$.items` | — |
-| 150 | `equipment.slots` | ⬜ | `$.items`, `$.inv` | — |
-| 151 | `equipment.weapon-slot` | ⬜ | `$.items`, `$.inv` | — |
-| 152 | `equipment.armor` | ⬜ | `$.items`, `$.inv` | — |
-| 153 | `equipment.attachments` | ⬜ | `$.items`, `$.inv` | — |
-| 154 | `equipment.loadout` | ⬜ | `$.items`, `$.inv` | — |
-| 155 | `item.consumable` | ⬜ | `$.items` | — |
-| 156 | `item.durability` | ⬜ | `$.items` | — |
-| 157 | `item.quest-bound` | ⬜ | `$.items` | — |
-| 158 | `item.currency` | ⬜ | `$.items` | — |
-| 159 | `item.drop` | ⬜ | `$.items` | — |
-| 160 | `item.loot-pickup` | ⬜ | `$.items` | — |
-
-## I. Экономика, торговля и ремесло — 0/20
+## H. Подбор, инвентарь и экипировка — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 161 | `economy.wallet` | ⬜ | `$.items`, `$.store` | — |
-| 162 | `economy.price` | ⬜ | `$.items`, `$.store` | — |
-| 163 | `economy.shop` | ⬜ | `$.items`, `$.store` | — |
-| 164 | `economy.shop-stock` | ⬜ | `$.items`, `$.store` | — |
-| 165 | `economy.trade` | ⬜ | `$.items`, `$.store` | — |
-| 166 | `economy.reputation-price` | ⬜ | `$.items`, `$.store` | — |
-| 167 | `economy.reward` | ⬜ | `$.items`, `$.store` | — |
-| 168 | `economy.loot-table` | ⬜ | `$.items`, `$.store` | — |
-| 169 | `economy.weighted-drop` | ⬜ | `$.items`, `$.store` | — |
-| 170 | `economy.chest-loot` | ⬜ | `$.items`, `$.store` | — |
-| 171 | `crafting.recipe` | ⬜ | `$.items`, `$.inv` | — |
-| 172 | `crafting.station` | ⬜ | `$.items`, `$.inv` | — |
-| 173 | `crafting.queue` | ⬜ | `$.items`, `$.inv` | — |
-| 174 | `crafting.repair` | ⬜ | `$.items`, `$.inv` | — |
-| 175 | `crafting.upgrade` | ⬜ | `$.items`, `$.inv` | — |
-| 176 | `crafting.disassemble` | ⬜ | `$.items`, `$.inv` | — |
-| 177 | `crafting.discover` | ⬜ | `$.items`, `$.inv` | — |
-| 178 | `economy.income-expense` | ⬜ | `$.items`, `$.store` | — |
-| 179 | `economy.auction` | ⬜ | `$.items`, `$.store` | — |
-| 180 | `economy.quest-payment` | ⬜ | `$.items`, `$.store` | — |
+| 141 | `item.definition` | ✅ | `$.items`, `$.items.define` | — |
+| 142 | `item.stack` | ✅ | `$.fn.filter`, `$.fn.map`, `$.fn.max`, `$.items.define`, `$.items.get`, `$.selection.get` | — |
+| 143 | `inventory.grid` | ✅ | `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.inv.create`, `$.items.has`, `$.off`, `$.on`, `$.selection.get` | — |
+| 144 | `inventory.quickbar` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.slice`, `$.input.pressed`, `$.updateFor` | — |
+| 145 | `inventory.weight` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.mass`, `$.fn.velocity`, `$.inv`, `$.updateFor` | — |
+| 146 | `inventory.container` | ✅ | `$.emit`, `$.fn.add`, `$.fn.addClass`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.inv`, `$.inv.create`, `$.items.has`, `$.updateFor` | — |
+| 147 | `inventory.transfer` | ✅ | `$.fn.add`, `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.inv` | — |
+| 148 | `inventory.filter` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.inv`, `$.items.get`, `$.selection.get` | — |
+| 149 | `inventory.sort` | ✅ | `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.input.pressed`, `$.inv`, `$.items.get`, `$.selection.get`, `$.updateFor` | — |
+| 150 | `equipment.slots` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.inv`, `$.items.get`, `$.selection.get` | — |
+| 151 | `equipment.weapon-slot` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.inv`, `$.items.get`, `$.selection.get`, `$.weapons.give`, `$.weapons.has` | — |
+| 152 | `equipment.armor` | ✅ | `$.fn.damageFilter`, `$.fn.data`, `$.fn.max`, `$.inv` | — |
+| 153 | `equipment.attachments` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.inv`, `$.items.has`, `$.weapons.mod`, `$.weapons.of` | — |
+| 154 | `equipment.loadout` | ✅ | `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.inv`, `$.items.has` | — |
+| 155 | `item.consumable` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.find`, `$.fn.has`, `$.fn.heal`, `$.fn.remove`, `$.input.pressed`, `$.inv`, `$.items.get`, `$.selection.get`, `$.updateFor` | — |
+| 156 | `item.durability` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.find`, `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.inv`, `$.items.get`, `$.selection.get` | — |
+| 157 | `item.quest-bound` | ✅ | `$.fn.add`, `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.inv`, `$.updateFor` | — |
+| 158 | `item.currency` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.selection.get` | — |
+| 159 | `item.drop` | ✅ | `$.emit`, `$.fn.appendTo`, `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.random.chance`, `$.updateFor`, `$.world` | — |
+| 160 | `item.loot-pickup` | ✅ | `$.fn.add`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.remove`, `$.input.pressed`, `$.inv`, `$.selection.each`, `$.updateFor` | — |
 
-## J. Характеристики, уровни и способности — 0/20
+## I. Экономика, торговля и ремесло — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 181 | `stats.base` | ⬜ | `$.fn`, `$.state` | — |
-| 182 | `stats.modifier` | ⬜ | `$.fn`, `$.state` | — |
-| 183 | `stats.derived` | ⬜ | `$.fn`, `$.state` | — |
-| 184 | `progression.xp` | ⬜ | `$.state`, `$.store` | — |
-| 185 | `progression.level` | ⬜ | `$.state`, `$.store` | — |
-| 186 | `progression.skill-points` | ⬜ | `$.state`, `$.store` | — |
-| 187 | `progression.skill-tree` | ⬜ | `$.state`, `$.store` | — |
-| 188 | `progression.perk` | ⬜ | `$.state`, `$.store` | — |
-| 189 | `ability.base` | ⬜ | `$.combat`, `$.time` | — |
-| 190 | `ability.cooldown` | ⬜ | `$.combat`, `$.time` | — |
-| 191 | `ability.resource-cost` | ⬜ | `$.combat`, `$.time` | — |
-| 192 | `ability.charge` | ⬜ | `$.combat`, `$.time` | — |
-| 193 | `ability.targeting` | ⬜ | `$.combat`, `$.time` | — |
-| 194 | `ability.area-effect` | ⬜ | `$.combat`, `$.time` | — |
-| 195 | `ability.summon` | ⬜ | `$.combat`, `$.time` | — |
-| 196 | `progression.unlock` | ⬜ | `$.state`, `$.store` | — |
-| 197 | `progression.mastery` | ⬜ | `$.state`, `$.store` | — |
-| 198 | `progression.challenge` | ⬜ | `$.state`, `$.store` | — |
-| 199 | `progression.loadout-preset` | ⬜ | `$.state`, `$.store` | — |
-| 200 | `progression.respec` | ⬜ | `$.state`, `$.store` | — |
+| 161 | `economy.wallet` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.fn.off`, `$.fn.on` | — |
+| 162 | `economy.price` | ✅ | `$.fn.filter`, `$.fn.map`, `$.items.define`, `$.items.get`, `$.items.ids`, `$.selection.get` | — |
+| 163 | `economy.shop` | ✅ | `$.fn.add`, `$.fn.attr`, `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.inv`, `$.items.get`, `$.selection.get` | — |
+| 164 | `economy.shop-stock` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.updateFor` | — |
+| 165 | `economy.trade` | ✅ | `$.fn.add`, `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.reduce`, `$.fn.remove`, `$.inv`, `$.items.get`, `$.selection.get` | — |
+| 166 | `economy.reputation-price` | ✅ | `$.fn.attr`, `$.fn.data`, `$.fn.max`, `$.fn.min`, `$.updateFor` | — |
+| 167 | `economy.reward` | ✅ | `$.emit`, `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.inv`, `$.items.has`, `$.off`, `$.on` | — |
+| 168 | `economy.loot-table` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.random.int`, `$.random.seed`, `$.random.weighted` | — |
+| 169 | `economy.weighted-drop` | ✅ | `$.emit`, `$.fn.appendTo`, `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.random.int`, `$.random.seed`, `$.random.weighted`, `$.updateFor`, `$.world` | — |
+| 170 | `economy.chest-loot` | ✅ | `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.inv`, `$.items.has`, `$.random.int`, `$.random.seed`, `$.random.weighted` | — |
+| 171 | `crafting.recipe` | ✅ | `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map` | — |
+| 172 | `crafting.station` | ✅ | `$.emit`, `$.fn.add`, `$.fn.addClass`, `$.fn.count`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.find`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.input.pressed`, `$.inv`, `$.updateFor` | — |
+| 173 | `crafting.queue` | ✅ | `$.fn.add`, `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.inv`, `$.updateFor` | — |
+| 174 | `crafting.repair` | ✅ | `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.fn.some`, `$.inv` | — |
+| 175 | `crafting.upgrade` | ✅ | `$.fn.add`, `$.fn.count`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.find`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.fn.some`, `$.inv` | — |
+| 176 | `crafting.disassemble` | ✅ | `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.inv` | — |
+| 177 | `crafting.discover` | ✅ | `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
+| 178 | `economy.income-expense` | ✅ | `$.fn.data`, `$.fn.off`, `$.fn.on`, `$.time.now` | — |
+| 179 | `economy.auction` | ✅ | `$.emit`, `$.fn.add`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.inv`, `$.items.has`, `$.updateFor` | — |
+| 180 | `economy.quest-payment` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
+
+## J. Характеристики, уровни и способности — 20/20
+
+| № | ID | Статус | API | Пробел |
+|---|---|---|---|---|
+| 181 | `stats.base` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map` | — |
+| 182 | `stats.modifier` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map` | — |
+| 183 | `stats.derived` | ✅ | `$.fn.data`, `$.fn.filter`, `$.fn.map`, `$.fn.maxHp`, `$.fn.off`, `$.fn.on`, `$.fn.speed` | — |
+| 184 | `progression.xp` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on` | — |
+| 185 | `progression.level` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.hp`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.selection.get` | — |
+| 186 | `progression.skill-points` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on` | — |
+| 187 | `progression.skill-tree` | ✅ | `$.fn.add`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.some` | — |
+| 188 | `progression.perk` | ✅ | `$.fn.damageFilter`, `$.fn.data` | — |
+| 189 | `ability.base` | ✅ | `$.fn.emit`, `$.fn.pos`, `$.input.pressed`, `$.updateFor` | — |
+| 190 | `ability.cooldown` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 191 | `ability.resource-cost` | ✅ | `$.fn.data`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 192 | `ability.charge` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 193 | `ability.targeting` | ✅ | `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.input.mouseWorld`, `$.selection.each` | — |
+| 194 | `ability.area-effect` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.heal`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.world.query` | — |
+| 195 | `ability.summon` | ✅ | `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor`, `$.world` | — |
+| 196 | `progression.unlock` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.store.set`, `$.updateFor` | — |
+| 197 | `progression.mastery` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on` | — |
+| 198 | `progression.challenge` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.time.now` | — |
+| 199 | `progression.loadout-preset` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.slice` | — |
+| 200 | `progression.respec` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.reduce` | — |
 
 ## K. Задания, цели и миссии — 0/20
 
@@ -370,7 +370,7 @@
 | 284 | `camera.smoothing` | ⬜ | `$.camera` | — |
 | 285 | `camera.bounds` | ✅ | `$.camera.limits` | — |
 | 286 | `camera.room-lock` | ⬜ | `$.camera` | — |
-| 287 | `camera.screen-shake` | ✅ | `$.camera.shake`, `$.fn.hp`, `$.updateFor` | — |
+| 287 | `camera.screen-shake` | ✅ | `$.camera.shake`, `$.fn.hp`, `$.fn.shake`, `$.updateFor` | — |
 | 288 | `camera.trauma` | ⬜ | `$.camera` | — |
 | 289 | `camera.zoom` | ✅ | `$.camera.zoom`, `$.camera.zoomTo` | — |
 | 290 | `camera.split-screen` | ⬜ | `$.camera` | — |

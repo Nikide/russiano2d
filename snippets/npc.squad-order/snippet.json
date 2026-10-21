@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.squad-order",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Приказ отряду"
+  },
+  "description": {
+    "ru": "Участник выполняет приказ squad:order { kind: move|hold|follow, x, y } от лидера."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 140,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "leader",
+      "label": "Лидер для follow",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "отряд",
+    "приказ"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

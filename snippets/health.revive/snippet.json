@@ -16,25 +16,28 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
       "api": "$.fn.alive"
-    },
-    {
-      "api": "$.fn.distanceTo"
-    },
-    {
-      "api": "$.input.down"
-    },
-    {
-      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.data"
     },
     {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
       "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

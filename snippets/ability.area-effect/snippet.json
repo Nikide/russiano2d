@@ -1,0 +1,107 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ability.area-effect",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Эффект по площади"
+  },
+  "description": {
+    "ru": "При применении способности: урон или лечение всем подходящим в радиусе цели."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.heal"
+    },
+    {
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.world.query"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "ability.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID способности",
+      "type": "string",
+      "default": "fireball"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 80,
+      "min": 1,
+      "max": 5000,
+      "unit": "пикс."
+    },
+    {
+      "id": "effect",
+      "label": "Эффект",
+      "type": "enum",
+      "default": "damage",
+      "options": [
+        "damage",
+        "heal",
+        "status"
+      ]
+    },
+    {
+      "id": "amount",
+      "label": "Величина",
+      "type": "number",
+      "default": 25,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "targets",
+      "label": "Кого",
+      "type": "string",
+      "default": ".enemy"
+    },
+    {
+      "id": "type",
+      "label": "Тип урона / статуса",
+      "type": "string",
+      "default": "fire"
+    }
+  ],
+  "tags": [
+    "AoE",
+    "магия"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

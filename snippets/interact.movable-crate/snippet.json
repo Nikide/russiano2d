@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.movable-crate",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Переносимый ящик"
+  },
+  "description": {
+    "ru": "Ящик берётся клавишей рядом и носится перед актором; повторное нажатие — поставить."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.flip"
+    },
+    {
+      "api": "$.fn.gravity"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "offset",
+      "label": "Вынос",
+      "type": "number",
+      "default": 24,
+      "min": 0,
+      "max": 200,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "ящик",
+    "перенос"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

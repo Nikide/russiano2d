@@ -16,16 +16,19 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.emit"
     },
     {
       "api": "$.fn.alive"
     },
     {
+      "api": "$.fn.alpha"
+    },
+    {
       "api": "$.fn.controls"
     },
     {
-      "api": "$.fn.velocity"
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.fadeOut"
@@ -34,13 +37,13 @@
       "api": "$.fn.flash"
     },
     {
-      "api": "$.emit"
-    },
-    {
-      "api": "$.fn.alpha"
-    },
-    {
       "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

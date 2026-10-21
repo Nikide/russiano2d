@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "item.consumable",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Расходник"
+  },
+  "description": {
+    "ru": "Использование активного или первого подходящего расходника: лечение и перезарядка."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.heal"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.get"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "f"
+    },
+    {
+      "id": "kinds",
+      "label": "Виды",
+      "type": "list",
+      "default": [
+        "med",
+        "food"
+      ]
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 1000,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "аптечка",
+    "еда"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

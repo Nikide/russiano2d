@@ -16,13 +16,10 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.data"
     },
     {
-      "api": "$.input.pressed"
-    },
-    {
-      "api": "$.fn.width"
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.height"
@@ -31,13 +28,16 @@
       "api": "$.fn.size"
     },
     {
-      "api": "$.fn.data"
-    },
-    {
-      "api": "$.fn.emit"
-    },
-    {
       "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

@@ -1,0 +1,59 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "crafting.recipe",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Рецепты"
+  },
+  "description": {
+    "ru": "Рецепты станции: «результат=число: ингредиент=число, …» в data('recipes')."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.count"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "recipes",
+      "label": "Рецепты",
+      "type": "list",
+      "default": [
+        "bandage=1: cloth=2"
+      ]
+    }
+  ],
+  "tags": [
+    "рецепт",
+    "ремесло"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

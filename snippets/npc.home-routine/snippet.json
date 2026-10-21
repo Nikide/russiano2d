@@ -1,0 +1,129 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.home-routine",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Дом — работа — отдых"
+  },
+  "description": {
+    "ru": "Распорядок дня между тремя точками по игровым часам."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.time.now"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "home",
+      "label": "Дом",
+      "type": "vec2",
+      "default": [
+        100,
+        300
+      ]
+    },
+    {
+      "id": "work",
+      "label": "Работа",
+      "type": "vec2",
+      "default": [
+        500,
+        300
+      ]
+    },
+    {
+      "id": "rest",
+      "label": "Отдых",
+      "type": "vec2",
+      "default": [
+        300,
+        300
+      ]
+    },
+    {
+      "id": "workFrom",
+      "label": "Работа с",
+      "type": "int",
+      "default": 9,
+      "min": 0,
+      "max": 23,
+      "unit": "ч"
+    },
+    {
+      "id": "workTo",
+      "label": "Работа до",
+      "type": "int",
+      "default": 17,
+      "min": 1,
+      "max": 24,
+      "unit": "ч"
+    },
+    {
+      "id": "sleepFrom",
+      "label": "Сон с",
+      "type": "int",
+      "default": 22,
+      "min": 0,
+      "max": 24,
+      "unit": "ч"
+    },
+    {
+      "id": "dayLength",
+      "label": "Длина суток",
+      "type": "number",
+      "default": 240,
+      "min": 10,
+      "max": 86400,
+      "unit": "с"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 80,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "распорядок",
+    "город"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

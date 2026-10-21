@@ -1,0 +1,57 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ability.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Способность"
+  },
+  "description": {
+    "ru": "Способность по клавише: проверки других пакетов (перезарядка, ресурс) и событие ability:cast."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID способности",
+      "type": "string",
+      "default": "fireball"
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "q"
+    }
+  ],
+  "tags": [
+    "способность",
+    "скилл"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

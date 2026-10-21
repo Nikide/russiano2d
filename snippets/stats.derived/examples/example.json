@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "formulas": [
+      "armor=agility*0.5+1"
+    ]
+  }
+}

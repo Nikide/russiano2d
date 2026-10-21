@@ -21,13 +21,13 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
       "api": "$.fn.pos"
     },
     {
       "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

@@ -21,19 +21,19 @@
   ],
   "requires": [
     {
-      "api": "$.fn.health"
+      "api": "$.fn.fadeOut"
     },
     {
-      "api": "$.fn.on"
+      "api": "$.fn.health"
     },
     {
       "api": "$.fn.off"
     },
     {
-      "api": "$.fn.remove"
+      "api": "$.fn.on"
     },
     {
-      "api": "$.fn.fadeOut"
+      "api": "$.fn.remove"
     }
   ],
   "dependencies": [],

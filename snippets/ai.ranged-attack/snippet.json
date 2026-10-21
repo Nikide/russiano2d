@@ -21,37 +21,43 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
       "api": "$.fn.alive"
     },
     {
-      "api": "$.fn.pos"
-    },
-    {
-      "api": "$.fn.moveTowards"
-    },
-    {
-      "api": "$.fn.velocity"
+      "api": "$.fn.appendTo"
     },
     {
       "api": "$.fn.at"
     },
     {
-      "api": "$.fn.size"
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.moveTowards"
     },
     {
       "api": "$.fn.overlaps"
     },
     {
-      "api": "$.fn.damage"
+      "api": "$.fn.pos"
     },
     {
       "api": "$.fn.remove"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
     }
   ],
   "dependencies": [],

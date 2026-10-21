@@ -1,0 +1,89 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ability.resource-cost",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Стоимость способности"
+  },
+  "description": {
+    "ru": "Ресурс (мана, энергия) с восстановлением; способность тратит cost или отказывает."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "ability.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID способности",
+      "type": "string",
+      "default": "fireball"
+    },
+    {
+      "id": "resource",
+      "label": "Ресурс",
+      "type": "string",
+      "default": "mana"
+    },
+    {
+      "id": "max",
+      "label": "Максимум",
+      "type": "number",
+      "default": 100,
+      "min": 1,
+      "max": 1000000
+    },
+    {
+      "id": "regen",
+      "label": "Восстановление",
+      "type": "number",
+      "default": 5,
+      "min": 0,
+      "max": 1000000,
+      "unit": "ед./с"
+    },
+    {
+      "id": "cost",
+      "label": "Цена",
+      "type": "number",
+      "default": 20,
+      "min": 0,
+      "max": 1000000
+    }
+  ],
+  "tags": [
+    "мана",
+    "энергия"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

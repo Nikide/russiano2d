@@ -21,19 +21,19 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.audio.play"
     },
     {
       "api": "$.fn.overlaps"
     },
     {
-      "api": "$.fn.trigger"
-    },
-    {
       "api": "$.fn.remove"
     },
     {
-      "api": "$.audio.play"
+      "api": "$.fn.trigger"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

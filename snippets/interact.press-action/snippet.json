@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.press-action",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Действие у ближайшего"
+  },
+  "description": {
+    "ru": "Игрок жмёт клавишу — ближайший объект класса .interactive получает событие interact."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "targets",
+      "label": "Объекты",
+      "type": "string",
+      "default": ".interactive"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "действие",
+    "кнопка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

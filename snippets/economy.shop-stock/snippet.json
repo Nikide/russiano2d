@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "economy.shop-stock",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Пополнение лавки"
+  },
+  "description": {
+    "ru": "Запас лавки восполняется до максимума раз в интервал."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "economy.shop"
+    }
+  ],
+  "fields": [
+    {
+      "id": "max",
+      "label": "Максимум (id=количество)",
+      "type": "list",
+      "default": [
+        "medkit=5"
+      ]
+    },
+    {
+      "id": "interval",
+      "label": "Интервал",
+      "type": "int",
+      "default": 60000,
+      "min": 1000,
+      "max": 86400000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "магазин",
+    "запас"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

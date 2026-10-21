@@ -16,10 +16,10 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.fn.on"
+      "api": "$.fn.alive"
     },
     {
-      "api": "$.fn.off"
+      "api": "$.fn.damage"
     },
     {
       "api": "$.fn.data"
@@ -28,19 +28,22 @@
       "api": "$.fn.emit"
     },
     {
-      "api": "$.updateFor"
+      "api": "$.fn.min"
     },
     {
-      "api": "$.fn.alive"
+      "api": "$.fn.off"
     },
     {
-      "api": "$.fn.damage"
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.overlaps"
     },
     {
       "api": "$.fn.some"
     },
     {
-      "api": "$.fn.overlaps"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

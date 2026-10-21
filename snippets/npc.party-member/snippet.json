@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.party-member",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Участник партии"
+  },
+  "description": {
+    "ru": "Вступает в партию лидера (по событию party:join) и покидает по party:leave."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.slice"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "leader",
+      "label": "Лидер",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "joinNow",
+      "label": "Сразу в партии",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": "order",
+      "label": "Порядок",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64
+    }
+  ],
+  "tags": [
+    "партия",
+    "RPG"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

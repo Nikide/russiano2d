@@ -21,22 +21,22 @@
   ],
   "requires": [
     {
+      "api": "$.camera.follow"
+    },
+    {
+      "api": "$.camera.unfollow"
+    },
+    {
       "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.controls"
     },
     {
       "api": "$.fn.removeClass"
     },
     {
       "api": "$.fn.speed"
-    },
-    {
-      "api": "$.fn.controls"
-    },
-    {
-      "api": "$.camera.follow"
-    },
-    {
-      "api": "$.camera.unfollow"
     }
   ],
   "dependencies": [],

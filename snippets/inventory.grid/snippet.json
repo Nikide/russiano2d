@@ -1,0 +1,108 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "inventory.grid",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Инвентарь-сетка"
+  },
+  "description": {
+    "ru": "Контейнер $.inv у объекта: сетка, вместимость; подбор (pickup/drop) кладётся сюда."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "inventory",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.inv.create"
+    },
+    {
+      "api": "$.items.has"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "cols",
+      "label": "Колонок",
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "id": "rows",
+      "label": "Рядов",
+      "type": "int",
+      "default": 6,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "id": "capacity",
+      "label": "Предел веса",
+      "type": "number",
+      "default": 25,
+      "min": 0,
+      "max": 100000,
+      "unit": "кг"
+    },
+    {
+      "id": "start",
+      "label": "Стартовые (id=число)",
+      "type": "list",
+      "default": []
+    }
+  ],
+  "tags": [
+    "инвентарь",
+    "сетка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

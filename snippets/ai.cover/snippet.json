@@ -21,31 +21,34 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.data"
     },
     {
       "api": "$.fn.distanceTo"
     },
     {
-      "api": "$.fn.pos"
-    },
-    {
-      "api": "$.selection.each"
-    },
-    {
-      "api": "$.fn.width"
-    },
-    {
       "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.max"
     },
     {
       "api": "$.fn.moveTowards"
     },
     {
+      "api": "$.fn.pos"
+    },
+    {
       "api": "$.fn.velocity"
     },
     {
-      "api": "$.fn.data"
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

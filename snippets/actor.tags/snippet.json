@@ -19,10 +19,10 @@
       "api": "$.fn.addClass"
     },
     {
-      "api": "$.fn.removeClass"
+      "api": "$.fn.addTag"
     },
     {
-      "api": "$.fn.addTag"
+      "api": "$.fn.removeClass"
     },
     {
       "api": "$.fn.removeTag"

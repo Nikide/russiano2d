@@ -1,0 +1,89 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.moving-platform",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Движущаяся платформа"
+  },
+  "description": {
+    "ru": "Платформа ходит по точкам с остановками; класс platform для movement.platform-ride."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "points",
+      "label": "Точки (x,y через ;)",
+      "type": "string",
+      "default": "100,300; 300,300",
+      "hint": "Например: 100,300; 300,200"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 80,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "stop",
+      "label": "Остановка",
+      "type": "int",
+      "default": 600,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "pingPong",
+      "label": "Туда-обратно",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "платформа",
+    "лифт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

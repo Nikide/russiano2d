@@ -4,6 +4,11 @@ export default function respawn(node, config, $) {
     return $.updateFor(node, (dt, self) => {
         if (wait < 0) { if (!self.alive()) wait = config.delay; return; }
         wait -= dt * 1000;
-        if (wait <= 0) { self.respawn(config.point[0], config.point[1]); wait = -1; self.emit('respawned', {}); }
+        if (wait <= 0) {
+            // Контрольная точка (interact.checkpoint) важнее точки по умолчанию.
+            const cp = self.data('checkpoint');
+            const x = cp ? cp.x : config.point[0], y = cp ? cp.y : config.point[1];
+            self.respawn(x, y); wait = -1; self.emit('respawned', { x, y });
+        }
     });
 }

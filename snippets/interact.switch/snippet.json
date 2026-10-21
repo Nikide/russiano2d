@@ -1,0 +1,108 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.switch",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Переключатель"
+  },
+  "description": {
+    "ru": "Переключатель вкл/выкл по interact или клавише; глобальные события вкл и выкл."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "onEvent",
+      "label": "Событие «вкл»",
+      "type": "string",
+      "default": "switch:on"
+    },
+    {
+      "id": "offEvent",
+      "label": "Событие «выкл»",
+      "type": "string",
+      "default": "switch:off"
+    },
+    {
+      "id": "once",
+      "label": "Один раз",
+      "type": "bool",
+      "default": false
+    }
+  ],
+  "tags": [
+    "кнопка",
+    "логика"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

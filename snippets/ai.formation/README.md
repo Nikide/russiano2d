@@ -5,7 +5,7 @@
 Поля:
 
 - `leader` (entity) — Лидер
-- `slot` (int) — Место в строю
+- `position` (int) — Место в строю
 - `shape` (enum) — Форма
 - `spacing` (number) — Шаг
 - `speed` (number) — Скорость

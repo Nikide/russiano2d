@@ -19,13 +19,13 @@
       "api": "$.fn.addClass"
     },
     {
+      "api": "$.fn.data"
+    },
+    {
       "api": "$.fn.removeClass"
     },
     {
       "api": "$.fn.team"
-    },
-    {
-      "api": "$.fn.data"
     }
   ],
   "dependencies": [],

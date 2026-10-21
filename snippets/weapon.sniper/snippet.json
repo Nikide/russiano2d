@@ -21,10 +21,28 @@
   ],
   "requires": [
     {
-      "api": "$.input.vec"
+      "api": "$.camera.zoom"
     },
     {
-      "api": "$.updateFor"
+      "api": "$.camera.zoomTo"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.slice"
     },
     {
       "api": "$.input.down"
@@ -33,25 +51,16 @@
       "api": "$.input.pressed"
     },
     {
-      "api": "$.camera.zoomTo"
+      "api": "$.input.vec"
     },
     {
-      "api": "$.camera.zoom"
+      "api": "$.selection.get"
     },
     {
-      "api": "$.fn.pos"
+      "api": "$.updateFor"
     },
     {
       "api": "$.world.raycastAll"
-    },
-    {
-      "api": "$.fn.is"
-    },
-    {
-      "api": "$.fn.damage"
-    },
-    {
-      "api": "$.fn.emit"
     }
   ],
   "dependencies": [],

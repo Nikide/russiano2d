@@ -16,22 +16,22 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.input.vec"
-    },
-    {
-      "api": "$.input.pressed"
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.invulnerable"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.fn.velocity"
     },
     {
-      "api": "$.fn.velocity"
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

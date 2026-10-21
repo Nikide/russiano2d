@@ -21,37 +21,46 @@
   ],
   "requires": [
     {
-      "api": "$.input.vec"
+      "api": "$.fn.damage"
     },
     {
-      "api": "$.updateFor"
+      "api": "$.fn.emit"
     },
     {
-      "api": "$.fn.on"
-    },
-    {
-      "api": "$.fn.off"
-    },
-    {
-      "api": "$.fn.pos"
-    },
-    {
-      "api": "$.world.raycastAll"
-    },
-    {
-      "api": "$.fn.is"
+      "api": "$.fn.find"
     },
     {
       "api": "$.fn.hp"
     },
     {
-      "api": "$.fn.damage"
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
     },
     {
       "api": "$.weapons.falloff"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.world.raycastAll"
     }
   ],
   "dependencies": [

@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "item.currency",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Валюты"
+  },
+  "description": {
+    "ru": "Подобранные предметы-валюты идут в кошелёк data('wallet') по типам, а не в инвентарь."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "currencies",
+      "label": "Валюты (id предметов)",
+      "type": "list",
+      "default": [
+        "coin",
+        "gem"
+      ]
+    },
+    {
+      "id": "main",
+      "label": "Основная (в data money)",
+      "type": "string",
+      "default": "coin"
+    }
+  ],
+  "tags": [
+    "деньги",
+    "валюта"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

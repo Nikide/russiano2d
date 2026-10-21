@@ -21,31 +21,37 @@
   ],
   "requires": [
     {
-      "api": "$.input.vec"
+      "api": "$.fn.damage"
     },
     {
-      "api": "$.input.pressed"
+      "api": "$.fn.emit"
     },
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.pos"
-    },
-    {
-      "api": "$.world.query"
-    },
-    {
-      "api": "$.fn.is"
+      "api": "$.fn.filter"
     },
     {
       "api": "$.fn.hp"
     },
     {
-      "api": "$.fn.damage"
+      "api": "$.fn.is"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world.query"
     }
   ],
   "dependencies": [],

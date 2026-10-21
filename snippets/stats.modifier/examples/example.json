@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "mods": [
+      "strength+5"
+    ]
+  }
+}

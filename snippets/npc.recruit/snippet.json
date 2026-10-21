@@ -1,0 +1,99 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.recruit",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Вербовка"
+  },
+  "description": {
+    "ru": "По клавише рядом персонаж вступает в партию, если не превышен лимит."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "leader",
+      "label": "Лидер",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "limit",
+      "label": "Лимит партии",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    }
+  ],
+  "tags": [
+    "партия",
+    "вербовка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

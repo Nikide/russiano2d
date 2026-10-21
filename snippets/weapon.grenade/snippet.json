@@ -21,43 +21,58 @@
   ],
   "requires": [
     {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.body"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
       "api": "$.input.vec"
     },
     {
       "api": "$.updateFor"
     },
     {
-      "api": "$.input.pressed"
-    },
-    {
-      "api": "$.fn.pos"
-    },
-    {
-      "api": "$.fn.at"
-    },
-    {
-      "api": "$.fn.size"
-    },
-    {
-      "api": "$.fn.body"
-    },
-    {
-      "api": "$.fn.velocity"
+      "api": "$.world"
     },
     {
       "api": "$.world.query"
-    },
-    {
-      "api": "$.fn.is"
-    },
-    {
-      "api": "$.fn.damage"
-    },
-    {
-      "api": "$.emit"
-    },
-    {
-      "api": "$.fn.remove"
     }
   ],
   "dependencies": [],

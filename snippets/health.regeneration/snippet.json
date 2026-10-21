@@ -16,16 +16,16 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.hp"
+      "api": "$.fn.alive"
     },
     {
       "api": "$.fn.heal"
     },
     {
-      "api": "$.fn.alive"
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

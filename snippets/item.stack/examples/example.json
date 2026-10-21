@@ -1,0 +1,8 @@
+{
+  "owner": "project",
+  "values": {
+    "stacks": [
+      "arrow=50"
+    ]
+  }
+}

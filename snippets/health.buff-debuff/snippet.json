@@ -19,10 +19,13 @@
       "api": "$.fn.data"
     },
     {
+      "api": "$.fn.off"
+    },
+    {
       "api": "$.fn.on"
     },
     {
-      "api": "$.fn.off"
+      "api": "$.fn.slice"
     },
     {
       "api": "$.updateFor"

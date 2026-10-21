@@ -21,40 +21,40 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.input.pressed"
-    },
-    {
-      "api": "$.fn.distanceTo"
-    },
-    {
-      "api": "$.fn.hide"
-    },
-    {
-      "api": "$.fn.show"
-    },
-    {
       "api": "$.fn.active"
     },
     {
       "api": "$.fn.at"
     },
     {
-      "api": "$.fn.pos"
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
     },
     {
       "api": "$.fn.height"
     },
     {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
       "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.pressed"
     },
     {
       "api": "$.input.vec"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

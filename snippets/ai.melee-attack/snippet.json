@@ -21,22 +21,22 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
       "api": "$.fn.alive"
-    },
-    {
-      "api": "$.fn.distanceTo"
-    },
-    {
-      "api": "$.fn.moveTowards"
     },
     {
       "api": "$.fn.damage"
     },
     {
+      "api": "$.fn.distanceTo"
+    },
+    {
       "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

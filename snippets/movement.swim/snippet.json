@@ -16,22 +16,25 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.emit"
     },
     {
-      "api": "$.fn.some"
+      "api": "$.fn.max"
     },
     {
       "api": "$.fn.overlaps"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.fn.some"
     },
     {
       "api": "$.fn.velocity"
     },
     {
       "api": "$.input.vec"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

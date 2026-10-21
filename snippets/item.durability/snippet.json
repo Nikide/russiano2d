@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "item.durability",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Прочность"
+  },
+  "description": {
+    "ru": "Удары по объекту изнашивают надетый предмет; поломка снимает его; ремонт — событием repair."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.get"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "equipment.slots"
+    }
+  ],
+  "fields": [
+    {
+      "id": "wearSlot",
+      "label": "Слот ношения",
+      "type": "string",
+      "default": "armor"
+    },
+    {
+      "id": "perHit",
+      "label": "Износ за удар",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 1000
+    }
+  ],
+  "tags": [
+    "прочность",
+    "износ"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

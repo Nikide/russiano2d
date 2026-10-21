@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "parts": [
+      "armor: cloth=2"
+    ]
+  }
+}

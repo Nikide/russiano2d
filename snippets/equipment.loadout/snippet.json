@@ -1,0 +1,83 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "equipment.loadout",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор экипировки"
+  },
+  "description": {
+    "ru": "Именованный набор: при подключении кладёт и надевает перечисленное."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.has"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Название",
+      "type": "string",
+      "default": "штурмовик"
+    },
+    {
+      "id": "items",
+      "label": "Предметы (id=число)",
+      "type": "list",
+      "default": [
+        "medkit=2"
+      ]
+    },
+    {
+      "id": "wear",
+      "label": "Надеть",
+      "type": "list",
+      "default": [
+        "vest"
+      ]
+    }
+  ],
+  "tags": [
+    "набор",
+    "старт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

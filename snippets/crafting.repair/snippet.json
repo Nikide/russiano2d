@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "crafting.repair",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Ремонт"
+  },
+  "description": {
+    "ru": "Ремонт предмета за ресурсы: событие repair-request { item } у владельца."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.count"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.inv"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "item.durability"
+    }
+  ],
+  "fields": [
+    {
+      "id": "cost",
+      "label": "Стоимость (id=число)",
+      "type": "list",
+      "default": [
+        "scrap=2"
+      ]
+    },
+    {
+      "id": "money",
+      "label": "Деньги",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000000
+    }
+  ],
+  "tags": [
+    "ремонт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

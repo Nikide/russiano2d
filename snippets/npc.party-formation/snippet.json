@@ -1,0 +1,92 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.party-formation",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Позиции партии"
+  },
+  "description": {
+    "ru": "Участник партии встаёт на место по своему номеру в партии лидера."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.flip"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "npc.party-member"
+    }
+  ],
+  "fields": [
+    {
+      "id": "leader",
+      "label": "Лидер",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "spacing",
+      "label": "Шаг",
+      "type": "number",
+      "default": 28,
+      "min": 4,
+      "max": 500,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 200,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "партия",
+    "строй"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

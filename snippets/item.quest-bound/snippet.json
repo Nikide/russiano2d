@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "item.quest-bound",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Квестовый предмет"
+  },
+  "description": {
+    "ru": "Предмет нельзя потерять случайно: пропажа без quest:consume возвращается."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.count"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "item",
+      "label": "ID предмета",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "квест",
+    "предмет"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

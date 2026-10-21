@@ -17,6 +17,15 @@
   "requires": [
     {
       "api": "$.fn.damageFilter"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.slice"
     }
   ],
   "dependencies": [

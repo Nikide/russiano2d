@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "crafting.disassemble",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Разбор"
+  },
+  "description": {
+    "ru": "Разбор предмета на компоненты: «предмет: компонент=число,…»; событие disassemble { item }."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.inv"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "parts",
+      "label": "Разбор",
+      "type": "list",
+      "default": [
+        "rifle: scrap=3, spring=1"
+      ]
+    }
+  ],
+  "tags": [
+    "разбор",
+    "ремесло"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

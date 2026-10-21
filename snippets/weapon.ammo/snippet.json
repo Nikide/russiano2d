@@ -16,22 +16,28 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.weapons.of"
-    },
-    {
       "api": "$.fn.data"
-    },
-    {
-      "api": "$.fn.on"
-    },
-    {
-      "api": "$.fn.off"
     },
     {
       "api": "$.fn.emit"
     },
     {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
       "api": "$.updateFor"
+    },
+    {
+      "api": "$.weapons.of"
     }
   ],
   "dependencies": [

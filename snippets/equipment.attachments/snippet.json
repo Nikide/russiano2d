@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "equipment.attachments",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Навесное"
+  },
+  "description": {
+    "ru": "Модификации оружия из инвентаря: событие attach { mod } через $.weapons (слот и совместимость)."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.has"
+    },
+    {
+      "api": "$.weapons.mod"
+    },
+    {
+      "api": "$.weapons.of"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "consume",
+      "label": "Забирать из инвентаря",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "модификации",
+    "оружие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

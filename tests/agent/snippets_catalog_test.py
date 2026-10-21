@@ -67,9 +67,9 @@ def main():
     for p in pkgs:
         owner = "project" if p["targets"] == ["project"] else "object:" + slug(p["id"])
         res = r2d("snippet", "add", game, p["id"], "--owner", owner)
-        if not res["ok"]:
+        if not res["ok"] and not all(d["code"] == "SNIP144" for d in res["diagnostics"]):
             check(False, "%s: add — %s" % (p["id"], [d["message"] for d in res["diagnostics"]]))
-            continue
+            continue                     # SNIP144 — уже подключён как зависимость другого пакета
         example = json.load(open(os.path.join(ROOT, "snippets", p["id"], "examples/example.json")))
         values = dict(example.get("values", {}))
         for f in p.get("fields", []):

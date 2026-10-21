@@ -16,7 +16,7 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.jump"
     },
     {
       "api": "$.fn.onFloor"
@@ -25,7 +25,7 @@
       "api": "$.input.pressed"
     },
     {
-      "api": "$.fn.jump"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

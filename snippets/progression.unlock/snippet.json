@@ -1,0 +1,99 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.unlock",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Открытие функции"
+  },
+  "description": {
+    "ru": "По условию (уровень, флаг, событие) открывает функцию: флаг в $.store и событие unlock."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "feature",
+      "label": "Функция",
+      "type": "string",
+      "default": "fast-travel"
+    },
+    {
+      "id": "level",
+      "label": "С уровня (0 — не важно)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000
+    },
+    {
+      "id": "flag",
+      "label": "Ключ data",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "event",
+      "label": "Или событие",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "who",
+      "label": "Чей прогресс",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "открытие",
+    "прогресс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

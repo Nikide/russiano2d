@@ -21,13 +21,13 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.velocity"
     },
     {
       "api": "$.input.vec"
     },
     {
-      "api": "$.fn.velocity"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

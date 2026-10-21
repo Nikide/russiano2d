@@ -1,0 +1,60 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "progression.respec",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сброс навыков"
+  },
+  "description": {
+    "ru": "Событие respec возвращает очки за открытые навыки (с ценой) и очищает дерево."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.reduce"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "progression.skill-tree"
+    }
+  ],
+  "fields": [
+    {
+      "id": "price",
+      "label": "Цена сброса",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000000000
+    }
+  ],
+  "tags": [
+    "сброс",
+    "билд"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

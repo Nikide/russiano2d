@@ -16,22 +16,22 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.fn.hp"
-    },
-    {
       "api": "$.fn.closest"
+    },
+    {
+      "api": "$.fn.externalVelocity"
     },
     {
       "api": "$.fn.first"
     },
     {
+      "api": "$.fn.hp"
+    },
+    {
       "api": "$.fn.pos"
     },
     {
-      "api": "$.fn.externalVelocity"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

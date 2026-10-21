@@ -21,10 +21,13 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.every"
     },
     {
-      "api": "$.fn.pos"
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
     },
     {
       "api": "$.fn.moveTowards"
@@ -33,7 +36,13 @@
       "api": "$.fn.onWall"
     },
     {
+      "api": "$.fn.pos"
+    },
+    {
       "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

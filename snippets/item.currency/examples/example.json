@@ -1,0 +1,9 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "currencies": [
+      "gold"
+    ],
+    "main": "gold"
+  }
+}

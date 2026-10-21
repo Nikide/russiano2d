@@ -21,19 +21,25 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.input.pressed"
-    },
-    {
-      "api": "$.fn.pos"
+      "api": "$.fn.add"
     },
     {
       "api": "$.fn.damage"
     },
     {
       "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

@@ -1,0 +1,84 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ability.targeting",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Выбор цели"
+  },
+  "description": {
+    "ru": "Цель способности: точка мыши, ближайший враг или сам объект; дальность ограничена."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.selection.each"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "ability.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID способности",
+      "type": "string",
+      "default": "fireball"
+    },
+    {
+      "id": "mode",
+      "label": "Режим",
+      "type": "enum",
+      "default": "mouse",
+      "options": [
+        "mouse",
+        "nearest",
+        "self"
+      ]
+    },
+    {
+      "id": "targets",
+      "label": "Враги",
+      "type": "string",
+      "default": ".enemy"
+    },
+    {
+      "id": "range",
+      "label": "Дальность",
+      "type": "number",
+      "default": 300,
+      "min": 0,
+      "max": 100000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "прицел",
+    "цель"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

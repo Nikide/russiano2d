@@ -21,22 +21,37 @@
   ],
   "requires": [
     {
-      "api": "$.input.vec"
+      "api": "$.fn.appendTo"
     },
     {
-      "api": "$.updateFor"
+      "api": "$.fn.at"
     },
     {
-      "api": "$.fn.on"
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.is"
     },
     {
       "api": "$.fn.off"
     },
     {
+      "api": "$.fn.on"
+    },
+    {
       "api": "$.fn.pos"
     },
     {
-      "api": "$.fn.at"
+      "api": "$.fn.remove"
     },
     {
       "api": "$.fn.size"
@@ -45,22 +60,19 @@
       "api": "$.fn.sprite"
     },
     {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    },
+    {
       "api": "$.world.query"
-    },
-    {
-      "api": "$.fn.is"
-    },
-    {
-      "api": "$.fn.hp"
-    },
-    {
-      "api": "$.fn.damage"
-    },
-    {
-      "api": "$.fn.remove"
-    },
-    {
-      "api": "$.fn.emit"
     }
   ],
   "dependencies": [

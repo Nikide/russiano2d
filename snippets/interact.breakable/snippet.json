@@ -1,0 +1,91 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.breakable",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Разбиваемое"
+  },
+  "description": {
+    "ru": "Разбивается за заданное число ударов (событие damaged) и роняет предметы."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.flash"
+    },
+    {
+      "api": "$.fn.health"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "hits",
+      "label": "Ударов",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "id": "drop",
+      "label": "Выпадение (id=число)",
+      "type": "list",
+      "default": [
+        "coin=3"
+      ]
+    },
+    {
+      "id": "collector",
+      "label": "Кто подбирает",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "ваза",
+    "разрушение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

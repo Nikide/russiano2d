@@ -25,6 +25,9 @@
       "api": "$.fn.emit"
     },
     {
+      "api": "$.fn.min"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

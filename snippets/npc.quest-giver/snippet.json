@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.quest-giver",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Квестодатель"
+  },
+  "description": {
+    "ru": "Выдаёт задание $.quest по клавише и принимает готовое."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.quest.accept"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.quest.turnIn"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define"
+    },
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    }
+  ],
+  "tags": [
+    "квест",
+    "NPC"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

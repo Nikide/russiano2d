@@ -1,0 +1,60 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "stats.base",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Характеристики"
+  },
+  "description": {
+    "ru": "Базовые характеристики персонажа: data(stat) и data('baseStats')."
+  },
+  "kind": "behavior",
+  "category": "Характеристики и способности",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "stats",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "stats",
+      "label": "Характеристики (имя=число)",
+      "type": "list",
+      "default": [
+        "strength=10",
+        "agility=10",
+        "intellect=10"
+      ]
+    }
+  ],
+  "tags": [
+    "статы",
+    "RPG"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

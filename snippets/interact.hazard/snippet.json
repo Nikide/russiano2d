@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.hazard",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Опасная зона"
+  },
+  "description": {
+    "ru": "Шипы, лава: периодический урон целям, пересекающим объект."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": ".player, .enemy"
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 10,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "interval",
+      "label": "Интервал",
+      "type": "int",
+      "default": 500,
+      "min": 16,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "type",
+      "label": "Тип урона",
+      "type": "string",
+      "default": "hazard"
+    }
+  ],
+  "tags": [
+    "шипы",
+    "лава",
+    "ловушка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

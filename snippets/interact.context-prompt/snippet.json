@@ -1,0 +1,104 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.context-prompt",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Подсказка действия"
+  },
+  "description": {
+    "ru": "Над ближайшим объектом показывается его подсказка (data prompt) текстом."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "targets",
+      "label": "Объекты",
+      "type": "string",
+      "default": ".interactive"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "size",
+      "label": "Размер шрифта",
+      "type": "int",
+      "default": 12,
+      "min": 6,
+      "max": 64
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#ffffff"
+    }
+  ],
+  "tags": [
+    "подсказка",
+    "UI"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

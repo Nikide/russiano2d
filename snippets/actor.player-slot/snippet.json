@@ -16,10 +16,10 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.fn.data"
+      "api": "$.fn.addClass"
     },
     {
-      "api": "$.fn.addClass"
+      "api": "$.fn.data"
     },
     {
       "api": "$.fn.removeClass"
@@ -28,7 +28,7 @@
   "dependencies": [],
   "fields": [
     {
-      "id": "slot",
+      "id": "player",
       "label": "Игрок",
       "type": "int",
       "default": 1,

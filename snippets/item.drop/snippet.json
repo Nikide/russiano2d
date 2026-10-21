@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "item.drop",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Выпадение при смерти"
+  },
+  "description": {
+    "ru": "При гибели объекта на месте появляются предметы с шансами «id=число=шанс»."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.random.chance"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "drops",
+      "label": "Выпадение (id=число=шанс 0..1)",
+      "type": "list",
+      "default": [
+        "coin=3=1",
+        "medkit=1=0.25"
+      ]
+    },
+    {
+      "id": "collector",
+      "label": "Кто подбирает",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "лут",
+    "выпадение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

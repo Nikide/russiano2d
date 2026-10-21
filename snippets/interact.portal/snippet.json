@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.portal",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Портал в сцену"
+  },
+  "description": {
+    "ru": "Касание загружает другую сцену ($.scene.load) с точкой появления в $.store."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.scene.load"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "scene",
+      "label": "Сцена",
+      "type": "string",
+      "default": "",
+      "hint": "Имя из $.scene.add"
+    },
+    {
+      "id": "spawn",
+      "label": "Точка появления (id)",
+      "type": "string",
+      "default": "",
+      "hint": "Записывается в $.store 'spawn'"
+    }
+  ],
+  "tags": [
+    "сцена",
+    "переход"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

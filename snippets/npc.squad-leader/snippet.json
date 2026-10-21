@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.squad-leader",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Лидер отряда"
+  },
+  "description": {
+    "ru": "Назначает отряду общую цель: участники получают squad:goal и data('squadGoal')."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "members",
+      "label": "Участники",
+      "type": "string",
+      "default": ".squad"
+    },
+    {
+      "id": "goal",
+      "label": "Общая цель",
+      "type": "entity",
+      "default": "#hero"
+    },
+    {
+      "id": "every",
+      "label": "Обновлять раз в",
+      "type": "int",
+      "default": 500,
+      "min": 50,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "отряд",
+    "тактика"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

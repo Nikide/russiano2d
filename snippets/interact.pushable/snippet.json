@@ -1,0 +1,83 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "interact.pushable",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Толкаемый объект"
+  },
+  "description": {
+    "ru": "Актор, упираясь в объект, толкает его, если впереди нет препятствия."
+  },
+  "kind": "behavior",
+  "category": "Взаимодействие и мир",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world.castShape"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 80,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "contact",
+      "label": "Зазор касания",
+      "type": "number",
+      "default": 4,
+      "min": 0,
+      "max": 50,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "ящик",
+    "головоломка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

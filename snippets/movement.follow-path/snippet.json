@@ -21,19 +21,28 @@
   ],
   "requires": [
     {
-      "api": "$.updateFor"
+      "api": "$.fn.emit"
     },
     {
-      "api": "$.fn.pos"
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
     },
     {
       "api": "$.fn.moveTowards"
     },
     {
+      "api": "$.fn.pos"
+    },
+    {
       "api": "$.fn.velocity"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [],

@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "inventory.transfer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Перемещение предметов"
+  },
+  "description": {
+    "ru": "Перенос, разделение и объединение: событие inv:transfer { to, item, count }."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.count"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.inv"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "partial",
+      "label": "Разрешить частичный перенос",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "перенос",
+    "стопки"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

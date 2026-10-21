@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "upgrades": [
+      "bow→longbow: wood=2"
+    ]
+  }
+}

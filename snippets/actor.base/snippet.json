@@ -19,13 +19,13 @@
       "api": "$.fn.addClass"
     },
     {
-      "api": "$.fn.removeClass"
-    },
-    {
       "api": "$.fn.data"
     },
     {
       "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.removeClass"
     },
     {
       "api": "$.fn.show"

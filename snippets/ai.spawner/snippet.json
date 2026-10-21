@@ -16,13 +16,25 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.on"
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
     },
     {
       "api": "$.off"
     },
     {
-      "api": "$.updateFor"
+      "api": "$.on"
     },
     {
       "api": "$.prefab.has"
@@ -31,10 +43,10 @@
       "api": "$.prefab.instantiate"
     },
     {
-      "api": "$.fn.pos"
+      "api": "$.updateFor"
     },
     {
-      "api": "$.fn.emit"
+      "api": "$.world"
     }
   ],
   "dependencies": [],

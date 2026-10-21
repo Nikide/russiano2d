@@ -16,16 +16,16 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.updateFor"
-    },
-    {
-      "api": "$.input.pressed"
+      "api": "$.fn.jump"
     },
     {
       "api": "$.fn.onFloor"
     },
     {
-      "api": "$.fn.jump"
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
     }
   ],
   "dependencies": [

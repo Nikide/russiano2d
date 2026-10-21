@@ -16,13 +16,13 @@
   "slots": [],
   "requires": [
     {
+      "api": "$.fn.angle"
+    },
+    {
       "api": "$.fn.at"
     },
     {
       "api": "$.fn.size"
-    },
-    {
-      "api": "$.fn.angle"
     }
   ],
   "dependencies": [],

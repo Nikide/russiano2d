@@ -1,0 +1,84 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "crafting.upgrade",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Улучшение"
+  },
+  "description": {
+    "ru": "Улучшение предмета: «из→в: ресурс=число,…»; событие upgrade { item }."
+  },
+  "kind": "behavior",
+  "category": "Экономика и ремесло",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.count"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.inv"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "upgrades",
+      "label": "Улучшения",
+      "type": "list",
+      "default": [
+        "sword→sword_plus: iron=3"
+      ]
+    }
+  ],
+  "tags": [
+    "улучшение",
+    "ремесло"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

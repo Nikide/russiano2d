@@ -1,0 +1,62 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "item.stack",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Стопки"
+  },
+  "description": {
+    "ru": "Правило стопки для описанных предметов: «id=размер стопки»."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.items.define"
+    },
+    {
+      "api": "$.items.get"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "item.definition"
+    }
+  ],
+  "fields": [
+    {
+      "id": "stacks",
+      "label": "Стопки (id=число)",
+      "type": "list",
+      "default": [
+        "ammo_9mm=60"
+      ]
+    }
+  ],
+  "tags": [
+    "стопка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

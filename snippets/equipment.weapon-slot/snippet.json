@@ -1,0 +1,74 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "equipment.weapon-slot",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Оружие в руках"
+  },
+  "description": {
+    "ru": "Экипировка оружия из инвентаря: событие equip-weapon { item } выдаёт ствол $.weapons."
+  },
+  "kind": "behavior",
+  "category": "Предметы и инвентарь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.inv"
+    },
+    {
+      "api": "$.items.get"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.weapons.give"
+    },
+    {
+      "api": "$.weapons.has"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [
+    {
+      "id": "defaultWeapon",
+      "label": "Ствол по умолчанию",
+      "type": "string",
+      "default": "",
+      "hint": "id из $.weapons"
+    }
+  ],
+  "tags": [
+    "оружие",
+    "экипировка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

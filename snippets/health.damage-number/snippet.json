@@ -16,16 +16,10 @@
   "slots": [],
   "requires": [
     {
-      "api": "$.fn.on"
+      "api": "$.fn.alpha"
     },
     {
-      "api": "$.fn.off"
-    },
-    {
-      "api": "$.fn.pos"
-    },
-    {
-      "api": "$.fn.height"
+      "api": "$.fn.appendTo"
     },
     {
       "api": "$.fn.at"
@@ -34,13 +28,28 @@
       "api": "$.fn.color"
     },
     {
-      "api": "$.updateFor"
+      "api": "$.fn.height"
     },
     {
-      "api": "$.fn.alpha"
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
     },
     {
       "api": "$.fn.remove"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
     }
   ],
   "dependencies": [],

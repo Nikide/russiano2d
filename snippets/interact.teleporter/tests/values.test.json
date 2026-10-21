@@ -1,0 +1,6 @@
+{
+  "values": {
+    "target": "#exit",
+    "cooldown": 500
+  }
+}

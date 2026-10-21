@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "npc.relationship",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Отношение к игроку"
+  },
+  "description": {
+    "ru": "Отношение −100…100 меняется событием relationship; пороги — классы и события."
+  },
+  "kind": "behavior",
+  "category": "NPC и группы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.removeClass"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "start",
+      "label": "Начальное",
+      "type": "int",
+      "default": 0,
+      "min": -100,
+      "max": 100
+    },
+    {
+      "id": "friend",
+      "label": "Друг от",
+      "type": "int",
+      "default": 50,
+      "min": -100,
+      "max": 100
+    },
+    {
+      "id": "enemy",
+      "label": "Враг до",
+      "type": "int",
+      "default": -50,
+      "min": -100,
+      "max": 100
+    }
+  ],
+  "tags": [
+    "отношения",
+    "дружба"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}
