@@ -1,0 +1,114 @@
+<rml>
+<head>
+<link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="atlas.rcss"/>
+<title>Атлас</title>
+</head>
+<body>
+<div class="st-root">
+  <div class="st-bar">
+    <button id="at-mode-sprite" class="st-btn on" title="Кадры атласа">Кадры</button>
+    <button id="at-mode-anim" class="st-btn" title="Теги-анимации (Tab)">Анимация</button>
+    <span class="st-sep"></span>
+    <span id="at-sprite-tools">
+      <button id="at-tool-select" class="st-btn on" title="Выбор, перенос и рисование кадра">Выбор</button>
+      <button id="at-tool-pivot" class="st-btn" title="Точка привязки кадра (P)">Точка привязки</button>
+      <button id="at-grid" class="st-btn on" title="Сетка пикселей при масштабе ×8+ (G)">Сетка</button>
+      <span class="st-sep"></span>
+      <button id="at-zoom-out" class="st-btn">−</button>
+      <span id="at-zoom" class="st-pill">×1</span>
+      <button id="at-zoom-in" class="st-btn">+</button>
+      <button id="at-fit" class="st-btn" title="Вписать (F)">Вписать</button>
+    </span>
+    <span class="st-sep"></span>
+    <button id="at-validate" class="st-btn" title="Проверить текущее состояние командой r2d validate; несохранённые правки проверяются как черновик">Проверить</button>
+    <button id="at-spritemesh" class="st-btn" title="Открыть атлас в редакторе меша спрайта">Меш спрайта…</button>
+    <span class="st-grow"></span>
+    <span id="at-dirty" class="st-dirty"></span>
+    <span id="at-status" class="st-pill ok">—</span>
+  </div>
+
+  <div class="st-main">
+    <div class="st-left">
+      <div class="st-scroll">
+        <span class="st-h first">Кадры</span>
+        <div id="at-frames"></div>
+        <span class="st-h">Теги</span>
+        <div id="at-tags"></div>
+        <button id="at-t-new" class="st-btn wide" title="Тег из выбранного кадра">+ Тег</button>
+        <span id="at-count" class="st-note"></span>
+      </div>
+    </div>
+
+    <div class="st-center">
+      <div id="at-canvas" class="st-canvas"><div id="at-overlay" class="st-overlay"></div></div>
+      <div id="at-strip" class="at-strip st-hidden">
+        <div class="at-strip-row">
+          <button id="at-prev" class="st-btn">|&lt;</button>
+          <button id="at-play" class="st-btn primary">Пауза</button>
+          <button id="at-next" class="st-btn">&gt;|</button>
+          <span class="st-sep"></span>
+          <span class="st-label">Скорость</span>
+          <button id="at-speed-0" class="st-btn">×0.25</button>
+          <button id="at-speed-1" class="st-btn">×0.5</button>
+          <button id="at-speed-2" class="st-btn on">×1</button>
+          <button id="at-speed-3" class="st-btn">×2</button>
+          <span class="st-grow"></span>
+          <span id="at-anim-info" class="st-label"></span>
+        </div>
+        <div id="at-thumbs" class="at-thumbs"></div>
+      </div>
+      <div id="at-hud" class="st-hud"></div>
+    </div>
+
+    <div class="st-right">
+      <div class="st-scroll">
+        <div id="at-create" class="st-hidden">
+          <span class="st-title">Новый атлас</span>
+          <span class="st-note">У картинки нет *.atlas.json. Нарезка сеткой создаст его рядом (нативная r2d atlas-grid).</span>
+          <div class="st-field"><label>Колонки</label><input id="at-c-cols" class="st-in" type="text" value="4"/></div>
+          <div class="st-field"><label>Строки</label><input id="at-c-rows" class="st-in" type="text" value="1"/></div>
+          <button id="at-g-slice2" class="st-btn primary wide">Нарезать и создать атлас</button>
+        </div>
+        <div id="at-edit">
+          <div id="at-frame">
+            <span id="at-f-title" class="st-title">Кадр</span>
+            <div class="st-field"><label>Имя</label><input id="at-f-name" class="st-in" type="text" value=""/></div>
+            <div class="st-field"><label>X / Y</label><input id="at-f-x" class="st-in" type="text" value=""/><input id="at-f-y" class="st-in" type="text" value=""/></div>
+            <div class="st-field"><label>Ш / В</label><input id="at-f-w" class="st-in" type="text" value=""/><input id="at-f-h" class="st-in" type="text" value=""/></div>
+            <div class="st-field"><label>Пивот</label><input id="at-f-px" class="st-in" type="text" value=""/><input id="at-f-py" class="st-in" type="text" value=""/></div>
+            <div class="st-field"><label>Длит., мс</label><input id="at-f-dur" class="st-in" type="text" value=""/></div>
+            <div class="st-btns"><button id="at-f-apply" class="st-btn primary">Применить</button><button id="at-f-nopivot" class="st-btn">Без пивота</button><button id="at-f-up" class="st-btn">Выше</button><button id="at-f-down" class="st-btn">Ниже</button><button id="at-f-delete" class="st-btn danger">Удалить</button></div>
+          </div>
+          <span id="at-frame-empty" class="st-empty">Выберите кадр слева или на картинке.</span>
+
+          <span id="at-t-title" class="st-h">Тег</span>
+          <div class="st-field"><label>Имя</label><input id="at-t-name" class="st-in" type="text" value=""/></div>
+          <div class="st-field"><label>Кадры</label><input id="at-t-from" class="st-in" type="text" value=""/><input id="at-t-to" class="st-in" type="text" value=""/></div>
+          <div class="st-field"><label>Порядок</label><select id="at-t-dir" class="st-in"><option value="forward">Вперёд</option><option value="reverse">Назад</option><option value="pingpong">Туда и обратно</option></select></div>
+          <div class="st-field"><label>Повтор</label><select id="at-t-loop" class="st-in"><option value="loop">Повторять</option><option value="once">Один раз</option></select></div>
+          <div class="st-field"><label>Мс/кадр</label><input id="at-t-dur" class="st-in" type="text" value=""/></div>
+          <div class="st-btns"><button id="at-t-apply" class="st-btn primary">Применить тег</button><button id="at-t-delete" class="st-btn danger">Удалить тег</button></div>
+          <span class="st-note">Длительность тега пишется во все его кадры; игра берёт её по первому кадру.</span>
+
+          <span class="st-h">Нарезка сеткой</span>
+          <div class="st-field"><label>Кол. / стр.</label><input id="at-g-cols" class="st-in" type="text" value=""/><input id="at-g-rows" class="st-in" type="text" value=""/></div>
+          <div class="st-field"><label>Ячейка</label><input id="at-g-cw" class="st-in" type="text" value=""/><input id="at-g-ch" class="st-in" type="text" value=""/></div>
+          <div class="st-field"><label>Префикс</label><input id="at-g-prefix" class="st-in" type="text" value=""/></div>
+          <div class="st-field"><label>Мс/кадр</label><input id="at-g-dur" class="st-in" type="text" value="100"/></div>
+          <button id="at-g-slice" class="st-btn wide" title="Заменить кадры нарезкой (одна правка, Cmd/Ctrl+Z вернёт прежние)">Нарезать</button>
+
+          <span class="st-h">Метаданные</span>
+          <div id="at-custom"></div>
+          <div class="st-field"><label>Ключ</label><input id="at-m-key" class="st-in" type="text" value=""/></div>
+          <div class="st-field"><label>Значение</label><input id="at-m-val" class="st-in" type="text" value=""/></div>
+          <button id="at-m-apply" class="st-btn wide" title="Пустое значение — удалить ключ">Записать</button>
+        </div>
+        <span class="st-h">Проверка</span>
+        <div id="at-diags"></div>
+      </div>
+    </div>
+  </div>
+  <div id="at-conflict" class="st-hidden"></div>
+</div>
+</body>
+</rml>

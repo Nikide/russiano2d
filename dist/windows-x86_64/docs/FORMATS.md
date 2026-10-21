@@ -37,3 +37,33 @@
    читаемом JSON и ASCII-картах; бинарные blob'ы для ревью непригодны.
 4. **Незаявленное остаётся незаявленным.** Если поля нет в коде, оно не
    попадает в обещания профиля — тест печатает его как «ждёт», а не «ок».
+
+## project.json (минимальный и schema_version 2)
+
+`project.json` — манифест запуска и граф проекта для Editor, а не база данных:
+правило 1 выше в силе. Полное описание — [PROJECT_JSON.md](PROJECT_JSON.md).
+Разбор: `src/project.c`; проверка: `sdk/native/sdk_validate.c`; индексатор графа:
+`sdk/native/sdk_project_graph.c`.
+
+```json
+{
+  "schema_version": 2,
+  "project": {"name": "Неоновый курьер", "version": "1.0.0"},
+  "runtime": {"entry": "main.js", "start_scene": "menu",
+              "window": {"title": "Неоновый курьер", "width": 960, "height": 640}},
+  "editor": {"graph": {"…": "строит r2d project-index"}}
+}
+```
+
+| Поле | Значение |
+|---|---|
+| `schema_version` | `2`; нет поля — минимальный манифест (`title`, `width`, `height`, `version`, `toolHost`), читается как раньше |
+| `runtime.entry` | точка входа (по умолчанию `main.js`); её берут и запуск `--game`, и `build` без `--entry` |
+| `runtime.start_scene` | сцена при запуске без `--scene`; попадает в `$.startScene`. `--scene` старше |
+| `runtime.window` | `title`, `width`, `height`, `fullscreen` |
+| `editor.graph` | сохранённый граф проекта; рантайм его не читает |
+
+Коды `r2d validate` (`R2D201`–`R2D210`, `--json`) и `r2d project-index` /
+`project-set` / `migrate-project` — в [PROJECT_JSON.md](PROJECT_JSON.md) §2 и §4.
+Прежний `"format": 2` с `entry`/`scenes`/`roles` больше не читается:
+`r2d migrate-project` переводит его в schema 2.

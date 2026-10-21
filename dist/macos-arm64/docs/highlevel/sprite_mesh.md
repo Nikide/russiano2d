@@ -18,7 +18,7 @@ player.play('walk'); // обычная Sprite animation выбирает соо�
 
 Вызов без аргумента возвращает настройки, а `spriteMesh(false)` отключает
 отрисовку mesh для узла. Настройки по умолчанию можно записать в Sprite/Atlas
-asset через SpriteMesh Studio SDK tool.
+asset через SpriteMesh Studio в Editor.
 
 ## Bake и cache
 
@@ -30,7 +30,8 @@ SDK строит и сохраняет mesh для **каждого** кадра
 SpriteMesh Studio открывает PNG или Atlas JSON, показывает кадры и animations,
 позволяет проигрывать animation, менять depth/alpha threshold/units per pixel,
 pivot и режим preview, затем запечь cache всех кадров вместе с настройками
-asset.
+asset (для PNG записывается только cache; при повторном открытии студии —
+настройки по умолчанию).
 
 ## Ограничения
 
@@ -38,3 +39,6 @@ asset.
 Соседние opaque-пиксели объединяются без внутренних стенок; границы atlas frame
 изолированы. Cache содержит CPU mesh и загружается через существующий Re2D mesh
 renderer. Это 2D/2.5D представление обычного Sprite, а не новый renderer.
+
+Preview camera принимает `yaw: 0` и `pitch: 0` как точный вид спереди;
+пропущенные углы используют ракурс по умолчанию.

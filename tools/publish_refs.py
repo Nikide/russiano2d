@@ -21,6 +21,10 @@ def publish(remotes, refs):
         for url in urls.stdout.splitlines():
             if url in seen: continue
             seen.add(url)
+            if 'hub.mos.ru' in url.lower():
+                print(remote + ': пропущен hub.mos — публикация отключена', flush=True)
+                results.append({'remote':remote,'url':url,'ok':True,'skipped':'publishing disabled'})
+                continue
             pushed=run(['git','push',url,*refs])
             print(remote + ': ' + pushed.stdout + pushed.stderr, flush=True)
             verified=run(['git','ls-remote',url,*refs], timeout=45) if pushed.returncode==0 else None

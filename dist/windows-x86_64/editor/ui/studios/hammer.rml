@@ -1,0 +1,167 @@
+<rml>
+<head>
+<!-- Hammer Studio: one document per tab, common Editor lifecycle. -->
+<link type="text/rcss" href="legacy-theme.rcss"/><link type="text/rcss" href="legacy-studio.rcss"/><link type="text/rcss" href="legacy-world-editor.rcss"/><link type="text/rcss" href="../hammer.rcss"/>
+<link type="text/rcss" href="kit.rcss"/><title>Редактор карт</title>
+</head>
+<body>
+<div class="studio we-root hm-root">
+  <!-- Тулбар: файл, правка, сборка, сетка — одна строка, как в макете -->
+  <div class="hm-bar">
+    <button id="we-back" class="hm-hidden">Назад</button>
+    <button id="we-save" class="hm-btn" title="Сохранить карту (Cmd/Ctrl+S)"><span class="we-icon" id="we-icon-save"></span>Сохранить</button>
+    <button id="we-undo" class="hm-btn" title="Отменить (Cmd/Ctrl+Z)"><span class="we-icon" id="we-icon-undo"></span>Отменить</button>
+    <button id="we-redo" class="hm-btn" title="Повторить (Cmd/Ctrl+Y)"><span class="we-icon" id="we-icon-redo"></span>Повторить</button>
+    <span class="hm-sep"></span>
+    <button id="we-validate" class="hm-btn" title="Проверить карту без записи"><span class="we-icon" id="we-icon-validate"></span>Проверить</button>
+    <button id="we-compile" class="hm-btn" title="Собрать карту для игры"><span class="we-icon" id="we-icon-compile"></span>Собрать</button>
+    <button id="we-run" class="hm-btn" title="Запустить игру"><span class="we-icon" id="we-icon-run"></span>Запустить</button>
+    <button id="we-build-run" class="hm-btn hm-primary" title="Сохранить, проверить, собрать и запустить (F5)"><span class="we-icon" id="we-icon-build-run"></span>Собрать и запустить</button>
+    <span class="hm-sep"></span>
+    <span class="hm-label">Сетка</span>
+    <button id="we-grid-dec" class="hm-btn hm-sq" title="Мельче ([)">[</button>
+    <span id="we-grid-value" class="hm-pill">16</span>
+    <button id="we-grid-inc" class="hm-btn hm-sq" title="Крупнее (])">]</button>
+    <button id="we-grid-toggle" class="hm-btn" title="Показать/скрыть сетку">Сетка</button>
+    <span class="hm-sep"></span>
+    <button id="we-duplicate" class="hm-btn hm-sq" title="Дублировать выделенное"><span class="we-icon" id="we-icon-duplicate"></span></button>
+    <button id="we-delete" class="hm-btn hm-sq" title="Удалить выделенное (Delete)"><span class="we-icon" id="we-icon-delete"></span></button>
+    <button id="we-focus-selection" class="hm-btn" title="Показать выделенное во всех видах (F)">К выделению</button>
+    <button id="we-restore" class="hm-btn" title="Вернуть четыре вида">Все виды</button>
+    <span class="we-spacer"></span>
+    <span id="we-dirty" class="dirty hm-dirty"></span>
+    <span id="we-tool-current" class="hm-pill">Выбор</span>
+    <span id="we-status" class="hm-pill ok">готов</span>
+  </div>
+  <div id="we-map-hint" class="we-map-hint"><span id="we-map-hint-text"></span></div>
+
+  <div class="hm-main">
+    <!-- Палитра инструментов -->
+    <div class="hm-tools">
+      <button id="we-tool-select" class="hm-tool on" title="Выбрать и перемещать"><span class="we-icon" id="we-icon-tool-select"></span>Выбор</button>
+      <button id="we-tool-block" class="hm-tool" title="Создать кисть протяжкой"><span class="we-icon" id="we-icon-tool-block"></span>Кисть</button>
+      <button id="we-tool-move" class="hm-tool" title="Переместить выделенное"><span class="we-icon" id="we-icon-tool-move"></span>Перемещение</button>
+      <button id="we-tool-resize" class="hm-tool" title="Изменить размер"><span class="we-icon" id="we-icon-tool-resize"></span>Размер</button>
+      <button id="we-tool-rotate" class="hm-tool" title="Повернуть выделенное"><span class="we-icon" id="we-icon-tool-rotate"></span>Поворот</button>
+      <button id="we-tool-vertex" class="hm-tool" title="Редактировать вершины"><span class="we-icon" id="we-icon-tool-vertex"></span>Вершины</button>
+      <button id="we-tool-clip" class="hm-tool" title="Разрезать кисть"><span class="we-icon" id="we-icon-tool-clip"></span>Разрез</button>
+      <button id="we-tool-face" class="hm-tool" title="Материал грани"><span class="we-icon" id="we-icon-tool-face"></span>Грани</button>
+      <button id="we-tool-entity" class="hm-tool" title="Размещать объекты"><span class="we-icon" id="we-icon-tool-entity"></span>Объекты</button>
+      <button id="we-tool-path" class="hm-tool" title="Редактировать пути"><span class="we-icon" id="we-icon-tool-path"></span>Пути</button>
+      <div id="we-ext-toolbar" class="we-ext hm-ext"></div>
+      <div id="we-ext-overlays" class="we-ext hm-ext"></div>
+
+      <div class="hm-h">Кисть</div>
+      <div class="hm-field"><label>Низ</label><input id="we-bottom" class="field" type="text" value="0"/></div>
+      <div class="hm-field"><label>Высота</label><input id="we-height" class="field" type="text" value="128"/></div>
+      <div class="hm-h">Объект</div>
+      <select id="we-entity-class" class="field hm-wide"></select>
+      <div class="hm-field"><label>Тип</label><input id="we-entity-kind" class="field" type="text" value="light"/></div>
+      <div class="hm-field"><label>Высота</label><input id="we-entity-h" class="field" type="text" value="0"/></div>
+      <button id="we-entity-create" class="hm-btn hm-wide">Создать объект</button>
+      <div class="hm-h">Преобразование</div>
+      <div class="hm-row"><button id="we-resize-plus" class="hm-btn hm-sq">+</button><button id="we-resize-minus" class="hm-btn hm-sq">-</button><button id="we-rotate-90" class="hm-btn">90°</button><button id="we-rotate--90" class="hm-btn">-90°</button></div>
+    </div>
+
+    <!-- Четыре вида -->
+    <div class="we-center hm-center">
+      <div class="we-viewgrid" id="we-viewgrid">
+        <div class="we-vrow" id="we-row-a">
+          <div class="we-pane" id="we-pane-top">
+            <div class="we-pane-bar hm-pane-bar"><span class="we-pane-title">СВЕРХУ / XY</span><span class="we-spacer"></span><button id="we-pane-max-top" class="hm-mini">Развернуть</button></div>
+            <div id="we-vp-top" class="we-vp"><div id="we-overlay-top" class="we-overlay"></div></div>
+          </div>
+          <div class="we-pane" id="we-pane-3d">
+            <div class="we-pane-bar hm-pane-bar"><span class="we-pane-title">3D-КАМЕРА</span><span id="we-3d-state" class="sub">соберите карту</span><span class="we-spacer"></span><button id="we-3d-debug" class="hm-mini">Вид</button><button id="we-3d-backend" class="hm-mini">Рендер</button><button id="we-3d-light" class="hm-mini">Свет</button><button id="we-pane-max-3d" class="hm-mini">Развернуть</button></div>
+            <div id="we-vp-3d" class="we-vp we-vp3d"></div>
+          </div>
+        </div>
+        <div class="we-vrow" id="we-row-b">
+          <div class="we-pane" id="we-pane-front">
+            <div class="we-pane-bar hm-pane-bar"><span class="we-pane-title">СПЕРЕДИ / XZ</span><span class="we-spacer"></span><button id="we-pane-max-front" class="hm-mini">Развернуть</button></div>
+            <div id="we-vp-front" class="we-vp"><div id="we-overlay-front" class="we-overlay"></div></div>
+          </div>
+          <div class="we-pane" id="we-pane-side">
+            <div class="we-pane-bar hm-pane-bar"><span class="we-pane-title">СБОКУ / YZ</span><span class="we-spacer"></span><button id="we-pane-max-side" class="hm-mini">Развернуть</button></div>
+            <div id="we-vp-side" class="we-vp"><div id="we-overlay-side" class="we-overlay"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Инспектор, объекты, visgroups -->
+    <div class="hm-right">
+      <div class="hm-insp">
+        <div id="we-selection" class="kv hm-title"></div>
+        <div id="we-inspector" class="we-inspector"></div>
+        <div id="we-ext-inspectors" class="we-ext"></div>
+        <div id="we-ext-context-actions" class="we-ext"></div>
+        <button id="we-apply" class="hm-btn hm-primary hm-wide">Применить</button>
+        <button id="we-toggle-elements" class="we-section-toggle">Мир Re2D +</button>
+        <div id="we-element-settings" class="we-extra">
+          <div class="hm-row"><button id="we-add-cells" class="hm-btn">Ячейка</button><button id="we-add-walls" class="hm-btn">Стена</button><button id="we-add-portals" class="hm-btn">Портал</button></div>
+          <div class="hm-row"><button id="we-add-stairs" class="hm-btn">Лестница</button><button id="we-add-slopes" class="hm-btn">Склон</button><button id="we-add-lights" class="hm-btn">Свет</button></div>
+          <textarea id="we-element-json" class="area we-json"></textarea>
+          <button id="we-element-apply" class="hm-btn hm-wide">Применить полный JSON объекта</button>
+          <textarea id="we-material-spec" class="area we-json">{"name":"preview","surfaces":[0],"albedo":""}</textarea>
+          <button id="we-material-preview" class="hm-btn hm-wide">Материал PNG (только предпросмотр)</button>
+          <button id="we-wall-split" class="hm-btn hm-wide">Разделить выбранную стену</button>
+          <div class="hm-field"><label>Стена ID</label><input id="we-wall-other" class="field" type="text"/></div>
+          <button id="we-wall-join" class="hm-btn hm-wide">Объединить стены</button>
+        </div>
+        <button id="we-toggle-face" class="we-section-toggle">Материалы граней +</button>
+        <div id="we-face-settings" class="we-extra">
+          <div class="hm-row"><button id="we-face-side" class="hm-btn">Стена</button><button id="we-face-floor" class="hm-btn">Пол</button><button id="we-face-ceiling" class="hm-btn">Потолок</button></div>
+          <div class="hm-field"><label>Материал</label><input id="we-face-material" class="field" type="text" value=""/></div>
+          <div class="hm-field"><label>Теги</label><input id="we-face-tags" class="field" type="text" value=""/></div>
+          <button id="we-face-apply" class="hm-btn hm-wide">Применить грань</button>
+        </div>
+        <button id="we-toggle-clip" class="we-section-toggle">Разрезать кисть +</button>
+        <div id="we-clip-settings" class="we-extra">
+          <div class="hm-field"><label>Ось</label><input id="we-clip-axis" class="field" type="text" value="x"/></div>
+          <div class="hm-field"><label>Координата</label><input id="we-clip-coord" class="field" type="text" value="0"/></div>
+          <div class="hm-row"><button id="we-clip-front" class="hm-btn">Перед</button><button id="we-clip-back" class="hm-btn">Зад</button><button id="we-clip-both" class="hm-btn">Обе</button></div>
+        </div>
+        <button id="we-toggle-path" class="we-section-toggle">Управление путями +</button>
+        <div id="we-path-settings" class="we-extra">
+          <button id="we-path-create" class="hm-btn hm-wide">Новый путь</button>
+          <div class="hm-field"><label>Координата X</label><input id="we-path-x" class="field" type="text" value="0"/></div>
+          <div class="hm-field"><label>Координата Y</label><input id="we-path-y" class="field" type="text" value="0"/></div>
+          <div class="hm-row"><button id="we-path-add" class="hm-btn">Добавить узел</button><button id="we-path-node-delete" class="hm-btn">Удалить узел</button></div>
+          <div class="hm-field"><label>Индекс</label><input id="we-path-node-index" class="field" type="text" value="0"/></div>
+          <div class="hm-field"><label>Соединить</label><input id="we-path-connect-a" class="field" type="text" value="0"/></div>
+          <div class="hm-field"><label>с</label><input id="we-path-connect-b" class="field" type="text" value="1"/></div>
+          <div class="hm-row"><button id="we-path-connect" class="hm-btn">Соединить</button><button id="we-path-loop" class="hm-btn">Замкнуть</button></div>
+        </div>
+        <button id="we-toggle-build" class="we-section-toggle">Журнал сборки +</button>
+        <div id="we-build-settings" class="we-extra"><div id="we-build-output" class="log we-build"></div></div>
+      </div>
+
+      <div class="hm-objects">
+        <div class="hm-h hm-h-first">Объекты</div>
+        <input id="we-filter" class="field hm-wide" type="text" value=""/>
+        <div id="we-tree" class="hm-tree"></div>
+        <button id="we-select-world" class="hm-btn hm-wide">Мир (worldspawn)</button>
+        <button id="we-toggle-groups" class="we-section-toggle">Группы видимости +</button>
+        <div id="we-groups" class="we-extra">
+          <input id="we-visgroup-name" class="field hm-wide" type="text" value="group"/>
+          <div class="hm-row"><button id="we-visgroup-create" class="hm-btn">Создать</button><button id="we-visgroup-hide" class="hm-btn">Скрыть/показать</button><button id="we-visgroup-lock" class="hm-btn">Закрепить</button></div>
+        </div>
+        <div id="we-ext-menu" class="we-ext"></div>
+        <div id="we-ext-panels" class="we-ext"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Файл карты: путь и открыть/создать (редко нужно — файл открыт вкладкой) -->
+  <div class="hm-file hm-hidden">
+    <span class="hm-label">Файл</span>
+    <input id="we-path" class="field hm-path" type="text" value=""/>
+    <button id="we-open" class="hm-btn"><span class="we-icon" id="we-icon-open"></span>Открыть</button>
+    <button id="we-new" class="hm-btn"><span class="we-icon" id="we-icon-new"></span>Новая</button>
+    <span id="we-file" class="sub hm-filename"></span>
+  </div>
+  <div id="we-diag" class="diag-strip hm-diag"></div>
+</div>
+</body>
+</rml>

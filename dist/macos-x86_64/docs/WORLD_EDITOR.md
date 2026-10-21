@@ -20,9 +20,9 @@ volumes, markers, materials, surface tags, visgroups, world properties и
 ## 1. Запуск
 
 ```bash
-./build/russiano2d --game sdk          # SDK GUI → инструмент world-editor
-./run_sdk.sh                           # то же через скрипт
-r2d-sdk tool info world-editor         # из CLI
+./build-xmake/macos-arm64/macosx/arm64/release/r2d edit <проект>
+# Откройте .re2dmap в дереве проекта → Hammer Studio
+r2d tool info world-editor             # из CLI
 ```
 
 Инструмент зарегистрирован в `sdk_tools.json` (`id: world-editor`, assets
@@ -43,9 +43,12 @@ r2d-sdk tool info world-editor         # из CLI
   текущий размер — в статус-баре.
 * Ортогональные вьюпорты: pan (средняя/правая кнопка или Space+drag), zoom
   (колесо), frame selection, maximize/restore 4-view.
-* Инструменты: Select (brush/face/vertex/entity/path, box/multi-select),
+* Инструменты: Select (brush/face/vertex/entity/path и cell/wall/portal/stair/slope/light, box/multi-select),
   Block/Brush (drag footprint + высота во Front/Side или числом), Move, Resize,
-  Rotate, Vertex, Clip, Face, Entity, Path.
+  Rotate, Vertex, Clip, Face, Entity, Path. Раздел «Re2D World» добавляет
+  cells/walls/portals/stairs/slopes/lights, split/join стен и полный JSON
+  свойств. Move/Delete и общая история работают с этими объектами;
+  Resize/Rotate/Vertex/Clip/Face остаются инструментами brushes.
 * 3D-вьюпорт: WASD fly, RMB look, выбор brush/face, настоящий runtime preview
   `$.re2dWorld` (CPU/GPU, свет, `world.debug.view`: final/depth/owner/light/
   normal/emissive/bsp/portals/region/pvs/occluder). Отдельного wireframe-режима
@@ -56,12 +59,12 @@ r2d-sdk tool info world-editor         # из CLI
 
 ## 3. Native backend операций
 
-Каждая правка — один вызов `r2d-sdk world-edit`. GUI, CLI и агент используют
+Каждая правка — один вызов `r2d world-edit`. GUI, CLI и агент используют
 одну реализацию; геометрия (выпуклость, holes, clip, vertex) проверяется
 нативным `sdk_brush_*`.
 
 ```text
-r2d-sdk world-edit <file.re2dmap> --op <op> [--args JSON] [--out <file>]
+r2d world-edit <file.re2dmap> --op <op> [--args JSON] [--out <file>]
 ```
 
 `--out` пишет канонический `.re2dmap`; без `--out` результат карты
@@ -83,6 +86,12 @@ r2d-sdk world-edit <file.re2dmap> --op <op> [--args JSON] [--out <file>]
 | `brush.clip` | `id`, `axis` x/y, `coordinate`, `keep` front/back/both | `ids` |
 | `face.set` | `id`, `face` side/floor/ceiling, `material`, `tags` | `id`, `face` |
 | `world.set` | поля world-конверта | — |
+| `element.create` | `section`, `value` (id опционален) | `id` |
+| `element.replace` | `section`, `id`, `value` (полный объект с id) | `id` |
+| `element.delete` | `section`, `id` | `id` |
+| `element.move` | `section`, `id`, `dx/dy/dz` | `id` |
+| `wall.split` | `id` (середина стены) | `ids` |
+| `wall.join` | `id`, `other` (общий конец, коллинеарность, одинаковые свойства) | `id` |
 | `entity.create/set/delete` | generic данные; неизвестные поля сохраняются | `id` |
 | `path.create/path.set/path.node.*` | `nodes`, `loop`, `oneWay`, `fields` (metadata) | `id`, `index` |
 | `visgroup.ensure/state` | `name`, `visible`, `locked` | `id` |
@@ -94,12 +103,15 @@ r2d-sdk world-edit <file.re2dmap> --op <op> [--args JSON] [--out <file>]
 ## 4. Публичный фасад
 
 ```js
-const ed = $.sdkApp.studios.world;
+const ed = $.editorApp.activeTab().inst; // активная вкладка Hammer
 ed.ops.createBrush({ rect: [0,0,128,128], bottom: 0, top: 128 });
 ed.ops.moveSelection(16, 0, 0);
 ed.ops.setGrid(16);
 ed.ops.setFaceMaterial('brush_1', 'floor', '#8f8b82');
 ed.ops.setTags('brush_1', ['stone']);
+ed.ops.addWorldElement('lights');
+ed.ops.splitWall('wall1');
+ed.ops.joinWalls('wall1', 'walls1');
 ed.ops.createEntity({ kind: 'example.spawn', x: 64, y: 64, h: 0 });
 ed.ops.createPath([{ x: 0, y: 0 }, { x: 128, y: 0 }]);
 ed.ops.ensureVisgroup('Lighting');
@@ -109,14 +121,18 @@ ed.ops.buildAndRun();
 ed.ops.save();
 ```
 
-Каждая кнопка/menu/toolbar-действие вызывает ровно эти операции; агент вызывает
-их же через `$.sdkApp.studios.world.ops`. Расширения используют документированное
-подмножество.
+Hammer в Editor использует `editor/studios/hammer.js`, отдельный документ и
+сессию на вкладку. `sdk/tools/world-editor.js` сохраняет старый фасад
+`$.sdkApp.studios.world` через адаптер к тому же контроллеру.
+
+Каждая кнопка/menu/toolbar-действие вызывает те же операции; агент в Editor
+вызывает их через `$.editorApp.activeTab().inst.ops`. Legacy shell продолжает
+использовать `$.sdkApp.studios.world.ops`.
 
 Capability discovery для агента:
 
 ```js
-$.sdkApp.studios.world.capabilities();
+$.editorApp.activeTab().inst.capabilities();
 // { editor, file, operations:[{name,args}], entityDefinitions:[], extensions:[],
 //   build:['validate','compile','run','buildAndRun'], snapshot }
 ```
@@ -138,9 +154,9 @@ $.sdkApp.studios.world.capabilities();
 
 | Действие | Backend |
 |---|---|
-| Validate | `r2d-sdk world info <map> --renderer` |
-| Compile | `r2d-sdk world compile <map> --renderer --output <map>.re2dworld` |
-| Run | `$.sdkApp.runProject()` (настоящий runtime) |
+| Validate | `r2d world info <map> --renderer` |
+| Compile | `r2d world compile <map> --renderer --output <map>.re2dworld` |
+| Run | Run/F5 в Editor (настоящий runtime) |
 | Build & Run | save → validate → compile → run |
 
 Диагностики кликабельны: выбор объекта/свойства, фокус вьюпорта. Структурные
@@ -149,8 +165,9 @@ $.sdkApp.studios.world.capabilities();
 ## 6. Данные авторинга
 
 `.re2dmap` хранит `world` (bounds, bottom/top, boundary, цвета, tags,
-`regionSize`), `brushes`, `entities`, `paths`, `visgroups` и (для совместимости)
-`cells/walls/portals/stairs/slopes/lights`. Неизвестные корневые ключи и
+`regionSize`), `brushes`, `entities`, `paths`, `visgroups` и
+`cells/walls/portals/stairs/slopes/lights`. Hammer редактирует оба вида
+авторинга в одной сессии; `world` и `regionSize` у cell-карт могут отсутствовать. Неизвестные корневые ключи и
 неизвестные поля объектов сохраняются при правках.
 
 * Entity definitions — data-driven (generic bases: point/brush/volume/marker);
@@ -166,29 +183,31 @@ $.sdkApp.studios.world.capabilities();
 
 ## 7. Расширение редактора
 
-Расширение (см. [SDK_EXTENSIONS.md](SDK_EXTENSIONS.md)) может добавить в World
-Editor: entity definitions, inspector sections, toolbar/menu actions, dock
-panels, world tools, validators и build steps. Contribution-точки декларативны;
-поведение регистрируется через `ctx.sdk.register*`. Если расширение добавило
-кнопку, та же операция обязана быть доступна программно (agent parity).
+Расширение (см. [SDK_EXTENSIONS.md](SDK_EXTENSIONS.md)) может добавить в Hammer
+entity definitions, toolbar/menu actions, panels и world tools. Contribution-
+точки декларативны; поведение регистрируется через `ctx.sdk.register*`. Если
+расширение добавило кнопку, та же операция обязана быть доступна программно
+(agent parity). Validators, build steps, agent commands, inspectors и overlays
+пока не имеют consumers в Editor.
 
-`worldOverlays` реестр читает и отдаёт (`ext.overlays()`), но декларативного
-формата отрисовки overlay/gizmo пока нет — это следующий шаг; остальные
-contribution-точки подключены (validators идут в диагностику, buildSteps
-исполняются в Build & Run, agentCommands доступны агенту).
+`worldOverlays` зарегистрированы в общем host, но Hammer пока не показывает
+overlay/gizmo. Неиспользуемые registry entries остаются доступными для будущих
+UI consumers; отсутствие consumer явно отражено в [SDK_EXTENSIONS.md](SDK_EXTENSIONS.md).
 
 ## 8. Проверка
 
 ```bash
 python3 tests/agent/world_editor_test.py     # живой движок: UI+ops+snapshot
 python3 tests/agent/world_edit_cli_test.py   # CLI-контракт world-edit
-./build/r2d-sdk world compile tests/fixtures/sdk/world/editor_base.re2dmap --renderer --output /tmp/a.re2dworld
+"$R2D_BINARY" world compile tests/fixtures/sdk/world/editor_base.re2dmap --renderer --output /tmp/a.re2dworld
 python3 tests/agent/sdk_studios_test.py      # реестр инструментов
 ```
 
 ## 9. Границы
 
-Ключ фасада — `$.sdkApp.studios.world`; инструменты SDK взаимоисключающие,
+В Editor фасад активной карты — `$.editorApp.activeTab().inst`;
+`re2d-world-studio` открывает ту же вкладку Hammer. Старый standalone SDK
+сохранён для совместимости. В нём ключ фасада — `$.sdkApp.studios.world`; инструменты SDK взаимоисключающие,
 поэтому открытый последним World Editor перекрывает фасад Re2D World Studio
 (оба используют одно имя студии; регрессии в тестах нет).
 
@@ -196,3 +215,11 @@ python3 tests/agent/sdk_studios_test.py      # реестр инструмент
 Полигональный mesh, sculpting, rigging и DCC-gizmo не добавляются. Материалы
 поверхностей — существующий compiler contract (tool policy), а не новая
 система. Runtime API не меняется: на выходе тот же `.re2dworld`.
+
+`element.*` редактирует существующие authoring-разделы `cells`, `walls`,
+`portals`, `stairs`, `slopes`, `lights` через тот же транзакционный backend.
+Replace принимает полный объект и допускает незавершённый черновик;
+топологию, spans и ссылки проверяет `world info/compile`. Move переносит
+XY-координаты и абсолютные высоты, сохраняя материалы и неизвестные поля.
+Split/Join выполняются в native; Join отклоняет различающиеся свойства стен,
+чтобы не терять материалы, теги и пользовательские поля.

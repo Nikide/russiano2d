@@ -60,6 +60,19 @@ def check(binary: Path) -> bool:
     return True
 
 
+def refresh(binary: Path) -> bool:
+    """Refresh versioned artifacts from an already built release binary.
+
+    Authored API help must already be embedded in every platform binary.
+    This step writes schema/types/reference only; it never rebuilds a target.
+    """
+    if not run([sys.executable, "scripts/generate_api_docs_catalog.py", "--check"]):
+        return False
+    if not run([str(binary), "api", "generate", "--game", GAME, "--out-dir", "."]):
+        return False
+    return check(binary)
+
+
 def generate(binary_argument: str | None, jobs: int) -> bool:
     if not run(["xmake", "build", "-y", "-j", str(jobs), "r2d"]):
         return False
@@ -86,7 +99,7 @@ def generate(binary_argument: str | None, jobs: int) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("generate", "check"))
+    parser.add_argument("mode", choices=("generate", "refresh", "check"))
     parser.add_argument("--binary", help="r2d executable (defaults to R2D_BINARY or active xmake target)")
     parser.add_argument("--jobs", type=int, default=8, help="parallel xmake jobs during generation")
     args = parser.parse_args()
@@ -99,6 +112,8 @@ def main() -> int:
     if not binary:
         print("cannot locate r2d; pass --binary or set R2D_BINARY", file=sys.stderr)
         return 2
+    if args.mode == "refresh":
+        return 0 if refresh(binary) else 1
     return 0 if check(binary) else 1
 
 

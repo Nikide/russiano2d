@@ -8,12 +8,14 @@
 <p align="center">
   <a href="https://r2d.nikiniki.ru/"><b>Сайт движка</b></a> ·
   <a href="https://r2d.nikiniki.ru/doc/"><b>Документация</b></a> ·
-  <a href="https://github.com/Nikide/russiano2d/releases"><b>Скачать релизы</b></a>
+  <a href="https://gitverse.ru/Nikide/russiano2d/releases"><b>GitVerse · релизы</b></a> ·
+  <a href="https://github.com/Nikide/russiano2d"><b>GitHub</b></a>
 </p>
 
-Лёгкий кроссплатформенный **2D-движок**: платформеры, визуальные новеллы и
-другие 2D-игры. Ядро на C/C++ (SDL3 + SDL_GPU, Box2D v3, QuickJS-ng,
-SDL3_mixer, RmlUi), игровая логика — JavaScript. Вся работа с движком идёт
+Кроссплатформенный **2D-движок и редактор проекта**: платформеры, визуальные
+новеллы и другие 2D-игры. Ядро на C11 (SDL3 + SDL_GPU, Box2D v3, QuickJS-ng,
+SDL3_mixer, RmlUi), игровые инструменты используют отдельные native adapters,
+а игровая логика пишется на JavaScript. Вся работа с движком идёт
 через одну точку входа — `$` в стиле jQuery; низкоуровневого `engine.*` в игре
 нет.
 
@@ -21,10 +23,9 @@ SDL3_mixer, RmlUi), игровая логика — JavaScript. Вся рабо�
 логика и интерфейс описываются текстом, поэтому их удобно читать, diff'ить,
 генерировать и проверять автоматически, в том числе ИИ-агентом.
 
-Базовый движок **feature-complete** после FINAL ENGINE PASS: новые
-engine-level возможности принимаются только по правилам
-[docs/FEATURE_FREEZE.md](docs/FEATURE_FREEZE.md). Следующий этап — реальная
-игра, а не бесконечное расширение движка.
+Редактор, CLI и runtime поставляются одним бинарником `r2d`. Проект остаётся
+обычной папкой с JavaScript-кодом и открытыми данными; сборка движка и
+проектные тесты выполняются только через Xmake.
 
 ## Собрать и запустить
 
@@ -53,24 +54,12 @@ Editor-authored платформер и романтическая ВН нахо
 opt-in Linux-кросс-сборки (`R2D_BUILD_LINUX=1`).
 Docker и VM не используются.
 
-## Релизы
+## Скачать
 
-Релизные пакеты для macOS (arm64/x86_64) и Windows x86_64 собираются и
-публикуются **локально** одной командой:
-
-```bash
-build_and_push
-```
-
-Она спрашивает сообщение и версию, собирает пакеты в `dist/`, проверяет их,
-гоняет Unity-тесты, ставит тег и публикует релизы на GitHub/GitVerse/hub.mos.
-**Linux x86_64 в локальный релиз временно не входит**: Zig-кросс-сборка на
-машине релиза зависает. Linux-пользователи собирают движок на своей ОС
-(см. [docs/BUILD.md](docs/BUILD.md)); вернуть платформу в релиз можно
-`R2D_BUILD_LINUX=1`. Сайт бинарники не раздаёт: кнопки скачивания ведут на
-GitHub Releases.
-
-Подробности — [docs/RELEASING.md](docs/RELEASING.md).
+Готовые пакеты для macOS (arm64/x86_64) и Windows x86_64 доступны в
+[GitVerse Releases](https://gitverse.ru/Nikide/russiano2d/releases) и
+[GitHub Releases](https://github.com/Nikide/russiano2d/releases).
+На Linux движок собирается из исходников — см. [инструкцию сборки](docs/BUILD.md).
 
 ## Документация
 
@@ -84,4 +73,3 @@ GitHub Releases.
 | [docs/EDITOR_GUIDE.md](docs/EDITOR_GUIDE.md) | практическая работа в Editor со скриншотами платформера и ВН |
 | [docs/VN_MAKER.md](docs/VN_MAKER.md) | Visual Novel Maker |
 | [docs/FEATURE_FREEZE.md](docs/FEATURE_FREEZE.md) | feature freeze и правила новых engine-возможностей |
-| [docs/RELEASING.md](docs/RELEASING.md) | локальный релизный процесс |

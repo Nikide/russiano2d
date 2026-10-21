@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Публикация ОДНИХ И ТЕХ ЖЕ архивов из dist/ во все три сервиса.
+"""Публикация ОДНИХ И ТЕХ ЖЕ архивов из dist/ в GitHub и GitVerse.
 
 Единственный публикатор релиза. build_and_push вызывает его после push тега;
 CI релизы больше не создаёт. Архивы не пересобираются: на все сервисы уходят
@@ -8,7 +8,6 @@ CI релизы больше не создаёт. Архивы не пересо
 Провайдеры:
   * GitHub      — gh CLI (уже авторизован локально);
   * GitVerse    — публичный API https://api.gitverse.ru (Bearer GITVERSE_TOKEN);
-  * hub.mos     — GitLab API v4 (HUB_MOS_TOKEN / GITLAB_TOKEN).
 
 Если токена провайдера нет, это НЕ успех и НЕ тихий skip: статус
 'skipped-no-token' и итоговый код 1. Git-тег при этом уже отправлен — это
@@ -184,63 +183,6 @@ def publish_gitverse(tag, title, notes, files, dry):
     return {"provider": "GitVerse", "status": "ok", "detail": "release %s, %d файлов" % (release_id, len(files))}
 
 
-# ---------------------------------------------------------------------------
-# hub.mos (GitLab API v4)
-# ---------------------------------------------------------------------------
-def publish_gitlab(tag, title, notes, files, dry):
-    token = (os.environ.get("HUB_MOS_TOKEN") or os.environ.get("GITLAB_TOKEN")
-             or os.environ.get("PRIVATE_TOKEN"))
-    if not token:
-        return {"provider": "hub.mos", "status": "skipped-no-token",
-                "detail": "нет HUB_MOS_TOKEN/GITLAB_TOKEN"}
-    project = remote_path("origin", "dem4ev48/russiano2d")
-    enc = urllib.parse.quote(project, safe="")
-    base = "https://hub.mos.ru/api/v4/projects/" + enc
-    headers_token = token
-    def gl(url, method="GET", body=None):
-        data = None
-        hdr = {"PRIVATE-TOKEN": headers_token, "Accept": "application/json"}
-        if body is not None:
-            data = json.dumps(body).encode()
-            hdr["Content-Type"] = "application/json"
-        req = urllib.request.Request(url, data=data, headers=hdr, method=method)
-        try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                return resp.status, json.loads(resp.read().decode() or "{}")
-        except urllib.error.HTTPError as exc:
-            return exc.code, {"raw": exc.read().decode("utf-8", "replace")}
-        except Exception as exc:  # noqa: BLE001
-            return 0, {"error": str(exc)}
-    if dry:
-        return {"provider": "hub.mos", "status": "dry-run",
-                "detail": "%s: create release + upload %d файлов" % (base, len(files))}
-    status, rel = gl(base + "/releases/" + urllib.parse.quote(tag, safe=""))
-    if status == 404:
-        status, rel = gl(base + "/releases", method="POST",
-                         body={"name": title, "tag_name": tag, "description": notes})
-    if status not in (200, 201):
-        return {"provider": "hub.mos", "status": "failed",
-                "detail": "release API: %s %s" % (status, rel)}
-    links = {l.get("name") for l in rel.get("assets", {}).get("links", [])}
-    for path in files:
-        name = os.path.basename(path)
-        if name in links:
-            continue
-        code, up = multipart_upload(base + "/uploads", token, path, "file",
-                                    accept="application/json",
-                                    auth_field="PRIVATE-TOKEN", auth_value=token)
-        if code not in (200, 201) or not up.get("url"):
-            return {"provider": "hub.mos", "status": "failed",
-                    "detail": "upload %s: %s %s" % (name, code, up)}
-        url = "https://hub.mos.ru/" + project + up["url"]
-        status, link = gl(base + "/releases/" + urllib.parse.quote(tag, safe="") + "/assets/links",
-                          method="POST", body={"name": name, "url": url})
-        if status not in (200, 201):
-            return {"provider": "hub.mos", "status": "failed",
-                    "detail": "link %s: %s %s" % (name, status, link)}
-    return {"provider": "hub.mos", "status": "ok", "detail": "%s, %d файлов" % (tag, len(files))}
-
-
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--version", required=True)
@@ -249,15 +191,14 @@ def main():
     p.add_argument("--notes-file", required=True)
     p.add_argument("--dist", default=os.path.join(ROOT, "dist"))
     p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--only", choices=("github", "gitverse", "hubmos"), default=None)
+    p.add_argument("--only", choices=("github", "gitverse"), default=None)
     args = p.parse_args()
     title = args.title or ("Russiano2D " + args.tag)
     notes = open(args.notes_file, encoding="utf-8").read()
     files = archives(args.version)
     log("release_publish: %s, %d файлов" % (args.tag, len(files)))
     handlers = {"github": lambda: publish_github(args.tag, title, args.notes_file, files, args.dry_run),
-                "gitverse": lambda: publish_gitverse(args.tag, title, notes, files, args.dry_run),
-                "hubmos": lambda: publish_gitlab(args.tag, title, notes, files, args.dry_run)}
+                "gitverse": lambda: publish_gitverse(args.tag, title, notes, files, args.dry_run)}
     results = []
     for key, fn in handlers.items():
         if args.only and key != args.only:

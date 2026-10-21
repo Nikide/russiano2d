@@ -15,7 +15,7 @@
 ## 0. Подготовка
 
 ```bash
-cmake --build build-release -j6                        # собрать движок
+xmake build -y -j 8 r2d                         # собрать единственный бинарник
 ./build-release/russiano2d --game demos --scene witch_menu
 ```
 

@@ -1,7 +1,7 @@
 # Рецепты Russiano2D
 
 Короткие рабочие рецепты на текущем `$` API. Каждый блок проверяется
-`tools/sdk_recipes_check.py` через `r2d-sdk lint`.
+`tools/sdk_recipes_check.py` через `r2d lint`.
 
 ## player
 

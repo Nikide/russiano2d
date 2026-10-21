@@ -102,7 +102,7 @@ def project_version():
 def previous_tag(cwd=None):
     """Предыдущий релизный тег (vX.Y.Z), достижимый из HEAD, или None."""
     try:
-        return git(["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*.[0-9]*.[0-9]*"], cwd).strip() or None
+        return git(["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"], cwd).strip() or None
     except RuntimeError:
         return None
 

@@ -1,0 +1,56 @@
+/* VN Maker во вкладке Editor (поверх hammer.rcss: общие hm-* классы). */
+
+.vn-script {
+    display: flex; flex-direction: column; width: 420px; flex: 0 0 420px; min-height: 0px;
+    background-color: #1b1e24; border-right: 1px #2a2f39;
+}
+.vn-head { display: flex; flex-direction: row; align-items: center; flex: 0 0 auto; padding: 6px 8px 2px 8px; }
+.vn-head2 { padding-top: 2px; padding-bottom: 6px; border-bottom: 1px #2a2f39; }
+.vn-head > * { flex: 0 0 auto; }
+.vn-head .we-spacer { flex: 1 1 0; }
+.vn-title { color: #e6e9ef; font-size: 14px; margin-right: 8px; }
+
+.vnm-commands { display: block; flex: 1 1 0; min-height: 0px; overflow-y: auto; padding: 4px 6px; }
+.vnm-cmd {
+    display: block; padding: 5px 8px; margin: 2px 0px; cursor: pointer; border-radius: 4px;
+    background-color: #14161b; border-left: 3px #2f3440;
+}
+.vnm-cmd:hover { background-color: #20242b; }
+.vnm-cmd.active { background-color: #1f3a5f; border-left-color: #3b82f6; }
+.vnm-cmd .vnm-head { display: block; font-size: 11px; letter-spacing: 1px; color: #8fb4e8; }
+.vnm-cmd .vnm-body { display: block; color: #d7dce6; font-size: 13px; }
+.vnm-source {
+    display: block; flex: 1 1 0; margin: 6px; padding: 6px; font-family: Roboto Mono; font-size: 12px;
+    color: #d7dce6; background-color: #14161b; border-width: 1px; border-color: #2f3440;
+}
+.vnm-list { display: block; margin-bottom: 6px; }
+.vnm-item { display: block; padding: 3px 6px; margin: 1px 0px; font-size: 12px; color: #c9ced8; cursor: pointer; border-radius: 3px; }
+.vnm-item:hover { background-color: #23272f; }
+.vnm-item.active { background-color: #1f3a5f; color: #ffffff; }
+.vnm-diag { display: block; max-height: 140px; overflow-y: auto; }
+.vnm-diag .diag { display: block; margin: 2px 0px; font-size: 12px; color: #e2b33c; }
+.vn-right textarea.area { display: block; width: 100%; box-sizing: border-box; margin: 3px 0px; font-size: 12px; }
+.vn-right .hm-field input.field { margin-right: 4px; }
+
+/* Preview: сцена 16:9 по центру панели */
+.vn-center { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0px; background-color: #101216; }
+.vn-preview { display: block; position: relative; flex: 1 1 0; min-height: 0px; padding: 14px; overflow: hidden; }
+.vp-empty { display: block; padding: 30px; color: #6b7280; text-align: center; }
+.vp-stage {
+    display: block; position: relative; width: 100%; height: 100%; overflow: hidden;
+    background-color: #0b0c0f; border-width: 1px; border-color: #2a2f39; border-radius: 6px;
+}
+.vp-bg { position: absolute; left: 0px; top: 0px; width: 100%; height: 100%; }
+.vp-nobg { display: block; position: absolute; left: 0px; right: 0px; top: 40%; text-align: center; color: #4b5263; font-size: 12px; }
+.vp-portrait { position: absolute; left: 30%; bottom: 0px; height: 78%; }
+.vp-box {
+    display: block; position: absolute; left: 6%; right: 6%; bottom: 5%; padding: 12px 18px;
+    background-color: #0d1220e6; border-width: 1px; border-color: #c9a86a; border-radius: 8px;
+}
+.vp-name { display: block; color: #4fc1ff; font-size: 16px; margin-bottom: 4px; }
+.vp-text { display: block; color: #f1f3f7; font-size: 15px; margin-bottom: 6px; }
+.vp-choice {
+    display: block; margin: 5px 6%; padding: 6px 10px; text-align: center; color: #e6e9ef; font-size: 14px;
+    background-color: #12192a; border-width: 1px; border-color: #3a4560; border-radius: 4px;
+}
+.vp-choice.on { border-color: #4fa3ff; background-color: #1a2b47; }

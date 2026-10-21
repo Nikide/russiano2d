@@ -192,5 +192,5 @@ IR — обычные данные: его можно валидировать, 
 presentation-слоями. Story state (`$.story.flags`, `set`/`if`) не становится
 частью UI; `.scene` остаётся authoring-форматом.
 
-Новые команды нативного линтера: `r2d-sdk story validate <dir>`.
+Новые команды нативного линтера: `r2d story validate <dir>`.
 Подробности — `docs/VN_NARRATIVE.md`.

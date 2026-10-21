@@ -198,8 +198,8 @@ def sha256_file(path: str) -> str:
 
 
 def check_version(value: str) -> bool:
-    """Проверить, что версия похожа на x.y.z."""
-    return bool(re.fullmatch(r"\d+\.\d+\.\d+", value or ""))
+    """Проверить версию релиза: X.Y.Z или X.e.Z."""
+    return bool(re.fullmatch(r"\d+\.(?:\d+|e)\.\d+", value or ""))
 
 
 def bump_version(current: str, kind: str = "patch") -> str:
@@ -215,18 +215,24 @@ def bump_version(current: str, kind: str = "patch") -> str:
     """
     if not check_version(current):
         raise SystemExit("ошибка: версия %r не похожа на x.y.z" % current)
-    major, minor, patch = (int(part) for part in current.split("."))
+    major_s, minor_s, patch_s = current.split(".")
+    major, patch = int(major_s), int(patch_s)
+    minor = int(minor_s) if minor_s.isdigit() else minor_s
     kind = (kind or "patch").strip()
     if check_version(kind):
-        target = tuple(int(part) for part in kind.split("."))
-        if target <= (major, minor, patch):
+        target_parts = kind.split(".")
+        current_order = (major, int(minor) if isinstance(minor, int) else float("inf"), patch)
+        target_order = (int(target_parts[0]), int(target_parts[1]) if target_parts[1].isdigit() else float("inf"), int(target_parts[2]))
+        if target_order <= current_order:
             raise SystemExit(
                 "ошибка: версия %s не больше текущей %s — понижение версии "
                 "делается вручную и осознанно" % (kind, current))
-        return "%d.%d.%d" % target
+        return ".".join(target_parts)
     if kind == "patch":
-        return "%d.%d.%d" % (major, minor, patch + 1)
+        return "%d.%s.%d" % (major, minor, patch + 1)
     if kind == "minor":
+        if not isinstance(minor, int):
+            raise SystemExit("ошибка: для версии с буквенным каналом задайте явную версию")
         return "%d.%d.0" % (major, minor + 1)
     if kind == "major":
         return "%d.0.0" % (major + 1)
@@ -1006,7 +1012,7 @@ def tag_steps(runner: Runner, version: str, skip_tag: bool) -> None:
         raise SystemExit("ошибка: тег %s уже существует" % tag)
     runner.run(["git", "tag", "-a", tag, "-m", "Russiano2D %s" % version])
     log("    push тегов не делается: это отдельное осознанное действие")
-    log("    git push origin %s   # уедет и на hub.mos.ru, и на gitverse.ru" % tag)
+    log("    git push github %s && git push gitverse %s" % (tag, tag))
 
 
 def print_plan_header(args: "Options") -> None:
@@ -1353,9 +1359,9 @@ def main(argv: List[str]) -> int:
 
     log("")
     log("Готово. Дальше вручную:")
-    log("  git push origin main && git push origin v%s" % version)
-    log("  (origin пушит сразу на hub.mos.ru и gitverse.ru)")
-    log("  сверка: git ls-remote origin main && git ls-remote gitverse main")
+    log("  git push github main && git push gitverse main")
+    log("  git push github v%s && git push gitverse v%s" % (version, version))
+    log("  сверка: git ls-remote github main && git ls-remote gitverse main")
     log("  релиз и ассеты публикует build_and_push (tools/release_publish.py)")
     return 0
 

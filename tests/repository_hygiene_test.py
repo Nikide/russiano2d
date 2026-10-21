@@ -47,8 +47,9 @@ check(not _cached, 'tracked files contain no OS/Python caches' + (
 check(not [n for n in existing if re.search(r'(^|/)_tmp_|\.cleanup\.tmp$', n)], 'tracked files contain no temporary scratch files')
 missing = []
 for name in existing:
-    if not name.endswith('.md') or name.startswith(('dist/', 'deliverables/')):
-        continue  # Published docs are snapshots, not the live Markdown source tree.
+    if (not name.endswith('.md') or name.startswith(('dist/', 'deliverables/', 'docs/internal/'))
+            or name == 'CHANGELOG.md'):
+        continue  # Package snapshots, internal notes and changelog history are not live docs.
     path = ROOT / name
     # site/doc-home.md — стартовая страница документации: build-doc.py разбирает
     # её с origin='README.md', то есть её ссылки отсчитываются от КОРНЯ

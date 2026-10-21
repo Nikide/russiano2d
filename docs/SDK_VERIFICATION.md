@@ -8,7 +8,7 @@
 Сверка 2026-10-20, macOS arm64, ветка `main`, сборка `build`
 (RelWithDebInfo). Команды и возможности — [SDK.md](SDK.md),
 очередь работ — [SDK_IMPLEMENTATION_GAPS.md](SDK_IMPLEMENTATION_GAPS.md),
-журнал и история проверок — [SDK_HANDOFF.md](../SDK_HANDOFF.md).
+журнал и история проверок — локальный `SDK_HANDOFF.md` (не публикуется).
 
 ## Автоматические проверки (фактический вывод этой сверки)
 

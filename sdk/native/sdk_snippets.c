@@ -2266,8 +2266,16 @@ static int cmd_new(const SdkArgs *a, const char *dir)
             char buf[1024];
             snprintf(buf, sizeof buf, "%s", deps);
             int n = 0;
-            for (char *tok = strtok(buf, ","); tok; tok = strtok(NULL, ",")) {
+            for (char *cursor = buf; *cursor;) {
+                while (*cursor == ',') cursor++;
+                if (!*cursor) break;
+                char *tok = cursor;
+                while (*cursor && *cursor != ',') cursor++;
+                if (*cursor == ',') *cursor++ = '\0';
                 while (*tok == ' ') tok++;
+                char *end = tok + strlen(tok);
+                while (end > tok && end[-1] == ' ') *--end = '\0';
+                if (!*tok) continue;
                 r2d_sb_puts(&m, n++ ? ", {\"id\": " : "{\"id\": ");
                 r2d_sb_put_json_string(&m, tok);
                 r2d_sb_putc(&m, '}');

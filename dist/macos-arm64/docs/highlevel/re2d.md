@@ -539,7 +539,7 @@ world.findSpan('hall.upper'); world.findPortal('door.exit'); world.findCell('roo
 `.re2dworld`; загрузчик валидирует дубликаты/длину транзакционно, старые карты
 без таблицы грузятся с пустыми ID. Числовые индексы после reload не
 семантика — переразрешайте их через `find_*`. Компилятор:
-`build/r2d-sdk world-compile ... --renderer`.
+`R2D_BINARY world-compile ... --renderer`.
 
 ## Map metadata и spawn points (P1)
 
@@ -928,7 +928,7 @@ world.ricochet(dir, hitNormal);     // отражённый вектор по н
 ## Polygon cells (P1 authoring)
 
 `.re2dmap` принимает `cells[].polygon: [[x,y],...]` вместо `rect`. Компилятор
-(`r2d-sdk world-compile --renderer`) валидирует простой полигон, тайлит его в
+(`r2d world-compile --renderer`) валидирует простой полигон, тайлит его в
 **axis-aligned runtime cells** (runtime-модель остаётся rect XY) и генерирует:
 внутренние порталы по общим рёбрам тайлов и граничные стены по внешнему
 контуру. Идентификаторы тайлов — `id#N`.
@@ -1124,7 +1124,7 @@ World positional audio: [`world.audio` / `$.re2dWorldAudio(world)`](../re2d/WORL
 
 `.re2dworld` остаётся обычным runtime-миром: `$.re2dWorld.load(path)` не меняется.
 Новые authored-источники (`brushes`, `world`-конверт, `entities`, `regionSize`)
-обрабатываются **SDK-компилятором** `r2d-sdk world compile`; публичного polygon
+обрабатываются **SDK-компилятором** `r2d world compile`; публичного polygon
 mesh API в runtime нет. В `.re2dworld` добавляется необязательный блок
 `compiler` (brush stats, `regionGrid`, `regionCells`, entities, stage timings),
 который runtime игнорирует.
@@ -1140,7 +1140,7 @@ mesh API в runtime нет. В `.re2dworld` добавляется необяз�
 Docs: [brush authoring](../RE2D_BRUSH_AUTHORING.md),
 [huge world](../RE2D_HUGE_WORLD.md), [sky boundary](../RE2D_SKY_BOUNDARY.md).
 
-Demo: `demos/re2d_openworld_lab` (`r2d-sdk world compile` -> `.re2dworld`).
+Demo: `demos/re2d_openworld_lab` (`r2d world compile` -> `.re2dworld`).
 
 ## P4/P5 слой (sky/weather/shafts/post)
 

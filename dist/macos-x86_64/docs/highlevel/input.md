@@ -135,6 +135,9 @@ axisThreshold: 0.5 })` — пауза до автоповтора, темп по
 | Вызов | Смысл |
 |---|---|
 | `text()` | введённые символы за кадр (учитывает раскладку) |
+| `$.input.ime()` | текущая незавершённая IME-композиция `{ text, start }` или пустое значение |
+| `$.input.textInputArea(x, y, w, h, cursor)` | позиция системного окна кандидатов IME в координатах окна; алиас `$.ввод.textInputArea(...)` |
+| `$.input.clipboard()` / `$.input.setClipboard(text)` | системный буфер обмена: текст или `null` / записать → `bool` |
 | `cursor(name?)` / `cursorVisible(on?)` | форма и видимость курсора |
 | `touches()` / `touchCount()` / `touch(i)` / `touched()` | касания: список, число, один палец, есть ли вообще |
 | `taken()` | ввод забран катсценой (`$.cutscene`) |
@@ -253,7 +256,7 @@ if ($.input.pressed('confirm')) {
 
 | Имя | Сигнатура | Проверено запуском |
 |---|---|---|
-| `$.input.shiftDown()` / `$.input.ctrlDown()` / `$.input.altDown()` | `→ bool` | удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — `false` |
+| `$.input.shiftDown()` / `$.input.ctrlDown()` / `$.input.altDown()` | `→ bool` | удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — `false`. `altDown()` — это и Option на macOS (SDL называет клавишу «Option»; имена `'alt'`/`'lalt'`/`'ralt'` для `down`/`pressed` тоже ведут на неё) |
 | `$.input.released(name)` | `→ bool` | фронт ОТПУСКАНИЯ: `true` один кадр после того, как клавишу/кнопку отпустили (парная к `pressed`) |
 | `$.input.mouseDelta()` | `→ { x, y }` | смещение мыши за кадр в пикселях окна; без движения — `{ x: 0, y: 0 }` |
 | `$.input.mousePressed(button)` | `→ bool` | фронт нажатия кнопки мыши; принимает имя (`'left'`) или номер (`1`); `pressed` — не «удерживается» |

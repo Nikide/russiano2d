@@ -4,7 +4,7 @@
 Кодовая база после миграции:
   * релизные бинарники собираются локально (Xmake), а не CI;
   * GitHub Actions — только валидация;
-  * релизы на GitHub/GitVerse/hub.mos создаёт tools/release_publish.py;
+  * релизы на GitHub/GitVerse создаёт tools/release_publish.py;
   * сайт не раздаёт бинарники.
 
 Запуск: python3 tests/release_ownership_test.py
@@ -51,14 +51,22 @@ def test_single_publisher():
         check("gh release" not in text and "create-release" not in text,
               "%s не публикует релиз" % wf)
         check("tags:" not in text, "%s не запускается по тегам" % wf)
+    gitlab = read(".gitlab-ci.yml")
+    check("when: never" in gitlab and not re.search(r"^\s*-\s+cmake\b", gitlab, re.M | re.I),
+          "GitLab CI отключён и не содержит прежних CMake jobs")
     publisher = read("tools/release_publish.py")
-    for provider in ("GitHub", "GitVerse", "hub.mos"):
+    for provider in ("GitHub", "GitVerse"):
         check(provider in publisher, "release_publish.py умеет %s" % provider)
     check('"gh"' in publisher and '"release"' in publisher,
           "GitHub публикуется через gh CLI")
     check("api.gitverse.ru" in publisher, "GitVerse публикуется через его API")
-    check("/releases" in publisher and "uploads" in publisher,
-          "hub.mos публикуется через GitLab API")
+    check("/releases" in publisher and '"/assets"' in publisher and '"attachment"' in publisher,
+          "GitVerse публикует релизы и ассеты")
+    check("hub.mos.ru" not in publisher and "publish_gitlab" not in publisher,
+          "публикатор не отправляет релизы на hub.mos")
+    refs = read("tools/publish_refs.py")
+    check("hub.mos.ru" in refs and "publishing disabled" in refs,
+          "refs-публикатор блокирует push на hub.mos")
 
     offenders = []
     for name in tracked(".sh", ".py", ".yml", ".yaml"):
@@ -80,14 +88,19 @@ def test_local_release_scripts():
 
     build = read("tools/release_build.sh")
     check("xmake" in build.lower(), "release_build.sh использует Xmake")
-    check("zig" in build.lower() and "zigcc" in build, "Linux/Windows собираются Zig")
+    check('R2D_BUILD_LINUX' in build and 'zigcc' in build,
+          "Linux Zig cross-build отключен по умолчанию и включается явно")
+    check('mingw' in build and 'x86_64-w64-mingw32-gcc' in build,
+          "Windows собирается через Xmake MinGW toolchain")
     check("docker" not in build.lower(), "release_build.sh не использует Docker")
     for platform in ("macos-arm64", "macos-x86_64", "linux-x86_64", "windows-x86_64"):
         check(platform in build, "release_build.sh знает %s" % platform)
 
     tests = read("tools/release_tests.sh")
-    check("xmake test" in tests or "ctest" in tests, "release_tests.sh запускает Unity")
-    check("python" not in tests.lower(), "release_tests.sh не использует Python-тесты")
+    check("xmake test" in tests, "release_tests.sh запускает зарегистрированные Xmake tests")
+    for gate in ("doc_claims_test.py", "doc_coverage_test.py", "api_docs_sync_test.py",
+                 "release_ownership_test.py", "release_architecture_test.py"):
+        check(gate in tests, "release gate запускает %s" % gate)
 
 
 def test_dist_contract():
@@ -108,8 +121,10 @@ def test_website():
         print("  skip  site/ отсутствует (локальный каталог)")
         return
     index = read("site/index.html")
-    check("github.com/Nikide/russiano2d/releases" in index,
-          "кнопка скачивания ведёт на GitHub Releases")
+    check("gitverse.ru/Nikide/russiano2d/releases" in index,
+          "кнопка скачивания ведёт на GitVerse Releases")
+    check("github.com/Nikide/russiano2d" in index,
+          "ссылка на GitHub остаётся доступна")
     check('href="download/' not in index, "нет локальных ссылок download/")
     sync = read("site/sync-downloads.sh")
     check("ln -sfn" not in sync, "sync-downloads больше не создаёт ссылки на dist")

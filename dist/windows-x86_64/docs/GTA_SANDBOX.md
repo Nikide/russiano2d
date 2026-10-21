@@ -6,6 +6,7 @@
 переноса Carnage3D, без ECS/3D и без второго scene graph. Игровая логика — только
 через публичный `$` API; нативные добавления сделаны лишь там, где был реальный
 пробел (теги поверхностей), остальное — переиспользуемые JS-сэмплы в демо.
+В примерах `R2D_BINARY` задаётся по [инструкции проверок](TESTING.md).
 
 ## Аудит: есть / частично / отсутствует
 
@@ -43,8 +44,8 @@
 Запуск:
 
 ```bash
-./build/russiano2d --game demos --scene re2d_gta_sandbox_city
-./build/russiano2d --game demos --scene re2d_gta_sandbox_plain
+"$R2D_BINARY" --game demos --scene re2d_gta_sandbox_city
+"$R2D_BINARY" --game demos --scene re2d_gta_sandbox_plain
 ```
 
 (точные имена сцен и управление — в `demos/re2d_gta_sandbox/README.md`).
@@ -80,8 +81,8 @@
 Приёмочные команды:
 
 ```bash
-./build/r2d-sdk lint demos/re2d_gta_sandbox
-./build/r2d-sdk validate demos/re2d_gta_sandbox
+"$R2D_BINARY" lint demos/re2d_gta_sandbox
+"$R2D_BINARY" validate demos/re2d_gta_sandbox
 python3 tests/agent/re2d_gta_sandbox_test.py
 python3 tests/agent/re2d_gta_vehicle_test.py
 python3 tests/agent/re2d_gta_combat_test.py

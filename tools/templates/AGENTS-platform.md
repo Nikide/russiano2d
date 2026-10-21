@@ -129,4 +129,4 @@ call(cmd="quit")
 ```
 
 Полный справочник протокола:
-<https://hub.mos.ru/dem4ev48/russiano2d/-/blob/main/docs/AGENT_API.md>
+<https://gitverse.ru/Nikide/russiano2d/blob/main/docs/AGENT_API.md>

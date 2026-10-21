@@ -1,3 +1,100 @@
+> EDITOR — РЕДАКТОР КОДА БЛИЖЕ К VS CODE (2026-10-21).
+> Отступ — только табы (таб = 4 колонки на экране); Save приводит ведущие пробелы `.js`/`.rcss`/`.rml` к табам.
+> Аудит `editor/lib/code_model.js`/`code_view.js`. Исправлено: Shift+Tab без выделения
+> выделял строку; копия строки вверх/вниз уводила каретку не туда; кавычка перед такой же
+> дублировала пару, автозакрытие срабатывало после слова; автопрокрутка при выделении
+> мышью замирала у края; любая правка сворачивала все блоки; отмена до сохранения не
+> снимала «изменён»; `Cmd+/` сбрасывал выделение и работал только в JS; значки
+> сворачивания были «тофу». Добавлено: замена в файле, регистр/слово/regex, `Cmd+L`,
+> `Cmd+Enter`, тройной щелчок, удаление слова/до начала строки, направляющие отступов,
+> мультикурсор (Alt+щелчок, Cmd+D, Cmd+Shift+L, Cmd+Alt+↑/↓), F12/Cmd+щелчок и F2 (в файле),
+> подсказка параметров, автодополнение объявлений файла и сниппеты, мини-карта и
+> перетаскиваемый скроллбар, sticky-строки, хлебные крошки, цветные скобки, маркеры
+> изменений в gutter, контекстное меню, «Выровнять отступы» (Shift+Alt+F), подгонка
+> отступа при вставке, trim/пустая последняя строка при Save, показ пробелов/табов.
+> Исправлено в движке: на macOS `$.input.altDown()` и `down('alt')` всегда были ложными (SDL зовёт клавишу «Left Option»,
+> движок искал «Left Alt»), поэтому Alt-сочетания в Editor не работали; теперь у `alt`/`lalt`/`ralt` есть запасное имя «Option».
+> (`src/highlevel/input.js`, тесты `tests/js/input_alt*_test.mjs`). Правки в `editor/` (+ `line_diff.js`, `format.js`).
+> подсветка одинаковых слов, группировка Backspace в один шаг undo. `tests/js/editor_code_test.mjs` +9.
+
+> PROJECT.JSON SCHEMA 2 И ГРАФ ПРОЕКТА (2026-10-21; без тега/релиза).
+> `project.json` со `schema_version: 2` — `project.*`, `runtime.*` (`entry`,
+> `start_scene`, `window.{title,width,height,fullscreen}`) и `editor.graph`: сохранённый
+> граф сцен, `$.world`, объектов `$('<тег>')`, связей `.appendTo`/`.sprite` и ресурсов.
+> Новые команды: `r2d project-index [--write|--check]` (индексатор из поддержанного
+> поднабора JS, детерминированный, без дат; динамика → статус `partial`),
+> `r2d project-set` (запись настроек без переформатирования графа); `r2d migrate-project`
+> теперь переводит плоский манифест и прежний `format: 2` в schema 2; `r2d new`
+> индексирует созданный проект, шаблон `blank` — schema 2. `r2d validate`: `R2D201–R2D210`
+> (граф, устаревший индекс). Прежний `format: 2` (`entry`/`scenes`/`roles`) больше не
+> читается; манифест без `schema_version` работает как раньше, демо и фикстуры не
+> менялись. Editor: Project Settings (`Настройки | JSON`) и read-only граф во вкладке
+> нижней панели (обзор, World, сцены, ресурсы, breadcrumb, поиск, zoom/pan, миникарта),
+> индекс после Save `.js`. Рантайм: `runtime.window.fullscreen` применяется при старте.
+> Документация: `docs/PROJECT_JSON.md`; публичный `$` API и снимок API не менялись.
+
+> FS DIALOGS — системные окна выбора папки и файла (2026-10-20).
+> Новое: `$.fs.pickFolder`, `$.fs.pickFile`, `$.fs.saveFile` — Promise с путём,
+> `null` при отмене, reject `R2D_FS_DIALOG_FAILED` при отказе ОС. Нативная часть —
+> `src/dialog.c` (SDL3), ответы забирает кадровый цикл. Use case — Editor: все
+> места, где он просит путь, открывают окно ОС. Feature Freeze: use case есть,
+> существующим API не решается, спецификация и тест (`tests/js/fs_dialog_test.mjs`)
+> и документация (`docs/highlevel/store.md`) — в этом же изменении. Снимок API
+> обновлён (+3 имени, существующие не менялись).
+
+> EDITOR IME — composition и candidate window (2026-10-20; без тега/релиза).
+> В `$.input` добавлены `ime()` и `textInputArea(...)`, проксирующие уже
+> существующий native SDL IME contract. Code view отображает composition
+> подчёркнутой поверх строки и размещает системное окно кандидатов у каретки;
+> составной текст остаётся временным до SDL text commit. Freeze snapshot
+> пополнен двумя новыми API и двумя русскими алиасами; прежние имена сохранены.
+
+> EDITOR TEMPLATE — Re2D boomer shooter (2026-10-20; без тега/релиза; отозван 2026-10-21).
+> Временно добавлялся standalone `templates/re2d-boomer` на базе Dust2, с Hammer картой,
+> `$` gameplay, world assets, Re2DSprite оружием, шрифтами и credits. Позиционный
+> звук выбирает нативный HRTF только при наличии backend; иначе HUD показывает
+> `PAN`. Tests проверяют Project Manager Create/Validate/Run/Build, запуск
+> пакета вне checkout, Hammer viewports, cell edit/undo и runtime preview.
+> Annex gameplay test проверяет позиционный звук, оружие, зомби и урон; image
+> captures по умолчанию выключены. Открыты 115 world warnings и ручная
+> визуальная приёмка. По прямому запросу пользователя жанровый шаблон удалён;
+> `demos/re2d_dust2` и Hammer workflow сохранены как отдельные возможности.
+
+> EDITOR NARRATIVE — VN Maker на общем каркасе (2026-10-20).
+> У каждой `.scene/.story` свои документ, история и dirty; Save/Undo/Redo и
+> Problems ведёт Editor. Inspector сохраняет choice commits и image duration.
+> Исправлен конфликт ID Source, подключены его буфер, метки/переходы, asset
+> picker и i18n. Play использует несохранённый текст через существующие
+> story/dialog и тему проекта; Esc/конец/закрытие возвращают Editor, другая
+> вкладка не останавливает preview. Validate проверяет отдельный черновик
+> native-командой без записи исходника. Старый SDK использует адаптер к тому
+> же контроллеру. Форматы и публичный `$` API не меняются.
+
+> VN VALIDATE — image duration/off (2026-10-20).
+> Native `r2d story validate` больше не принимает длительность `image` за
+> часть имени файла и не ищет ассет `off`. CLI-тест использует единый `r2d`
+> через `R2D_BINARY` и проверяет синтаксис с длительностью, как у runtime.
+
+> VN SOURCE MODEL — подготовка переноса студии (2026-10-20).
+> Добавлена модель строк `.scene/.story` с сохранением переводов строк,
+> комментариев, неизвестных команд и choice commits. Семантика и runtime
+> не меняются; 7 qjs-тестов проверяют точечные правки и отмену к saved state.
+
+> EDITOR HAMMER — перенос на общий каркас (2026-10-20; без тега/релиза).
+> Hammer теперь живёт в `editor/studios/hammer.js`: свой RmlUi-документ,
+> история и preview у каждой вкладки карты. Геометрия и транзакции — прежний
+> native `r2d world-edit`; старый SDK вызывает тот же контроллер через адаптер.
+> Save/Undo/Redo и Problems подключены к Editor; исправлены выбор грани,
+> единый undo для material+tags, клавиши при фокусе поля, камера preview,
+> коллизии временных файлов двух сессий и потеря последнего preview при ошибке
+> компиляции. Preview показывает stale после правок.
+
+> EDITOR API — синхронизация артефактов (2026-10-20; без тега/релиза).
+> Xmake сообщает текущую версию 1.3.2. Штатным `r2d api generate` обновлены
+> schema/typings/reference и freeze snapshot на уже добавленные при переносе
+> Editor `$.input.clipboard`, `$.input.setClipboard`, `$.ui.markup`,
+> `$.ui.typing` и русские алиасы. Это добавления; прежние имена сохранены.
+
 > SPRITEMESH V1 — SDK, cache, обычная Sprite-анимация (2026-10-20; без тега/релиза).
 > В `$` добавлен `spriteMesh(config?)`: Sprite использует заранее baked mesh
 > текущего обычного frame index; runtime только переключает кадр mesh. `r2d-sdk`
@@ -342,6 +439,42 @@
 > listeners continue to work.
 
 
+## 1.3.2 — 2026-10-20
+
+<!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->
+
+23 коммита в релизе.
+
+### Сборка и версии
+
+- fix(release): allow binaries inside macOS app bundle (`02fd12b6c`)
+- fix(release): retry macOS package cleanup races (`16b75519c`)
+- release_publish: publish three platforms by default; Linux only with R2D_BUILD_LINUX=1 (`3330cbf56`)
+
+### Прочее
+
+- fix(macos): keep SDK runtime in app process (`0049d4763`)
+- fix(macos): bundle SDK UI and backend assets (`29683120e`)
+- feat(macos): package SDK as Finder app (`38184600c`)
+- feat(sprite-mesh): complete V1 authoring pipeline (`316d785e2`)
+- feat(sdk): bake SpriteMesh cache for atlas frames (`8175bd2fe`)
+- feat(sprite-mesh): cache meshes for all frames (`209c72f96`)
+- feat(sprite-mesh): add frame extrusion generator (`02bfc2487`)
+- ux(sdk): use material icons in world editor (`6f539c602`)
+- ux(sdk): translate common tool controls (`0e673f0e4`)
+- ux(sdk): localize tool catalog and world studio (`6ca9783de`)
+- ux(sdk): simplify and localize world editor (`f2368049a`)
+- fix(sdk): improve editor tool routing and map guidance (`e619b135e`)
+- demo(sdk): integrate 2d and re2d showcase (`6f9af77e2`)
+- demo(sdk): scaffold multi-tool showcase project (`1a82dff75`)
+- docs(sdk): record studio editing audit (`36b4e430a`)
+- sdk: compact studio diagnostics and verify editing (`b8158be95`)
+- sdk: compact workspace and diagnostics (`bbf65c659`)
+- docs(sdk): refresh verification audit (`e80923871`)
+- tests: avoid false failure in world editor runner (`da98fea7a`)
+- sdk: make tool catalog easier to navigate (`76499f0b3`)
+
+<!-- release-notes:end -->
 ## 1.3.1 — 2026-10-20
 
 <!-- release-notes:begin — генерируется tools/release_notes.py, правьте текст вне маркеров -->

@@ -532,7 +532,7 @@ $('#water').animations([{ tile: 5, frames: [5, 6], fps: 6 }]);   // примен
 $('#water').animations(null);                       // выключить
 ```
 
-Валидатор студии и `r2d-sdk validate` проверяют `tile`, `frames`, `fps`,
+Валидатор студии и `r2d validate` проверяют `tile`, `frames`, `fps`,
 `interval`, `random`, `offset` и `layer` одинаково (JS и C); ошибки —
 `SDK_TILEMAP_ANIM`. Невалидную запись рантайм не применяет.
 
@@ -728,12 +728,15 @@ $('#level2').autotile({ mode: 'terrain', terrain: 'grass' });
 }
 ```
 
-В Tilemap Studio правая панель «ТЕРРЕЙН» — тот же JSON: имя набора, `bit16`/
-`blob47`, `base`, твёрдые id, переходы «маска:тайл», граница. «Сохранить»
-пишет `terrains`, «Красить» переключает `autotile` на `mode: "terrain"` и
-берёт кисть из набора, так что рисование сразу показывает результат в настоящем
-`<tilemap>`. «Удалить» убирает набор и, если он был активен, `autotile`.
-Валидатор студии и `r2d-sdk validate` проверяют те же поля одинаково (JS и C),
+В Tilemap Studio левая библиотека редактирует наборы террейнов через поля
+имени, режима `bit16`/`blob47`, базового tile id, solid ids, таблицы
+«маска:тайл» и border. «Красить террейном» выбирает его в `autotile`, а кисть
+берёт базовый id; rename, настройка и удаление — отдельные Undo-операции.
+Анимации имеют поля исходного tile, кадров, FPS/интервала, random, offset и
+слоя. Bit16/Blob47 autotile имеет отдельные controls для base, solid и border.
+Предпросмотр читает эту же модель настоящим runtime `<tilemap>`; Save проходит
+native validate черновика до публикации.
+Валидатор студии и `r2d validate` проверяют те же поля одинаково (JS и C),
 ошибки — `SDK_TILEMAP_TERRAIN`.
 
 ---

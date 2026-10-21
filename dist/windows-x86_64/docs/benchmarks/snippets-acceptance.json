@@ -1,0 +1,65 @@
+{
+ "meta": {
+  "machine": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "cpu": "arm",
+  "binary": "/Volumes/SSD NVME/nikiniki2d/build/macosx/arm64/release/r2d",
+  "frames": 120,
+  "warm": 40,
+  "build": "xmake release",
+  "behaviors_per_enemy": [
+   "ai.chase",
+   "health.base",
+   "health.regeneration"
+  ]
+ },
+ "rows": [
+  {
+   "logic_ms": 0.176,
+   "frame_ms": 16.667,
+   "errors": 0,
+   "near_hero": 82,
+   "n": 500,
+   "mode": "bare"
+  },
+  {
+   "logic_ms": 1.718,
+   "frame_ms": 16.667,
+   "errors": 0,
+   "near_hero": 82,
+   "n": 500,
+   "mode": "manual"
+  },
+  {
+   "logic_ms": 1.899,
+   "frame_ms": 16.667,
+   "errors": 0,
+   "near_hero": 82,
+   "n": 500,
+   "mode": "snippets"
+  },
+  {
+   "logic_ms": 0.722,
+   "frame_ms": 16.667,
+   "errors": 0,
+   "near_hero": 330,
+   "n": 2000,
+   "mode": "bare"
+  },
+  {
+   "logic_ms": 5.707,
+   "frame_ms": 16.667,
+   "errors": 0,
+   "near_hero": 388,
+   "n": 2000,
+   "mode": "manual"
+  },
+  {
+   "logic_ms": 5.903,
+   "frame_ms": 16.667,
+   "errors": 0,
+   "near_hero": 388,
+   "n": 2000,
+   "mode": "snippets"
+  }
+ ]
+}

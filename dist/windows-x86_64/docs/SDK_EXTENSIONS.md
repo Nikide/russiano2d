@@ -1,17 +1,23 @@
 # SDK Extensions
 
-Status: implemented (P0 extension foundation) — extension discovery, manifests,
-merged effective registry, CLI, JS contribution host.
+Status: partial — native discovery, manifest validation, merged registry and
+CLI operations are in `r2d`; the shared JS contribution host is connected to
+Editor Hammer for World Tools, entity definitions, menu/toolbar actions,
+panels, inspectors, context actions, world overlays, validators, build steps, and
+agent commands.
+Validator contributions currently add declared diagnostic metadata; they do
+not run arbitrary extension code.
 
-Расширения SDK — это штатный способ добавить инструмент, панель, сущность,
-валидатор или команду агента, **не меняя исходники SDK**. Один и тот же
-manifest/loader обслуживает extension-пакеты и standalone-инструменты, а
-тяжёлая работа по-прежнему идёт через нативный `r2d-sdk`.
+Расширения — механизм добавления инструмента, панели, сущности, валидатора или
+команды агента без изменения backend. Native discovery доступен через `r2d`.
+JS contributions активирует общий host из `editor/lib/shared/extensions.js`.
+Editor передаёт поддержанные World contribution points в Hammer. Overlay можно
+включать и выключать; его shape-данные рисуются в ортопроекциях карты.
 
 ```text
 GAME       = CODE + DATA
-SDK        = R2D APPLICATION + AUTHORING CAPABILITIES
-SDK TOOL   = CODE + DATA
+EDITOR      = R2D APPLICATION + AUTHORING CAPABILITIES
+EDITOR TOOL = CODE + DATA
 EXTENSION  = CODE + DATA
 ```
 
@@ -24,7 +30,7 @@ EXTENSION  = CODE + DATA
 
 ```text
 built-in (sdk_tools.json)  +  user расширения  +  project расширения
-                          =  effective SDK registry
+                          =  effective tool registry
 ```
 
 Порядок discovery: **built-in → user → project**, внутри каталога — по имени
@@ -36,7 +42,7 @@ namespaced-id отключает вторую запись с `SDK_EXTENSION_DUP
 
 | Scope | Каталог | Владелец |
 |---|---|---|
-| built-in | `<SDK>/sdk/extensions/<id>/` + записи `sdk_tools.json` | движок |
+| built-in | `<r2d>/sdk/extensions/<id>/` + записи `sdk_tools.json` | движок |
 | user | платформенный конфиг-путь: `.../russiano2d/sdk/extensions/<id>/` (на macOS — `~/Library/Application Support/russiano2d/sdk/extensions`) | пользователь |
 | project | `<project>/sdk_extensions/<id>/` | проект, коммитится вместе с ним |
 
@@ -85,6 +91,16 @@ Project-расширения живут рядом с игрой, пережив
   `id` (у `entityDefinitions` — `class`). Ошибки —
   `SDK_EXTENSION_CONTRIBUTION_INVALID`.
 
+### Runtime validators
+
+Валидатор может объявить `run(map)` при регистрации через
+`registerValidator`. Hammer вызывает его во время Validate с глубоко
+замороженной JSON-копией карты. Callback возвращает массив до 256 объектов
+диагностики (`code`, `severity` — `error`/`warning`/`info`, `message`,
+`asset`, `location`, `details`). Исключение, неверный формат результата или
+превышение лимита создаёт `SDK_EXTENSION_RUN_FAILED`; остальные валидаторы
+продолжают выполняться. Валидатор не может менять текущую карту.
+
 Standalone-инструмент — это тот же манифест, но с именем `tool.json` и без
 (или с пустым) `contributes`:
 
@@ -100,10 +116,30 @@ Standalone-инструмент — это тот же манифест, но с
 }
 ```
 
-## 4. Contribution points и JS-хост
+## World overlays в Hammer
+
+World overlay — декларативная аннотация без собственного UI или renderer.
+Contribution задаёт visible (по умолчанию true) и до 256 shapes:
+
+    {
+      "id": "author.spawn-guide",
+      "label": "Spawn guide",
+      "shapes": [
+        { "kind": "point", "position": [64, 96, 0], "label": "Spawn", "color": "#ff8855" },
+        { "kind": "line", "from": [0, 0, 0], "to": [128, 128, 32], "color": "#66ddaa" },
+        { "kind": "rect", "min": [160, 32, 0], "max": [288, 160, 48], "label": "Area", "color": "#7799ff" }
+      ]
+    }
+
+Position arrays use numeric [x, y] or [x, y, z] values; rect min/max are
+opposite corners. Hammer projects shapes into Top/XY, Front/XZ, and Side/YZ.
+Unsupported shape kinds and invalid coordinates are ignored, invalid colors
+use a safe default, and escaped labels are limited to 256 characters.
+
+## 4. Contribution points и общий JS-хост
 
 Декларативные `contributes` попадают в единый реестр хоста
-(`sdk/lib/extensions.js`). Код расширения получает контекст и регистрирует
+(`editor/lib/shared/extensions.js`, также используемый legacy shell). Код расширения получает контекст и регистрирует
 поведение только через документированные функции:
 
 ```js
@@ -122,6 +158,16 @@ export function activate(ctx) {
 `registerAgentCommand`, `registerContextAction`, плюс `register(kind, item)`.
 Контекст: `{ $, app, sdk, manifest }`.
 
+Hammer вызывает runtime `run(options)` у World Tool, menu, toolbar и panel
+contributions, inspector sections и context actions. Inspector `fields` задаёт
+поля ввода как строки либо объекты `{id, label, value}`; callback получает их
+значения. Context actions показываются при выбранном объекте. В `options`
+передаются объявленные `args`, снимок выделения `{kind, ids}` и
+`apply(op, args)`, который выполняет операцию через сессию Hammer и её историю
+Undo. Ошибка или `{ok:false, message}` показывается как
+`SDK_EXTENSION_RUN_FAILED`; callback не получает DOM или изменяемую модель
+карты.
+
 Правила:
 
 * никакого monkey-patching DOM/приватных методов — только эти точки;
@@ -139,26 +185,27 @@ export function activate(ctx) {
 чего `import('sdk-ext/<id>/main.js')` читает файл из каталога расширения —
 где бы он ни лежал. Ошибка разрешения — `R2D_MODULE_EXTENSION`.
 
-## 5. CLI (тот же backend, что GUI и агент)
+## 5. CLI (native backend `r2d`)
 
 ```text
-r2d-sdk extension list   [--project DIR] [--registry FILE] [--user-extensions DIR] [--builtin-extensions DIR]
-r2d-sdk extension info   <id|path> [...]
-r2d-sdk extension validate [path] [...]
-r2d-sdk tool list        [...]
-r2d-sdk tool info        <id|path> [...]
-r2d-sdk tool validate    <path>
-r2d-sdk tool run         <id|path> [--project DIR] [--headless] [--frames N]
-r2d-sdk tool install     <path> [--user-extensions DIR]
-r2d-sdk tool uninstall   <id>   [--user-extensions DIR]
+r2d extension list   [--project DIR] [--registry FILE] [--user-extensions DIR] [--builtin-extensions DIR]
+r2d extension info   <id|path> [...]
+r2d extension validate [path] [...]
+r2d tool list        [...]
+r2d tool info        <id|path> [...]
+r2d tool validate    <path>
+r2d tool run         <id|path> [--project DIR] [--headless] [--frames N]
+r2d tool install     <path> [--user-extensions DIR]
+r2d tool uninstall   <id>   [--user-extensions DIR]
 ```
 
-`r2d-sdk tools` (реестр для SDK GUI) отдаёт объединённый массив `tools` и
-снимок `extensions`; записи расширений содержат `source` (`builtin` |
+`r2d tool list` отдаёт объединённый массив `tools`; `r2d extension list` отдаёт
+снимок `extensions`. Записи расширений содержат `source` (`builtin` |
 `user` | `project`) и `module` (`sdk-ext/...`).
 
-`tool run` оставляет запрос `sdk/.open-tool.json` и запускает SDK-приложение
-движком; GUI при старте открывает инструмент той же операцией `openTool`.
+`tool run` сохраняет совместимость с legacy приложениями инструментов из `sdk/`.
+В текущем Editor файлы и Hammer открываются через Project/Asset tree и
+специализированные студии.
 `--headless --frames N` позволяет прогнать инструмент без окна (CI/агент).
 
 `tool install` копирует каталог в user-scope; `tool uninstall` удаляет его.
@@ -176,6 +223,7 @@ r2d-sdk tool uninstall   <id>   [--user-extensions DIR]
 | `SDK_EXTENSION_API_MISMATCH` | `sdk_api` не совпал с поддерживаемым |
 | `SDK_EXTENSION_ENTRY_MISSING` | JS-модуля входа нет на диске |
 | `SDK_EXTENSION_INIT_FAILED` | JS-модуль не загрузился при старте |
+| `SDK_EXTENSION_RUN_FAILED` | runtime contribution завершился ошибкой или отказом |
 | `SDK_EXTENSION_CONTRIBUTION_INVALID` | кривая contribution-точка |
 | `SDK_EXTENSION_PERMISSION` | некорректное объявление permission |
 | `SDK_EXTENSION_NOT_FOUND` | `extension info` не нашёл id/path |
@@ -185,13 +233,25 @@ r2d-sdk tool uninstall   <id>   [--user-extensions DIR]
 | `SDK_PICK_ASSET` / `SDK_NO_TOOL_FOR_ASSET` | инструменту нужен файл |
 | `R2D_MODULE_EXTENSION` | module не разрешён через `moduleRoot` |
 
-Failure isolation: одно сломанное расширение не роняет SDK — оно отключается
-(`enabled=false`), диагностика остаётся в общем снимке, остальные инструменты
-продолжают работать.
+В JS-хосте одно сломанное расширение не роняет Editor: оно помечается
+`enabled=false`, его уже зарегистрированные contributions отзываются, а
+диагностика остаётся в общем снимке. Другие расширения продолжают работать.
 
 ## 7. Снимок для агента
 
-`$.sdkApp.snapshot()` содержит:
+В Editor общий JS host и активный Hammer доступны агенту через:
+
+```js
+$.editorApp.extensions.snapshot();
+$.editorApp.activeTab().inst.snapshot().extensions;
+$.editorApp.state.extensionDiags;
+```
+
+Legacy shell сохраняет дополнительный снимок registry для совместимости:
+
+```js
+$.sdkApp.snapshot();
+```
 
 ```json
 {
@@ -208,7 +268,7 @@ Failure isolation: одно сломанное расширение не рон�
 }
 ```
 
-Агент не читает исходники SDK, чтобы узнать список инструментов, расширений,
+Агент не читает исходники backend, чтобы узнать список инструментов, расширений,
 contribution-точек и их состояний.
 
 ## 8. Пример и проверка
@@ -221,11 +281,18 @@ python3 tests/agent/sdk_extensions_test.py
 ```
 
 Он проверяет discovery, дубликаты, API mismatch, merged registry, install/
-uninstall и работу хоста в настоящем SDK GUI (activate, contribute, открытие
-инструмента, снимок). CLI-часть не требует окна.
+uninstall и совместимость старого shell host. `tests/agent/editor_extensions_test.py`
+проверяет загрузку project extension через Editor, декларативные и runtime
+contributions, вывод ошибки активации в Problems, отключение и откат
+contributions сломанного расширения, а также интеграцию поддерживаемых типов
+в Hammer, runtime World Tool/inspector/context callbacks через историю Hammer
+и декларативные overlays во всех трёх ортопроекциях.
 
 ## 9. Границы
 
-Расширение не может: подменить встроенный инструмент, писать в
+Hammer поддерживает World Tools, entity definitions, menu/toolbar actions,
+panels, inspectors, context actions, world overlays, validators, agent commands
+и build steps. Расширение не может: подменить
+встроенный инструмент, писать в
 `sdk_tools.json`, требовать правки `sdk/`, добавлять второй UI/renderer/
 scene graph, исполнять shell-команды в обход `$.sdk`.

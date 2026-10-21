@@ -155,8 +155,10 @@ def test_evidence():
           "чеклист §37 проверяется машиной")
     check(exists("tests/fixtures"), "фикстуры для сценариев приёмки на месте")
     # Правило §37: заявленный профиль — это версия+платформа+набор возможностей.
-    check(exists("docs/WEB_EXPORT.md") or exists("web/export.py"),
-          "заявленный web-профиль описан и имеет инструмент экспорта")
+    web_doc = exists("docs/WEB_EXPORT.md")
+    web_exporter = exists("web/export.py")
+    check(web_doc == web_exporter,
+          "web export публикуется только при наличии и документации, и инструмента")
 
 
 def main():

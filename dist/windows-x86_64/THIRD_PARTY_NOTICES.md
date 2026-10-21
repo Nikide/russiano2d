@@ -1,7 +1,8 @@
 # Сторонние компоненты и их лицензии
 
-Russiano2D собирается из исходников и тянет зависимости через CMake
-`FetchContent` (см. `cmake/Dependencies.cmake` и `cmake/Shaders.cmake`).
+Russiano2D собирается через Xmake (`xmake.lua` и `xmake/packages/`). Xmake
+управляет зависимостями и генерирует включаемые ресурсы; некоторые сторонние
+проекты используют собственные build-инструменты внутри своих рецептов.
 Ниже — что именно используется, под какой лицензией и где это закреплено.
 
 Документ описывает **сторонние** компоненты. Лицензия самого движка —
@@ -21,11 +22,11 @@ Russiano2D собирается из исходников и тянет зави
 | trylock/visibility | `master` (`71eb5c0`) | MIT |
 | glslang | `16.6.0` | Apache-2.0 (части — BSD-3-Clause / MIT) |
 | SPIRV-Cross | `vulkan-sdk-1.4.363.0` | Apache-2.0 |
-| Steam Audio **4.8.1** | vendored, `third_party/steam_audio`; пин — `cmake/SteamAudio.cmake` (steamaudio_4.8.1.zip, SHA256 `4a0aa5ec…1d5449`), лицензия кладётся в поставку (`share/licenses/steam_audio`) | Apache-2.0. Используется для настоящей HRTF (бинауральная панорама 3D-миров через `r2d_audio_world_channel`) и окклюзии; с task-18 — как backend `'steam'` в 2D-режиме `$.audio.hrtf()` |
+| Steam Audio **4.8.1** | vendored, `third_party/steam_audio`; пин — `xmake.lua`; лицензия кладётся в поставку (`share/licenses/steam_audio`) | Apache-2.0. Используется для настоящей HRTF и окклюзии |
 | tinyexr | vendored, `third_party/tinyexr` | BSD-3-Clause |
 | ufbx | vendored, `third_party/ufbx` | MIT **или** public domain (на выбор) |
 | stb_truetype (`nothings/stb`) | `2c980bb` (1.26) | public domain / MIT (dual) |
-| SDL_net | `30dd38a` | zlib |
+| ENet (`zpl-c/enet`) | `v2.7.0` (`8b43b925`) | MIT |
 | FastNoiseLite | vendored, `third_party/fastnoise_lite` (`785f37a`, `Cpp/FastNoiseLite.h`) | MIT |
 | Tracy | `v0.14.1` (`30997d5`) — только при `-DR2D_TRACY=ON` | BSD-3-Clause |
 | zstd | `v1.5.7` (`ac66b19`) — только при `R2D_ENABLE_ZSTD=ON` (по умолчанию) | BSD-3-Clause |
@@ -33,13 +34,24 @@ Russiano2D собирается из исходников и тянет зави
 | Noto Sans | файл в репозитории | SIL OFL 1.1 |
 | LatoLatin | файл в репозитории | SIL OFL 1.1 |
 | Open Sans | файл в репозитории (`OpenSans-Regular.ttf`) | SIL OFL 1.1 |
+| Roboto Mono | файл в репозитории (`RobotoMono-Regular.ttf`, из образцов RmlUi 6.x) | SIL OFL 1.1 |
 | Material Design Icons | шрифт `MaterialIcons-Regular.ttf`, коммит `737e332` | Apache-2.0 |
+| TypeScript ECMAScript declarations | `5.9.3`, используются для генерации каталога JS-подсказок редактора | Apache-2.0 (`third_party/typescript/LICENSE.txt`) |
 
 Все библиотеки берутся из своих официальных репозиториев при сборке
-(`cmake/Dependencies.cmake`, `cmake/Shaders.cmake`) — тексты их лицензий
+(`xmake.lua`, `xmake/packages/`, `tools/xmake_generate.sh`) — тексты их лицензий
 распространяются вместе с исходниками, а уведомления обязаны сохраняться в
 поставке. Шрифты и иконки лежат в репозитории вместе с текстами лицензий
 (`assets/fonts/LICENSE-*.txt`).
+
+## TypeScript ECMAScript declarations — Apache-2.0
+
+`editor/lib/js_builtin_catalog.js` генерируется из ECMAScript-only деклараций
+TypeScript 5.9.3 (`lib.esnext.d.ts` и стандартные библиотеки, на которые он
+ссылается). Каталог содержит имена, сигнатуры и документационные комментарии
+для стандартных JS-глобалов и методов. DOM, WebWorker и ScriptHost декларации
+не используются. Исходные декларации распространяются по Apache-2.0; текст
+лицензии сохранён в `third_party/typescript/LICENSE.txt`.
 
 **RmlUi — статус версии (проверено 2026-10-16, апстрим `mikke89/RmlUi`):**
 
@@ -52,19 +64,19 @@ Russiano2D собирается из исходников и тянет зави
   вместо неявного преобразования в указатель у `Colour`/`Vector` (#1018).
 * **ОСОЗНАННО НЕ ОБНОВЛЯЕМ** на `6.4-dev`: это нерелизная версия, решение
   пользователя — оставить стабильный тег. Откат/обновление — одна строка пина
-  в `cmake/Dependencies.cmake`.
+  в `xmake.lua` или соответствующем рецепте `xmake/packages/`.
 * Патч `third_party/patches/rmlui-webgpu.patch` **проверен на master**: файл
   `Backends/RmlUi_Renderer_SDL_GPU.cpp` там байт-в-байт совпадает с 6.3, WGSL
   апстрим так и не принял — патч остаётся нужным и на новой версии.
 
 Состав и лицензии сверены с `README.md` (раздел «Лицензии сторонних
-компонентов») и с `cmake/Dependencies.cmake` / `cmake/Shaders.cmake`.
+компонентов») и с `xmake.lua`, `xmake/packages/` и `tools/xmake_generate.sh`.
 
 ## Что именно попадает в сборку
 
 ### SDL3 — zlib
 Платформа, окно, ввод, тайминги и SDL_GPU (Vulkan / Metal / DirectX 12).
-Если системный SDL3 не найден, CMake собирает `release-3.4.16` из исходников.
+Если системный SDL3 не найден, Xmake-рецепт собирает `release-3.4.16` из исходников.
 Бинарник распространяется под zlib — текст лицензии разрешает использование
 в проприетарных продуктах при сохранении уведомления.
 
@@ -96,35 +108,14 @@ Russiano2D собирается из исходников и тянет зави
 
 ### RmlUi — MIT
 Игровой GUI. Собираются ядро и бэкенды под SDL_GPU (файлы бэкендов
-компилируются из `Backends/` напрямую, см. `src/CMakeLists.txt`).
+компилируются из `Backends/` напрямую, см. `xmake.lua`).
 
 ### trylock/visibility — MIT
 Полигоны видимости (2D-свет и тени). Используются только заголовки,
 C-обёртка — `src/light.cpp`.
 
 ### Tracy — BSD-3-Clause
-Профайлер реального времени (живой таймлайн с отдельным сервером
-`tracy-profiler`, сэмплирование стека потоков, графики, локи, сравнение двух
-прогонов). Подключается **только** опцией `-DR2D_TRACY=ON`
-([`cmake/Tracy.cmake`](cmake/Tracy.cmake), пин `v0.14.1` / `30997d5`).
-
-Что важно для поставки:
-
-* **По умолчанию OFF.** Релизная сборка не скачивает, не компилирует и не
-  линкует Tracy: ни байта в бинарнике, ни влияния на цену кадра, ни изменений
-  в поведении. Это проверяется сравнением размера бинарника и
-  `tests/agent/profiler_baseline_test.py` (числа — в отчёте задачи).
-* **Сервер внутрь игры не встраивается.** Tracy состоит из двух частей: клиент
-  (эта библиотека, компилируется в игру) и сервер-GUI `tracy-profiler`
-  (отдельное приложение, автор Tracy распространяет его как самостоятельную
-  программу). Мы линкуем только клиент.
-* **Клиент статический**, собирается из одного файла `public/TracyClient.cpp`
-  в режиме `TRACY_ON_DEMAND` (без подключённого сервера профилирование не
-  пишет ничего). Текст лицензии распространяется вместе с исходниками Tracy,
-  а уведомление BSD-3-Clause обязано сохраняться при распространении сборок,
-  где `R2D_TRACY=ON`.
-* Как включить, что видно и чего не видно — [`docs/BUILD.md`](docs/BUILD.md),
-  раздел «Tracy: профайлер реального времени».
+Tracy не входит в текущую Xmake-цель `r2d` и не поставляется с движком.
 
 ### SMAA — MIT (у эталонной реализации; код не вендорился)
 
@@ -150,12 +141,12 @@ C-обёртка — `src/light.cpp`.
 Сжатие груза игры: билдер сжимает тело контейнера (`russiano2d build`), движок
 распаковывает его на старте — см. [`docs/BUILD.md`](docs/BUILD.md), раздел
 «Сжатие груза (zstd)». Подключается отдельным файлом
-[`cmake/Zstd.cmake`](cmake/Zstd.cmake) с пином `v1.5.7` / `ac66b19`.
+[`xmake.lua`](xmake.lua) с пином `v1.5.7` / `ac66b19`.
 
 Что важно для поставки:
 
 * **Версия запинена коммитом, уровень сжатия — константа**
-  (`R2D_PAYLOAD_ZSTD_LEVEL` в `src/payload.h`, `R2D_ZSTD_LEVEL` в CMake):
+  (`R2D_PAYLOAD_ZSTD_LEVEL` в `src/payload.h`, `R2D_ZSTD_LEVEL` в Xmake):
   байты груза зависят и от версии библиотеки, и от уровня, поэтому одинаковое
   дерево обязано давать одинаковый груз. Проверяется
   `tests/agent/payload_compression_test.py` (двойная сборка → один SHA256).
@@ -200,6 +191,9 @@ SPIR-V → MSL (`spirv-cross`). В **готовый бинарник не поп
 уведомление Apache-2.0 и уведомления этих файлов должны сохраняться.
 
 ### Шрифты — SIL OFL 1.1
+- **Roboto Mono** — `assets/fonts/RobotoMono-Regular.ttf`, полный текст:
+  `assets/fonts/LICENSE-RobotoMono.txt`. Моноширинный шрифт редактора кода
+  (`editor/`): позиция каретки считается как колонка × ширина символа.
 - **Open Sans** — `assets/fonts/OpenSans-Regular.ttf`, полный текст:
   `assets/fonts/LICENSE-OpenSans.txt`. Это **шрифт движка по умолчанию**: он
   покрывает и латиницу, и кириллицу. Взят статический Regular из официальной
@@ -224,7 +218,7 @@ OFL требует распространять его под другим им�
 
 ### Material Design Icons — Apache-2.0
 Шрифт `MaterialIcons-Regular.ttf` и таблица `.codepoints` не лежат в
-репозитории: `cmake/Icons.cmake` скачивает их с конкретного коммита
+репозитории: `tools/xmake_generate.sh` скачивает их с конкретного коммита
 `google/material-design-icons` и проверяет SHA256. Шрифт встраивается в
 исполняемый файл байтами, поэтому уведомление Apache-2.0 в релизной сборке
 сохраняется (см. раздел «Что нужно сделать до релиза»).

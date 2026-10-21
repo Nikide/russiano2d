@@ -40,7 +40,7 @@ token.release();
 ## Ограничения
 
 * RCSS не парсится и не валидируется здесь: синтаксис проверяет RmlUi при
-  загрузке; native `r2d-sdk dialog validate` проверяет роли, теги, linked RCSS
+  загрузке; native `r2d dialog validate` проверяет роли, теги, linked RCSS
   и файлы шрифтов.
 * Hot reload «все или ничего»: при ошибке view не выгружает прошлый документ.
 

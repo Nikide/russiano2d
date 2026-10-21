@@ -48,4 +48,5 @@ python3 tests/api_docs_sync_test.py
 
 ## Передача работы
 
-Система сниппетов (ветка `snippets-system`): состояние, остаток и команды — [docs/HANDOFF_CODEX.md](docs/HANDOFF_CODEX.md).
+Система сниппетов: [docs/SNIPPETS.md](docs/SNIPPETS.md).
+Локальная передача состояния при наличии — `docs/HANDOFF_CODEX.md`; хендоффы не публикуются.

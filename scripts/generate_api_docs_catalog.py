@@ -8,7 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "api.schema.json"
 OUTPUT = ROOT / "src/highlevel/api_docs_catalog.js"
-API_PATH = r"(?:\$|engine)\.[\w$]+(?:\.[\w$]+){0,3}"
+# The editor catalog is a public `$` help/autocomplete surface. Private native
+# bridge names such as `engine.raycast` are implementation details and must not
+# leak into it even when a doc paragraph explains the bridge.
+API_PATH = r"\$\.[\w$]+(?:\.[\w$]+){0,3}"
 
 
 def clean(value: str) -> str:

@@ -115,7 +115,7 @@ def test_no_m_pi():
 # ---------------------------------------------------------------------------
 
 def test_no_strtok():
-    print("\n== §4.2: strtok_r/strtok не используются ==")
+    print("\n== §4.2: strtok variants не используются ==")
     offenders = []
     pattern = re.compile(r'\b(strtok_r|strtok_s|strtok)\s*\(')
     for path in code_files():
@@ -123,7 +123,7 @@ def test_no_strtok():
             if pattern.search(line):
                 offenders.append("%s:%d" % (os.path.relpath(path, ROOT), num))
     check(not offenders,
-          "POSIX strtok_r и глобального strtok нет в коде (%s)"
+          "strtok variants отсутствуют в переносимом коде (%s)"
           % (", ".join(offenders[:5]) or "чисто"))
 
 

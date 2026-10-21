@@ -126,7 +126,7 @@ build/_deps/quickjs-build/qjs tests/js/re2d_viewmodel_test.mjs
 от скорости и возврат в покой, sway за мышью и успокоение, `update(0)`,
 детерминизм двух прогонов, отказ неверных опций, `$.re2dFeel` и установку без
 `engine`. Страница обязательна для `tests/doc_coverage_test.py`; новые публичные
-имена входят в снимок `tests/api_freeze_baseline.txt`.
+имена описываются в документации и попадают в сгенерированную схему.
 
 Источники: [модуль](../../src/highlevel/re2d_viewmodel.js), [обёртка
 `$`](../../src/highlevel/api.js), [Re2D World](re2d.md).

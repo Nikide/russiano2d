@@ -6,9 +6,11 @@
 
 Из корня checkout:
 
+Установите `R2D_BINARY` по [инструкции проверок](TESTING.md).
+
 ```sh
-./build/russiano2d --game demos/re2d_world_renderer_lab/acceptance --seed 7
-./build/russiano2d --game demos/re2d_dust2 --seed 7
+"$R2D_BINARY" --game demos/re2d_world_renderer_lab/acceptance --seed 7
+"$R2D_BINARY" --game demos/re2d_dust2 --seed 7
 ```
 
 Acceptance lab: 1–7 выбирают corridor/upper/bridge/fog/stairs/ramp/window; E — этаж, O — дверь, Space — вспышка, M — движение красной верхней лампы, F2 — debug, WASD/стрелки — движение/взгляд. Dust2: 1–8 — именованные камеры, 0 — fire map (стрельбище), O — doors, Space — прыжок, Shift — бег, мышь — взгляд, ЛКМ/F — вспышка, Esc — отпустить мышь, M — захват, Q — выход; G — CPU/GPU, R — перезарядка, X — reset очагов (вне fire map — камера «T SPAWN»), F2 — diagnostics. Управление конкретного демо задано его README/main.js.
@@ -80,7 +82,7 @@ $.render(() => docWorld.render(view,400,240));
 Вместо description в JS храните `.re2dmap` с SDK rect/id/stairs/slopes; compile выдаёт `.re2dworld`:
 
 ```sh
-build/r2d-sdk world-compile maps/room.re2dmap --renderer --output maps/room.re2dworld
+$R2D_BINARY world-compile maps/room.re2dmap --renderer --output maps/room.re2dworld
 ```
 
 ```js
@@ -193,7 +195,7 @@ function moveWalker(world, walker, dx, dy) {
   отдаёт их как обычные. Automap их не рисует отдельными линиями: грань портала
   уже представлена PORTAL-линией.
 * Baked/compiled карты несут эти стены в своей таблице walls, поэтому
-  `world.load` и `r2d-sdk world-compile --renderer` дают одну и ту же геометрию.
+  `world.load` и `r2d world-compile --renderer` дают одну и ту же геометрию.
   Старые baked-карты загружаются как есть (без новых полос) — перекомпилируйте
   исходник, если нужна закрытая slab-полоса.
 

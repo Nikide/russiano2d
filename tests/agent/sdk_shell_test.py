@@ -188,9 +188,9 @@ def main():
               "справка оболочки содержит только актуальные пользовательские документы")
 
         # --- Документация ----------------------------------------------------------------------------------------
-        n = a.eval("$.sdkApp.showDoc('SDK_HANDOFF.md')")
+        n = a.eval("$.sdkApp.showDoc('docs/SDK.md')")
         check(isinstance(n, int) and n > 500, "документ прочитан")
-        check("SDK Handoff" in a.eval(f"{DOC}.content('doc-text')"), "текст документа показан в RmlUi")
+        check("Инструменты Russiano2D" in a.eval(f"{DOC}.content('doc-text')"), "текст документа показан в RmlUi")
         a.eval("$.sdkApp.showDoc('docs/нет.md'); 1")
         check("SDK_DOC_MISSING" in snap(a)["diagnostics"]["codes"], "нет документа — диагностика")
 

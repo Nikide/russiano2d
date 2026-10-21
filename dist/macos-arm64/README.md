@@ -1,4 +1,4 @@
-# Russiano2D 1.3.2 — macOS Apple Silicon
+# Russiano2D 2.0.0 — macOS Apple Silicon
 
 Готовый движок и всё, что нужно, чтобы начать на нём первый проект.
 
@@ -6,24 +6,29 @@
 
 | Файл | Что это |
 |---|---|
-| `russiano2d` | сам движок — твой инструмент |
+| `r2d` | сам движок — твой инструмент |
 | `game/` | игра по умолчанию: демо визуальной новеллы «Руси-тян: Бака!» |
-| `r2d-sdk[.exe]`, `sdk/`, `sdk_tools.json` | SDK на R2D: шаблоны, студии, запуск и упаковка |
-| `docs/` | текущие справочники SDK и API |
+| `editor/` | Project Manager и встроенные студии Editor |
+| `templates/` | шаблоны проектов |
+| `docs/` | справочники Editor и API |
 | `assets/` | текстуры, шрифты, иконки |
 | `AGENTS.md` | то же самое, но для ИИ-агента: как управлять игрой программно |
 | `CHANGELOG.md` | что менялось по версиям |
 | `LICENSE`, `THIRD_PARTY_NOTICES.md` | лицензия движка и лицензии зависимостей |
 
+`r2d` открывает Project Manager без аргументов, `r2d edit <проект>` открывает
+проект в Editor, а `r2d --game <проект>` запускает его напрямую. Все три
+режима принадлежат одному executable.
+
 ## 1. Проверить, что движок работает
 
 ```bash
-./russiano2d                      # игра по умолчанию
-./russiano2d --scene russi_vn    # сразу новелла, без меню
-./russiano2d --stats --seconds 5  # прогон без рук: печатает FPS и статистику кадра
+./r2d                      # игра по умолчанию
+./r2d --scene launcher   # меню проекта
+./r2d --stats --seconds 5  # прогон без рук: печатает FPS и статистику кадра
 ```
 
-**macOS:** если система откажется запускать файл — переподпиши его: `codesign --force --sign - russiano2d`
+**macOS:** если система откажется запускать файл — переподпиши его: `codesign --force --sign - r2d`
 
 ## 2. Свой первый проект
 
@@ -58,7 +63,7 @@ $.ready(() => {
 ## 3. Запустить свою игру
 
 ```bash
-./russiano2d --game mygame
+./r2d --game mygame
 ```
 
 Пока игра запущена, правь `.js` — движок перезапускает скрипты на лету (F5).
@@ -67,7 +72,7 @@ $.ready(() => {
 ## 4. Собрать в один файл
 
 ```bash
-./russiano2d build --project . --entry mygame/main.js --out mygame-release
+./r2d build --project . --entry mygame/main.js --out mygame-release
 ```
 
 На выходе — один исполняемый файл: скрипты и ассеты внутри, зашифрованы
@@ -78,21 +83,24 @@ $.ready(() => {
 
 ## 5. Куда дальше
 
-* **[tutorial-first-game.md](https://hub.mos.ru/dem4ev48/russiano2d/-/blob/main/docs/tutorial-first-game.md)**
+* **[tutorial-first-game.md](https://gitverse.ru/Nikide/russiano2d/blob/main/docs/tutorial-first-game.md)**
   — «Моя первая игра»: hello world, меню с кнопками, смена сцен, сборка;
-* [HIGH_LEVEL_API.md](https://hub.mos.ru/dem4ev48/russiano2d/-/blob/main/docs/HIGH_LEVEL_API.md)
+* [HIGH_LEVEL_API.md](https://gitverse.ru/Nikide/russiano2d/blob/main/docs/HIGH_LEVEL_API.md)
   — полный справочник по `$`;
-* [AGENT_API.md](https://hub.mos.ru/dem4ev48/russiano2d/-/blob/main/docs/AGENT_API.md)
+* [AGENT_API.md](https://gitverse.ru/Nikide/russiano2d/blob/main/docs/AGENT_API.md)
   — протокол агента: управлять игрой программой;
-* [docs/highlevel/](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/docs/highlevel)
+* [docs/highlevel/](https://gitverse.ru/Nikide/russiano2d/tree/main/docs/highlevel)
   — подсистемы по отдельности: анимация, TileMap, частицы, навигация, UI, твины,
   локализация, HTTP.
 
-Репозиторий: <https://hub.mos.ru/dem4ev48/russiano2d>
+Репозиторий: <https://gitverse.ru/Nikide/russiano2d>
 Зеркало: <https://gitverse.ru/Nikide/russiano2d>
 
-## SDK
+## Editor
 
-Откройте SDK: `./russiano2d --game sdk`. Исходники создаваемых игр остаются обычными
-файлами; CLI `r2d-sdk[.exe]` использует те же нативные операции, что GUI.
+Откройте Project Manager командой `./r2d` или сразу существующий проект:
+`./r2d edit mygame`. Editor и native tools входят в тот же бинарник `r2d`;
+команды проверки доступны как `./r2d lint mygame` и `./r2d validate mygame`.
+Исходники игр остаются обычными файлами, а запуск игры без Editor —
+`./r2d --game mygame`.
 Для распространения собранной игры сохраните рядом её каталог `lib/`, если он есть.

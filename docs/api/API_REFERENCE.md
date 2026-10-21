@@ -4,7 +4,7 @@
      Source: Russiano2D $ API Registry
      Generator: r2d -->
 
-Engine version: "1.3.2"
+Engine version: "2.0.0"
 
 Entries: 4111
 
@@ -3005,7 +3005,7 @@ Entries: 4111
 | `seek` | function | `(arg0: any, arg1: any) -> any` — перемотка и позиция |
 | `sfxVolume` | function | `(arg0: any) -> any` — только сеттер, геттера нет: вызов без аргумента ничего не читает и возвращает $.sound. Текущий уровень эффектов читается через $.audio |
 | `stems` | function | `(arg0: any, arg1: any) -> any` — музыкальные слои с общим транспортом (§25) |
-| `stemsState` | function | `() -> any` — Состояние музыкальных слоёв ровно в том виде, в каком его отдаёт движок: { count, playing, paused, loopStart, loops, remaining }. Публичная обёртка нужна, чтобы игре не приходилось читать внутренний биндинг engine.audio.stemsState() (пункт H5 отчёта BASHNYA). |
+| `stemsState` | function | `() -> any` — Слои музыки: $.sound.stemsState() — публичное состояние транспорта ({ count, playing, paused, loopStart, loops, remaining }), ровно те же поля, что у внутреннего engine.audio.stemsState(): игре больше не нужно читать биндинг. |
 | `stop` | function | `(arg0: any, arg1: any) -> any` — останавливает ОДИН канал с затуханием в миллисекундах (stop(0, 50)). Без канала останавливает канал 0, а не всё: проверено — после stop() playing(0) = false, playing(1) = true. Остановить всё — $.sound.stopAll(fadeMs) |
 | `stopAll` | function | `(arg0: any) -> any` — управление каналами |
 | `stopMusic` | function | `(arg0: any) -> any` — Останавливает текущий музыкальный трек. |
@@ -3871,7 +3871,7 @@ Entries: 4111
 | `seek` | function | `(arg0: any, arg1: any) -> any` — перемотка и позиция |
 | `sfxVolume` | function | `(arg0: any) -> any` — только сеттер, геттера нет: вызов без аргумента ничего не читает и возвращает $.sound. Текущий уровень эффектов читается через $.audio |
 | `stems` | function | `(arg0: any, arg1: any) -> any` — музыкальные слои с общим транспортом (§25) |
-| `stemsState` | function | `() -> any` — Состояние музыкальных слоёв ровно в том виде, в каком его отдаёт движок: { count, playing, paused, loopStart, loops, remaining }. Публичная обёртка нужна, чтобы игре не приходилось читать внутренний биндинг engine.audio.stemsState() (пункт H5 отчёта BASHNYA). |
+| `stemsState` | function | `() -> any` — Слои музыки: $.sound.stemsState() — публичное состояние транспорта ({ count, playing, paused, loopStart, loops, remaining }), ровно те же поля, что у внутреннего engine.audio.stemsState(): игре больше не нужно читать биндинг. |
 | `stop` | function | `(arg0: any, arg1: any) -> any` — останавливает ОДИН канал с затуханием в миллисекундах (stop(0, 50)). Без канала останавливает канал 0, а не всё: проверено — после stop() playing(0) = false, playing(1) = true. Остановить всё — $.sound.stopAll(fadeMs) |
 | `stopAll` | function | `(arg0: any) -> any` — управление каналами |
 | `stopMusic` | function | `(arg0: any) -> any` — Останавливает текущий музыкальный трек. |
@@ -4339,7 +4339,7 @@ Entries: 4111
 | `WHITE` | number | — |
 | `addShape` | function | `(arg0: any, arg1: any) -> any` |
 | `agent` | boolean | — |
-| `applyImpulse` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Отдача. У узла с телом Box2D это engine.applyImpulse по направлению удара — дальше работает физика (масса, трение, затухание). У узла без тела позиция сдвигается на force · 0.06 пикселей с затуханием за ms, и узел остаётся сдвинутым: движение без физики — дело игры. |
+| `applyImpulse` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `async` | object | — |
 | `audio` | object | — |
 | `basePath` | string | — |
@@ -4349,7 +4349,7 @@ Entries: 4111
 | `bodyGeneration` | function | `(arg0: any) -> any` |
 | `bodyMass` | function | `(arg0: any) -> any` |
 | `bsp` | object | — |
-| `castShape` | function | `(arg0: any) -> any` — маска запроса |
+| `castShape` | function | `(arg0: any) -> any` |
 | `clearClip` | function | `() -> any` |
 | `clearPhysicsErrors` | function | `() -> any` |
 | `clipCount` | function | `() -> any` |
@@ -4358,7 +4358,7 @@ Entries: 4111
 | `contactStay` | function | `(arg0: any) -> any` |
 | `contacts` | function | `() -> any` |
 | `contactsOf` | function | `(arg0: any, arg1: any) -> any` |
-| `createBody` | function | `(arg0: any) -> any` — Для каждого тела вызывается engine.createBody с прямоугольником формы; layerBits/mask/group/oneWay/oneWayAngle/sensor передаются как есть. Полигоны и наклонные формы через таблицу пока не выражаются: локальная геометрия — только axis-aligned прямоугольники (одна клетка может дать несколько тел). |
+| `createBody` | function | `(arg0: any) -> any` |
 | `createJoint` | function | `(arg0: any) -> any` |
 | `createSprite` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
 | `cursorVisible` | function | `(arg0: any) -> any` |
@@ -4409,13 +4409,13 @@ Entries: 4111
 | `light` | object | — |
 | `lightMap` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `lightMaskPasses` | function | `() -> any` |
-| `limits` | function | `() -> any` — Зачем слияние. Реестр тел динамический (старт 1024, дальше растёт), но каждое тело — это память и работа Box2D, поэтому число тел важно даже без жёсткого потолка. Раньше тела строились по горизонтальным полосам: плотная карта 200×100 просила до 10 000 полос, и часть тайлов оставалась вообще без коллизий — игрок проваливался сквозь пол. Теперь число тел зависит от площади прямоугольников, а не от числа строк; на патологических узорах (диагональная шахматка) срабатывает бюджет engine.limits().bodies_max — см. §19: модуль возвращает failed result и по умолчанию не публикует неполную коллизию. |
+| `limits` | function | `() -> any` |
 | `loadFont` | function | `(arg0: any, arg1: any) -> any` |
 | `loadTexture` | function | `(arg0: any) -> any` |
 | `log` | function | `(arg0: any) -> any` |
 | `markUI` | function | `() -> any` |
 | `markUnlit` | function | `() -> any` |
-| `measureText` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Обе функции внутри зовут нативный engine.measureText (internal/NATIVE.md); игре доступны только они. |
+| `measureText` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `mouseDX` | number | — |
 | `mouseDY` | number | — |
 | `mouseDelta` | function | `() -> any` |
@@ -4425,7 +4425,7 @@ Entries: 4111
 | `mouseX` | number | — |
 | `mouseY` | number | — |
 | `nodes` | object | — |
-| `noise` | object | — — Внутренний нативный backend FastNoiseLite для фасада $.noise; игровые сценарии используют высокоуровневые методы $.noise. |
+| `noise` | object | — |
 | `now` | function | `() -> any` |
 | `oneWayIgnore` | function | `(arg0: any) -> any` |
 | `padAxis` | function | `(arg0: any) -> any` |
@@ -4444,30 +4444,30 @@ Entries: 4111
 | `pixel_height` | number | — |
 | `pixel_width` | number | — |
 | `postSupported` | function | `() -> any` |
-| `profile` | function | `() -> any` — Профиль остаётся машиночитаемым: engine.profile() отдаёт zones, frame_ms и gpu_available/gpu_ms; GPU-время называется GPU-временем только если timestamp'ы действительно сняты, иначе поле остаётся пустым, а не подменяется CPU-временем. |
+| `profile` | function | `() -> any` |
 | `profileEnabled` | function | `(arg0: any) -> any` |
 | `profileReset` | function | `() -> any` |
 | `queryBox` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
-| `queryCircle` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` — Первые n узлов выборки. n <= 0, NaN, нечисло — пустая выборка; Infinity — вся выборка. Ограничение режет УЖЕ отфильтрованный результат: оно не ускоряет запрос и не заменяет нативный лимит engine.queryCircle. |
+| `queryCircle` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
 | `queryPoint` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `queryStats` | function | `() -> any` |
 | `quit` | function | `() -> any` |
-| `raycast` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any) -> any` — Без engine.raycast (сборка без физики, юнит-тест) оператор возвращает пустую выборку и один раз пишет диагностику. «Всё видно» было бы выдуманным ответом; если луч не нужен, берите .within(). |
+| `raycast` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any) -> any` |
 | `re2d` | object | — |
 | `readBytes` | function | `(arg0: any) -> any` |
 | `real2d` | object | — |
 | `reloadPending` | function | `() -> any` |
-| `reloadTexture` | function | `(arg0: any, arg1: any) -> any` — { kind: 'texture', path, texture \| resource }. Перезагрузка на месте: engine.reloadTexture читает картинку и заливает её в ту же текстуру — handle не меняется, узлы и спрайты продолжают работать, новых handle'ов не появляется. Смена размера отклоняется (R2D_RELOAD_TEXTURE_SIZE): спрайты хранят uv-прямоугольник, нормированный по старому размеру. |
+| `reloadTexture` | function | `(arg0: any, arg1: any) -> any` |
 | `reloads` | number | — |
 | `renderInfo` | function | `() -> any` |
 | `requestReload` | function | `(arg0: any) -> any` |
-| `rgba` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` — Экспортируются из src/highlevel/particles.js и не требуют движка (кроме цвета — engine.rgba из мока): |
+| `rgba` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
 | `rotSpriteChanged` | function | `(arg0: any) -> any` |
 | `rotSpriteConfig` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
 | `rotSpriteDispose` | function | `(arg0: any) -> any` |
 | `rotSpriteFileStamp` | function | `(arg0: any) -> any` |
 | `rotSpriteInfo` | function | `(arg0: any) -> any` |
-| `rotSpriteLoad` | function | `(arg0: any) -> any` — Низкий уровень: engine.rotSpriteLoad(path), rotSpritePose(handle,yaw,pitch, eyes?,mouth?,brows?), rotSpriteRig(handle,body,phase,stride,armLeft,armRight, headYaw), rotSpritePart(handle,path,mask), rotSpriteChanged(handle), rotSpriteStyle(handle,style), rotSpriteFileStamp(path), rotSpriteInfo(handle), rotSpriteDispose(handle). Игра использует $; masks и файловые stamp — детали обёртки. |
+| `rotSpriteLoad` | function | `(arg0: any) -> any` |
 | `rotSpriteModelPose` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `rotSpritePart` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `rotSpritePose` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
@@ -4481,7 +4481,7 @@ Entries: 4111
 | `setAgentQuery` | function | `(arg0: any) -> any` |
 | `setAngularVelocity` | function | `(arg0: any, arg1: any) -> any` |
 | `setAwake` | function | `(arg0: any, arg1: any) -> any` |
-| `setBodyEnabled` | function | `(arg0: any, arg1: any) -> any` — physics: false вызывает engine.setBodyEnabled(id, false): тело выключено, не падает, не сталкивается и не двигается, его sensor-формы молчат. Это не сон: спящее тело продолжает участвовать в мире и просыпается от толчка. Box2D при выключении обнуляет скорость, поэтому после physics: true тело начнёт движение с нуля — если нужно сохранить импульс, не выключайте тело, а остановите логику (update: false) и обнулите скорость сами. |
+| `setBodyEnabled` | function | `(arg0: any, arg1: any) -> any` |
 | `setBodyFilter` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
 | `setBullet` | function | `(arg0: any, arg1: any) -> any` |
 | `setClearColor` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
@@ -4505,23 +4505,23 @@ Entries: 4111
 | `setSnap` | function | `(arg0: any) -> any` |
 | `setSnapshot` | function | `(arg0: any) -> any` |
 | `setSpriteFilter` | function | `(arg0: any) -> any` |
-| `setTimeScale` | function | `(arg0: any) -> any` — Масштаб принимает только конечные неотрицательные числа: отрицательное и NaN читаются как 0 (полный стоп — так же их трактует C, engine.setTimeScale), Infinity — как потолок SCALE_MAX = 100. Не-конечный множитель ушёл бы в шаг Box2D и вернулся NaN-позициями тел, поэтому потолок стоит до моста в C. |
+| `setTimeScale` | function | `(arg0: any) -> any` |
 | `setUpdate` | function | `(arg0: any) -> any` |
-| `setVelocity` | function | `(arg0: any, arg1: any, arg2: any) -> any` — у узла есть тело — агенту задаётся скорость (engine.setVelocity), тело ведёт физика; тела нет — узел смещается на speed dt за кадр. |
+| `setVelocity` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `shapeCount` | function | `(arg0: any) -> any` |
 | `shapeEnabled` | function | `(arg0: any, arg1: any) -> any` |
-| `shapeOverlaps` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` — engine.shapeOverlaps(body, index, layer, mask, cap) — сырой биндинг: он передаёт фильтр в Box2D как есть, то есть остаётся двусторонним. Публичный .areaOverlap() — поверх него и следует правилу выше; прежнее двустороннее поведение доступно явно: .areaOverlap('hurt', { both: true }). |
+| `shapeOverlaps` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
 | `spriteFilter` | function | `() -> any` |
 | `spriteInfo` | function | `(arg0: any) -> any` |
 | `startScene` | null | — |
 | `submitLightTriangles` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
-| `submitMesh` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Третий аргумент engine.submitMesh — id текстуры (или ничего). С текстурой u/v сэмплят её, а цвет вершин умножается: 255 — «как есть». Раньше меш всегда биндил белую текстуру, поэтому u/v были мертвы и текстурированный псевдо-3D был невозможен. Треугольники собираются своим батчем, рисуются первыми в проходе сцены: меш пишет глубину, спрайты потом по ней проверяются. |
+| `submitMesh` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `submitSprites` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any) -> any` |
 | `submitTriangles` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `textInput` | function | `() -> any` |
-| `textInputArea` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` — IME. Незавершённая композиция (nihao → 你好) приходит событием SDL_EVENT_TEXT_EDITING; сам текст вставляется только по завершении. Окно кандидатов показывается у поля: движку передаётся прямоугольник поля (engine.textInputArea) — без этого кандидаты всплывали в углу окна. |
+| `textInputArea` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
 | `textureAverageColor` | function | `(arg0: any) -> any` |
-| `textureFromPixels` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Сразу пиксели RGBA: серый канал round((value 0.5 + 0.5) 255), альфа 255, зажим в 0..255. Массив годится прямо в engine.textureFromPixels(w, h, pixels). |
+| `textureFromPixels` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `textureList` | function | `() -> any` |
 | `textureSize` | function | `(arg0: any) -> any` |
 | `textureSprites` | function | `(arg0: any) -> any` |
@@ -4539,7 +4539,7 @@ Entries: 4111
 | `userShaderError` | function | `() -> any` |
 | `userShaderPreamble` | function | `() -> any` |
 | `userShadersSupported` | function | `() -> any` |
-| `version` | string | — — ID движка и сборки. Движок отдаёт engine.version (версия проекта из CMake); игру можно уточнить через $.replay.identity({ version, build }) — явное значение важнее. Неизвестное честно помечается null, а не «0.0.0» |
+| `version` | string | — |
 | `viewport` | object | — |
 | `wheel` | number | — |
 | `whiteSprite` | number | — |

@@ -1,0 +1,12 @@
+<rml><head><link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="project.rcss"/><title>Настройки проекта</title></head><body>
+<div class="st-root ps-root">
+ <div class="st-bar">
+  <button id="ps-tab-settings" class="st-btn on">Настройки</button>
+  <button id="ps-tab-json" class="st-btn">JSON</button>
+  <span class="st-grow"></span>
+  <button id="ps-reread" class="st-btn st-hidden">Перечитать</button>
+  <button id="ps-save" class="st-btn primary">Сохранить</button>
+  <span id="ps-state" class="st-pill"></span>
+ </div>
+ <div id="ps-scroll" class="ps-scroll"><div id="ps-body" class="ps-body"></div></div>
+</div></body></rml>

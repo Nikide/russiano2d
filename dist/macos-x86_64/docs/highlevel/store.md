@@ -49,6 +49,10 @@ const hp = $.store.get('hp', 100);    // значение по умолчани�
 | `list(dir)` | пути в каталоге, отсортированы |
 | `remove(path)` | удалить файл (идемпотентно: файла нет — тишина, см. ниже) |
 | `basePath()` | корень, от которого считаются относительные пути |
+| `$.fs.documentsPath()` | системный каталог «Документы» текущего пользователя на этой ОС |
+| `pickFolder(opts?)` | системное окно выбора папки → `Promise<string \| null>` |
+| `pickFile(opts?)` | системное окно выбора файла → `Promise<string \| string[] \| null>` |
+| `saveFile(opts?)` | системное окно «Сохранить как» → `Promise<string \| null>` (сам файл не пишет) |
 
 Чтение сначала проверяет встроенные данные собранной игры, затем файлы на
 диске: каталог выбранного `--game` → корень запуска (`$.fs.basePath()`).
@@ -78,6 +82,34 @@ $.fs.remove('saves');       // каталог непустой → false и од
 
 Успешное удаление тоже молчит. Проверки: `tests/agent/fs_write_failure_test.py`
 (запись и удаление, тишина на успехе).
+
+### Системные окна выбора
+
+`pickFolder`/`pickFile`/`saveFile` открывают окно ОС (SDL3
+`SDL_ShowFileDialogWithProperties`, `src/dialog.c`) и не блокируют кадр:
+ответ приходит в безопасной фазе кадра.
+
+| Опция | Смысл |
+|---|---|
+| `title` | заголовок окна (на части ОС игнорируется) |
+| `path` | где открыть окно (папка или файл) |
+| `filters` | `[{ name: 'Картинки', ext: 'png;jpg' }]`; точки, пробелы и запятые в `ext` убираются; у `pickFolder` не действуют |
+| `many` | только `pickFile`: можно выбрать несколько, ответ — массив |
+
+Ответ — абсолютный путь (или массив при `many`), `null` — пользователь нажал
+«Отмена». Если окно не открылось (нет оконной системы, нет портала на Linux),
+Promise отклоняется ошибкой с `code: 'R2D_FS_DIALOG_FAILED'`, и та же запись
+попадает в `$.debug.errors()` — тихого `null` вместо ошибки нет.
+
+```js
+const dir = await $.fs.pickFolder({ title: 'Папка проекта' });
+if (dir) openProject(dir);
+const png = await $.fs.pickFile({ filters: [{ name: 'PNG', ext: 'png' }] });
+```
+
+Проверки: `tests/js/fs_dialog_test.mjs` (7, контракт обёртки на заглушке).
+Сам системный диалог автоматическим тестом не проверяется — он требует
+пользователя.
 
 ## 3. Атомарная замена, backup и восстановление
 
@@ -180,4 +212,7 @@ $.store.save();     // запишет "schema": 2
 | `$.store.lastFailure()` | `→ object \| null` | последний отказ чтения/записи (код, стадия, файл, схема) |
 | `$.store.schema(cfg?)` | `→ object \| $.store` | игровая схема файла настроек; без аргумента — что объявлено |
 | `$.store.stats()` | `→ object` | `{ file, schema, schema_migrations, loads, saves, backups, recovered, dirty, last_failure }` |
+| `$.fs.pickFolder(opts?)` | `→ Promise<string \| null>` | контракт — `tests/js/fs_dialog_test.mjs` |
+| `$.fs.pickFile(opts?)` | `→ Promise<string \| string[] \| null>` | контракт — `tests/js/fs_dialog_test.mjs` |
+| `$.fs.saveFile(opts?)` | `→ Promise<string \| null>` | контракт — `tests/js/fs_dialog_test.mjs` |
 | `$.fs.writeAtomic(path, data)` | `→ bool` | атомарная замена (temp+fsync+rename) при наличии биндинга; иначе обычная запись |

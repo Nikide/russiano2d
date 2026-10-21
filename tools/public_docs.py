@@ -80,6 +80,8 @@ INTERNAL_DOCS = (
     "docs/re2d/GZDOOM_REFERENCE_RULES.md",
     "docs/re2d/GZDOOM_VISUAL_OBSERVATIONS.md",
     "SDK_HANDOFF.md",
+    "docs/HANDOFF_CODEX.md",
+    "docs/CLAUDE_EDITOR_HANDOFF_2026-10-20.md",
 )
 
 #: Что публикуется на САЙТЕ документации (r2d.nikiniki.ru/doc/). Это ALLOW-LIST,
@@ -149,7 +151,10 @@ def glob_site(*parts: str, pattern: str = "*.md", skip_underscore: bool = False,
 
 #: Что выкидывать из копируемых каталогов (мусор ОС и рабочие файлы).
 PACKAGE_IGNORE = (".DS_Store", "__pycache__", "*.pyc", "*.pyo",
-                  "state.local.json", "native")
+                  "state.local.json", "native", ".env", ".env.*", "*.env",
+                  "*.pem", "*.key", "*.secret", ".claude", ".codex", "secrets",
+                  "*PROMPT*.md", "*prompt*.md", "*HANDOFF*.md", "*handoff*.md",
+                  "NEXT_SESSION.md", "from_agent_to_agent.md")
 
 
 def repo_root() -> Path:

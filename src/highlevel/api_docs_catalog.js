@@ -3108,18 +3108,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "маска запроса"
     },
-    "engine.castShape": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "маска запроса"
-    },
     "$.selection.areaOverlap": {
         "kind": "function",
         "arity": 0,
@@ -3138,34 +3126,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "$.collision.mask(выражение) отдаёт число — его можно передать в ядерные .mask(bits), .collidesWith(bits, false) и так далее."
-    },
-    "engine.shapeOverlaps": {
-        "kind": "function",
-        "arity": 5,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            },
-            {
-                "name": "arg3",
-                "type": "any"
-            },
-            {
-                "name": "arg4",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "engine.shapeOverlaps(body, index, layer, mask, cap) — сырой биндинг: он передаёт фильтр в Box2D как есть, то есть остаётся двусторонним. Публичный .areaOverlap() — поверх него и следует правилу выше; прежнее двустороннее поведение доступно явно: .areaOverlap('hurt', { both: true })."
     },
     "$.collision": {
         "kind": "object",
@@ -3857,61 +3817,17 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "Узлы, которые физически видны из центра цели. Для каждого узла пускается луч engine.raycast от центра цели к центру узла — те же коллизии, маски и мир, что у .ground() и $.world.raycast. Пиксели рендера (камера, спрайты, прозрачность, слои отрисовки) на результат не влияют."
     },
-    "engine.queryCircle": {
+    "$.debug.nativePasses": {
         "kind": "function",
-        "arity": 4,
+        "arity": 1,
         "args": [
             {
                 "name": "arg0",
                 "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            },
-            {
-                "name": "arg3",
-                "type": "any"
             }
         ],
         "returns": "any",
-        "description": "Первые n узлов выборки. n <= 0, NaN, нечисло — пустая выборка; Infinity — вся выборка. Ограничение режет УЖЕ отфильтрованный результат: оно не ускоряет запрос и не заменяет нативный лимит engine.queryCircle."
-    },
-    "engine.raycast": {
-        "kind": "function",
-        "arity": 6,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            },
-            {
-                "name": "arg3",
-                "type": "any"
-            },
-            {
-                "name": "arg4",
-                "type": "any"
-            },
-            {
-                "name": "arg5",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "Без engine.raycast (сборка без физики, юнит-тест) оператор возвращает пустую выборку и один раз пишет диагностику. «Всё видно» было бы выдуманным ответом; если луч не нужен, берите .within()."
+        "description": "нативные проходы кадра (src/nodes.c): синк физики, события мира, наведение, сортировка и сборка батча. false возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (true по умолчанию в движке, false без движка)"
     },
     "$.csv.jsonParse": {
         "kind": "function",
@@ -4464,18 +4380,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "факты о JS-куче: { bytes, used, objects, arrays, strings, atoms, shapes, native_tweens } (QuickJS JS_ComputeMemoryUsage); без движка — null. Растущее objects между кадрами — утечка, а не шум"
     },
-    "$.debug.nativePasses": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "нативные проходы кадра (src/nodes.c): синк физики, события мира, наведение, сортировка и сборка батча. false возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (true по умолчанию в движке, false без движка)"
-    },
     "$.debug.profiler": {
         "kind": "object",
         "description": "покадровый профайлер подсистем: включить (без аргумента), выключить on(false), прочитать состояние"
@@ -4539,26 +4443,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "Читает или задаёт глубину последующих примитивов отрисовки."
-    },
-    "engine.submitMesh": {
-        "kind": "function",
-        "arity": 3,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "Третий аргумент engine.submitMesh — id текстуры (или ничего). С текстурой u/v сэмплят её, а цвет вершин умножается: 255 — «как есть». Раньше меш всегда биндил белую текстуру, поэтому u/v были мертвы и текстурированный псевдо-3D был невозможен. Треугольники собираются своим батчем, рисуются первыми в проходе сцены: меш пишет глубину, спрайты потом по ней проверяются."
     },
     "$.devtools.tab": {
         "kind": "function",
@@ -5383,13 +5267,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "Путь проверяется, а не «чинится молча»: dir — до 4 относительных сегментов [A-Za-z0-9._-], timestamp — одно такое имя без ведущей точки; абсолютные пути, .., ~, : и разделители внутри сегментов отклоняются с { ok: false, path: null, files: [], error } и без единой записи. Отказ $.fs.write (диск только для чтения) возвращает частичный files и текст ошибки с путём — молчания нет."
-    },
-    "engine.profile": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "Профиль остаётся машиночитаемым: engine.profile() отдаёт zones, frame_ms и gpu_available/gpu_ms; GPU-время называется GPU-временем только если timestamp'ы действительно сняты, иначе поле остаётся пустым, а не подменяется CPU-временем."
     },
     "$.diag": {
         "kind": "object",
@@ -6925,26 +6802,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "размер кольца эмиттеров искр, диапазон 1..64 (выше 64 живых эмиттеров больше, чем ударов успевает случиться за кадр, и пул перестаёт экономить узлы). Без аргумента — геттер (по умолчанию 8); $.hits.pool(16) → true, $.hits.pool(99) → false (вне диапазона)"
-    },
-    "engine.applyImpulse": {
-        "kind": "function",
-        "arity": 3,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "Отдача. У узла с телом Box2D это engine.applyImpulse по направлению удара — дальше работает физика (масса, трение, затухание). У узла без тела позиция сдвигается на force · 0.06 пикселей с затуханием за ms, и узел остаётся сдвинутым: движение без физики — дело игры."
     },
     "$.hits": {
         "kind": "object",
@@ -8670,6 +8527,18 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "то же, с ожиданием загрузки и ресурсов (§45)"
     },
+    "$.ui.doc": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "RmlUi-документ: .show() / .hide() / .visible() / .text(id, t) / .html(id, m) / .cls(id, name, add) / .style(id, prop, value) / .on(id, event, fn) → id / .off(id, event, fn?) → снято / .listeners() / .unload()"
+    },
     "$.loading.value": {
         "kind": "function",
         "arity": 0,
@@ -9525,26 +9394,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "1. узлы по селекторам tags (по умолчанию ['wall']) — включая узлы без физического тела, по их габаритам (nodeBounds); 2. все статические/кинематические тела, попавшие в габарит сетки ($.world.bodiesIn) — поэтому препятствием становится и стена без тега <wall>."
     },
-    "engine.setVelocity": {
-        "kind": "function",
-        "arity": 3,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "у узла есть тело — агенту задаётся скорость (engine.setVelocity), тело ведёт физика; тела нет — узел смещается на speed dt за кадр."
-    },
     "$.nav": {
         "kind": "object",
         "description": "(tx, ty) → bool, клеточная занятость"
@@ -10366,26 +10215,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "$.noise.fractals() — список режимов."
     },
-    "engine.textureFromPixels": {
-        "kind": "function",
-        "arity": 3,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "Сразу пиксели RGBA: серый канал round((value 0.5 + 0.5) 255), альфа 255, зажим в 0..255. Массив годится прямо в engine.textureFromPixels(w, h, pixels)."
-    },
     "$.noise": {
         "kind": "object",
         "description": "Набор шумов и фракталов поверх FastNoiseLite (Jordan Peck, MIT): OpenSimplex2, OpenSimplex2S, Perlin, Value, ValueCubic, Cellular (Worley) с метриками расстояния и типами возврата, фракталы fBm/Ridged/PingPong, domain warp. 2D и 3D. Числа считает апстрим — мы не переписывали алгоритмы, поэтому значения совпадают с его эталоном (см. §7)."
@@ -10629,30 +10458,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "то же, что $.particles.inBox"
-    },
-    "engine.rgba": {
-        "kind": "function",
-        "arity": 4,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            },
-            {
-                "name": "arg3",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "Экспортируются из src/highlevel/particles.js и не требуют движка (кроме цвета — engine.rgba из мока):"
     },
     "$.hits.reduced": {
         "kind": "function",
@@ -12294,10 +12099,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "Проверка снимка без исключения"
     },
-    "engine.noise": {
-        "kind": "object",
-        "description": "Внутренний нативный backend FastNoiseLite для фасада $.noise; игровые сценарии используют высокоуровневые методы $.noise."
-    },
     "$.re2dWorld.load": {
         "kind": "function",
         "arity": 1,
@@ -12674,18 +12475,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "отсоединить объект"
     },
-    "engine.rotSpriteLoad": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "Низкий уровень: engine.rotSpriteLoad(path), rotSpritePose(handle,yaw,pitch, eyes?,mouth?,brows?), rotSpriteRig(handle,body,phase,stride,armLeft,armRight, headYaw), rotSpritePart(handle,path,mask), rotSpriteChanged(handle), rotSpriteStyle(handle,style), rotSpriteFileStamp(path), rotSpriteInfo(handle), rotSpriteDispose(handle). Игра использует $; masks и файловые stamp — детали обёртки."
-    },
     "$.real2d.load": {
         "kind": "function",
         "arity": 1,
@@ -12945,34 +12734,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "выводит из эксплуатации старую версию ресурса/узла после перезагрузки; false, если выводить нечего"
-    },
-    "engine.reloadTexture": {
-        "kind": "function",
-        "arity": 2,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "{ kind: 'texture', path, texture | resource }. Перезагрузка на месте: engine.reloadTexture читает картинку и заливает её в ту же текстуру — handle не меняется, узлы и спрайты продолжают работать, новых handle'ов не появляется. Смена размера отклоняется (R2D_RELOAD_TEXTURE_SIZE): спрайты хранят uv-прямоугольник, нормированный по старому размеру."
-    },
-    "$.ui.doc": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "RmlUi-документ: .show() / .hide() / .visible() / .text(id, t) / .html(id, m) / .cls(id, name, add) / .style(id, prop, value) / .on(id, event, fn) → id / .off(id, event, fn?) → снято / .listeners() / .unload()"
     },
     "$.reload.value": {
         "kind": "function",
@@ -13885,10 +13646,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "внутреннее: запись кадра ядром в обход проверки режима; публичный record принимает сборщик ввода, поэтому хук зовёт _push. Используется src/highlevel/replay.js и tests/js/replay_test.mjs"
-    },
-    "engine.version": {
-        "kind": "string",
-        "description": "ID движка и сборки. Движок отдаёт engine.version (версия проекта из CMake); игру можно уточнить через $.replay.identity({ version, build }) — явное значение важнее. Неизвестное честно помечается null, а не «0.0.0»"
     },
     "$.replay": {
         "kind": "object",
@@ -16186,6 +15943,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "файлы банка ПО ЕГО ИМЕНИ (не по индексу); неизвестное имя — []"
     },
+    "$.sound.stemsState": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Слои музыки: $.sound.stemsState() — публичное состояние транспорта ({ count, playing, paused, loopStart, loops, remaining }), ровно те же поля, что у внутреннего engine.audio.stemsState(): игре больше не нужно читать биндинг."
+    },
     "$.sound": {
         "kind": "object",
         "description": "Эффекты, позиционное звучание, музыка. Позиционность приблизительная: SDL_mixer умеет панораму (pan −1..1) и громкость, поэтому «где звучит» вычисляется относительно камеры. Для 2D этого достаточно: источник слева — в левом ухе."
@@ -17142,26 +16906,6 @@ export const API_DOCS_CATALOG = {
         "kind": "object",
         "description": "Мини-фреймворк проверок внутри игры: те же строки ok/FAIL, что печатает агентский прогон, но проверку пишет сама игра (в сценарии или в отладочной ветке). Счётчики копятся до $.test.reset()."
     },
-    "engine.measureText": {
-        "kind": "function",
-        "arity": 3,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "Обе функции внутри зовут нативный engine.measureText (internal/NATIVE.md); игре доступны только они."
-    },
     "$.tilemap.create": {
         "kind": "function",
         "arity": 1,
@@ -18014,13 +17758,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "bit16: N=1, E=2, S=4, W=8 → визуальный тайл base + mask (16 тайлов); blob47: N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128 → тайл base + $.tilemap.blob47Index(mask) (47 форм)."
     },
-    "engine.limits": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "Зачем слияние. Реестр тел динамический (старт 1024, дальше растёт), но каждое тело — это память и работа Box2D, поэтому число тел важно даже без жёсткого потолка. Раньше тела строились по горизонтальным полосам: плотная карта 200×100 просила до 10 000 полос, и часть тайлов оставалась вообще без коллизий — игрок проваливался сквозь пол. Теперь число тел зависит от площади прямоугольников, а не от числа строк; на патологических узорах (диагональная шахматка) срабатывает бюджет engine.limits().bodies_max — см. §19: модуль возвращает failed result и по умолчанию не публикует неполную коллизию."
-    },
     "$.tilemap.tileDef": {
         "kind": "function",
         "arity": 3,
@@ -18040,18 +17777,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "opts.tiles можно задать и на конкретном слое массива layers. Читается дескриптор через $.tilemap.tileDef(tm, id [, layer])."
-    },
-    "engine.createBody": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "Для каждого тела вызывается engine.createBody с прямоугольником формы; layerBits/mask/group/oneWay/oneWayAngle/sensor передаются как есть. Полигоны и наклонные формы через таблицу пока не выражаются: локальная геометрия — только axis-aligned прямоугольники (одна клетка может дать несколько тел)."
     },
     "$.world.bounds": {
         "kind": "function",
@@ -18403,18 +18128,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "снимает метку времени по имени (без имени — все метки), парная к $.time.mark; возвращает $.time"
-    },
-    "engine.setTimeScale": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "Масштаб принимает только конечные неотрицательные числа: отрицательное и NaN читаются как 0 (полный стоп — так же их трактует C, engine.setTimeScale), Infinity — как потолок SCALE_MAX = 100. Не-конечный множитель ушёл бы в шаг Box2D и вернулся NaN-позициями тел, поэтому потолок стоит до моста в C."
     },
     "$.time": {
         "kind": "object",
@@ -18909,22 +18622,6 @@ export const API_DOCS_CATALOG = {
         "args": [],
         "returns": "any",
         "description": "снять ВСЕ наблюдения (смена сцены, тесты): ручки помечаются alive = false; возвращает $.activation"
-    },
-    "engine.setBodyEnabled": {
-        "kind": "function",
-        "arity": 2,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "physics: false вызывает engine.setBodyEnabled(id, false): тело выключено, не падает, не сталкивается и не двигается, его sensor-формы молчат. Это не сон: спящее тело продолжает участвовать в мире и просыпается от толчка. Box2D при выключении обнуляет скорость, поэтому после physics: true тело начнёт движение с нуля — если нужно сохранить импульс, не выключайте тело, а остановите логику (update: false) и обнулите скорость сами."
     },
     "$.triggers": {
         "kind": "object",
@@ -19939,34 +19636,6 @@ export const API_DOCS_CATALOG = {
         "args": [],
         "returns": "any",
         "description": "логический размер / размер в пикселях"
-    },
-    "engine.textInputArea": {
-        "kind": "function",
-        "arity": 5,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            },
-            {
-                "name": "arg3",
-                "type": "any"
-            },
-            {
-                "name": "arg4",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "IME. Незавершённая композиция (nihao → 你好) приходит событием SDL_EVENT_TEXT_EDITING; сам текст вставляется только по завершении. Окно кандидатов показывается у поля: движку передаётся прямоугольник поля (engine.textInputArea) — без этого кандидаты всплывали в углу окна."
     },
     "$.window.title": {
         "kind": "function",
@@ -22002,13 +21671,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "Остановить музыку: то же, что stopMusic(ms), но под очевидным именем — игра ищет именно его (разведка inspector-backend: musicStop не существовал, хотя music/musicPitch/musicPlaying есть)."
-    },
-    "$.sound.stemsState": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "Состояние музыкальных слоёв ровно в том виде, в каком его отдаёт движок: { count, playing, paused, loopStart, loops, remaining }. Публичная обёртка нужна, чтобы игре не приходилось читать внутренний биндинг engine.audio.stemsState() (пункт H5 отчёта BASHNYA)."
     },
     "$.sound.position": {
         "kind": "function",
@@ -32653,6 +32315,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "файлы банка ПО ЕГО ИМЕНИ (не по индексу); неизвестное имя — []"
     },
+    "$.звук.stemsState": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Слои музыки: $.sound.stemsState() — публичное состояние транспорта ({ count, playing, paused, loopStart, loops, remaining }), ровно те же поля, что у внутреннего engine.audio.stemsState(): игре больше не нужно читать биндинг."
+    },
     "$.звук": {
         "kind": "object",
         "description": "Эффекты, позиционное звучание, музыка. Позиционность приблизительная: SDL_mixer умеет панораму (pan −1..1) и громкость, поэтому «где звучит» вычисляется относительно камеры. Для 2D этого достаточно: источник слева — в левом ухе."
@@ -32708,13 +32377,6 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "Остановить музыку: то же, что stopMusic(ms), но под очевидным именем — игра ищет именно его (разведка inspector-backend: musicStop не существовал, хотя music/musicPitch/musicPlaying есть)."
-    },
-    "$.звук.stemsState": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "Состояние музыкальных слоёв ровно в том виде, в каком его отдаёт движок: { count, playing, paused, loopStart, loops, remaining }. Публичная обёртка нужна, чтобы игре не приходилось читать внутренний биндинг engine.audio.stemsState() (пункт H5 отчёта BASHNYA)."
     },
     "$.звук.position": {
         "kind": "function",
@@ -35747,6 +35409,18 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "Смешать значения двух анимационных состояний для интерполяции перехода; не путать с переходом клипов $.animplayer."
     },
+    "$.отладка.nativePasses": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "нативные проходы кадра (src/nodes.c): синк физики, события мира, наведение, сортировка и сборка батча. false возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (true по умолчанию в движке, false без движка)"
+    },
     "$.отладка.draw": {
         "kind": "object",
         "description": "рисование поверх кадра"
@@ -35832,18 +35506,6 @@ export const API_DOCS_CATALOG = {
         "args": [],
         "returns": "any",
         "description": "факты о JS-куче: { bytes, used, objects, arrays, strings, atoms, shapes, native_tweens } (QuickJS JS_ComputeMemoryUsage); без движка — null. Растущее objects между кадрами — утечка, а не шум"
-    },
-    "$.отладка.nativePasses": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "нативные проходы кадра (src/nodes.c): синк физики, события мира, наведение, сортировка и сборка батча. false возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (true по умолчанию в движке, false без движка)"
     },
     "$.отладка.profiler": {
         "kind": "object",

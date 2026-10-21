@@ -157,10 +157,10 @@ Runtime consumption is native and tested:
 Run:
 
 ```bash
-r2d-sdk world compile map.re2dmap --renderer --region-size 256 --output map.re2dworld
+r2d world compile map.re2dmap --renderer --region-size 256 --output map.re2dworld
 # legacy aliases:
-r2d-sdk world-compile map.re2dmap --renderer --output map.re2dworld
-r2d-sdk world info map.re2dmap
+r2d world-compile map.re2dmap --renderer --output map.re2dworld
+r2d world info map.re2dmap
 ```
 
 `world compile` prints a JSON report with a `stageReport`

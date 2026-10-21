@@ -83,17 +83,17 @@ $.ready(() => {
 
 ## 5. Куда дальше
 
-* **[tutorial-first-game.md](https://hub.mos.ru/dem4ev48/russiano2d/-/blob/main/docs/tutorial-first-game.md)**
+* **[tutorial-first-game.md](https://gitverse.ru/Nikide/russiano2d/blob/main/docs/tutorial-first-game.md)**
   — «Моя первая игра»: hello world, меню с кнопками, смена сцен, сборка;
-* [HIGH_LEVEL_API.md](https://hub.mos.ru/dem4ev48/russiano2d/-/blob/main/docs/HIGH_LEVEL_API.md)
+* [HIGH_LEVEL_API.md](https://gitverse.ru/Nikide/russiano2d/blob/main/docs/HIGH_LEVEL_API.md)
   — полный справочник по `$`;
-* [AGENT_API.md](https://hub.mos.ru/dem4ev48/russiano2d/-/blob/main/docs/AGENT_API.md)
+* [AGENT_API.md](https://gitverse.ru/Nikide/russiano2d/blob/main/docs/AGENT_API.md)
   — протокол агента: управлять игрой программой;
-* [docs/highlevel/](https://hub.mos.ru/dem4ev48/russiano2d/-/tree/main/docs/highlevel)
+* [docs/highlevel/](https://gitverse.ru/Nikide/russiano2d/tree/main/docs/highlevel)
   — подсистемы по отдельности: анимация, TileMap, частицы, навигация, UI, твины,
   локализация, HTTP.
 
-Репозиторий: <https://hub.mos.ru/dem4ev48/russiano2d>
+Репозиторий: <https://gitverse.ru/Nikide/russiano2d>
 Зеркало: <https://gitverse.ru/Nikide/russiano2d>
 
 ## Editor

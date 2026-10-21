@@ -114,7 +114,7 @@ TITLES = {
 # Evidence groups: each value must exist (file, dir, or glob). The matrix names
 # groups to stay readable; this table is the concrete file list.
 GROUPS = {
-    "policy": ["docs/HANDOFF_VN_RENDER_ROADMAP.md", "docs/RE2D.md", "AGENTS.md"],
+    "policy": ["docs/PHILOSOPHY.md", "docs/RE2D.md", "AGENTS.md"],
     "vn_core": ["src/highlevel/dialog.js", "docs/VN_NARRATIVE.md", "docs/highlevel/dialog.md"],
     "vn_view": ["src/highlevel/dialog_view.js", "src/highlevel/dialog_theme.js",
                 "docs/highlevel/dialog_theme.md", "docs/highlevel/dialog_view.md"],
@@ -174,7 +174,7 @@ GROUPS = {
                      "tests/re2d", "tests/js"],
     "debug": ["docs/RE2D_DEBUG_VIEWS.md", "tests/agent/re2d_budget_test.py",
               "src/highlevel/re2d.js"],
-    "handoff": ["docs/HANDOFF_VN_RENDER_ROADMAP.md"],
+    "handoff": ["docs/VN_NARRATIVE.md", "docs/RE2D_RENDER_FEATURES.md"],
     "openworld": ["demos/re2d_openworld_lab"],
     "automap": ["src/re2d_world_automap.c", "tests/re2d/automap_test.c"],
     "nav": ["src/re2d_world_nav.c", "tests/re2d/nav_test.c"],

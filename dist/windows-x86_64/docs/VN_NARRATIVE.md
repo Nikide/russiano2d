@@ -183,13 +183,15 @@ story — gameplay state и presentation разделены.
 ## Native validation
 
 ```bash
-r2d-sdk story validate story/            # labels/goto/speakers/expressions/assets/i18n/theme/loops
-r2d-sdk dialog validate ui/dialog/vn.rml # semantic roles, tag balance, RCSS/font files
+r2d story validate story/            # labels/goto/speakers/expressions/assets/i18n/theme/loops
+r2d dialog validate ui/dialog/vn.rml # semantic roles, tag balance, RCSS/font files
 ```
 
 `story validate` ищет `speakers.json` (`story/speakers.json` или рядом с
 каталогом), `i18n/*.json` и проверяет ссылки ассетов относительно каталога
-(или `--assets-root`). Оба валидатора — нативный C и один backend для
+(или `--assets-root`). `image <путь> [секунды]` проверяет только путь; `image off [секунды]`
+не требует файла. Это тот же синтаксис, что у runtime.
+Оба валидатора — нативный C и один backend для
 CLI/GUI/agent.
 
 ## Inspector

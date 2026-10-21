@@ -54,6 +54,7 @@ $.update(dt => {
 |---|---|
 | `$.ready(fn)` | один раз, на первом кадре (после `$` создан) |
 | `$.update(fn)` | каждый кадр; `fn(dt, $)` |
+| `$.updateFor(node, fn)` | каждый кадр, пока узел жив; `fn(dt, node, $)`; возвращает disposer, подписка снимается сама при удалении узла |
 | `$.render(fn)` | каждый кадр перед отрисовкой мира |
 | `$.exit(fn)` | при завершении движка |
 
@@ -254,6 +255,7 @@ $('#hero').h              // → 40
 .scale(1.5) / .scale(sx, sy)
 .lookAt('#hero')           // повернуться к цели
 .flip(true, false)         // отразить по осям
+.flip()                    // → { x, y }: отражён ли узел (направление взгляда)
 .layer(2) .depth(z)        // порядок отрисовки
 .depthRelative(true)       // depth СКЛАДЫВАЕТСЯ с родителем
 .distanceTo('#enemy')      // → число
@@ -592,13 +594,16 @@ $('<player>', { id: 'hero' }).at(100, 300)
 .hp() / .hp(50)     // прочитать / задать
 .maxHp(120)
 .damage(10) .heal(5) .kill() .respawn(x, y)
+.damage(10, source, 'fire')   // источник и тип урона (по умолчанию 'normal')
+.damageFilter(info => info.amount - 2)   // броня/щит: fn({ amount, raw, type, source }) → число; возвращает disposer
 .alive()            // → bool
 .team(2)            // своя команда
 .invulnerable(500)  // неуязвимость на 500 мс
 ```
 
 При изменении здоровья мир сам рассылает события `hit`, `heal`, `death`,
-`respawn`, `show`/`hide`.
+`respawn`, `show`/`hide`. Сам вызов `.damage()` сразу шлёт `damaged` с
+`{ amount, raw, type, source }` — итог после фильтров `.damageFilter`.
 
 ## 10. События
 
@@ -822,6 +827,7 @@ $.input.on('key', e => { })            // e.key, e.pressed, e.shift/ctrl/alt
 $.input.on('mouse', e => { }) .on('wheel', e => { }) .on('gamepadOn', e => { })
 $.input.off()
 $.input.text()                         // символы, набранные за этот кадр
+$.input.clipboard() .setClipboard('x') // системный буфер обмена (текст | null / bool)
 
 // Контексты ввода (§15): приоритет решает, кому достанется нажатие.
 $.input.context('menu', { active: false, priority: 20, binds: { confirm: ['space'] } })
@@ -1582,7 +1588,7 @@ $.update(() => {
 | Локализация на ходу: подписка, пропавшие ключи, числа (§16) | `$.i18n.onChange`, `$.i18n.missing`, `$.i18n.number` | — | [i18n.md](highlevel/i18n.md) §4.1 |
 | Маркеры, skip и возврат камеры/звука в катсцене (§16) | `$.timeline.markers`, `$.timeline.skipAll` | — | [timeline.md](highlevel/timeline.md) §3.6 |
 | Психика NPC и режиссёр рейда: страх, срывы, давление | `$.alive` | — | [alive.md](highlevel/alive.md) |
-| Сеть, только авторитарная: id, владение, снапшоты | `$.net` | — | [net.md](highlevel/net.md) |
+| Multiplayer: ENet, authoritative/mesh/relay, синхронизация `$`-сущностей и комнаты | `$.net` | — | [net.md](highlevel/net.md) |
 | Время, окно, файлы, сцены, ввод, мир, камера, интерфейс, звук, BSP | `$.time`, `$.window`, `$.fs`, `$.scene`, `$.input`, `$.world`, `$.camera`, `$.ui`, `$.sound`, `$.world.bsp` | — | [time](highlevel/time.md), [window](highlevel/window.md), [store](highlevel/store.md), [scene](highlevel/scene.md), [input](highlevel/input.md), [world](highlevel/world.md), [camera](highlevel/camera.md), [ui](highlevel/ui.md), [sound](highlevel/sound.md), [bsp](highlevel/bsp.md), [replay](highlevel/replay.md) |
 | Текст в сцене и шрифты: растеризация глифов, атлас, семейства | `$.font.load`, `.font()`, `<text>` | — | [text.md](highlevel/text.md) |
 

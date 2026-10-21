@@ -2671,15 +2671,15 @@ job CI), у каждого незакрытого пункта — причин�
 
 ## Build
 
-- [x] Windows x86_64 собирается локально — `tools/release_build.sh` (Xmake + Zig cross)
-- [x] Linux x86_64 собирается локально — `tools/release_build.sh` (Xmake + Zig cross)
-- [x] Linux ARM64 — явно вне релизной матрицы (macOS arm64/x86_64, Linux x86_64, Windows x86_64) — `tools/release_build.sh`
-- [x] macOS собирается локально на рабочем Mac — `tools/autobuild.py` + `tests/macos_package_smoke_test.py`
-- [x] macOS clean build проходит — `tests/macos_package_smoke_test.py` (чистая сборка в build-macos-clean)
-- [x] macOS package smoke проходит — `tests/macos_package_smoke_test.py`
-- [x] RE2D ON — `tools/ci_verify.py`
-- [x] RE2D OFF — `tools/ci_verify.py`
-- [x] `deploy_and_push` не содержит Linux build/package — `tests/release_ownership_test.py`
+- [x] Windows x86_64 cross-build настроен — `tools/release_build.sh` (Xmake + MinGW)
+- [x] Linux x86_64 opt-in cross-build настроен; по умолчанию платформа собирается на целевой ОС — `tools/release_build.sh`
+- [x] Релизная матрица соответствует пакетам macOS arm64/x86_64 и Windows x86_64 — `tools/release_build.sh`
+- [x] macOS собирается локально на рабочем Mac — `tools/release_build.sh`
+- [x] Архивы проверяются перед публикацией — `tools/ci_package_check.py`
+- [x] Xmake native test targets запускаются release gate — `tools/release_tests.sh`
+- [x] Linux Xmake CI gate настроен — `.github/workflows/ci.yml`
+- [x] Windows MinGW Xmake CI gate настроен — `.github/workflows/ci.yml`
+- [x] release ownership and hosting targets are checked — `tests/release_ownership_test.py`
 
 ## Core
 
@@ -2756,17 +2756,17 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] tag `vX.Y.Z` соответствует версии проекта — проверка в `build_and_push` до тега — `tools/release.py`
 - [x] GitHub Release создаётся локально — `tools/release_publish.py`
 - [x] Release создаётся ровно один раз — `tests/release_ownership_test.py`
-- [x] Windows artifact собирается локально — `tools/release_build.sh`
-- [x] Linux artifact собирается локально — `tools/release_build.sh`
-- [x] macOS artifact приходит из локальной Mac-сборки — `tools/attach_macos_release.py`
+- [x] Windows x86_64 artifact собирается локально через MinGW — `tools/release_build.sh`
+- [x] Linux artifact собирается на целевой ОС; Zig cross-build opt-in — `tools/release_build.sh`
+- [x] macOS arm64/x86_64 artifacts собираются release host'ом — `tools/release_build.sh`
 - [x] локальный script не создаёт GitHub Release — `tests/release_ownership_test.py`
 - [x] `SHA256SUMS` опубликован — `tools/release.py`
 - [x] reproducible package — `tools/agents_doc.py` — детерминированная перепаковка через `release.write_archive`
 - [x] licenses — `tools/release.py` — лицензии входят в пакет, проверяет `tests/agent/sdk_package_test.py`
 - [x] docs match runtime — `tests/doc_claims_test.py`
 - [x] no P0 defects — §6.3 закрыт: сползание на склоне 30° без ввода не больше 1 px за 120 кадров (после правки измерено 0.000 px) и не больше 2 px за 600 кадров, `tests/agent/slope_hold_test.py` + `tests/agent/highlevel_physics_slopes_test.py`
-- [x] Windows/Linux CI green — `.github/workflows/ci.yml` (валидация), релизные артефакты собираются локально
-- [x] локальный macOS acceptance green — `tests/macos_package_smoke_test.py` + полный локальный набор `tools/run_tests.py`
-- [x] API freeze удалён 2026-10-21 — публичная поверхность свободно меняется при перестройке движка; schema генерируется из текущего runtime API.
+- [x] Windows/Linux Xmake CI jobs определены — `.github/workflows/ci.yml`
+- [x] macOS package contents проходят validator — `tools/ci_package_check.py`
+- [x] API schema, typings и reference проходят sync check — `tests/api_docs_sync_test.py`
 
 ---

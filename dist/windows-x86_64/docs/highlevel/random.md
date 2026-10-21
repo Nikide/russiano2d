@@ -94,6 +94,8 @@ const x = $.random.range(0, arena.w);
 
 ## 2. Шум
 
+| `engine.noise` | Внутренний нативный backend FastNoiseLite для фасада `$.noise`; игровые сценарии используют высокоуровневые методы `$.noise`. |
+
 > Полноценный комплект шумов для генерации миров, текстур и тайлмапов живёт в
 > отдельном пространстве имён — [`$.noise`](noise.md): OpenSimplex2/2S, Perlin,
 > Value, ValueCubic, Cellular (Worley) с метриками и типами возврата, фракталы

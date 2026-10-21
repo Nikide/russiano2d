@@ -6,7 +6,7 @@
 -- ===========================================================================
 set_project("russiano2d")
 -- Keep in sync with VERSION; tools/release.py validates both values.
-local version = "1.3.2"
+local version = "2.0.0"
 set_version(version)
 set_license("MIT")
 add_rules("mode.release")
@@ -344,6 +344,10 @@ add_requires("libsdl3_image", {system = false})
 add_requires("libsdl3_mixer 3.2.4", {system = false})
 if is_plat("macosx") then
     add_requires("libcurl", {system = false})
+    -- Homebrew OpenSSL 4 removes legacy ENGINE symbols still referenced by
+    -- libcurl's OpenSSL backend. Keep the transitive dependency on pinned,
+    -- Xmake-built OpenSSL 3 instead of resolving it from the host.
+    add_requireconfs("libcurl.openssl3", {override = true, version = "3.6.5", system = false})
 end
 if is_plat("macosx") then
     add_requires("glslang", {system = false})

@@ -173,7 +173,7 @@ holdRifle — изготовка вперёд, оба хвата проверя�
 
 ## Проверка без движка
 
-`build/r2d-sdk validate <файл>.character.json` проверяет описание теми же
+`R2D_BINARY validate <файл>.character.json` проверяет описание теми же
 правилами, что рантайм (`validateRotDefinition`, `validateRotAnimations`), плюс
 PNG v2: размер, заголовок, карты, части без отсчётов, дыры и скачки XYZ.
 Ответ — JSON со стабильными кодами `SDK_RE2D_*` ([SDK.md](SDK.md) §6).

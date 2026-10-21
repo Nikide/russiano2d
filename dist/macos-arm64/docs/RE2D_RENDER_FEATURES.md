@@ -431,8 +431,8 @@ spire.
 ```sh
 python3 tools/gen_p5_asset_packs.py          # deterministic regeneration
 python3 tools/gen_p5_asset_packs.py --check  # repo assets match generator
-./build/r2d-sdk atlas-info assets/sprites/ultra16/warden_ultra16.atlas.json
-./build/r2d-sdk atlas-info assets/sprites/ultra16/turret_ultra16.atlas.json
+"$R2D_BINARY" atlas-info assets/sprites/ultra16/warden_ultra16.atlas.json
+"$R2D_BINARY" atlas-info assets/sprites/ultra16/turret_ultra16.atlas.json
 python3 tests/agent/re2d_p5_asset_packs_test.py
 ```
 

@@ -1,0 +1,25 @@
+/* Atlas Studio */
+.at-idx { display: inline-block; width: 26px; color: #6b7280; }
+.at-fr { position: absolute; border-width: 1px; border-color: #5f8fd0; background-color: rgba(95, 143, 208, 20); }
+.at-fr.sel { border-color: #ffb03a; background-color: rgba(255, 176, 58, 35); }
+.at-fr-n { position: absolute; left: 2px; top: 1px; font-size: 10px; color: #dbe7f6; }
+.at-pivot { position: absolute; width: 8px; height: 8px; border-width: 1px; border-color: #ff6b9d; background-color: rgba(255, 107, 157, 90); border-radius: 5px; }
+.at-pivot.sel { border-color: #ffffff; background-color: #ff6b9d; }
+.at-drag { position: absolute; border-width: 1px; border-color: #4ad991; background-color: rgba(74, 217, 145, 35); }
+
+.at-strip { display: block; flex: 0 0 auto; padding: 6px 10px; background-color: #1b1e24; border-top: 1px #2a2f39; }
+.at-strip-row { display: flex; flex-direction: row; align-items: center; margin-bottom: 4px; }
+.at-strip-row > * { flex: 0 0 auto; }
+.at-strip-row .st-grow { flex: 1 1 0; }
+.at-thumbs { display: block; height: 84px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
+.at-thumb {
+    display: inline-block; width: 64px; height: 76px; margin-right: 5px; padding: 2px; vertical-align: top; text-align: center; cursor: pointer;
+    background-color: #14161b; border-width: 1px; border-color: #2f3440; border-radius: 4px;
+}
+.at-thumb.on { border-color: #3b82f6; background-color: #1f3a5f; }
+.at-thumb img { display: block; margin: 0px auto; }
+.at-thumb-n { display: block; font-size: 10px; color: #8b93a3; }
+.at-conflict { display: flex; position: absolute; z-index: 80; left: 0px; top: 0px; width: 100%; height: 100%; align-items: center; justify-content: center; }
+.at-conflict-shade { display: block; position: absolute; left: 0px; top: 0px; width: 100%; height: 100%; background-color: rgba(4, 6, 10, 180); }
+.at-conflict-card { display: block; position: relative; width: 520px; max-width: 90%; padding: 20px; background-color: #20242b; border-width: 1px; border-color: #4a5260; border-radius: 8px; }
+.at-conflict-path { display: block; margin-top: 8px; color: #9dc9ff; font-family: Roboto Mono; white-space: normal; }

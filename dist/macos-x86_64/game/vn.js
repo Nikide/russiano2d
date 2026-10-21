@@ -20,7 +20,7 @@
 //   * HUD: «руси-метр», подсказки управления, авто-режим и быстрый пропуск.
 //
 // Запуск:
-//   ./build/russiano2d --game demos --scene russi_vn
+//   ./build/russiano2d --game game_vn
 //   ./build/russiano2d --game demos            # кнопка «Руси-тян (ВН)»
 //
 // Свою новеллу на этом модуле собрать просто: см. README.md рядом с этим

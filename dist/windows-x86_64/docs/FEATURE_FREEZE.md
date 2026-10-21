@@ -1,4 +1,8 @@
-# Feature Freeze — базовый движок закончен
+# Архив: Feature Freeze от 2026-10-20
+
+> **Архив.** Решение о feature freeze и ограничения на развитие `$` API отменены
+> 2026-10-21 из-за полной перестройки движка. Текст ниже фиксирует состояние
+> на дату документа и не задаёт текущие требования.
 
 Дата: **2026-10-20**. База: **v1.3.0**. FINAL ENGINE PASS завершён без нового
 тега и без публикации релиза.
@@ -58,9 +62,8 @@ MAKE A REAL GAME
   tilemap terrain/anim, font weight и drift-тесты.
 * `tools/ci_verify.py --build-dir build` — RE2D=on, API/schema/typings/docs
   up to date, project+lint без ошибок.
-* API freeze: **3254 имени**, снимок обновлён осознанно; `api_docs_sync` —
-  каждое публичное имя задокументировано (0 в allowlist); wrapper methods
-  105/105; schema/d.ts/API reference перегенерированы (4101 имя).
+* На дату документа существовали API snapshot-гейты. Они удалены 2026-10-21;
+  новые и изменённые имена теперь описываются актуальной генерируемой схемой.
 * Пакет macOS arm64 собран штатной release-тулзой, `ci_package_check`
   зелёный; распакованный вне checkout пакет: 465/465 checksums, CLI/templates/
   new/validate/run/build/doctor работают.

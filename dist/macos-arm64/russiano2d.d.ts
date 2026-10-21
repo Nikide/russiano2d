@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT MANUALLY
 // Source: Russiano2D $ API Registry
-// Generator: r2d-sdk
-// Run: r2d-sdk api generate
+// Generator: r2d
+// Run: r2d api generate
 
 declare interface R2DNode {
     [key: string]: any;
@@ -68,6 +68,7 @@ declare interface R2DNode {
     controls(arg0: any): any;
     count(): any;
     damage(arg0: any, arg1: any): any;
+    damageFilter(arg0: any): any;
     data(arg0: any, arg1: any): any;
     delay(arg0: any): any;
     depth(arg0: any): any;
@@ -165,6 +166,7 @@ declare interface R2DNode {
     navPath(): any;
     navTarget(): any;
     navigateTo(arg0: any, arg1: any): any;
+    net(arg0: any): any;
     nid(): any;
     not(arg0: any): any;
     occluderMask(arg0: any): any;
@@ -679,6 +681,7 @@ interface R2D_csv {
 interface R2D_ctx {
     $(arg0: any, arg1: any): any;
     _clip: Record<string, any>;
+    _netStep(arg0: any): any;
     _stopSceneSound(arg0: any): any;
     agent: Record<string, any>;
     alive: Record<string, any>;
@@ -1081,6 +1084,7 @@ interface R2D_fn {
     controls(arg0: any): any;
     count(): any;
     damage(arg0: any, arg1: any): any;
+    damageFilter(arg0: any): any;
     data(arg0: any, arg1: any): any;
     delay(arg0: any): any;
     depth(arg0: any): any;
@@ -1178,6 +1182,7 @@ interface R2D_fn {
     navPath(): any;
     navTarget(): any;
     navigateTo(arg0: any, arg1: any): any;
+    net(arg0: any): any;
     nid(): any;
     not(arg0: any): any;
     occluderMask(arg0: any): any;
@@ -1377,11 +1382,15 @@ interface R2D_font {
 
 interface R2D_fs {
     basePath(): any;
+    documentsPath(): any;
     exists(arg0: any): any;
     list(arg0: any): any;
+    pickFile(arg0: any): any;
+    pickFolder(arg0: any): any;
     readJSON(arg0: any, arg1: any): any;
     readText(arg0: any): any;
     remove(arg0: any): any;
+    saveFile(arg0: any): any;
     write(arg0: any, arg1: any): any;
     writeAtomic(arg0: any, arg1: any): any;
     writeJSON(arg0: any, arg1: any): any;
@@ -1553,6 +1562,7 @@ interface R2D_input {
     bind(arg0: any, arg1: any): any;
     bindings(): any;
     cancelWaits(arg0: any): any;
+    clipboard(): any;
     conflicts(arg0: any, arg1: any): any;
     consume(arg0: any): any;
     consumed(): any;
@@ -1570,6 +1580,7 @@ interface R2D_input {
     glyphs(arg0: any): any;
     hardLocked(): any;
     hardLocks(): any;
+    ime(): any;
     loadBindings(): any;
     lock(arg0: any, arg1: any, arg2: any): any;
     lockCount(): any;
@@ -1602,6 +1613,7 @@ interface R2D_input {
     rumble(arg0: any): any;
     rumbleSupported(): any;
     saveBindings(): any;
+    setClipboard(arg0: any): any;
     shiftDown(): any;
     stopRumble(): any;
     stuck(): any;
@@ -1613,6 +1625,7 @@ interface R2D_input {
     synthSeen(): any;
     taken(): any;
     text(): any;
+    textInputArea(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any): any;
     touch(arg0: any): any;
     touchCount(): any;
     touched(): any;
@@ -1780,73 +1793,48 @@ interface R2D_nav {
 }
 
 interface R2D_net {
-    addPlayer(): any;
-    apply(arg0: any): any;
+    acknowledge(arg0: any, arg1: any): any;
     applyInput(arg0: any): any;
-    applySnapshot(arg0: any, arg1: any): any;
-    attach(arg0: any): any;
-    bindEngine(): any;
-    confirmed(): any;
-    createAuthority(): any;
-    createClientState(): any;
-    createHistory(arg0: any, arg1: any): any;
-    createIdTable(arg0: any): any;
-    createInputQueue(arg0: any, arg1: any): any;
-    createPrediction(arg0: any): any;
-    decodeMessage(arg0: any): any;
+    authority(arg0: any): any;
+    available(): any;
+    broadcast(arg0: any, arg1: any, arg2: any): any;
+    connect(arg0: any, arg1: any, arg2: any): any;
     delayed(): any;
-    deltaFrom(arg0: any): any;
     describe(): any;
-    diffSnapshot(arg0: any, arg1: any, arg2: any): any;
-    emit(arg0: any): any;
-    encodeMessage(arg0: any): any;
-    engineBound(): any;
-    get(arg0: any, arg1: any): any;
-    history(): any;
+    disconnect(arg0: any): any;
+    entities(): any;
+    handle(arg0: any, arg1: any): any;
     host(arg0: any, arg1: any): any;
-    idOf(arg0: any): any;
-    interpolate(arg0: any, arg1: any, arg2: any): any;
-    isClient(): any;
-    isServer(): any;
+    input(arg0: any, arg1: any): any;
+    interpolationDelay(arg0: any): any;
+    isAuthority(): any;
     join(arg0: any, arg1: any, arg2: any): any;
-    lastChannel(): any;
-    latency(): any;
     leave(): any;
-    nextInput(): any;
-    nodeOfId(arg0: any): any;
+    listen(arg0: any, arg1: any): any;
     off(arg0: any, arg1: any): any;
     on(arg0: any, arg1: any): any;
     online(): any;
-    ownedBy(arg0: any): any;
-    ownerOf(arg0: any): any;
-    owns(arg0: any, arg1: any): any;
+    peer(arg0: any): any;
     peers(): any;
-    ping(arg0: any): any;
-    pings(): any;
     playerCount(): any;
-    polated(arg0: any, arg1: any, arg2: any): any;
-    poll(): any;
     port(): any;
     predict(arg0: any): any;
     prediction(): any;
-    previous(): any;
-    receive(arg0: any): any;
-    record(arg0: any): any;
-    removePlayer(arg0: any): any;
+    relay: Record<string, any>;
     replicate(arg0: any, arg1: any): any;
     reset(): any;
-    rewind(arg0: any, arg1: any, arg2: any): any;
-    role(): any;
-    rtt(): any;
-    sameValue(arg0: any, arg1: any, arg2: any): any;
+    room: Record<string, any>;
+    rpc(arg0: any, arg1: any, arg2: any): any;
     send(arg0: any, arg1: any): any;
     simulate(arg0: any): any;
-    simulateOff(): any;
     simulation(): any;
-    snapshotNow(): any;
+    start(arg0: any): any;
     stats(): any;
+    status(): any;
+    syncRate(arg0: any): any;
     tick(): any;
-    transport(): any;
+    topology(arg0: any): any;
+    unhandle(arg0: any): any;
     unreplicate(arg0: any): any;
 }
 
@@ -2715,6 +2703,7 @@ interface R2D_ui {
     listRange(arg0: any): any;
     listScroll(arg0: any, arg1: any): any;
     listScrollBy(arg0: any, arg1: any): any;
+    markup(arg0: any, arg1: any): any;
     modalContext(): any;
     modalOpen(): any;
     persist(): any;
@@ -2735,6 +2724,7 @@ interface R2D_ui {
     tr(arg0: any, arg1: any, arg2: any): any;
     trList(): any;
     transient(): any;
+    typing(): any;
     unbind(arg0: any): any;
 }
 
@@ -2958,6 +2948,7 @@ interface R2D_________ {
     bind(arg0: any, arg1: any): any;
     bindings(): any;
     cancelWaits(arg0: any): any;
+    clipboard(): any;
     conflicts(arg0: any, arg1: any): any;
     consume(arg0: any): any;
     consumed(): any;
@@ -2975,6 +2966,7 @@ interface R2D_________ {
     glyphs(arg0: any): any;
     hardLocked(): any;
     hardLocks(): any;
+    ime(): any;
     loadBindings(): any;
     lock(arg0: any, arg1: any, arg2: any): any;
     lockCount(): any;
@@ -3007,6 +2999,7 @@ interface R2D_________ {
     rumble(arg0: any): any;
     rumbleSupported(): any;
     saveBindings(): any;
+    setClipboard(arg0: any): any;
     shiftDown(): any;
     stopRumble(): any;
     stuck(): any;
@@ -3018,6 +3011,7 @@ interface R2D_________ {
     synthSeen(): any;
     taken(): any;
     text(): any;
+    textInputArea(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any): any;
     touch(arg0: any): any;
     touchCount(): any;
     touched(): any;
@@ -3215,6 +3209,7 @@ interface R2D___________________ {
     listRange(arg0: any): any;
     listScroll(arg0: any, arg1: any): any;
     listScrollBy(arg0: any, arg1: any): any;
+    markup(arg0: any, arg1: any): any;
     modalContext(): any;
     modalOpen(): any;
     persist(): any;
@@ -3235,6 +3230,7 @@ interface R2D___________________ {
     tr(arg0: any, arg1: any, arg2: any): any;
     trList(): any;
     transient(): any;
+    typing(): any;
     unbind(arg0: any): any;
 }
 
@@ -3681,6 +3677,7 @@ declare interface R2DGlobal {
     tweens(): any;
     ui: R2D_ui;
     update(arg0: any): any;
+    updateFor(arg0: any, arg1: any): any;
     vec(arg0: any, arg1: any): any;
     version(): any;
     vfx: R2D_vfx;

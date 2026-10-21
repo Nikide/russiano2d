@@ -94,8 +94,8 @@ if [ "$DRY_RUN" = "1" ]; then
     exit 0
 fi
 
-# Порядок как в релизном плане; каждый таргет обязан собраться.
-build_target macos-arm64   "-p macosx -a arm64"
+# Native arm64 собирается последним: следующие xmake tests должны
+# собираться и запускаться на Mac, а не в последней cross-конфигурации.
 build_target macos-x86_64  "-p macosx -a x86_64"
 # Linux x86_64 исключён из локального релиза: Zig-кросс на этой машине
 # зависает. Linux-пользователи собирают движок на своей ОС; вернуть в релиз —
@@ -107,6 +107,7 @@ else
 fi
 # Windows: Homebrew mingw-w64 (GCC) — Zig cc не умеет windres/windows.h для RC.
 build_target windows-x86_64 "-p mingw -a x86_64"
+build_target macos-arm64   "-p macosx -a arm64"
 
 echo
 if [ "${R2D_BUILD_LINUX:-0}" = "1" ]; then
