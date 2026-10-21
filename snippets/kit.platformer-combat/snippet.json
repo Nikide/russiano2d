@@ -1,0 +1,43 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.platformer-combat",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: бой в платформере"
+  },
+  "description": {
+    "ru": "Здоровье, вспышка, неуязвимость и тряска камеры при уроне."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "health.base"
+    },
+    {
+      "id": "health.hit-flash"
+    },
+    {
+      "id": "health.invulnerability"
+    },
+    {
+      "id": "camera.screen-shake"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор",
+    "бой"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

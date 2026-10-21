@@ -7,9 +7,9 @@
       "format": 1,
       "status": "current",
       "sources": [
-        {"path": "generated//snippets//index.js", "hash": "f82a4304df204898"},
-        {"path": "generated//snippets//packages//movement.topdown.js", "hash": "be4e94451615066a"},
-        {"path": "generated//snippets//packages//visual.sprite.js", "hash": "e78d04e3405b6c16"},
+        {"path": "generated/snippets/index.js", "hash": "503bd9b05162471c"},
+        {"path": "generated/snippets/packages/actor.visual-profile.js", "hash": "14883c070cc9f176"},
+        {"path": "generated/snippets/packages/movement.top-down.js", "hash": "e786da82f613c9d9"},
         {"path": "main.js", "hash": "f6c1be94cbbe8ded"}
       ],
       "diagnostics": [],
@@ -18,9 +18,9 @@
         {"key": "world:main", "type": "world", "label": "World", "runtime_root": "$.world", "origin": "code"}
       ],
       "entities": [
-        {"key": "script:generated//snippets//index.js", "area": "project:main", "type": "script", "origin": "code", "path": "generated//snippets//index.js", "source": {"file": "generated//snippets//index.js", "line": 1}},
-        {"key": "script:generated//snippets//packages//movement.topdown.js", "area": "project:main", "type": "script", "origin": "code", "path": "generated//snippets//packages//movement.topdown.js", "source": {"file": "generated//snippets//packages//movement.topdown.js", "line": 1}},
-        {"key": "script:generated//snippets//packages//visual.sprite.js", "area": "project:main", "type": "script", "origin": "code", "path": "generated//snippets//packages//visual.sprite.js", "source": {"file": "generated//snippets//packages//visual.sprite.js", "line": 1}},
+        {"key": "script:generated/snippets/index.js", "area": "project:main", "type": "script", "origin": "code", "path": "generated/snippets/index.js", "source": {"file": "generated/snippets/index.js", "line": 1}},
+        {"key": "script:generated/snippets/packages/actor.visual-profile.js", "area": "project:main", "type": "script", "origin": "code", "path": "generated/snippets/packages/actor.visual-profile.js", "source": {"file": "generated/snippets/packages/actor.visual-profile.js", "line": 1}},
+        {"key": "script:generated/snippets/packages/movement.top-down.js", "area": "project:main", "type": "script", "origin": "code", "path": "generated/snippets/packages/movement.top-down.js", "source": {"file": "generated/snippets/packages/movement.top-down.js", "line": 1}},
         {"key": "script:main.js", "area": "project:main", "type": "script", "origin": "code", "path": "main.js", "entry": true, "source": {"file": "main.js", "line": 1}},
         {"key": "object:floor", "area": "world:main", "type": "object", "origin": "code", "tag": "ground", "public_id": "floor", "source": {"file": "main.js", "line": 5}},
         {"key": "object:hero", "area": "world:main", "type": "object", "origin": "code", "tag": "hero", "public_id": "hero", "source": {"file": "main.js", "line": 6}}
@@ -34,21 +34,21 @@
     "snippets": {
       "format": 1,
       "catalog_lock": {
-        "movement.topdown": {"version": "1.0.0", "manifest_hash": "16001bfd850c6e5a", "source": "builtin"},
-        "visual.sprite": {"version": "1.0.0", "manifest_hash": "e21a60a8da4d6a74", "source": "builtin"}
+        "movement.top-down": {"version": "1.0.0", "manifest_hash": "fc1045b12fa17611", "source": "builtin"},
+        "actor.visual-profile": {"version": "1.0.0", "manifest_hash": "12ddc6dbc37c761e", "source": "builtin"}
       },
       "instances": [
         {
-          "id": "snippet:hero:movement.topdown",
-          "package": "movement.topdown",
+          "id": "snippet:hero:movement.top-down",
+          "package": "movement.top-down",
           "version": "1.0.0",
           "owner": "object:hero",
           "slot": "movement",
           "values": {"speed": 180}
         },
         {
-          "id": "snippet:hero:visual.sprite",
-          "package": "visual.sprite",
+          "id": "snippet:hero:actor.visual-profile",
+          "package": "actor.visual-profile",
           "version": "1.0.0",
           "owner": "object:hero",
           "slot": "visual",

@@ -1,0 +1,56 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.bounds",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Границы камеры"
+  },
+  "description": {
+    "ru": "Камера не выходит за прямоугольник уровня."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.limits"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "min",
+      "label": "Левый верхний угол",
+      "type": "vec2",
+      "default": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "max",
+      "label": "Правый нижний угол",
+      "type": "vec2",
+      "default": [
+        1280,
+        720
+      ]
+    }
+  ],
+  "tags": [
+    "камера",
+    "границы",
+    "уровень"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

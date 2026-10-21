@@ -1,0 +1,49 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "actor.visual-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Спрайт"
+  },
+  "description": {
+    "ru": "Назначает изображение узлу."
+  },
+  "kind": "behavior",
+  "category": "Внешний вид",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "visual",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.sprite"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "image",
+      "label": "Изображение",
+      "type": "asset",
+      "assetKind": "image",
+      "required": true
+    }
+  ],
+  "tags": [
+    "картинка",
+    "спрайт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

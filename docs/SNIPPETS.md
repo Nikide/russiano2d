@@ -55,8 +55,8 @@ snippets/movement.platformer/
 ```json
 "snippets": {
   "format": 1,
-  "catalog_lock": {"movement.topdown": {"version": "1.0.0", "manifest_hash": "…", "source": "builtin"}},
-  "instances": [{"id": "snippet:hero:movement.topdown", "package": "movement.topdown",
+  "catalog_lock": {"movement.top-down": {"version": "1.0.0", "manifest_hash": "…", "source": "builtin"}},
+  "instances": [{"id": "snippet:hero:movement.top-down", "package": "movement.top-down",
                  "version": "1.0.0", "owner": "object:hero", "slot": "movement",
                  "values": {"speed": 240}, "links": {}}],
   "sets": [],
@@ -89,8 +89,8 @@ snippets/movement.platformer/
 r2d snippet catalog [--project P] [--query прыж] [--id ID] [--fields] [--strict]
 r2d snippet validate snippets/movement.platformer
 r2d snippet check <проект>
-r2d snippet add <проект> movement.topdown --owner object:hero [--slot S] [--dry-run]
-r2d snippet set <проект> snippet:hero:movement.topdown speed=240 'links.target="object:boss"'
+r2d snippet add <проект> movement.top-down --owner object:hero [--slot S] [--dry-run]
+r2d snippet set <проект> snippet:hero:movement.top-down speed=240 'links.target="object:boss"'
 r2d snippet remove <проект> <экземпляр|набор>
 r2d snippet update <проект> [пакет]
 r2d snippet generate <проект> [--write|--check|--overwrite|--print]

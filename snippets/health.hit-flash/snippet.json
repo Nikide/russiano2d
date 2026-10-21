@@ -1,0 +1,63 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.hit-flash",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Вспышка при уроне"
+  },
+  "description": {
+    "ru": "Подсвечивает объект цветом, когда убывает здоровье."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.flash"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#ff4040"
+    },
+    {
+      "id": "duration",
+      "label": "Длительность",
+      "type": "int",
+      "default": 120,
+      "min": 10,
+      "max": 2000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "урон",
+    "вспышка",
+    "feedback"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

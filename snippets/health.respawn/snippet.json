@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.respawn",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Возрождение"
+  },
+  "description": {
+    "ru": "После гибели возвращает объект в точку возрождения через паузу."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.respawn"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "point",
+      "label": "Точка возрождения",
+      "type": "vec2",
+      "default": [
+        100,
+        100
+      ]
+    },
+    {
+      "id": "delay",
+      "label": "Пауза",
+      "type": "int",
+      "default": 1000,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "смерть",
+    "checkpoint"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

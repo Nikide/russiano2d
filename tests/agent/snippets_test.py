@@ -9,7 +9,7 @@
 #   * generate --write детерминирован: повтор даёт "same", --check — ok;
 #   * ручная правка generated → SNIP120, файл не перезаписан;
 #   * validate проекта чист; kit раскрывается в состав + набор;
-#   * runtime: поведение movement.topdown двигает #hero, sprite назначен.
+#   * runtime: поведение movement.top-down двигает #hero, sprite назначен.
 # Запуск: python3 tests/agent/snippets_test.py
 # ===========================================================================
 import json
@@ -62,19 +62,20 @@ def main():
     cat = r2d("snippet", "catalog", "--strict")
     check(cat["ok"] and cat["total"] >= 9, "каталог проходит --strict (%d пакетов)" % cat["total"])
     q = r2d("snippet", "catalog", "--query", "прыж")
-    check([p["id"] for p in q["packages"]] == ["movement.platformer"], "русский поиск: %s" % [p["id"] for p in q["packages"]])
+    ids = [p["id"] for p in q["packages"]]
+    check("movement.platformer" in ids and "movement.top-down" not in ids, "русский поиск: %s" % ids)
 
-    check(r2d("snippet", "add", game, "movement.topdown", "--owner", "object:hero")["ok"], "add movement.topdown")
-    check("SNIP060" in codes(r2d("snippet", "add", game, "npc.patrol", "--owner", "object:nobody")), "неизвестный owner — SNIP060")
-    check(r2d("snippet", "add", game, "visual.sprite", "--owner", "object:hero")["ok"], "add visual.sprite")
+    check(r2d("snippet", "add", game, "movement.top-down", "--owner", "object:hero")["ok"], "add movement.top-down")
+    check("SNIP060" in codes(r2d("snippet", "add", game, "ai.waypoint-patrol", "--owner", "object:nobody")), "неизвестный owner — SNIP060")
+    check(r2d("snippet", "add", game, "actor.visual-profile", "--owner", "object:hero")["ok"], "add actor.visual-profile")
     gen = r2d("snippet", "generate", game)
     check("SNIP027" in codes(gen) and not gen["ok"], "обязательный ресурс не задан — SNIP027 блокирует генерацию")
-    bad = r2d("snippet", "set", game, "snippet:hero:movement.topdown", "speed=5000")
+    bad = r2d("snippet", "set", game, "snippet:hero:movement.top-down", "speed=5000")
     check(not bad["written"] and "SNIP026" in codes(bad), "speed=5000 не записан (SNIP026)")
-    check("SNIP041" in codes(r2d("snippet", "set", game, "snippet:hero:visual.sprite", 'image="art/none.png"')),
+    check("SNIP041" in codes(r2d("snippet", "set", game, "snippet:hero:actor.visual-profile", 'image="art/none.png"')),
           "отсутствующий ресурс — SNIP041")
-    check(r2d("snippet", "set", game, "snippet:hero:visual.sprite", 'image="art/hero.png"')["written"], "set image")
-    check(r2d("snippet", "set", game, "snippet:hero:movement.topdown", "speed=240")["written"], "set speed=240")
+    check(r2d("snippet", "set", game, "snippet:hero:actor.visual-profile", 'image="art/hero.png"')["written"], "set image")
+    check(r2d("snippet", "set", game, "snippet:hero:movement.top-down", "speed=240")["written"], "set speed=240")
     check("SNIP062" in codes(r2d("snippet", "add", game, "movement.platformer", "--owner", "object:hero", "--dry-run")),
           "второй movement на том же owner — SNIP062")
 
@@ -92,12 +93,12 @@ def main():
     errs = [d for d in v["diagnostics"] if d["severity"] in ("error", "fatal", "warning")]
     check(v["ok"] and not errs, "validate проекта чист: %s" % [(d["code"], d["message"]) for d in errs])
 
-    pkg = os.path.join(game, "generated/snippets/packages/movement.topdown.js")
+    pkg = os.path.join(game, "generated/snippets/packages/movement.top-down.js")
     open(pkg, "a").write("// ручная правка\n")
     c = r2d("snippet", "generate", game, "--write")
     check(not c["ok"] and "SNIP120" in codes(c), "ручная правка — SNIP120")
     check(open(pkg).read().endswith("// ручная правка\n"), "ручная правка не перезаписана")
-    shutil.copy(os.path.join(ROOT, "snippets/movement.topdown/src/behavior.js"), pkg)
+    shutil.copy(os.path.join(ROOT, "snippets/movement.top-down/src/behavior.js"), pkg)
     r2d("snippet", "generate", game, "--write", "--overwrite")
     for f in os.listdir(os.path.dirname(pkg)):
         if f.endswith(".r2d-user"):
@@ -117,15 +118,15 @@ def main():
         check(not errors, "runtime без ошибок: %s" % errors[:2])
 
     # Kit раскрывается: удаляем движение и ставим набор игрока на того же героя.
-    r2d("snippet", "remove", game, "snippet:hero:movement.topdown")
-    k = r2d("snippet", "add", game, "kit.player.platformer", "--owner", "object:hero")
+    r2d("snippet", "remove", game, "snippet:hero:movement.top-down")
+    k = r2d("snippet", "add", game, "kit.platformer-core", "--owner", "object:hero")
     check(k["ok"] and len(k["added"]) == 3, "kit раскрыт: %s" % k.get("added"))
     sec = json.load(open(os.path.join(game, "project.json")))["editor"]["snippets"]
-    check(any(s["id"] == "set:hero:kit.player.platformer" for s in sec["sets"]), "набор kit записан")
-    rm = r2d("snippet", "remove", game, "set:hero:kit.player.platformer")
+    check(any(s["id"] == "set:hero:kit.platformer-core" for s in sec["sets"]), "набор kit записан")
+    rm = r2d("snippet", "remove", game, "set:hero:kit.platformer-core")
     check(rm["ok"] and len(rm["removed"]) == 3, "удаление набора убирает состав: %s" % rm.get("removed"))
     sec = json.load(open(os.path.join(game, "project.json")))["editor"]["snippets"]
-    check(sorted(sec["catalog_lock"]) == ["visual.sprite"], "catalog_lock — только используемые: %s" % sorted(sec["catalog_lock"]))
+    check(sorted(sec["catalog_lock"]) == ["actor.visual-profile"], "catalog_lock — только используемые: %s" % sorted(sec["catalog_lock"]))
 
     shutil.rmtree(tmp, ignore_errors=True)
     if FAILURES:

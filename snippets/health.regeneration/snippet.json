@@ -1,0 +1,68 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.regeneration",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Регенерация здоровья"
+  },
+  "description": {
+    "ru": "Восстанавливает здоровье после паузы без урона."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.heal"
+    },
+    {
+      "api": "$.fn.alive"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "delay",
+      "label": "Пауза после урона",
+      "type": "int",
+      "default": 2000,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "rate",
+      "label": "Скорость",
+      "type": "number",
+      "default": 5,
+      "min": 0,
+      "max": 10000,
+      "step": 0.5,
+      "unit": "HP/с"
+    }
+  ],
+  "tags": [
+    "здоровье",
+    "реген"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

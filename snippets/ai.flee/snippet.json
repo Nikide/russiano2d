@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.flee",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Убегать от угрозы"
+  },
+  "description": {
+    "ru": "Отходит от цели, когда та ближе радиуса."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.velocity"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "threat",
+      "label": "Угроза",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 180,
+      "min": 0,
+      "max": 4000,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 140,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "npc",
+    "бегство"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.waypoint-patrol",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Патруль по точкам"
+  },
+  "description": {
+    "ru": "Обходит точки маршрута по кругу с паузой на каждой."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.onWall"
+    },
+    {
+      "api": "$.fn.velocity"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "points",
+      "label": "Точки (x,y через ;)",
+      "type": "string",
+      "default": "",
+      "hint": "Например: 100,300; 400,300. Пусто — патруль между стенами."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 60,
+      "min": 0,
+      "max": 600,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "pause",
+      "label": "Пауза в точке",
+      "type": "int",
+      "default": 500,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "reach",
+      "label": "Радиус прибытия",
+      "type": "number",
+      "default": 6,
+      "min": 1,
+      "max": 200,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "враг",
+    "npc",
+    "патруль"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

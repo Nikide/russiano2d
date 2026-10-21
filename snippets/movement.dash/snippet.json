@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.dash",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Рывок"
+  },
+  "description": {
+    "ru": "Рывок по направлению ввода с длительностью и перезарядкой."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "shift"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 700,
+      "min": 0,
+      "max": 3000,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "duration",
+      "label": "Длительность",
+      "type": "int",
+      "default": 140,
+      "min": 10,
+      "max": 2000,
+      "unit": "мс"
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 600,
+      "min": 0,
+      "max": 20000,
+      "unit": "мс"
+    },
+    {
+      "id": "keys",
+      "label": "Направление",
+      "type": "enum",
+      "default": "wasd",
+      "options": [
+        "wasd",
+        "arrows"
+      ]
+    }
+  ],
+  "tags": [
+    "рывок",
+    "dash",
+    "игрок"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

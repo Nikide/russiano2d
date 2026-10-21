@@ -55,10 +55,10 @@ def test():
             run(a, E + ".snippets.changed('sn-owner')")
             check(a.eval(E + '.snippets.state.owner') == 'object:hero', 'выбран #hero в списке объектов')
             text = a.eval("$.ui.doc('ui/editor.rml').text ? 1 : 1")
-            run(a, E + ".snippets.click('add:movement.topdown')")
+            run(a, E + ".snippets.click('add:movement.top-down')")
             sec = disk(root)['editor']['snippets']
-            check([i['id'] for i in sec['instances']] == ['snippet:hero:movement.topdown'], 'подключено через панель: ' + str([i['id'] for i in sec['instances']]))
-            check(a.eval(E + '.snippets.state.open') == 'snippet:hero:movement.topdown', 'форма экземпляра открыта: %s / %s' % (a.eval(E + '.snippets.state.open'), a.eval(E + '.state.status')))
+            check([i['id'] for i in sec['instances']] == ['snippet:hero:movement.top-down'], 'подключено через панель: ' + str([i['id'] for i in sec['instances']]))
+            check(a.eval(E + '.snippets.state.open') == 'snippet:hero:movement.top-down', 'форма экземпляра открыта: %s / %s' % (a.eval(E + '.snippets.state.open'), a.eval(E + '.state.status')))
             # Inspector: неверное значение → SNIP026, файл не меняется.
             a.eval("$.ui.doc('ui/editor.rml').setValue('sn-f-speed', '5000');1")
             run(a, E + ".snippets.changed('sn-f-speed')")
@@ -80,7 +80,7 @@ def test():
             a.eval("$.ui.doc('ui/editor.rml').setValue('sn-owner', 'object:hero');1")
             run(a, E + ".snippets.changed('sn-owner')")
             check(a.eval(E + ".snippets.state.section || 1") and a.eval(E + ".state.project.json.editor.snippets.instances.length") == 1, 'композиция на месте после переоткрытия')
-            a.eval(E + ".snippets.click('open:snippet:hero:movement.topdown');1")
+            a.eval(E + ".snippets.click('open:snippet:hero:movement.top-down');1")
             a.step(6)
             check(a.eval("$.ui.doc('ui/editor.rml').value('sn-f-speed')") == '260', 'после переоткрытия форма показывает 260')
 

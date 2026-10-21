@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "movement.double-jump",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Двойной прыжок"
+  },
+  "description": {
+    "ru": "Дополнительные прыжки в воздухе; счётчик сбрасывается на земле."
+  },
+  "kind": "behavior",
+  "category": "Персонаж и движение",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.onFloor"
+    },
+    {
+      "api": "$.fn.jump"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "movement.platformer"
+    }
+  ],
+  "fields": [
+    {
+      "id": "extraJumps",
+      "label": "Прыжков в воздухе",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 5
+    },
+    {
+      "id": "jumpForce",
+      "label": "Сила прыжка",
+      "type": "number",
+      "default": 480,
+      "min": 0,
+      "max": 1400,
+      "step": 10
+    },
+    {
+      "id": "jumpKey",
+      "label": "Клавиша прыжка",
+      "type": "string",
+      "default": "space"
+    }
+  ],
+  "tags": [
+    "прыжок",
+    "игрок"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

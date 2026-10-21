@@ -1,0 +1,64 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.leash",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Поводок"
+  },
+  "description": {
+    "ru": "Возвращает объект к стартовой точке, если он ушёл дальше радиуса."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 300,
+      "min": 10,
+      "max": 10000,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 200,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "враг",
+    "npc"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

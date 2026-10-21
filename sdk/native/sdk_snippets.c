@@ -29,13 +29,13 @@
 // ---------------------------------------------------------------------------
 static bool snip_id_ok(const char *s)
 {
-    // a-z0-9_ сегменты через точку: movement.platformer, weapon.base
+    // a-z0-9_- сегменты через точку: movement.top-down, weapon.base (ID раздела 12 ТЗ)
     if (!s || !s[0] || s[0] == '.') return false;
     char prev = '.';
     for (const char *p = s; *p; ++p) {
         const char c = *p;
-        const bool word = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
-        if (c == '.') { if (prev == '.') return false; }
+        const bool word = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+        if (c == '.') { if (prev == '.' || prev == '-') return false; }
         else if (!word) return false;
         prev = c;
     }
@@ -270,7 +270,7 @@ static void validate_manifest(SnipPkg *p, SdkReport *rep, bool check_dirname)
     if (!format || strcmp(format, SNIP_FORMAT))
         diag(rep, SDK_ERROR, "SNIP002", mp, NULL, "format", "format: ожидалось \"%s\"", SNIP_FORMAT);
     const char *id = jstr(m, "id");
-    if (!snip_id_ok(id)) diag(rep, SDK_ERROR, "SNIP003", mp, NULL, "id", "id: сегменты a-z0-9_ через точку");
+    if (!snip_id_ok(id)) diag(rep, SDK_ERROR, "SNIP003", mp, NULL, "id", "id: сегменты a-z0-9_- через точку");
     snprintf(p->id, sizeof p->id, "%s", id ? id : "");
     const char *ver = jstr(m, "version");
     if (!semver_ok(ver)) diag(rep, SDK_ERROR, "SNIP004", mp, p->id, "version", "version: ожидался semver x.y.z");
@@ -919,6 +919,7 @@ typedef struct GenPlan {
 static void js_ident(const char *id, char *out, size_t cap)
 {
     size_t n = 0;
+    // movement.top-down → movement_top_down; «_» в id остаётся — уникальность держит каталог.
     for (const char *p = id; *p && n + 1 < cap; ++p) out[n++] = (*p == '.' || *p == '-' || *p == ':') ? '_' : *p;
     out[n] = 0;
 }

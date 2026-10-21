@@ -1,0 +1,7 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "points": "100,300; 400,300",
+    "pause": 250
+  }
+}

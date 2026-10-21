@@ -1,0 +1,66 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.screen-shake",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Тряска камеры при уроне"
+  },
+  "description": {
+    "ru": "Встряхивает камеру, когда у объекта убывает здоровье."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.camera.shake"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "strength",
+      "label": "Сила",
+      "type": "number",
+      "default": 6,
+      "min": 0,
+      "max": 60,
+      "step": 0.5,
+      "unit": "пикс."
+    },
+    {
+      "id": "duration",
+      "label": "Длительность",
+      "type": "int",
+      "default": 200,
+      "min": 10,
+      "max": 5000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "камера",
+    "урон",
+    "shake"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}
