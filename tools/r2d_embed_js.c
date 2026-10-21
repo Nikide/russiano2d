@@ -39,6 +39,7 @@ static void emit_literal(FILE *out, const char *text)
         case '\n': fputs("\\n\"\n    \"", out); break;
         case '\r': fputs("\\r", out); break;
         case '\t': fputs("\\t", out); break;
+        case '?':  fputs("\\?", out); break; // не даём `??=` стать триграфом `#`
         default:
             if (c < 0x20) {
                 // Шестнадцатеричный escape: движок парсит встроенный текст как
@@ -46,8 +47,8 @@ static void emit_literal(FILE *out, const char *text)
                 // Проверено: `\077` + `""` (склейка для «следующая цифра не
                 // прилипла») QuickJS читает как `\0` и пустую строку, и весь
                 // бандл падал с «SyntaxError» на старте движка.
-                // `?` экранировать не нужно: триграфы в C отключены по умолчанию,
-                // а в JS он обычный символ.
+                // `?` экранируется отдельно (`\?`): иначе `??=` из JS читается
+                // триграфом там, где они включены (-std=c11, -trigraphs).
                 fprintf(out, "\\x%02x", c);
             } else {
                 fputc((int)c, out);

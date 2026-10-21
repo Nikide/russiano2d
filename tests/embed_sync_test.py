@@ -22,7 +22,11 @@ import re
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-HEADER = os.environ.get("R2D_EMBED_HEADER") or os.path.join("build", "generated", "r2d_js_data.h")
+HEADER = (os.environ.get("R2D_EMBED_HEADER")
+          or next((p for p in (os.path.join("build-xmake", "generated", "r2d_js_data.h"),
+                               os.path.join("build", "generated", "r2d_js_data.h"))
+                   if os.path.exists(p)),
+                  os.path.join("build-xmake", "generated", "r2d_js_data.h")))
 FAILURES = []
 
 
@@ -50,7 +54,7 @@ def decode_literal(lit):
                 i += 1
                 continue
             nxt = chunk[i + 1] if i + 1 < len(chunk) else ""
-            simple = {"n": b"\n", "t": b"\t", "r": b"\r", '"': b'"', "\\": b"\\",
+            simple = {"n": b"\n", "t": b"\t", "r": b"\r", '"': b'"', "?": b"?", "\\": b"\\",
                       "'": b"'", "0": b"\0", "a": b"\a", "b": b"\b", "f": b"\f", "v": b"\v"}
             if nxt in simple:
                 buf.extend(simple[nxt])
