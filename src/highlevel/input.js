@@ -21,7 +21,10 @@ const ALIASES = {
     left: 'Left', right: 'Right', up: 'Up', down: 'Down',
     lshift: 'Left Shift', rshift: 'Right Shift',
     shift: 'Left Shift', lctrl: 'Left Ctrl', rctrl: 'Right Ctrl',
-    ctrl: 'Left Ctrl', lalt: 'Left Alt', ralt: 'Right Alt', alt: 'Left Alt',
+    // Alt на macOS в SDL3 зовётся «Option»: без запасного имени scancode() дал бы 0
+    // и altDown() всегда был бы ложным.
+    ctrl: 'Left Ctrl',
+    lalt: ['Left Alt', 'Left Option'], ralt: ['Right Alt', 'Right Option'], alt: ['Left Alt', 'Left Option'],
     tab: 'Tab', backspace: 'Backspace', delete: 'Delete', insert: 'Insert',
     home: 'Home', end: 'End', pageup: 'PageUp', pagedown: 'PageDown',
     // SDL3 называет клавишу по платформе: «Left Command» (macOS),
@@ -1334,7 +1337,7 @@ export function tickInput() {
 
 export function shiftDown() { return engine.keyDown(engine.scancode('Left Shift')) || engine.keyDown(engine.scancode('Right Shift')); }
 export function ctrlDown() { return engine.keyDown(engine.scancode('Left Ctrl')) || engine.keyDown(engine.scancode('Right Ctrl')); }
-export function altDown() { return engine.keyDown(engine.scancode('Left Alt')) || engine.keyDown(engine.scancode('Right Alt')); }
+export function altDown() { return engine.keyDown(scancodeOf('lalt')) || engine.keyDown(scancodeOf('ralt')); }
 function shift() { return shiftDown(); }
 function ctrl() { return ctrlDown(); }
 function alt() { return altDown(); }

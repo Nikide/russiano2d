@@ -401,7 +401,7 @@ if (!engine.padRumble(0.8, 0.3, 200)) engine.log('вибрировать неч�
 | `"Left"`, `"Right"`, `"Up"`, `"Down"` | Стрелки |
 | `"Left Shift"`, `"Right Shift"` | Shift (пробел в имени обязателен) |
 | `"Left Ctrl"`, `"Right Ctrl"` | Ctrl (именно `Ctrl`, не `Control`) |
-| `"Left Alt"`, `"Right Alt"` | Alt |
+| `"Left Alt"`, `"Right Alt"` | Alt (на macOS SDL называет их `"Left Option"`, `"Right Option"`; `$.input` пробует оба имени) |
 | `"Left GUI"`, `"Right GUI"` | Cmd / Win |
 | `"F1"` … `"F24"` | Функциональные клавиши |
 | `"Insert"`, `"Delete"`, `"Home"`, `"End"`, `"PageUp"`, `"PageDown"` | Навигация |

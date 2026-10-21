@@ -256,7 +256,7 @@ if ($.input.pressed('confirm')) {
 
 | Имя | Сигнатура | Проверено запуском |
 |---|---|---|
-| `$.input.shiftDown()` / `$.input.ctrlDown()` / `$.input.altDown()` | `→ bool` | удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — `false` |
+| `$.input.shiftDown()` / `$.input.ctrlDown()` / `$.input.altDown()` | `→ bool` | удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — `false`. `altDown()` — это и Option на macOS (SDL называет клавишу «Option»; имена `'alt'`/`'lalt'`/`'ralt'` для `down`/`pressed` тоже ведут на неё) |
 | `$.input.released(name)` | `→ bool` | фронт ОТПУСКАНИЯ: `true` один кадр после того, как клавишу/кнопку отпустили (парная к `pressed`) |
 | `$.input.mouseDelta()` | `→ { x, y }` | смещение мыши за кадр в пикселях окна; без движения — `{ x: 0, y: 0 }` |
 | `$.input.mousePressed(button)` | `→ bool` | фронт нажатия кнопки мыши; принимает имя (`'left'`) или номер (`1`); `pressed` — не «удерживается» |
