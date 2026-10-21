@@ -1093,6 +1093,12 @@ export function installCamera($, viewports) {
          * что попало, с запасом на ход объекта за кадр.
          */
         isOnScreen(what, opts) {
+            // Обёртка $(...) — первый узел: у обёртки есть метод .tag, и раньше
+            // она принималась за узел и падала на what.attrs.ui.
+            if (what && typeof what === 'object' && Array.isArray(what.nodes)) {
+                if (!what.nodes.length) return false;
+                what = what.nodes[0];
+            }
             // H8: второй аргумент — число (запас в пикселях, прежнее поведение)
             // ИЛИ прямоугольник ЗОНЫ вокруг узла: { w, h, dx, dy } (смещение от
             // узла) либо { x, y, w, h } (абсолютный центр). Раньше объект молча

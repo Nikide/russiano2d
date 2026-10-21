@@ -51,6 +51,8 @@ def main():
                         catch (e) { return e instanceof TypeError ? 'type' : 'other'; } })()""")
         check(bad == "type", "updateFor(null) — TypeError: %s" % bad)
         f = a.eval("(() => { const n = $('#ufb'); const a = n.flip(); n.flip(true); const b = n.flip(); n.flip(false, true); return [a, b, n.flip(), $('#nope').flip()]; })()")
+        vis = a.eval("[$.camera.isOnScreen($('#ufb')), $.camera.isOnScreen($('#nope'))]")
+        check(vis == [True, False], "$.camera.isOnScreen принимает обёртку: %s" % vis)
         check(f == [{"x": False, "y": False}, {"x": True, "y": False}, {"x": False, "y": True}, {"x": False, "y": False}],
               ".flip() без аргументов читает отражение: %s" % f)
     if FAILURES:
