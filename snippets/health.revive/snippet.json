@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.revive",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Поднятие союзника"
+  },
+  "description": {
+    "ru": "Упавшего союзника поднимает другой, удерживая клавишу рядом; уход прерывает."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.hp"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "reviver",
+      "label": "Кто поднимает",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "time",
+      "label": "Время",
+      "type": "int",
+      "default": 2000,
+      "min": 100,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 1000,
+      "unit": "пикс."
+    },
+    {
+      "id": "hp",
+      "label": "Здоровье после",
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "кооператив",
+    "поднятие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

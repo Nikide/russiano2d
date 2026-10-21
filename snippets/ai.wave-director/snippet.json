@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.wave-director",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Режиссёр волн"
+  },
+  "description": {
+    "ru": "Волны противников: число растёт от волны к волне, следующая — когда текущая убита."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.prefab.has"
+    },
+    {
+      "api": "$.prefab.instantiate"
+    },
+    {
+      "api": "$.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "prefab",
+      "label": "Prefab врага",
+      "type": "string",
+      "default": "",
+      "hint": "Имя из $.prefab"
+    },
+    {
+      "id": "first",
+      "label": "В первой волне",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "id": "growth",
+      "label": "Рост за волну",
+      "type": "number",
+      "default": 1.5,
+      "min": 1,
+      "max": 10,
+      "step": 0.1
+    },
+    {
+      "id": "waves",
+      "label": "Волн (0 — бесконечно)",
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 1000
+    },
+    {
+      "id": "pause",
+      "label": "Пауза между волнами",
+      "type": "int",
+      "default": 2000,
+      "min": 0,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "area",
+      "label": "Зона появления (x, y, ш, в)",
+      "type": "string",
+      "default": "100,100,600,300"
+    }
+  ],
+  "tags": [
+    "волны",
+    "арена"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

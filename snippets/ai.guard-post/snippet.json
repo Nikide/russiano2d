@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.guard-post",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Охрана поста"
+  },
+  "description": {
+    "ru": "Охраняет зону вокруг стартовой точки: гонит нарушителя и возвращается."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Цель",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус поста",
+      "type": "number",
+      "default": 180,
+      "min": 10,
+      "max": 10000,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 120,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "охрана",
+    "стелс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

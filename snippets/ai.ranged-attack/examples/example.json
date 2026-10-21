@@ -1,0 +1,7 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "min": 100,
+    "max": 300
+  }
+}

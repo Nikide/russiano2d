@@ -1,0 +1,134 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.grenade",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Граната"
+  },
+  "description": {
+    "ru": "Бросок гранаты с физическим телом: отскоки и взрыв по таймеру."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "throwable",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.body"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.world.query"
+    },
+    {
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.remove"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "g"
+    },
+    {
+      "id": "throw",
+      "label": "Бросок (вперёд, вверх)",
+      "type": "vec2",
+      "default": [
+        350,
+        350
+      ]
+    },
+    {
+      "id": "fuse",
+      "label": "Задержка",
+      "type": "int",
+      "default": 1500,
+      "min": 100,
+      "max": 20000,
+      "unit": "мс"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус взрыва",
+      "type": "number",
+      "default": 80,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 50,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": ".enemy",
+      "hint": "Селектор целей"
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 800,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "граната",
+    "взрыв"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -9,17 +9,20 @@ export default function weaponBase(node, config, $) {
     }
     const gun = $.weapons.give(node, config.weapon);
     if (!gun) return () => {};
-    return $.updateFor(node, (dt, self) => {
+    // Перезарядка — запросом: weapon.ammo подставляет запас, иначе — полный магазин.
+    const onReload = () => { if (!node.data('ammoReserveManaged')) gun.reload(); };
+    node.on('weapon:reload-request', onReload);
+    const stop = $.updateFor(node, (dt, self) => {
         gun.tick(dt);
-        if ($.input.pressed(config.reloadKey)) gun.reload();
-        const held = $.input.down(config.fireKey);
-        if (!held) return;
+        if (config.reloadKey && $.input.pressed(config.reloadKey)) self.emit('weapon:reload-request', {});
+        if (!config.fireKey || !$.input.down(config.fireKey)) return;
         const shot = gun.fire({ held: !$.input.pressed(config.fireKey) });
         if (shot.fired) {
             if (config.sound) $.sound.play(config.sound);
             self.emit('weapon:fire', { damage: shot.damage, spread: shot.spread, pellets: shot.pellets, falloff: config.falloff });
-        } else if (shot.reason === 'empty') {
-            gun.reload();
+        } else if (shot.reason === 'empty' && config.autoReload) {
+            self.emit('weapon:reload-request', { auto: true });
         }
     });
+    return () => { stop(); node.off('weapon:reload-request', onReload); };
 }

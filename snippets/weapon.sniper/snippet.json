@@ -1,0 +1,133 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.sniper",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Снайперская винтовка"
+  },
+  "description": {
+    "ru": "Прицеливание с приближением камеры и выстрел, пробивающий несколько целей."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.camera.zoomTo"
+    },
+    {
+      "api": "$.camera.zoom"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.world.raycastAll"
+    },
+    {
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "aimKey",
+      "label": "Прицел",
+      "type": "string",
+      "default": "i"
+    },
+    {
+      "id": "key",
+      "label": "Выстрел",
+      "type": "string",
+      "default": "j"
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 90,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "range",
+      "label": "Дальность",
+      "type": "number",
+      "default": 1200,
+      "min": 10,
+      "max": 20000,
+      "unit": "пикс."
+    },
+    {
+      "id": "pierce",
+      "label": "Пробивает целей",
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 20
+    },
+    {
+      "id": "zoom",
+      "label": "Приближение",
+      "type": "number",
+      "default": 1.6,
+      "min": 1,
+      "max": 6,
+      "step": 0.1
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 1200,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": ".enemy",
+      "hint": "Селектор целей"
+    }
+  ],
+  "tags": [
+    "снайпер",
+    "пробитие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

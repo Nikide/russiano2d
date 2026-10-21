@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.slow",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Замедление"
+  },
+  "description": {
+    "ru": "Временное замедление движения по событию узла status { kind: 'slow', factor, ms }."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.onFloor"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "factor",
+      "label": "Множитель по умолчанию",
+      "type": "number",
+      "default": 0.5,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "id": "duration",
+      "label": "Длительность по умолчанию",
+      "type": "int",
+      "default": 1500,
+      "min": 50,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "замедление",
+    "контроль"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

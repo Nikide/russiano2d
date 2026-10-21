@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.idle",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Ожидание"
+  },
+  "description": {
+    "ru": "Ждёт, иногда оглядывается; просыпается, когда цель подходит ближе радиуса."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.flip"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Цель",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "wake",
+      "label": "Радиус пробуждения",
+      "type": "number",
+      "default": 160,
+      "min": 0,
+      "max": 10000,
+      "unit": "пикс."
+    },
+    {
+      "id": "look",
+      "label": "Оглядываться раз в",
+      "type": "int",
+      "default": 1500,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "ожидание",
+    "npc"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.weapon-switch",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Смена оружия"
+  },
+  "description": {
+    "ru": "Слоты оружия: клавиши 1…N и колесо; незавершённая перезарядка отменяется."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon-switch",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.weapons.has"
+    },
+    {
+      "api": "$.weapons.of"
+    },
+    {
+      "api": "$.weapons.give"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.input.wheel"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "weapons",
+      "label": "Стволы по слотам",
+      "type": "list",
+      "default": [
+        "pistol",
+        "smg"
+      ]
+    },
+    {
+      "id": "next",
+      "label": "Следующее",
+      "type": "string",
+      "default": "q"
+    }
+  ],
+  "tags": [
+    "слоты",
+    "смена"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

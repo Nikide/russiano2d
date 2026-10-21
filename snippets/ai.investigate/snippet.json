@@ -1,0 +1,76 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.investigate",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Проверить место"
+  },
+  "description": {
+    "ru": "Идёт к последней известной позиции цели (зрение/слух) и сообщает итог."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.velocity"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 90,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "reach",
+      "label": "Радиус прибытия",
+      "type": "number",
+      "default": 8,
+      "min": 1,
+      "max": 200,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "поиск",
+    "стелс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

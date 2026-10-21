@@ -1,0 +1,9 @@
+{
+  "values": {
+    "weapons": [
+      "pistol",
+      "rifle",
+      "shotgun"
+    ]
+  }
+}

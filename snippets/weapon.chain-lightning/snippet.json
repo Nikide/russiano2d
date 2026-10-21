@@ -1,0 +1,118 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.chain-lightning",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цепная молния"
+  },
+  "description": {
+    "ru": "Удар по ближайшей цели перескакивает на соседние с убывающим уроном."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "j"
+    },
+    {
+      "id": "range",
+      "label": "Дальность",
+      "type": "number",
+      "default": 220,
+      "min": 10,
+      "max": 4000,
+      "unit": "пикс."
+    },
+    {
+      "id": "jump",
+      "label": "Перескок",
+      "type": "number",
+      "default": 120,
+      "min": 10,
+      "max": 4000,
+      "unit": "пикс."
+    },
+    {
+      "id": "chains",
+      "label": "Целей",
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 32
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 30,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "falloff",
+      "label": "Убывание",
+      "type": "number",
+      "default": 0.7,
+      "min": 0.1,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 900,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": ".enemy",
+      "hint": "Селектор целей"
+    }
+  ],
+  "tags": [
+    "молния",
+    "магия"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.buff-debuff",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Баффы и дебаффы"
+  },
+  "description": {
+    "ru": "Временные модификаторы характеристик: событие узла modifier { stat, add?, mul?, ms }."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "base",
+      "label": "Базовые значения (stat=число)",
+      "type": "list",
+      "default": [
+        "speed=200",
+        "damage=10"
+      ]
+    }
+  ],
+  "tags": [
+    "бафф",
+    "статы"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

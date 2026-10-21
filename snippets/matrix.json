@@ -746,7 +746,10 @@
    "kind": "behavior",
    "status": "implemented",
    "api": [
+    "$.fn.data",
     "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
     "$.input.down",
     "$.input.pressed",
     "$.sound.play",
@@ -842,13 +845,24 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.at",
+    "$.fn.damage",
+    "$.fn.is",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.input.vec",
+    "$.updateFor",
+    "$.world.query"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 46,
@@ -857,13 +871,18 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.emit",
+    "$.input.down",
+    "$.input.pressed",
+    "$.updateFor",
+    "$.weapons.of"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 47,
@@ -872,13 +891,18 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.emit",
+    "$.input.down",
+    "$.input.pressed",
+    "$.updateFor",
+    "$.weapons.of"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 48,
@@ -887,13 +911,19 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.input.down",
+    "$.input.pressed",
+    "$.updateFor",
+    "$.weapons.of"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 49,
@@ -902,10 +932,16 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.is",
+    "$.fn.pos",
+    "$.input.down",
+    "$.input.vec",
+    "$.updateFor",
+    "$.world.raycastAll"
    ],
    "gaps": [],
    "dependencies": []
@@ -917,10 +953,19 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.at",
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.is",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.input.pressed",
+    "$.input.vec",
+    "$.updateFor",
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -932,10 +977,21 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.emit",
+    "$.fn.at",
+    "$.fn.body",
+    "$.fn.damage",
+    "$.fn.is",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.fn.velocity",
+    "$.input.pressed",
+    "$.input.vec",
+    "$.updateFor",
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -947,10 +1003,18 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.emit",
+    "$.fn.at",
+    "$.fn.damage",
+    "$.fn.is",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.input.pressed",
+    "$.updateFor",
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -962,10 +1026,14 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.updateFor",
+    "$.weapons.define",
+    "$.weapons.give",
+    "$.weapons.has"
    ],
    "gaps": [],
    "dependencies": []
@@ -977,10 +1045,19 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.camera.zoom",
+    "$.camera.zoomTo",
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.is",
+    "$.fn.pos",
+    "$.input.down",
+    "$.input.pressed",
+    "$.input.vec",
+    "$.updateFor",
+    "$.world.raycastAll"
    ],
    "gaps": [],
    "dependencies": []
@@ -992,10 +1069,20 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.emit",
+    "$.fn.angle",
+    "$.fn.at",
+    "$.fn.damage",
+    "$.fn.is",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.input.pressed",
+    "$.input.vec",
+    "$.updateFor",
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -1007,10 +1094,13 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.pos",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -1022,10 +1112,20 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.alpha",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.damage",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.input.pressed",
+    "$.input.vec",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -1037,13 +1137,20 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.input.wheel",
+    "$.updateFor",
+    "$.weapons.give",
+    "$.weapons.has",
+    "$.weapons.of"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 59,
@@ -1052,13 +1159,19 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.updateFor",
+    "$.weapons.of"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 60,
@@ -1067,13 +1180,17 @@
    "section": "C",
    "section_title": "Оружие и атаки",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.weapons",
-    "$.combat"
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.updateFor",
+    "$.weapons.of"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 61,
@@ -1100,13 +1217,15 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.damageFilter",
+    "$.fn.data"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 63,
@@ -1115,13 +1234,14 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.damageFilter"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 64,
@@ -1130,13 +1250,14 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.damageFilter"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 65,
@@ -1145,13 +1266,17 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.damageFilter",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 66,
@@ -1217,13 +1342,17 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.externalVelocity",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 70,
@@ -1232,13 +1361,19 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 71,
@@ -1247,13 +1382,20 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.alive",
+    "$.fn.damage",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 72,
@@ -1262,13 +1404,22 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.alive",
+    "$.fn.damage",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.overlaps",
+    "$.fn.some",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 73,
@@ -1277,13 +1428,19 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 74,
@@ -1292,10 +1449,15 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.onFloor",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -1307,13 +1469,20 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.alive",
+    "$.fn.damage",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 76,
@@ -1322,10 +1491,12 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.data",
+    "$.fn.off",
+    "$.fn.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -1337,13 +1508,22 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.emit",
+    "$.fn.alive",
+    "$.fn.alpha",
+    "$.fn.controls",
+    "$.fn.fadeOut",
+    "$.fn.flash",
+    "$.fn.remove",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 78,
@@ -1371,13 +1551,20 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.alive",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.input.down",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 80,
@@ -1386,10 +1573,17 @@
    "section": "D",
    "section_title": "Здоровье, защита и состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.combat"
+    "$.fn.alpha",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.height",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -1401,9 +1595,12 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.flip",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1450,9 +1647,13 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.alive",
+    "$.fn.damage",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.moveTowards",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1465,9 +1666,18 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.alive",
+    "$.fn.at",
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.fn.velocity",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1496,9 +1706,12 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.fn.velocity",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1527,10 +1740,14 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
-    "$.updateFor"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.flip",
+    "$.fn.pos",
+    "$.updateFor",
+    "$.world.lineOfSight"
    ],
    "gaps": [],
    "dependencies": []
@@ -1542,10 +1759,13 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
-    "$.updateFor"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.pos",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -1557,9 +1777,15 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.velocity",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1572,13 +1798,20 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.moveTowards",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ai.investigate"
+   ]
   },
   {
    "n": 93,
@@ -1587,9 +1820,16 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.height",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.fn.velocity",
+    "$.fn.width",
+    "$.selection.each",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1602,9 +1842,12 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.emit",
+    "$.fn.flip",
+    "$.fn.moveTowards",
+    "$.fn.pos",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1617,9 +1860,12 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.flip",
+    "$.fn.moveTowards",
+    "$.fn.pos",
+    "$.fn.velocity",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1632,13 +1878,19 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.fn.removeClass",
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 97,
@@ -1647,10 +1899,18 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
-    "$.updateFor"
+    "$.fn.alpha",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.damage",
+    "$.fn.emit",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.updateFor",
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -1662,9 +1922,14 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.fn.emit",
+    "$.fn.pos",
+    "$.off",
+    "$.on",
+    "$.prefab.has",
+    "$.prefab.instantiate",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1677,9 +1942,11 @@
    "section": "E",
    "section_title": "Поведение врагов",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.nav",
+    "$.emit",
+    "$.prefab.has",
+    "$.prefab.instantiate",
     "$.updateFor"
    ],
    "gaps": [],

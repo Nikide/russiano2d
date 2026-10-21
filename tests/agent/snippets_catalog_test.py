@@ -92,13 +92,19 @@ def main():
 
     with Agent(game=game, seed=2) as a:
         a.step(5)
-        a.hold(["D", "Space", "Left Shift"])
+        a.hold(["D", "Space", "Left Shift", "J"])
         a.step(45)
         a.release_all()
-        a.eval("$('thing, hero').damage(5); 'ok'")
-        a.step(45)
+        for key in ["K", "G", "M", "H", "E", "I", "Q", "1", "2", "R", "U"]:
+            a.tap(key)
+            a.step(3)
+        for t in ["normal", "fire", "ice", "poison", "cut", "explosion"]:
+            a.eval("$('thing, hero').damage(5, null, '%s'); 'ok'" % t)
+            a.step(10)
+        a.eval("$('thing').emit('status', { kind: 'slow', factor: 0.5, ms: 300 }); $('thing').emit('modifier', { stat: 'speed', add: 10, ms: 200 }); $.emit('noise', { x: 300, y: 600, radius: 500 }); 'ok'")
+        a.step(60)
         errs = a.eval("$.debug.errors()") or []
-        check(not errs, "90 кадров без ошибок: %s" % [(e.get("message"), (e.get("source") or {}).get("file")) for e in errs[:3]])
+        check(not errs, "~200 кадров с вводом и уроном без ошибок: %s" % [(e.get("message"), (e.get("source") or {}).get("file")) for e in errs[:3]])
         a.eval("$('thing, hero, ground').remove(); 'ok'")
         a.step(10)
         errs = a.eval("$.debug.errors()") or []

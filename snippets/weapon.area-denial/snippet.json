@@ -1,0 +1,122 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.area-denial",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Опасная зона"
+  },
+  "description": {
+    "ru": "Создаёт временную зону, наносящую урон всем целям внутри."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "throwable",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.damage"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "h"
+    },
+    {
+      "id": "size",
+      "label": "Размер",
+      "type": "vec2",
+      "default": [
+        96,
+        32
+      ]
+    },
+    {
+      "id": "dps",
+      "label": "Урон в секунду",
+      "type": "number",
+      "default": 20,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "duration",
+      "label": "Длительность",
+      "type": "int",
+      "default": 3000,
+      "min": 100,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 4000,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": ".enemy",
+      "hint": "Селектор целей"
+    }
+  ],
+  "tags": [
+    "зона",
+    "огонь"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

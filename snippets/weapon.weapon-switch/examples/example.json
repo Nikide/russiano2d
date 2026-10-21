@@ -1,0 +1,10 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "weapons": [
+      "pistol",
+      "rifle",
+      "shotgun"
+    ]
+  }
+}

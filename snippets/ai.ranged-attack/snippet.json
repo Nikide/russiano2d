@@ -1,0 +1,132 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.ranged-attack",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Стрельба ИИ"
+  },
+  "description": {
+    "ru": "Держит дистанцию до цели и стреляет снарядами."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Цель",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "min",
+      "label": "Ближе — отходит",
+      "type": "number",
+      "default": 120,
+      "min": 0,
+      "max": 5000,
+      "unit": "пикс."
+    },
+    {
+      "id": "max",
+      "label": "Дальше — подходит",
+      "type": "number",
+      "default": 280,
+      "min": 1,
+      "max": 10000,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 100,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 6,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "bulletSpeed",
+      "label": "Скорость снаряда",
+      "type": "number",
+      "default": 360,
+      "min": 10,
+      "max": 5000,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 1200,
+      "min": 50,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "враг",
+    "стрелок"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

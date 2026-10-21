@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.shield",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Щит"
+  },
+  "description": {
+    "ru": "Отдельный запас щита поглощает урон и восстанавливается после паузы."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damageFilter"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "capacity",
+      "label": "Запас щита",
+      "type": "number",
+      "default": 50,
+      "min": 1,
+      "max": 100000
+    },
+    {
+      "id": "regen",
+      "label": "Восстановление",
+      "type": "number",
+      "default": 10,
+      "min": 0,
+      "max": 100000,
+      "unit": "ед./с"
+    },
+    {
+      "id": "delay",
+      "label": "Пауза",
+      "type": "int",
+      "default": 2000,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "щит",
+    "энергия"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

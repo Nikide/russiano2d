@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "thresholds": [
+      "50"
+    ]
+  }
+}

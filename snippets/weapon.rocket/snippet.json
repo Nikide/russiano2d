@@ -1,0 +1,133 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.rocket",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Ракета"
+  },
+  "description": {
+    "ru": "Ракета с наведением на ближайшую цель и взрывом по площади."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.angle"
+    },
+    {
+      "api": "$.world.query"
+    },
+    {
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.remove"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "j"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 320,
+      "min": 0,
+      "max": 3000,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "turn",
+      "label": "Поворот",
+      "type": "number",
+      "default": 3,
+      "min": 0,
+      "max": 20,
+      "unit": "рад/с",
+      "step": 0.1
+    },
+    {
+      "id": "radius",
+      "label": "Радиус взрыва",
+      "type": "number",
+      "default": 70,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 70,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 1000,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": ".enemy",
+      "hint": "Селектор целей"
+    }
+  ],
+  "tags": [
+    "ракета",
+    "взрыв"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

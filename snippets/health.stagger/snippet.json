@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.stagger",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Оглушение"
+  },
+  "description": {
+    "ru": "Накопленный урон выше порога оглушает: объект замирает на время."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "threshold",
+      "label": "Порог",
+      "type": "number",
+      "default": 30,
+      "min": 1,
+      "max": 100000
+    },
+    {
+      "id": "decay",
+      "label": "Спад накопления",
+      "type": "number",
+      "default": 10,
+      "min": 0,
+      "max": 100000,
+      "unit": "ед./с"
+    },
+    {
+      "id": "duration",
+      "label": "Оглушение",
+      "type": "int",
+      "default": 700,
+      "min": 10,
+      "max": 20000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "оглушение",
+    "poise"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

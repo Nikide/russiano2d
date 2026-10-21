@@ -1,0 +1,57 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.hearing",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Слух"
+  },
+  "description": {
+    "ru": "Слышит шум ($.emit('noise', {x, y, radius})) в своём радиусе; запоминает источник."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "range",
+      "label": "Чуткость",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 10,
+      "step": 0.1
+    }
+  ],
+  "tags": [
+    "слух",
+    "стелс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

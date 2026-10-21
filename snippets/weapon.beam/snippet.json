@@ -1,0 +1,92 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.beam",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Луч"
+  },
+  "description": {
+    "ru": "Пока клавиша зажата — непрерывный луч с уроном в секунду по первой цели."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.input.vec"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.world.raycastAll"
+    },
+    {
+      "api": "$.fn.is"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "j"
+    },
+    {
+      "id": "dps",
+      "label": "Урон в секунду",
+      "type": "number",
+      "default": 40,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "range",
+      "label": "Дальность",
+      "type": "number",
+      "default": 400,
+      "min": 10,
+      "max": 10000,
+      "unit": "пикс."
+    },
+    {
+      "id": "targets",
+      "label": "Цели",
+      "type": "string",
+      "default": ".enemy",
+      "hint": "Селектор целей"
+    }
+  ],
+  "tags": [
+    "лазер",
+    "луч"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

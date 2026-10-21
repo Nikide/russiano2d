@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "multipliers": [
+      "poison=2"
+    ]
+  }
+}

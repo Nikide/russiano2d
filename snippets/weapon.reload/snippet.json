@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.reload",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Перезарядка"
+  },
+  "description": {
+    "ru": "Ручная перезарядка, автоматическая на пустом с задержкой и отмена клавишей."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.weapons.of"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Перезарядка",
+      "type": "string",
+      "default": "r"
+    },
+    {
+      "id": "cancelKey",
+      "label": "Отмена",
+      "type": "string",
+      "default": "shift"
+    },
+    {
+      "id": "autoDelay",
+      "label": "Авто через",
+      "type": "int",
+      "default": 300,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "перезарядка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

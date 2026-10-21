@@ -1,0 +1,98 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.formation",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Строй"
+  },
+  "description": {
+    "ru": "Держит место в строю относительно лидера: линия, клин или круг."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.flip"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.velocity"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "leader",
+      "label": "Лидер",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "slot",
+      "label": "Место в строю",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "id": "shape",
+      "label": "Форма",
+      "type": "enum",
+      "default": "line",
+      "options": [
+        "line",
+        "wedge",
+        "circle"
+      ]
+    },
+    {
+      "id": "spacing",
+      "label": "Шаг",
+      "type": "number",
+      "default": 32,
+      "min": 4,
+      "max": 1000,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 180,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "строй",
+    "отряд"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

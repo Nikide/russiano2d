@@ -1,0 +1,56 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.armor",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Броня"
+  },
+  "description": {
+    "ru": "Плоское снижение каждого входящего удара, не ниже минимального урона."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damageFilter"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "armor",
+      "label": "Броня",
+      "type": "number",
+      "default": 5,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "minimum",
+      "label": "Минимальный урон",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "броня",
+    "защита"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

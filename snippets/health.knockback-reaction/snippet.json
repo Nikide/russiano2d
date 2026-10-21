@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.knockback-reaction",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Реакция на удар"
+  },
+  "description": {
+    "ru": "Отбрасывание от источника урона с силой по величине удара."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.externalVelocity"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "force",
+      "label": "Сила на единицу урона",
+      "type": "number",
+      "default": 12,
+      "min": 0,
+      "max": 1000
+    },
+    {
+      "id": "max",
+      "label": "Максимум",
+      "type": "number",
+      "default": 500,
+      "min": 0,
+      "max": 5000,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "decay",
+      "label": "Затухание",
+      "type": "int",
+      "default": 160,
+      "min": 10,
+      "max": 5000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "отдача",
+    "удар"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

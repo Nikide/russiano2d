@@ -1,0 +1,111 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.boss-telegraph",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Предупреждение атаки"
+  },
+  "description": {
+    "ru": "Перед сильной атакой показывает опасную зону, затем бьёт по ней."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.world.query"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.remove"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Цель",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "interval",
+      "label": "Раз в",
+      "type": "int",
+      "default": 4000,
+      "min": 500,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "warn",
+      "label": "Предупреждение",
+      "type": "int",
+      "default": 900,
+      "min": 100,
+      "max": 10000,
+      "unit": "мс"
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 70,
+      "min": 5,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 25,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "color",
+      "label": "Цвет зоны",
+      "type": "color",
+      "default": "#ff3030"
+    }
+  ],
+  "tags": [
+    "босс",
+    "атака"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

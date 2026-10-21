@@ -1,0 +1,52 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.damage-types",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Типы урона"
+  },
+  "description": {
+    "ru": "Множители урона по типам (fire, ice, explosion…) через фильтр .damageFilter."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damageFilter"
+    },
+    {
+      "api": "$.fn.data"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "multipliers",
+      "label": "Множители (тип=число)",
+      "type": "list",
+      "default": [
+        "fire=1.5",
+        "ice=0.5"
+      ]
+    }
+  ],
+  "tags": [
+    "урон",
+    "типы"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

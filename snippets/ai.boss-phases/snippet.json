@@ -1,0 +1,65 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.boss-phases",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Фазы босса"
+  },
+  "description": {
+    "ru": "Переходы фаз по порогам здоровья: класс phase-N и событие phase."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "thresholds",
+      "label": "Пороги, % здоровья",
+      "type": "list",
+      "default": [
+        "70",
+        "40",
+        "15"
+      ]
+    }
+  ],
+  "tags": [
+    "босс",
+    "фазы"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.burst",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Очередь"
+  },
+  "description": {
+    "ru": "Нажатие выпускает очередь из заданного числа выстрелов с интервалом."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon-trigger",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.weapons.of"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "j"
+    },
+    {
+      "id": "shots",
+      "label": "Выстрелов",
+      "type": "int",
+      "default": 3,
+      "min": 2,
+      "max": 20
+    },
+    {
+      "id": "interval",
+      "label": "Интервал",
+      "type": "int",
+      "default": 70,
+      "min": 10,
+      "max": 2000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "очередь",
+    "burst"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

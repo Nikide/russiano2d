@@ -1,0 +1,90 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.death",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Смерть"
+  },
+  "description": {
+    "ru": "При гибели: управление выключается, вспышка/затухание, глобальное событие и удаление."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.controls"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.fadeOut"
+    },
+    {
+      "api": "$.fn.flash"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.remove"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "visual",
+      "label": "Визуал",
+      "type": "enum",
+      "default": "fade",
+      "options": [
+        "fade",
+        "flash",
+        "none"
+      ]
+    },
+    {
+      "id": "event",
+      "label": "Глобальное событие",
+      "type": "string",
+      "default": "player:dead"
+    },
+    {
+      "id": "removeAfter",
+      "label": "Удалить через",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "смерть",
+    "game over"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

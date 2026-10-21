@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.freeze",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Заморозка"
+  },
+  "description": {
+    "ru": "Урон ice накапливает холод; полная заморозка обездвиживает, огонь снимает."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "threshold",
+      "label": "Холод до заморозки",
+      "type": "number",
+      "default": 20,
+      "min": 1,
+      "max": 100000
+    },
+    {
+      "id": "duration",
+      "label": "Заморозка",
+      "type": "int",
+      "default": 1500,
+      "min": 100,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "slow",
+      "label": "Замедление до заморозки",
+      "type": "number",
+      "default": 0.5,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "лёд",
+    "контроль"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

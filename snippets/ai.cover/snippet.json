@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.cover",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Укрытие"
+  },
+  "description": {
+    "ru": "Под угрозой бежит к ближайшему укрытию и встаёт за ним от угрозы."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.fn.data"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "threat",
+      "label": "Угроза",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "covers",
+      "label": "Укрытия",
+      "type": "string",
+      "default": ".cover"
+    },
+    {
+      "id": "danger",
+      "label": "Радиус угрозы",
+      "type": "number",
+      "default": 260,
+      "min": 0,
+      "max": 10000,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 150,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "укрытие",
+    "тактика"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

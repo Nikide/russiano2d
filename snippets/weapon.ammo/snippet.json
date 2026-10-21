@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.ammo",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Боезапас"
+  },
+  "description": {
+    "ru": "Резерв патронов: перезарядка берёт из запаса; подбор события ammo пополняет."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.weapons.of"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "reserve",
+      "label": "Запас",
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "max",
+      "label": "Максимум запаса",
+      "type": "int",
+      "default": 240,
+      "min": 1,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "патроны",
+    "запас"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json",
+    "tests/invalid.test.json"
+  ]
+}

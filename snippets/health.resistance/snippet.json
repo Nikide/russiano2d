@@ -1,0 +1,47 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.resistance",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сопротивления"
+  },
+  "description": {
+    "ru": "Процент сопротивления по типам урона."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damageFilter"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "percent",
+      "label": "Сопротивление (тип=%)",
+      "type": "list",
+      "default": [
+        "fire=50"
+      ]
+    }
+  ],
+  "tags": [
+    "сопротивление"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

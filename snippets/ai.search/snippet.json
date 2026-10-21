@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.search",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Поиск"
+  },
+  "description": {
+    "ru": "После проверки обходит точки вокруг последней позиции, затем сдаётся."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "ai.investigate"
+    }
+  ],
+  "fields": [
+    {
+      "id": "radius",
+      "label": "Радиус поиска",
+      "type": "number",
+      "default": 100,
+      "min": 10,
+      "max": 5000,
+      "unit": "пикс."
+    },
+    {
+      "id": "points",
+      "label": "Точек",
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 16
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 80,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "pause",
+      "label": "Пауза",
+      "type": "int",
+      "default": 600,
+      "min": 0,
+      "max": 20000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "поиск",
+    "стелс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

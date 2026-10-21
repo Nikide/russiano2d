@@ -3,7 +3,7 @@
 Сгенерировано `python3 scripts/snippet_matrix.py` из §12 [ТЗ](SNIPPET_SYSTEM_PROJECT.md),
 каталога `snippets/` и `api.schema.json`. Руками не править.
 
-Реализовано: **62 из 500**. Строк с пробелом API: **0**.
+Реализовано: **108 из 500**. Строк с пробелом API: **0**.
 
 Колонка API: для реализованного пакета — фактические `requires`; для
 запланированного — опорные пространства `$` по префиксу ID (предварительно,
@@ -60,79 +60,79 @@
 | 039 | `movement.platform-ride` | ✅ | `$.fn.at`, `$.fn.height`, `$.fn.onFloor`, `$.fn.pos`, `$.fn.width`, `$.selection.each`, `$.updateFor` | — |
 | 040 | `movement.vehicle-seat` | ✅ | `$.fn.active`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.height`, `$.fn.hide`, `$.fn.pos`, `$.fn.show`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
 
-## C. Оружие и атаки — 4/20
+## C. Оружие и атаки — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 041 | `weapon.base` | ✅ | `$.fn.emit`, `$.input.down`, `$.input.pressed`, `$.sound.play`, `$.updateFor`, `$.weapons.define`, `$.weapons.give`, `$.weapons.has` | — |
+| 041 | `weapon.base` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.input.down`, `$.input.pressed`, `$.sound.play`, `$.updateFor`, `$.weapons.define`, `$.weapons.give`, `$.weapons.has` | — |
 | 042 | `weapon.melee` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.hp`, `$.fn.is`, `$.fn.pos`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
 | 043 | `weapon.hitscan` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.hp`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.input.vec`, `$.updateFor`, `$.weapons.falloff`, `$.world.raycastAll` | — |
 | 044 | `weapon.projectile` | ✅ | `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.hp`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.sprite`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
-| 045 | `weapon.spread` | ⬜ | `$.weapons`, `$.combat` | — |
-| 046 | `weapon.auto` | ⬜ | `$.weapons`, `$.combat` | — |
-| 047 | `weapon.burst` | ⬜ | `$.weapons`, `$.combat` | — |
-| 048 | `weapon.charge` | ⬜ | `$.weapons`, `$.combat` | — |
-| 049 | `weapon.beam` | ⬜ | `$.weapons`, `$.combat` | — |
-| 050 | `weapon.boomerang` | ⬜ | `$.weapons`, `$.combat` | — |
-| 051 | `weapon.grenade` | ⬜ | `$.weapons`, `$.combat` | — |
-| 052 | `weapon.mine` | ⬜ | `$.weapons`, `$.combat` | — |
-| 053 | `weapon.shotgun` | ⬜ | `$.weapons`, `$.combat` | — |
-| 054 | `weapon.sniper` | ⬜ | `$.weapons`, `$.combat` | — |
-| 055 | `weapon.rocket` | ⬜ | `$.weapons`, `$.combat` | — |
-| 056 | `weapon.chain-lightning` | ⬜ | `$.weapons`, `$.combat` | — |
-| 057 | `weapon.area-denial` | ⬜ | `$.weapons`, `$.combat` | — |
-| 058 | `weapon.weapon-switch` | ⬜ | `$.weapons`, `$.combat` | — |
-| 059 | `weapon.ammo` | ⬜ | `$.weapons`, `$.combat` | — |
-| 060 | `weapon.reload` | ⬜ | `$.weapons`, `$.combat` | — |
+| 045 | `weapon.spread` | ✅ | `$.fn.at`, `$.fn.damage`, `$.fn.is`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
+| 046 | `weapon.auto` | ✅ | `$.fn.emit`, `$.input.down`, `$.input.pressed`, `$.updateFor`, `$.weapons.of` | — |
+| 047 | `weapon.burst` | ✅ | `$.fn.emit`, `$.input.down`, `$.input.pressed`, `$.updateFor`, `$.weapons.of` | — |
+| 048 | `weapon.charge` | ✅ | `$.fn.data`, `$.fn.emit`, `$.input.down`, `$.input.pressed`, `$.updateFor`, `$.weapons.of` | — |
+| 049 | `weapon.beam` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.is`, `$.fn.pos`, `$.input.down`, `$.input.vec`, `$.updateFor`, `$.world.raycastAll` | — |
+| 050 | `weapon.boomerang` | ✅ | `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.is`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
+| 051 | `weapon.grenade` | ✅ | `$.emit`, `$.fn.at`, `$.fn.body`, `$.fn.damage`, `$.fn.is`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
+| 052 | `weapon.mine` | ✅ | `$.emit`, `$.fn.at`, `$.fn.damage`, `$.fn.is`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.updateFor`, `$.world.query` | — |
+| 053 | `weapon.shotgun` | ✅ | `$.fn.emit`, `$.input.pressed`, `$.updateFor`, `$.weapons.define`, `$.weapons.give`, `$.weapons.has` | — |
+| 054 | `weapon.sniper` | ✅ | `$.camera.zoom`, `$.camera.zoomTo`, `$.fn.damage`, `$.fn.emit`, `$.fn.is`, `$.fn.pos`, `$.input.down`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.raycastAll` | — |
+| 055 | `weapon.rocket` | ✅ | `$.emit`, `$.fn.angle`, `$.fn.at`, `$.fn.damage`, `$.fn.is`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.input.vec`, `$.updateFor`, `$.world.query` | — |
+| 056 | `weapon.chain-lightning` | ✅ | `$.fn.damage`, `$.fn.emit`, `$.fn.pos`, `$.input.pressed`, `$.updateFor` | — |
+| 057 | `weapon.area-denial` | ✅ | `$.fn.alpha`, `$.fn.at`, `$.fn.color`, `$.fn.damage`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.input.vec`, `$.selection.each`, `$.updateFor` | — |
+| 058 | `weapon.weapon-switch` | ✅ | `$.fn.emit`, `$.input.pressed`, `$.input.wheel`, `$.updateFor`, `$.weapons.give`, `$.weapons.has`, `$.weapons.of` | — |
+| 059 | `weapon.ammo` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.updateFor`, `$.weapons.of` | — |
+| 060 | `weapon.reload` | ✅ | `$.fn.emit`, `$.input.pressed`, `$.updateFor`, `$.weapons.of` | — |
 
-## D. Здоровье, защита и состояния — 5/20
+## D. Здоровье, защита и состояния — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 061 | `health.base` | ✅ | `$.fn.fadeOut`, `$.fn.health`, `$.fn.off`, `$.fn.on`, `$.fn.remove` | — |
-| 062 | `health.damage-types` | ⬜ | `$.fn`, `$.combat` | — |
-| 063 | `health.armor` | ⬜ | `$.fn`, `$.combat` | — |
-| 064 | `health.resistance` | ⬜ | `$.fn`, `$.combat` | — |
-| 065 | `health.shield` | ⬜ | `$.fn`, `$.combat` | — |
+| 062 | `health.damage-types` | ✅ | `$.fn.damageFilter`, `$.fn.data` | — |
+| 063 | `health.armor` | ✅ | `$.fn.damageFilter` | — |
+| 064 | `health.resistance` | ✅ | `$.fn.damageFilter` | — |
+| 065 | `health.shield` | ✅ | `$.fn.damageFilter`, `$.fn.data`, `$.fn.emit`, `$.updateFor` | — |
 | 066 | `health.regeneration` | ✅ | `$.fn.alive`, `$.fn.heal`, `$.fn.hp`, `$.updateFor` | — |
 | 067 | `health.invulnerability` | ✅ | `$.fn.alive`, `$.fn.alpha`, `$.fn.hp`, `$.fn.invulnerable`, `$.updateFor` | — |
 | 068 | `health.hit-flash` | ✅ | `$.fn.flash`, `$.fn.hp`, `$.updateFor` | — |
-| 069 | `health.knockback-reaction` | ⬜ | `$.fn`, `$.combat` | — |
-| 070 | `health.stagger` | ⬜ | `$.fn`, `$.combat` | — |
-| 071 | `health.poison` | ⬜ | `$.fn`, `$.combat` | — |
-| 072 | `health.burning` | ⬜ | `$.fn`, `$.combat` | — |
-| 073 | `health.freeze` | ⬜ | `$.fn`, `$.combat` | — |
-| 074 | `health.slow` | ⬜ | `$.fn`, `$.combat` | — |
-| 075 | `health.bleed` | ⬜ | `$.fn`, `$.combat` | — |
-| 076 | `health.buff-debuff` | ⬜ | `$.fn`, `$.combat` | — |
-| 077 | `health.death` | ⬜ | `$.fn`, `$.combat` | — |
+| 069 | `health.knockback-reaction` | ✅ | `$.fn.externalVelocity`, `$.fn.off`, `$.fn.on`, `$.fn.pos` | — |
+| 070 | `health.stagger` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.velocity`, `$.updateFor` | — |
+| 071 | `health.poison` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 072 | `health.burning` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.some`, `$.updateFor` | — |
+| 073 | `health.freeze` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.velocity`, `$.updateFor` | — |
+| 074 | `health.slow` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.onFloor`, `$.fn.velocity`, `$.updateFor` | — |
+| 075 | `health.bleed` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 076 | `health.buff-debuff` | ✅ | `$.fn.data`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 077 | `health.death` | ✅ | `$.emit`, `$.fn.alive`, `$.fn.alpha`, `$.fn.controls`, `$.fn.fadeOut`, `$.fn.flash`, `$.fn.remove`, `$.fn.velocity`, `$.updateFor` | — |
 | 078 | `health.respawn` | ✅ | `$.fn.alive`, `$.fn.emit`, `$.fn.respawn`, `$.updateFor` | — |
-| 079 | `health.revive` | ⬜ | `$.fn`, `$.combat` | — |
-| 080 | `health.damage-number` | ⬜ | `$.fn`, `$.combat` | — |
+| 079 | `health.revive` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.input.down`, `$.updateFor` | — |
+| 080 | `health.damage-number` | ✅ | `$.fn.alpha`, `$.fn.at`, `$.fn.color`, `$.fn.height`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.updateFor` | — |
 
-## E. Поведение врагов — 5/20
+## E. Поведение врагов — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 081 | `ai.idle` | ⬜ | `$.nav`, `$.updateFor` | — |
+| 081 | `ai.idle` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.flip`, `$.updateFor` | — |
 | 082 | `ai.waypoint-patrol` | ✅ | `$.fn.moveTowards`, `$.fn.onWall`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
 | 083 | `ai.chase` | ✅ | `$.fn.distanceTo`, `$.fn.moveTowards`, `$.updateFor` | — |
-| 084 | `ai.melee-attack` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 085 | `ai.ranged-attack` | ⬜ | `$.nav`, `$.updateFor` | — |
+| 084 | `ai.melee-attack` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.updateFor` | — |
+| 085 | `ai.ranged-attack` | ✅ | `$.fn.alive`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.velocity`, `$.updateFor` | — |
 | 086 | `ai.flee` | ✅ | `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
-| 087 | `ai.guard-post` | ⬜ | `$.nav`, `$.updateFor` | — |
+| 087 | `ai.guard-post` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
 | 088 | `ai.follow-target` | ✅ | `$.fn.distanceTo`, `$.fn.moveTowards`, `$.updateFor` | — |
-| 089 | `ai.line-of-sight` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 090 | `ai.hearing` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 091 | `ai.investigate` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 092 | `ai.search` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 093 | `ai.cover` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 094 | `ai.flank` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 095 | `ai.formation` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 096 | `ai.boss-phases` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 097 | `ai.boss-telegraph` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 098 | `ai.spawner` | ⬜ | `$.nav`, `$.updateFor` | — |
-| 099 | `ai.wave-director` | ⬜ | `$.nav`, `$.updateFor` | — |
+| 089 | `ai.line-of-sight` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.flip`, `$.fn.pos`, `$.updateFor`, `$.world.lineOfSight` | — |
+| 090 | `ai.hearing` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.pos`, `$.off`, `$.on` | — |
+| 091 | `ai.investigate` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 092 | `ai.search` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.updateFor` | — |
+| 093 | `ai.cover` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.height`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.fn.width`, `$.selection.each`, `$.updateFor` | — |
+| 094 | `ai.flank` | ✅ | `$.fn.emit`, `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.updateFor` | — |
+| 095 | `ai.formation` | ✅ | `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 096 | `ai.boss-phases` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.hp`, `$.fn.removeClass`, `$.updateFor` | — |
+| 097 | `ai.boss-telegraph` | ✅ | `$.fn.alpha`, `$.fn.at`, `$.fn.color`, `$.fn.damage`, `$.fn.emit`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.updateFor`, `$.world.query` | — |
+| 098 | `ai.spawner` | ✅ | `$.fn.emit`, `$.fn.pos`, `$.off`, `$.on`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor` | — |
+| 099 | `ai.wave-director` | ✅ | `$.emit`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor` | — |
 | 100 | `ai.leash` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.updateFor` | — |
 
 ## F. NPC, союзники и группы — 0/20

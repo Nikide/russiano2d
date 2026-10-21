@@ -1,0 +1,111 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.shotgun",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Дробовик"
+  },
+  "description": {
+    "ru": "Дробовик в $.weapons: дробь, разброс, поштучная перезарядка; выстрел — через weapon.hitscan/spread."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.weapons.has"
+    },
+    {
+      "api": "$.weapons.define"
+    },
+    {
+      "api": "$.weapons.give"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "weapon",
+      "label": "ID ствола",
+      "type": "string",
+      "default": "shotgun"
+    },
+    {
+      "id": "damage",
+      "label": "Урон дробины",
+      "type": "number",
+      "default": 9,
+      "min": 0,
+      "max": 10000
+    },
+    {
+      "id": "pellets",
+      "label": "Дробин",
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 32
+    },
+    {
+      "id": "spread",
+      "label": "Разброс",
+      "type": "number",
+      "default": 6,
+      "min": 0,
+      "max": 90,
+      "unit": "°"
+    },
+    {
+      "id": "shells",
+      "label": "Патронов",
+      "type": "int",
+      "default": 6,
+      "min": 1,
+      "max": 50
+    },
+    {
+      "id": "reload",
+      "label": "Перезарядка",
+      "type": "number",
+      "default": 3,
+      "min": 0.1,
+      "max": 30,
+      "unit": "с",
+      "step": 0.1
+    },
+    {
+      "id": "key",
+      "label": "Клавиша выстрела",
+      "type": "string",
+      "default": "j"
+    }
+  ],
+  "tags": [
+    "дробовик",
+    "shotgun"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

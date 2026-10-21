@@ -15,4 +15,5 @@
 - `mode` (enum) — Режим
 - `fireKey` (string) — Клавиша выстрела
 - `reloadKey` (string) — Клавиша перезарядки
+- `autoReload` (bool) — Перезарядка на пустом
 - `sound` (asset) — Звук выстрела

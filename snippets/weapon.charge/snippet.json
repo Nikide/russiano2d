@@ -1,0 +1,84 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "weapon.charge",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Заряженный выстрел"
+  },
+  "description": {
+    "ru": "Удержание заряжает выстрел; пороги времени умножают урон."
+  },
+  "kind": "behavior",
+  "category": "Оружие и атаки",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "weapon-trigger",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.weapons.of"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.data"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "j"
+    },
+    {
+      "id": "levels",
+      "label": "Пороги (мс=множитель)",
+      "type": "list",
+      "default": [
+        "400=1.5",
+        "1000=3"
+      ]
+    },
+    {
+      "id": "min",
+      "label": "Минимум удержания",
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 5000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "заряд",
+    "charge"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

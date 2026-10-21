@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.spawner",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Спавнер"
+  },
+  "description": {
+    "ru": "Создаёт противников из $.prefab у себя с интервалом и лимитом живых."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.prefab.has"
+    },
+    {
+      "api": "$.prefab.instantiate"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "prefab",
+      "label": "Prefab",
+      "type": "string",
+      "default": "",
+      "hint": "Имя из $.prefab"
+    },
+    {
+      "id": "interval",
+      "label": "Интервал",
+      "type": "int",
+      "default": 2000,
+      "min": 50,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "alive",
+      "label": "Лимит живых",
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "id": "total",
+      "label": "Всего (0 — без лимита)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "event",
+      "label": "Включается событием",
+      "type": "string",
+      "default": "",
+      "hint": "Пусто — сразу"
+    }
+  ],
+  "tags": [
+    "спавн",
+    "враги"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

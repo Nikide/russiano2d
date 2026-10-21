@@ -42,6 +42,15 @@
       "api": "$.fn.emit"
     },
     {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
       "api": "$.sound.play"
     }
   ],
@@ -131,13 +140,20 @@
       "id": "fireKey",
       "label": "Клавиша выстрела",
       "type": "string",
-      "default": "j"
+      "default": "j",
+      "hint": "Пусто — стреляет другой пакет (weapon.auto/burst/charge)"
     },
     {
       "id": "reloadKey",
       "label": "Клавиша перезарядки",
       "type": "string",
       "default": "r"
+    },
+    {
+      "id": "autoReload",
+      "label": "Перезарядка на пустом",
+      "type": "bool",
+      "default": true
     },
     {
       "id": "sound",

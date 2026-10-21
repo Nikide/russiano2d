@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "health.damage-number",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Числа урона"
+  },
+  "description": {
+    "ru": "Всплывающее число урона над объектом."
+  },
+  "kind": "behavior",
+  "category": "Бой и здоровье",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.remove"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#ffd040"
+    },
+    {
+      "id": "size",
+      "label": "Размер шрифта",
+      "type": "int",
+      "default": 14,
+      "min": 6,
+      "max": 96
+    },
+    {
+      "id": "life",
+      "label": "Время",
+      "type": "int",
+      "default": 700,
+      "min": 100,
+      "max": 5000,
+      "unit": "мс"
+    },
+    {
+      "id": "rise",
+      "label": "Подъём",
+      "type": "number",
+      "default": 40,
+      "min": 0,
+      "max": 500,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "урон",
+    "feedback",
+    "UI"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

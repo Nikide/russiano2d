@@ -1,0 +1,108 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "ai.melee-attack",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Ближняя атака ИИ"
+  },
+  "description": {
+    "ru": "Подходит к цели и бьёт с перезарядкой."
+  },
+  "kind": "behavior",
+  "category": "ИИ",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "movement",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.moveTowards"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.emit"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Цель",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "aggro",
+      "label": "Радиус агрессии",
+      "type": "number",
+      "default": 300,
+      "min": 0,
+      "max": 10000,
+      "unit": "пикс."
+    },
+    {
+      "id": "reach",
+      "label": "Дистанция удара",
+      "type": "number",
+      "default": 24,
+      "min": 1,
+      "max": 500,
+      "unit": "пикс."
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 110,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 8,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "cooldown",
+      "label": "Перезарядка",
+      "type": "int",
+      "default": 900,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "враг",
+    "ближний бой"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}
