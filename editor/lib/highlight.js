@@ -124,7 +124,8 @@ export function lineToRml(tokens) {
     for (const t of tokens) {
         // Пробелы — неразрывные: парсер RML схлопывает пробел перед первым
         // <span> строки, и отступ пропадал. Ширина в моноширинном шрифте та же.
-        const text = escapeRml(t.text).replace(/ /g, '&#160;').replace(/\t/g, '&#160;&#160;&#160;&#160;');
+        // «{{» и «}}» RmlUi принимает за привязку данных и роняет разбор строки: скобки — числовыми сущностями.
+        const text = escapeRml(t.text).replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/ /g, '&#160;').replace(/\t/g, '&#160;&#160;&#160;&#160;');
         html += t.cls ? '<span class="' + t.cls + '">' + text + '</span>' : text;
     }
     return html;

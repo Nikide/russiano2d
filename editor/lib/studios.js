@@ -36,6 +36,7 @@ export function createStudioHost($, editor) {
             typing: () => editor.typing(),
             preview: () => editor.fullPreview(tab),
             extensions: editor.extensions,
+            graphInfo: () => editor.graphInfo(), reindex: () => editor.reindex(), migrate: () => editor.migrate(), projectChanged: () => editor.projectChanged(),
         };
     }
 

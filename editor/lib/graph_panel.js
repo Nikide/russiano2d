@@ -122,15 +122,21 @@ export function createGraphPanel($, doc, host) {
         renderMini();
     }
 
-    function applyPan() {
-        doc.style('gp-canvas', 'left', Math.round(st.pan.x) + 'px');
-        doc.style('gp-canvas', 'top', Math.round(st.pan.y) + 'px');
-    }
+    function applyPan() { st.dirty = true; }
 
     // --- отрисовка ----------------------------------------------------------------------
 
-    const seg = (x, y, w, h, cls) =>
-        '<div class="gp-seg ' + cls + '" style="left: ' + Math.round(x) + 'px; top: ' + Math.round(y) + 'px; width: ' + Math.max(1, Math.round(w)) + 'px; height: ' + Math.max(1, Math.round(h)) + 'px;"></div>';
+    // Вид: смещение pan и размер области. Элементы рисуются сразу в координатах области и
+    // отбрасываются, если выходят за её границы: RmlUi-обрезка (overflow) на части машин
+    // не срабатывает, а «уехавшие» за край карточки поверх кода недопустимы.
+    const V = { ox: 0, oy: 0, w: 0, h: 0 };
+    const fits = (x, y, w, h) => x >= 0 && y >= 0 && x + w <= V.w && y + h <= V.h;
+
+    const seg = (x, y, w, h, cls) => {
+        x += V.ox; y += V.oy; w = Math.max(1, w); h = Math.max(1, h);
+        if (!fits(x, y, w, h)) return '';
+        return '<div class="gp-seg ' + cls + '" style="left: ' + Math.round(x) + 'px; top: ' + Math.round(y) + 'px; width: ' + Math.round(w) + 'px; height: ' + Math.round(h) + 'px;"></div>';
+    };
 
     function edgeHtml(e, byId, z) {
         const a = byId.get(e.from), b = byId.get(e.to);
@@ -141,15 +147,19 @@ export function createGraphPanel($, doc, host) {
         let html = seg(x1, y1 - 1, xm - x1, 2, t);
         html += seg(xm - 1, Math.min(y1, y2) - 1, 2, Math.abs(y2 - y1) + 2, t);
         html += seg(xm, y2 - 1, x2 - xm - 6 * z, 2, t);
-        html += '<span class="gp-arrow ' + t + '" style="left: ' + Math.round(x2 - 14 * z) + 'px; top: ' + Math.round(y2 - 9 * z) + 'px; font-size: ' + Math.round(17 * z) + 'px;">' + icon('arrow_right') + '</span>';
-        if (e.label) html += '<span class="gp-lbl" style="left: ' + Math.round(xm + 3 * z) + 'px; top: ' + Math.round(y2 - 17 * z) + 'px; font-size: ' + Math.max(7, Math.round(10 * z)) + 'px;">' + esc(e.label) + '</span>';
+        const ax = x2 - 14 * z + V.ox, ay = y2 - 9 * z + V.oy, as = Math.round(17 * z);
+        if (fits(ax, ay, as, as)) html += '<span class="gp-arrow ' + t + '" style="left: ' + Math.round(ax) + 'px; top: ' + Math.round(ay) + 'px; font-size: ' + as + 'px;">' + icon('arrow_right') + '</span>';
+        const lx = xm + 3 * z + V.ox, ly = y2 - 17 * z + V.oy, lf = Math.max(7, Math.round(10 * z));
+        if (e.label && fits(lx, ly, (e.label.length * 0.62 + 1) * lf, lf + 4)) html += '<span class="gp-lbl" style="left: ' + Math.round(lx) + 'px; top: ' + Math.round(ly) + 'px; font-size: ' + lf + 'px;">' + esc(e.label) + '</span>';
         return html;
     }
 
     function cardHtml(n, z, sel) {
+        const x = n.x * z + V.ox, y = n.y * z + V.oy, w = n.w * z, h = n.h * z;
+        if (!fits(x, y, w, h)) return '';
         const fs = Math.max(7, Math.round(12 * z));
         return '<div class="gp-card k-' + n.kind + (n.root ? ' root' : '') + (sel === n.id ? ' sel' : '') + (n.missing ? ' missing' : '') + (n.dynamic ? ' dynamic' : '') +
-            '" data-key="' + esc(n.id) + '" style="left: ' + Math.round(n.x * z) + 'px; top: ' + Math.round(n.y * z) + 'px; width: ' + Math.round(n.w * z) + 'px; height: ' + Math.round(n.h * z) + 'px; font-size: ' + fs + 'px;">' +
+            '" data-key="' + esc(n.id) + '" style="left: ' + Math.round(x) + 'px; top: ' + Math.round(y) + 'px; width: ' + Math.round(w) + 'px; height: ' + Math.round(h) + 'px; font-size: ' + fs + 'px;">' +
             '<span class="gp-ico">' + icon(n.icon) + '</span>' +
             '<span class="gp-txt"><span class="gp-t">' + esc(n.title) + '</span><span class="gp-s">' + esc(n.sub || '') + '</span></span>' +
             (n.badge ? '<span class="gp-badge">' + esc(n.badge) + '</span>' : '') +
@@ -173,7 +183,6 @@ export function createGraphPanel($, doc, host) {
         doc.text('gp-warn', s.unsaved ? 'Код не сохранён · граф может быть устаревшим' : '');
         doc.cls('gp-warn', 'hidden', !s.unsaved);
         doc.text('gp-fullbtn', icon(st.full ? 'close_fullscreen' : 'open_in_full'));
-        doc.text('gp-collapsebtn', icon(st.collapsed ? 'expand_less' : 'expand_more'));
     }
 
     function renderEmpty(g) {
@@ -199,15 +208,26 @@ export function createGraphPanel($, doc, host) {
         if (!view || st.collapsed) { doc.html('gp-canvas', ''); doc.html('gp-mini', ''); return; }
         if (!st.fitted && !light) fit(view);
         const z = Z();
+        const body = bodyRect();
+        if (!body || !body.w || !body.h) { doc.html('gp-canvas', ''); return; }
+        clampPan(view, body);
+        Object.assign(V, { ox: st.pan.x, oy: st.pan.y, w: body.w, h: body.h });
         const byId = new Map(view.nodes.map((n) => [n.id, n]));
-        let html = view.labels.map((l) => '<span class="gp-col" style="left: ' + Math.round(l.x * z) + 'px; top: ' + Math.round(l.y * z) + 'px; font-size: ' + Math.max(8, Math.round(11 * z)) + 'px;">' + esc(l.text) + '</span>').join('');
+        let html = view.labels.map((l) => {
+            const x = l.x * z + V.ox, y = l.y * z + V.oy, f = Math.max(8, Math.round(11 * z));
+            return fits(x, y, l.text.length * 0.62 * f, f + 4) ? '<span class="gp-col" style="left: ' + Math.round(x) + 'px; top: ' + Math.round(y) + 'px; font-size: ' + f + 'px;">' + esc(l.text) + '</span>' : '';
+        }).join('');
         html += view.edges.map((e) => edgeHtml(e, byId, z)).join('');
         html += view.nodes.map((n) => cardHtml(n, z, st.selected)).join('');
         doc.html('gp-canvas', html);
-        doc.style('gp-canvas', 'width', Math.round(view.bounds.w * z) + 'px');
-        doc.style('gp-canvas', 'height', Math.round(view.bounds.h * z) + 'px');
-        applyPan();
         renderMini();
+    }
+
+    // Содержимое нельзя утащить целиком за край: хотя бы часть остаётся в области.
+    function clampPan(view, body) {
+        const z = Z(), cw = view.bounds.w * z, ch = view.bounds.h * z, m = 80;
+        st.pan.x = Math.round(Math.max(Math.min(0, body.w - cw) - m, Math.min(Math.max(0, body.w - cw) + m, st.pan.x)));
+        st.pan.y = Math.round(Math.max(Math.min(0, body.h - ch) - m, Math.min(Math.max(0, body.h - ch) + m, st.pan.y)));
     }
 
     function renderMini() {
@@ -271,7 +291,6 @@ export function createGraphPanel($, doc, host) {
         doc.on('gp-fit', 'click', () => { st.fitted = false; render(); });
         doc.on('gp-backbtn', 'click', () => back());
         doc.on('gp-fullbtn', 'click', () => setFull(!st.full));
-        doc.on('gp-collapsebtn', 'click', () => setCollapsed(!st.collapsed));
         doc.on('gp-reindex', 'click', () => host.reindex());
         doc.on('gp-code', 'click', () => {
             const g = graph();
@@ -301,40 +320,24 @@ export function createGraphPanel($, doc, host) {
         renderResults();
     }
 
-    function setCollapsed(on) { st.collapsed = !!on; if (on) st.full = false; host.layout(); render(); }
-    function setFull(on) { st.full = !!on; if (on) st.collapsed = false; host.layout(); st.fitted = false; render(); }
+    function setFull(on) { st.full = !!on; host.layout(); st.fitted = false; render(); }
 
     // Мышь по телу графа: перетаскивание, колесо, миникарта, ручка высоты.
     function update(dt) {
-        if (st.collapsed) return;
+        if (st.dirty) { st.dirty = false; render(true); }
         search();
         const m = mousePx($);
         const body = bodyRect();
         // Раскладка документа догоняет показ панели через кадр: вписываем, когда размеры известны.
         if (!st.fitted && st.last && body && body.w > 0 && body.h > 0) render();
         const down = $.input.mouseDown('left');
-        if (st.resize) {
-            if (!down) st.resize = null;
-            else {
-                const top = doc.rect('gp');
-                const h = Math.max(MIN_H, Math.round(st.resize.bottom - m.y));
-                if (top) { st.height = h; host.layout(); }
-            }
-            return;
-        }
-        const handle = doc.rect('gp-resize');
-        if (!st.drag && down && $.input.mousePressed('left') && inside(m, handle)) {
-            const panel = doc.rect('gp');
-            if (panel) st.resize = { bottom: panel.y + panel.h };
-            return;
-        }
         if (!body) return;
         const mini = doc.rect('gp-mini');
         const over = inside(m, body);
         if (over && inside(m, mini) && $.input.mousePressed('left') && st.miniScale) {
             const z = Z(), k = st.miniScale;
             st.pan = { x: Math.round(-((m.x - mini.x) / k) * z + body.w / 2), y: Math.round(-((m.y - mini.y) / k) * z + body.h / 2) };
-            applyPan(); renderMini();
+            applyPan();
             return;
         }
         if (over) {
@@ -345,7 +348,7 @@ export function createGraphPanel($, doc, host) {
         else if (st.drag) {
             const dx = m.x - st.drag.x, dy = m.y - st.drag.y;
             if (Math.abs(dx) + Math.abs(dy) > 4) st.dragMoved = true;
-            if (st.dragMoved) { st.pan = { x: st.drag.px + dx, y: st.drag.py + dy }; applyPan(); renderMini(); }
+            if (st.dragMoved) { st.pan = { x: st.drag.px + dx, y: st.drag.py + dy }; applyPan(); }
         } else if ($.input.mousePressed('left') && over && !inside(m, mini)) {
             st.drag = { x: m.x, y: m.y, px: st.pan.x, py: st.pan.y };
             st.dragMoved = false;
@@ -362,11 +365,9 @@ export function createGraphPanel($, doc, host) {
     doc.text('gp-code', icon('code'));
     doc.text('gp-reindex', icon('refresh'));
     doc.text('gp-fullbtn', icon('open_in_full'));
-    doc.text('gp-collapsebtn', icon('expand_more'));
     return {
-        state: st, render, update, navigate, back, setView, pick, zoomBy, setCollapsed, setFull, fit: () => { st.fitted = false; render(); },
+        state: st, render, update, navigate, back, setView, pick, zoomBy, setFull, fit: () => { st.fitted = false; render(); },
         head: () => renderHead(st.last), view: () => st.last, selected: () => st.selected,
-        height: () => st.height,
         // для тестов: прямое действие над карточкой
         openNode: (key) => open(st.last && st.last.nodes.find((n) => n.id === key)),
         search: (q) => { const g = graph(); return g ? searchGraph(g, q, 12) : []; },

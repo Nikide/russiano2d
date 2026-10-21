@@ -216,7 +216,7 @@ export function create(host) {
         reload: () => rebase(false),
         reread: () => rebase(true),
         diagnostics: () => st.diags,
-        snapshot: () => ({ dirty: dirty(), v2: st.v2, conflict: st.conflict, values: st.v2 && st.json ? Object.fromEntries(FIELDS.map((f) => [f.path, display(f, st.json)])) : null }),
+        snapshot: () => ({ dirty: dirty(), v2: st.v2, conflict: st.conflict, graph: host.graphInfo ? host.graphInfo().has : null, values: st.v2 && st.json ? Object.fromEntries(FIELDS.map((f) => [f.path, display(f, st.json)])) : null }),
         // Для агента и тестов: правка поля формы и чтение значений.
         setField(id, value) { doc.setValue('ps-' + id, String(value)); renderState(); host.changed(); },
         fieldValue: (id) => doc.value('ps-' + id),

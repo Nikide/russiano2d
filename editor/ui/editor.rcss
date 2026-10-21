@@ -34,7 +34,7 @@ scrollbarcorner { background-color: transparent; }
 .hidden { display: none; }
 /* Правила с #id специфичнее .hidden — скрываемым блокам нужен свой селектор. */
 #pm.hidden, #app.hidden, #palette.hidden, #findbar.hidden, #code.hidden, #pane.hidden, #welcome.hidden,
-#sidebar.hidden, #side-search.hidden, #caret.hidden, #code-vscroll.hidden, #code-completion.hidden, #api-hover.hidden,
+#sidebar.hidden, #side-search.hidden, #caret.hidden, #code-switch.hidden, #code-vscroll.hidden, #code-completion.hidden, #api-hover.hidden,
 #close-confirm.hidden, #file-conflict.hidden, #file-conflict-reload.hidden, #gp.hidden, #gp-results.hidden, #gp-warn.hidden, #gp-empty.hidden { display: none; }
 .icon { font-size: 18px; }
 .muted { color: #8b93a3; }
@@ -137,7 +137,7 @@ scrollbarcorner { background-color: transparent; }
 .tab-x:hover { color: #ffffff; background-color: #343a46; }
 .tab-dirty { color: #e6e9ef; font-size: 10px; }
 
-#host { display: block; position: relative; flex: 1 1 0; min-height: 0px; }
+#host { display: block; position: relative; flex: 1 1 0; min-height: 0px; overflow: hidden; }
 .welcome { display: block; padding: 60px 40px; color: #8b93a3; text-align: center; }
 .welcome h1 { display: block; font-size: 26px; color: #d7dce6; margin-bottom: 10px; }
 .welcome .keys { display: block; margin-top: 18px; font-size: 13px; line-height: 24px; }
@@ -409,10 +409,12 @@ scrollbarcorner { background-color: transparent; }
 #pm .pm-open, #pm .pm-create { margin-left: 0px; }
 
 /* --- Граф проекта --------------------------------------------------------------- */
-#gp { display: flex; flex-direction: column; flex: 0 0 auto; height: 280px; background-color: #14161b; border-top: 1px #2a2f39; position: relative; }
-#gp-resize { display: block; flex: 0 0 4px; height: 4px; cursor: ns-resize; background-color: #1b1e24; }
-#gp-resize:hover { background-color: #3b82f6; }
-#gp-head { display: flex; flex-direction: row; align-items: center; flex: 0 0 34px; height: 34px; padding: 0px 8px; background-color: #1b1e24; border-bottom: 1px #2a2f39; overflow: hidden; }
+#gp { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0px; background-color: #14161b; position: relative; }
+#bottom.graph { height: 330px; flex: 0 0 330px; }
+#bottom.graph.tall { height: 560px; flex: 0 0 560px; }
+#bottom.collapsed #gp { display: none; }
+#bottom.graph #bottom-body { display: none; }
+#gp-head { display: flex; flex-direction: row; align-items: center; flex: 0 0 32px; height: 32px; padding: 0px 8px; background-color: #1b1e24; border-top: 1px #2a2f39; border-bottom: 1px #2a2f39; overflow: hidden; }
 #gp-head .tb-btn { padding: 4px 5px; margin-right: 0px; }
 .gp-h-title { display: none; }
 #gp-crumbs { display: flex; flex-direction: row; align-items: center; flex: 1 1 0; min-width: 0px; overflow: hidden; white-space: nowrap; }
@@ -434,7 +436,7 @@ scrollbarcorner { background-color: transparent; }
 .gp-res-t { flex: 1 1 0; color: #e6e9ef; white-space: nowrap; overflow: hidden; }
 .gp-res-d { color: #8b93a3; margin-left: 10px; white-space: nowrap; }
 #gp-body { display: block; flex: 1 1 0; min-height: 0px; position: relative; overflow: hidden; background-color: #101216; }
-#gp-canvas { display: block; position: absolute; left: 0px; top: 0px; width: 10px; height: 10px; }
+#gp-canvas { display: block; position: absolute; left: 0px; top: 0px; right: 0px; bottom: 0px; }
 #gp-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; position: absolute; left: 0px; top: 0px; right: 0px; bottom: 0px; }
 .gp-empty-t { display: block; margin-bottom: 12px; color: #8b93a3; font-size: 13px; }
 #gp-mini { display: block; position: absolute; right: 10px; bottom: 10px; width: 150px; height: 86px; background-color: rgba(27, 30, 36, 220); border-width: 1px; border-color: #343a46; border-radius: 4px; overflow: hidden; }
@@ -466,7 +468,7 @@ scrollbarcorner { background-color: transparent; }
 .gp-card.k-resource { border-color: #a8731f; background-color: #33250f; }
 .gp-card.k-script { border-color: #4a5160; background-color: #20242b; }
 .gp-card.missing { border-color: #c93c3c; }
-.gp-card.dynamic { border-style: dashed; }
+.gp-card.dynamic { border-color: #9a7bff; }
 .gp-card.root { border-width: 2px; }
 .gp-ico { display: inline-block; flex: 0 0 auto; width: 1.6em; font-size: 1.5em; color: #c9ced8; }
 .gp-txt { display: block; flex: 1 1 0; overflow: hidden; white-space: nowrap; }
@@ -474,5 +476,9 @@ scrollbarcorner { background-color: transparent; }
 .gp-s { display: block; font-size: 0.82em; color: #8b93a3; white-space: nowrap; overflow: hidden; }
 .gp-badge { display: inline-block; flex: 0 0 auto; margin-left: 4px; padding: 0px 6px; font-size: 0.85em; color: #ffffff; background-color: #3b4560; border-radius: 8px; }
 .gp-open { display: inline-block; flex: 0 0 auto; font-size: 1.3em; color: #8b93a3; }
-#center.gp-full #host { display: none; }
-#center.gp-full #gp { flex: 1 1 0; }
+
+/* project.json как текст: переключатель «Настройки | JSON» */
+#code-switch { display: flex; flex-direction: row; position: absolute; z-index: 5; top: 8px; right: 22px; padding: 2px; background-color: #1b1e24; border-width: 1px; border-color: #343a46; border-radius: 6px; font-family: Open Sans; }
+.cs-btn { display: inline-block; padding: 3px 10px; font-size: 12px; color: #9aa2b1; border-radius: 4px; cursor: pointer; }
+.cs-btn:hover { color: #ffffff; }
+.cs-btn.on { color: #ffffff; background-color: #1f3a5f; cursor: default; }

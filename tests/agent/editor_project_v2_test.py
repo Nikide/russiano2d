@@ -83,7 +83,9 @@ def test():
             check(a.eval(E + '.graphInfo().objects') == 3, 'Save JS обновляет граф (3 объекта)')
             check(any(e.get('public_id') == 'guide' for e in disk(root)['editor']['graph']['entities']), 'новый объект записан в project.json')
 
-            # Панель графа
+            # Граф — вкладка нижней панели рядом с Problems/Output/Console
+            a.eval(E + '.showGraph();1')
+            check(a.eval(E + '.state.bottom') == 'graph', 'вкладка «Граф» нижней панели открывается')
             panel = a.eval(E + '.graph.view().nodes.map(n=>n.kind).sort().join(",")')
             check(panel == 'resource,scene,script,world,world', 'панель: обзор (%s)' % panel)
             check(a.eval(E + ".graph.openNode('world:game')") is True, 'двойной клик на World открывает область')
@@ -104,6 +106,7 @@ def test():
             settle(a, E + '.activeTab().api!==undefined && !!' + E + '.activeTab().api')
             check(a.eval(E + '.activeTab().studio.id') == 'project', 'project.json открывается в Project Settings')
             before = json.dumps(disk(root)['editor'], sort_keys=True)
+            check(a.eval(E + '.activeTab().inst.snapshot().graph') is True, 'Project Settings видит построенный граф')
             a.eval(E + ".activeTab().inst.setField('width','800');1")
             check(a.eval(E + '.activeTab().inst.dirty()') is True, 'правка поля делает документ несохранённым')
             run(a, E + '.save()')
@@ -132,6 +135,11 @@ def test():
             # Вкладка JSON — тот же файл текстом
             run(a, E + ".openWith('" + str(root / 'project.json') + "','code')")
             check(a.eval(E + '.activeTab().kind') == 'code', 'вкладка JSON открывает текст')
+            a.step(6)
+            check('Failed to instance' not in a.stderr_tail(), 'JSON с «}}» (граф) отображается без ошибок разбора RML')
+            run(a, E + ".openFile('project.json',0,0,'project')")
+            settle(a, E + '.activeTab().api!==undefined && !!' + E + '.activeTab().api')
+            check(a.eval(E + '.activeTab().studio.id') == 'project', 'из JSON можно вернуться в Project Settings')
 
         # Плоский манифест: миграция
         flat = root / 'flat'

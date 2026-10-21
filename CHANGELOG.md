@@ -9,8 +9,8 @@
 > индексирует созданный проект, шаблон `blank` — schema 2. `r2d validate`: `R2D201–R2D210`
 > (граф, устаревший индекс). Прежний `format: 2` (`entry`/`scenes`/`roles`) больше не
 > читается; манифест без `schema_version` работает как раньше, демо и фикстуры не
-> менялись. Editor: Project Settings (`Настройки | JSON`) и read-only панель графа под
-> кодом (обзор, World, сцены, ресурсы, breadcrumb, поиск, zoom/pan, миникарта),
+> менялись. Editor: Project Settings (`Настройки | JSON`) и read-only граф во вкладке
+> нижней панели (обзор, World, сцены, ресурсы, breadcrumb, поиск, zoom/pan, миникарта),
 > индекс после Save `.js`. Рантайм: `runtime.window.fullscreen` применяется при старте.
 > Документация: `docs/PROJECT_JSON.md`; публичный `$` API и снимок API не менялись.
 

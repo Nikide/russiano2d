@@ -254,8 +254,8 @@ albedo/normal применяется кнопкой «Материал PNG (то
 
 Клик по `project.json` открывает **Project Settings** (`editor/studios/project.js`):
 форма с `Настройки | JSON`, запись через native `r2d project-set` (граф и
-неизвестные поля не меняются). Под редактором кода и под формой живёт **панель
-графа проекта** (`editor/lib/graph_panel.js`, модель — `editor/lib/shared/graph_model.js`):
+неизвестные поля не меняются). В нижней панели (вкладка «Граф» рядом с Problems/Output/Console) живёт **граф
+проекта** (`editor/lib/graph_panel.js`, модель — `editor/lib/shared/graph_model.js`):
 обзор, World, сцены, ресурсы, breadcrumb, поиск, zoom/pan/вписать, миникарта,
 выбор с переходом в код; граф только для чтения. Граф перестраивается после Save
 `.js` (`r2d project-index --write`), по команде «Проект: перестроить связи

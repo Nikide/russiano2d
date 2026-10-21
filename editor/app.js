@@ -421,10 +421,8 @@ export function createEditor($) {
         graphPanel.head();
     }
 
-    function graphVisible() {
-        const t = activeTab();
-        return !!(s.project && !s.fullPreview && t && (t.kind === 'code' || (t.kind === 'studio' && t.studio.id === 'project')));
-    }
+    // Граф живёт во вкладке «Граф» нижней панели, рядом с Problems/Output/Console.
+    function graphVisible() { return !!(s.project && !s.fullPreview && s.bottom === 'graph' && !s.bottomCollapsed); }
 
     async function openProject(input) {
         const abs = absPath(input);
@@ -1122,7 +1120,7 @@ export function createEditor($) {
         { id: 'agent-session', label: 'Тесты: выполнить активную .agent.json сессию', keys: '', run: () => runAgentSession() },
         { id: 'migrate-project', label: 'Проект: перейти на schema_version 2', keys: '', run: () => migrateProject() },
         { id: 'reindex', label: 'Проект: перестроить связи проекта (граф)', keys: '', run: () => reindex() },
-        { id: 'graph', label: 'Вид: панель графа проекта', keys: '', run: () => { graphPanel.setCollapsed(!graphPanel.state.collapsed); } },
+        { id: 'graph', label: 'Вид: граф проекта (нижняя панель)', keys: '', run: () => { s.bottom = 'graph'; s.bottomCollapsed = false; renderAll(); } },
         { id: 'build', label: 'Проект: собрать игру (validate → build)', keys: 'Cmd/Ctrl+Shift+B', run: () => buildPackage() },
         { id: 'refresh', label: 'Проект: обновить дерево файлов', keys: '', run: () => refreshTree() },
         { id: 'projects', label: 'Проект: открыть другой (Project Manager)', keys: '', run: () => { closeAllTabs(true); s.project = null; showPM(); } },
@@ -1278,6 +1276,7 @@ export function createEditor($) {
                 '<span class="keys"><span class="kbd">Cmd/Ctrl+P</span> перейти к файлу &#160; <span class="kbd">Cmd/Ctrl+Shift+P</span> команды &#160; <span class="kbd">F5</span> запуск</span>');
             return;
         }
+        doc.cls('code-switch', 'hidden', !(t.model && t.path === 'project.json'));
         if (t.model) { code.invalidate(); return; }
         const entry = s.entries.find((e) => e.path === t.path) || {};
         if (t.kind === 'image') {
@@ -1381,7 +1380,9 @@ export function createEditor($) {
         const errors = problems.filter((d) => d.severity === 'error').length;
         doc.text('prob-badge', String(problems.length));
         doc.cls('prob-badge', 'zero', problems.length === 0);
-        for (const b of ['problems', 'output', 'console']) doc.cls('bt-' + b, 'on', s.bottom === b);
+        for (const b of ['problems', 'output', 'console', 'graph']) doc.cls('bt-' + b, 'on', s.bottom === b);
+        doc.cls('gp', 'hidden', s.bottom !== 'graph');
+        doc.cls('bottom-body', 'hidden', s.bottom === 'graph');
         doc.text('bt-toggle', icon(s.bottomCollapsed ? 'expand_less' : 'expand_more'));
         if (s.bottom === 'problems') {
             doc.html('bottom-body', problems.length
@@ -1402,7 +1403,7 @@ export function createEditor($) {
             doc.html('bottom-body', '<div class="out-toolbar">' + buttons + '</div>' +
                 (rows ? '<div class="out-log">' + rows + '</div>' : '<span class="empty">' +
                     (s.outputEntries.length ? 'Нет записей для выбранного фильтра.' : 'Вывод игры и команд r2d появится после запуска или проверки.') + '</span>'));
-        } else {
+        } else if (s.bottom === 'console') {
             doc.html('bottom-body', s.consoleLog ? '<div class="log">' + esc(s.consoleLog) + '</div>' : '<span class="empty">Журнал Editor пуст.</span>');
         }
         void errors;
@@ -1433,12 +1434,8 @@ export function createEditor($) {
         doc.text('side-title', s.side === 'search' ? 'Поиск по проекту' : 'Проект');
         doc.cls('side-search', 'hidden', s.side !== 'search');
         doc.cls('bottom', 'collapsed', s.bottomCollapsed);
-        // Граф проекта: под кодом и Project Settings; на весь центр — по кнопке «развернуть».
-        const gv = graphVisible(), gp = graphPanel.state;
-        doc.cls('gp', 'hidden', !gv);
-        doc.cls('center', 'gp-full', gv && gp.full);
-        if (gv) doc.style('gp', 'height', (gp.collapsed ? 40 : graphPanel.height()) + 'px');
-        if (t && t.kind === 'studio' && t.api && !s.palette) studios.show(t, !(gv && gp.full));
+        doc.cls('bottom', 'graph', s.bottom === 'graph');
+        doc.cls('bottom', 'tall', s.bottom === 'graph' && graphPanel.state.full);
         for (const r of ['project', 'search', 'run', 'tools']) doc.cls('rail-' + r, 'on', s.side === r && !s.sidebarHidden);
         code.invalidate();
     }
@@ -1541,6 +1538,7 @@ export function createEditor($) {
         doc.on('code-completion', 'click', (id, ev, key) => {
             if (key && key.startsWith('completion:')) code.chooseCompletion(parseInt(key.slice(11), 10));
         });
+        doc.on('cs-settings', 'click', () => { openFile('project.json', 0, 0, 'project'); });
         doc.on('find-prev', 'click', () => findStep(true));
         doc.on('find-next', 'click', () => findStep(false));
         doc.on('find-close', 'click', () => closeFind());
@@ -1557,7 +1555,7 @@ export function createEditor($) {
             else if (key.startsWith('line:')) { const t = activeTab(); if (t && t.model) { t.model.goto(parseInt(key.slice(5), 10), 1); code.ensureCaretVisible(); focusCode(); } }
         });
 
-        for (const b of ['problems', 'output', 'console']) doc.on('bt-' + b, 'click', () => { s.bottom = b; s.bottomCollapsed = false; renderBottom(); renderLayout(); });
+        for (const b of ['problems', 'output', 'console', 'graph']) doc.on('bt-' + b, 'click', () => { s.bottom = b; s.bottomCollapsed = false; renderBottom(); renderLayout(); if (b === 'graph') graphPanel.render(); });
         doc.on('bt-toggle', 'click', () => { s.bottomCollapsed = !s.bottomCollapsed; renderBottom(); renderLayout(); });
         doc.on('bottom-body', 'click', (id, ev, key) => {
             if (s.bottom === 'output' && key && key.startsWith('output-filter:')) {
@@ -1670,6 +1668,9 @@ export function createEditor($) {
             if (t.jsonValidationPending <= 0) validateJsonText(t);
         }
         if (t && t.model) {
+            // Высота #host меняется вместе с панелью графа; число видимых строк берётся из актуальной геометрии.
+            const cr = doc.rect('code'), ck = cr ? Math.round(cr.w) + 'x' + Math.round(cr.h) : '';
+            if (ck !== s.codeRectKey) { s.codeRectKey = ck; code.invalidate(); }
             code.update(dt, s.focus === 'code', {
                 find: openFind,
                 gotoLine: () => openPalette('line'),
@@ -1718,9 +1719,11 @@ export function createEditor($) {
         }
     }
 
+    function showGraph() { s.bottom = 'graph'; s.bottomCollapsed = false; renderAll(); }
+
     doc.show();
     return {
-        state: s, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
+        state: s, showGraph, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
         searchProject, openSearchResult, showProjectSearch, runAgentSession,
         manifest, migrateProject, reindex, checkIndex, graphInfo, refreshProjectJson, graph: graphPanel, showPM, createProject, openProjectDialog, pickNewProjectDir, openFileDialog,
         openPalette, closePalette, activeTab, closeTab, code, studios, extensions: extensionHost,
