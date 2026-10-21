@@ -363,6 +363,9 @@ static void validate_manifest(SnipPkg *p, SdkReport *rep, bool check_dirname)
         const R2dJson *f = r2d_json_at(fields, i);
         const char *fid = jstr(f, "id");
         if (!snip_key_ok(fid)) { diag(rep, SDK_ERROR, "SNIP020", mp, p->id, "fields", "fields[%d]: нужен id", i); continue; }
+        // Свойства экземпляра в r2d snippet set — не поля Inspector.
+        if (!strcmp(fid, "slot") || !strcmp(fid, "disabled") || !strcmp(fid, "links"))
+            diag(rep, SDK_ERROR, "SNIP020", mp, p->id, fid, "id поля «%s» зарезервирован свойством экземпляра", fid);
         for (int k = 0; k < i; ++k) {
             const char *other = jstr(r2d_json_at(fields, k), "id");
             if (other && !strcmp(other, fid)) diag(rep, SDK_ERROR, "SNIP020", mp, p->id, fid, "повтор id поля «%s»", fid);
@@ -457,6 +460,57 @@ static void resolve_api(const SnipPkg *p, const R2dJson *schema, SdkReport *rep)
             diag(rep, SDK_ERROR, "SNIP100", p->manifest_path, p->id, "requires",
                  "%s нет в api.schema.json — пакет требует отсутствующий $ API", api);
     }
+}
+
+static bool schema_has(const R2dJson *names, const char *path)
+{
+    for (int k = 0; k < r2d_json_size(names); ++k)
+        if (!strcmp(r2d_json_str(r2d_json_get(r2d_json_at(names, k), "path"), ""), path)) return true;
+    return false;
+}
+
+// Исходник вызывает $.x.y, которого нет в requires: манифест неполон (SNIP103).
+// Путь укорачивается до самого длинного имени из схемы ($.camera.follow(…).x → $.camera.follow).
+static void check_source_api(const SnipPkg *p, const R2dJson *schema, SdkReport *rep)
+{
+    const char *src = jstr(p->m, "source");
+    if (!src || strcmp(p->kind, "behavior")) return;
+    char full[2048];
+    sdk_join(p->dir, src, full, sizeof full);
+    char *text = sdk_read_file(full, NULL);
+    if (!text) return;
+    const R2dJson *names = r2d_json_get(schema, "names");
+    const R2dJson *req = r2d_json_get(p->m, "requires");
+    char seen[64][128];
+    int nseen = 0;
+    for (const char *q = text; (q = strstr(q, "$.")) != NULL; q += 2) {
+        char path[128];
+        size_t n = 0;
+        path[n++] = '$';
+        const char *c = q + 1;
+        while (*c && n + 1 < sizeof path && (*c == '.' || *c == '_' || (*c >= 'a' && *c <= 'z') || (*c >= 'A' && *c <= 'Z') || (*c >= '0' && *c <= '9')))
+            path[n++] = *c++;
+        path[n] = 0;
+        while (n > 2 && path[n - 1] == '.') path[--n] = 0;
+        while (!schema_has(names, path)) {
+            char *dot = strrchr(path, '.');
+            if (!dot || dot == path + 1) { path[0] = 0; break; }
+            *dot = 0;
+        }
+        if (!path[0] || !strcmp(path, "$")) continue;
+        bool declared = false, dup = false;
+        for (int i = 0; i < r2d_json_size(req) && !declared; ++i) {
+            const R2dJson *r = r2d_json_at(req, i);
+            const char *api = r && r->type == R2D_JSON_STR ? r->string : jstr(r, "api");
+            declared = api && !strcmp(api, path);
+        }
+        for (int i = 0; i < nseen && !dup; ++i) dup = !strcmp(seen[i], path);
+        if (declared || dup) continue;
+        if (nseen < 64) snprintf(seen[nseen++], 128, "%s", path);
+        diag(rep, SDK_WARNING, "SNIP103", p->manifest_path, p->id, "requires",
+             "%s вызывает %s, но не объявляет его в requires", src, path);
+    }
+    free(text);
 }
 
 static bool load_pkg(const char *dir, const char *scope, SnipPkg *p, SdkReport *rep)
@@ -617,7 +671,7 @@ static void catalog_check(const SnipCatalog *c, const R2dJson *schema, SdkReport
     for (int i = 0; i < c->count; ++i) {
         if (!c->items[i].m) continue;
         dep_visit(c, i, color, rep);
-        if (schema) resolve_api(&c->items[i], schema, rep);
+        if (schema) { resolve_api(&c->items[i], schema, rep); check_source_api(&c->items[i], schema, rep); }
     }
     free(color);
 }
@@ -2169,7 +2223,7 @@ static int cmd_validate_pkg(const SdkArgs *a)
         diag(&rep, SDK_ERROR, "SNIP001", dir, NULL, NULL, "в «%s» нет snippet.json", dir);
     else {
         R2dJson *schema = load_schema(sdk_arg_value(a, "--schema"), NULL, &rep);
-        if (schema) resolve_api(&p, schema, &rep);
+        if (schema) { resolve_api(&p, schema, &rep); check_source_api(&p, schema, &rep); }
         // Зависимости — по полному каталогу (встроенный + проект вокруг пакета, если есть).
         SnipCatalog cat;
         SdkReport cr;
