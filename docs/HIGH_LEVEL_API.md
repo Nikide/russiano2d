@@ -54,6 +54,7 @@ $.update(dt => {
 |---|---|
 | `$.ready(fn)` | один раз, на первом кадре (после `$` создан) |
 | `$.update(fn)` | каждый кадр; `fn(dt, $)` |
+| `$.updateFor(node, fn)` | каждый кадр, пока узел жив; `fn(dt, node, $)`; возвращает disposer, подписка снимается сама при удалении узла |
 | `$.render(fn)` | каждый кадр перед отрисовкой мира |
 | `$.exit(fn)` | при завершении движка |
 
@@ -1583,7 +1584,7 @@ $.update(() => {
 | Локализация на ходу: подписка, пропавшие ключи, числа (§16) | `$.i18n.onChange`, `$.i18n.missing`, `$.i18n.number` | — | [i18n.md](highlevel/i18n.md) §4.1 |
 | Маркеры, skip и возврат камеры/звука в катсцене (§16) | `$.timeline.markers`, `$.timeline.skipAll` | — | [timeline.md](highlevel/timeline.md) §3.6 |
 | Психика NPC и режиссёр рейда: страх, срывы, давление | `$.alive` | — | [alive.md](highlevel/alive.md) |
-| Сеть, только авторитарная: id, владение, снапшоты | `$.net` | — | [net.md](highlevel/net.md) |
+| Multiplayer: ENet, authoritative/mesh/relay, синхронизация `$`-сущностей и комнаты | `$.net` | — | [net.md](highlevel/net.md) |
 | Время, окно, файлы, сцены, ввод, мир, камера, интерфейс, звук, BSP | `$.time`, `$.window`, `$.fs`, `$.scene`, `$.input`, `$.world`, `$.camera`, `$.ui`, `$.sound`, `$.world.bsp` | — | [time](highlevel/time.md), [window](highlevel/window.md), [store](highlevel/store.md), [scene](highlevel/scene.md), [input](highlevel/input.md), [world](highlevel/world.md), [camera](highlevel/camera.md), [ui](highlevel/ui.md), [sound](highlevel/sound.md), [bsp](highlevel/bsp.md), [replay](highlevel/replay.md) |
 | Текст в сцене и шрифты: растеризация глифов, атлас, семейства | `$.font.load`, `.font()`, `<text>` | — | [text.md](highlevel/text.md) |
 

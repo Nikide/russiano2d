@@ -6,7 +6,7 @@
 
 Engine version: "1.3.2"
 
-Entries: 4129
+Entries: 4109
 
 ## $
 
@@ -71,7 +71,7 @@ Entries: 4129
 | `math` | object | — — Математические функции и утилиты для игрового кода. |
 | `mesh` | object | — — Псевдо-3D персонаж: части-квады с текстурой, которые деформируются скелетом, а z-буфер разбирается с их самопересечениями. Это вторая половина §4.1 (первая — текстура и UV в engine.submitMesh, см. depth.md §4). |
 | `nav` | object | — — (tx, ty) → bool, клеточная занятость |
-| `net` | object | — — Решение проекта. В высокоуровневом API $ существует только авторитарный мультиплеер: один узел — хост-сервер, его симуляция всегда права; клиенты не вычисляют игровое состояние, а присылают ввод и рисуют то, что подтвердил сервер. Peer-to-peer, детерминированный лок-степ и «у каждого своя правда» в API не выставляются: там, где выбор есть, побеждает состояние сервера. |
+| `net` | object | — — $.net — высокоуровневое мультиплеерное API поверх встроенного ENet. ENet обрабатывает peer-соединения, доставку, фрагментацию и RTT. Игровой код работает с топологиями, сообщениями, комнатами и обычными $-сущностями; сокетных методов в игровом API нет. |
 | `noise` | object | — — Набор шумов и фракталов поверх FastNoiseLite (Jordan Peck, MIT): OpenSimplex2, OpenSimplex2S, Perlin, Value, ValueCubic, Cellular (Worley) с метриками расстояния и типами возврата, фракталы fBm/Ridged/PingPong, domain warp. 2D и 3D. Числа считает апстрим — мы не переписывали алгоритмы, поэтому значения совпадают с его эталоном (см. §7). |
 | `now` | function | `() -> any` — Вернуть монотонное время текущего процесса в единицах, указанных API времени. |
 | `off` | function | `(arg0: any, arg1: any) -> any` — Снять ранее зарегистрированную подписку на событие по токену/имени. |
@@ -132,6 +132,7 @@ Entries: 4129
 | `tweens` | function | `() -> any` — массив живых (не убитых и не завершённых) Tween'ов |
 | `ui` | object | — — $.ui — слой HUD: узлы, положенные в него, рисуются в координатах окна и не двигаются с камерой. Тексты, полосы, иконки и свои шрифты живут здесь. |
 | `update` | function | `(arg0: any) -> any` — движок передаёт туда реальную дельту: если логика не должна идти на заморозке, спрашивайте $.time.frozen() или берите $.time.delta() |
+| `updateFor` | function | `(arg0: any, arg1: any) -> any` |
 | `vec` | function | `(arg0: any, arg1: any) -> any` — Создать/нормализовать вектор из компонентов или объекта в формате API. |
 | `version` | function | `() -> any` — Вернуть версию движка как строку. |
 | `vfx` | object | — — Модуль src/highlevel/vfx.js (M0–M5 задачи task-67; разделение пространств — task-69). Это визуальная половина бывшего $.fx: вспышки, волны, молнии, ленты, поля сил, свет, hit-stop и экранные слои. Звук живёт отдельно в $.sfx — правило простое: что слышно → sfx, что видно → vfx. |
@@ -1159,6 +1160,7 @@ Entries: 4129
 | `navPath` | function | `() -> any` — Текущий маршрут [ {x, y}, … ] или [] |
 | `navTarget` | function | `() -> any` — Цель { x, y } или null |
 | `navigateTo` | function | `(arg0: any, arg1: any) -> any` — Ставит узел на маршрут к цели. target — узел, обёртка, id/селектор или { x, y }; цель пере-разрешается при каждом пересчёте. Возвращает ту же обёртку, поэтому метод цепной. |
+| `net` | function | `(arg0: any) -> any` — Применить сетевые параметры к узлам выборки и вернуть выборку для цепочки. |
 | `nid` | function | `() -> any` — Возвращает стабильный идентификатор узла в реестре движка. |
 | `not` | function | `(arg0: any) -> any` — Исключает из выборки узлы, соответствующие заданному селектору или объекту. |
 | `occluderMask` | function | `(arg0: any) -> any` — Читает или задаёт маску слоёв света, которые узел закрывает. |
@@ -1413,7 +1415,7 @@ Entries: 4129
 | Name | Kind | Signature / value |
 |---|---|---|
 | `basePath` | function | `() -> any` — Чтение сначала проверяет встроенные данные собранной игры, затем файлы на диске: каталог выбранного --game → корень запуска ($.fs.basePath()). Абсолютные пути принимаются как есть. Запись и удаление работают на диске; встроенный payload не меняют. |
-| `documentsPath` | function | `() -> any` |
+| `documentsPath` | function | `() -> any` — системный каталог «Документы» текущего пользователя на этой ОС |
 | `exists` | function | `(arg0: any) -> any` — Проверяет, существует ли файл или каталог по указанному пути. |
 | `list` | function | `(arg0: any) -> any` — Возвращает список файлов и каталогов по указанному пути. |
 | `pickFile` | function | `(arg0: any) -> any` — контракт — tests/js/fs_dialog_test.mjs |
@@ -1639,7 +1641,7 @@ Entries: 4129
 | Name | Kind | Signature / value |
 |---|---|---|
 | `actions` | function | `() -> any` — имена всех объявленных действий |
-| `altDown` | function | `() -> any` — удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false |
+| `altDown` | function | `() -> any` — удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false. altDown() — это и Option на macOS (SDL называет клавишу «Option»; имена 'alt'/'lalt'/'ralt' для down/pressed тоже ведут на неё) |
 | `axis` | function | `(arg0: any, arg1: any) -> any` — направление по двум действиям (-1/0/1) |
 | `axisAction` | function | `(arg0: any, arg1: any) -> any` — ось как действие с гистерезисом |
 | `axisActions` | function | `() -> any` — объявленные действия-оси (карта «имя → описание»); без объявлений — {}. Это карта, а не массив |
@@ -1652,7 +1654,7 @@ Entries: 4129
 | `consumed` | function | `() -> any` — кто и что съел в этом кадре (для DevTools) |
 | `context` | function | `(arg0: any, arg1: any) -> any` — объявить/настроить контекст |
 | `contextOff` | function | `(arg0: any) -> any` — явно выключить контекст ввода (парная к $.input.context(name).active(true)) |
-| `ctrlDown` | function | `() -> any` — удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false |
+| `ctrlDown` | function | `() -> any` — удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false. altDown() — это и Option на macOS (SDL называет клавишу «Option»; имена 'alt'/'lalt'/'ralt' для down/pressed тоже ведут на неё) |
 | `cursor` | function | `(arg0: any) -> any` — форма и видимость курсора |
 | `cursorVisible` | function | `(arg0: any) -> any` — без аргумента — видим ли курсор; с аргументом — задать видимость и вернуть ЗАПРОШЕННОЕ значение. В headless-прогоне геттер всегда false: курсора в кадре нет |
 | `deadzone` | function | `(arg0: any) -> any` — $.input.deadzone(value) задаёт мёртвую зону (0..1, по умолчанию 0.2), $.input.deadzone() — читает её. Значение применяется в axis() и к аналоговому стику в vec(), чтобы стик не «дрожал», а клавиатурные оси работали как раньше. |
@@ -1895,74 +1897,69 @@ Entries: 4129
 
 | Name | Kind | Signature / value |
 |---|---|---|
-| `addPlayer` | function | `() -> any` — сервер: игрок пришёл / ушёл (события join/leave) |
-| `apply` | function | `(arg0: any) -> any` — клиент: применить снапшот (то же, что receive) и выпустить applied |
-| `applyInput` | function | `(arg0: any) -> any` — клиент: применить свой ввод немедленно (перед отправкой) |
-| `applySnapshot` | function | `(arg0: any, arg1: any) -> any` — применить снапшот: сначала удаления, потом патчи (вход не меняется) |
-| `attach` | function | `(arg0: any) -> any` — подключить свой транспорт: { listen, connect, close, send, poll, simulate? } |
-| `bindEngine` | function | `() -> any` — взять транспорт движка (SDL3_net, R2D_ENABLE_NET); сам ставит listen/connect/send/poll/close/simulate и возит сообщения байтами (JSON) |
-| `confirmed` | function | `() -> any` — два последних подтверждённых состояния |
-| `createAuthority` | function | `() -> any` — стол игроков и владения реплицируемыми узлами |
-| `createClientState` | function | `() -> any` — подтверждённое/предыдущее состояние клиента и его интерполяция |
-| `createHistory` | function | `(arg0: any, arg1: any) -> any` — история подтверждённых состояний для перемотки |
-| `createIdTable` | function | `(arg0: any) -> any` — стол сетевых id: один узел — один номер, номера не переиспользуются |
-| `createInputQueue` | function | `(arg0: any, arg1: any) -> any` — очередь ввода клиента: номера по порядку, старые вытесняются |
-| `createPrediction` | function | `(arg0: any) -> any` — предсказание клиента с подтверждением и сглаживанием отката |
-| `decodeMessage` | function | `(arg0: any) -> any` — объект или null, если не разобралось |
-| `delayed` | function | `() -> any` — сколько пакетов ждёт своей задержки (видно, что она работает) |
-| `deltaFrom` | function | `(arg0: any) -> any` — сервер: снапшот с дельтой от предыдущего подтверждённого |
-| `describe` | function | `() -> any` — строка и счётчики; stats.lastSendOk — ушёл ли последний пакет |
-| `diffSnapshot` | function | `(arg0: any, arg1: any, arg2: any) -> any` — дельта: только изменившиеся поля, null — удаление сущности |
-| `emit` | function | `(arg0: any) -> any` — выпустить событие вручную |
-| `encodeMessage` | function | `(arg0: any) -> any` — сообщение → байты (JSON) для транспорта движка |
-| `engineBound` | function | `() -> any` — подключён ли именно транспорт движка (а не свой через attach) |
-| `get` | function | `(arg0: any, arg1: any) -> any` — значение из подтверждённого |
-| `history` | function | `() -> any` — история подтверждённых состояний |
-| `host` | function | `(arg0: any, arg1: any) -> any` — сервер: мир считает этот узел |
-| `idOf` | function | `(arg0: any) -> any` — сетевой id и обратно |
-| `interpolate` | function | `(arg0: any, arg1: any, arg2: any) -> any` — интерполяция чужой сущности между снапшотами; t — доля 0…1 |
-| `isClient` | function | `() -> any` — узел — клиент (только ввод и рендер) |
-| `isServer` | function | `() -> any` — узел — сервер (мир считает он) |
-| `join` | function | `(arg0: any, arg1: any, arg2: any) -> any` — клиент: только ввод и рендер |
-| `lastChannel` | function | `() -> any` — канал последнего принятого сообщения (диагностика) |
-| `latency` | function | `() -> any` — половина задержки — столько клиент ждал подтверждения |
-| `leave` | function | `() -> any` — выйти / сбросить всё |
-| `nextInput` | function | `() -> any` — следующий номер ввода для отправки |
-| `nodeOfId` | function | `(arg0: any) -> any` — узел по сетевому id |
-| `off` | function | `(arg0: any, arg1: any) -> any` — отписаться (без fn — снять всех) |
-| `on` | function | `(arg0: any, arg1: any) -> any` — подписаться на канал/событие (join, leave, input, snapshot, pong, start, stop, applied, любой свой канал) |
-| `online` | function | `() -> any` — роль не offline |
-| `ownedBy` | function | `(arg0: any) -> any` — массив сетевых id |
-| `ownerOf` | function | `(arg0: any) -> any` — номер игрока или 0 |
-| `owns` | function | `(arg0: any, arg1: any) -> any` — может ли игрок управлять узлом |
-| `peers` | function | `() -> any` — адреса пиров, уже привязанные к игрокам (диагностика сервера) |
-| `ping` | function | `(arg0: any) -> any` — клиент: отправить «пинг» (игра зовёт раз в секунду-две, не каждый кадр); now — время игры в мс |
-| `pings` | function | `() -> any` — сколько пингов отправлено |
-| `playerCount` | function | `() -> any` — сколько игроков в столе |
-| `polated` | function | `(arg0: any, arg1: any, arg2: any) -> any` — своё — подтверждённое, чужое — интерполированное |
-| `poll` | function | `() -> any` — опросить транспорт и раздать сообщения в receive; движок зовёт раз в кадр |
-| `port` | function | `() -> any` — порт текущей сессии (0 — не в сети) |
-| `predict` | function | `(arg0: any) -> any` — включить предсказание клиента: simulate(state, input) — та же чистая функция шага, что на сервере |
-| `prediction` | function | `() -> any` — включённое предсказание |
-| `previous` | function | `() -> any` — клиент: предыдущее подтверждённое (для интерполяции) |
-| `receive` | function | `(arg0: any) -> any` — пришло сообщение из транспорта: { channel, data, from?, player? } |
-| `record` | function | `(arg0: any) -> any` — сервер: запомнить подтверждённое состояние в историю (now — время игры) |
-| `removePlayer` | function | `(arg0: any) -> any` — сервер: игрок ушёл (заодно снимается привязка адреса) |
-| `replicate` | function | `(arg0: any, arg1: any) -> any` — сервер объявляет узел реплицируемым; возвращает сетевой id |
-| `reset` | function | `() -> any` — полный сброс сети (новый мир, тесты) |
-| `rewind` | function | `(arg0: any, arg1: any, arg2: any) -> any` — сервер: где был узел на момент «сейчас минус задержка» (проверка попадания); delay по умолчанию — latency() |
-| `role` | function | `() -> any` — состояние узла |
-| `rtt` | function | `() -> any` — миллисекунды (0 — ещё не измерена) |
-| `sameValue` | function | `(arg0: any, arg1: any, arg2: any) -> any` — сравнение значений: числа — с допуском (epsilon по умолчанию 0.0001) |
-| `send` | function | `(arg0: any, arg1: any) -> any` — отправить сообщение в канал (может и сервер: он рассылает снапшоты) |
-| `simulate` | function | `(arg0: any) -> any` — симуляция плохой сети: loss (0…100 %), delay (мс), jitter (мс, добавка [0, jitter)), seed; задержка — очередью отложенных отправок, а не сном в кадре |
-| `simulateOff` | function | `() -> any` — выключить симуляцию (все нули) |
-| `simulation` | function | `() -> any` — настроенная симуляция (или нули) |
-| `snapshotNow` | function | `() -> any` — сервер: собрать снапшот из описанных узлов и увеличить tick |
-| `stats` | function | `() -> any` — счётчики для интерфейса |
-| `tick` | function | `() -> any` — номер сетевого тика (растёт в snapshotNow) |
-| `transport` | function | `() -> any` — текущий транспорт |
-| `unreplicate` | function | `(arg0: any) -> any` — снять с репликации |
+| `acknowledge` | function | `(arg0: any, arg1: any) -> any` — Ввод, локальное предсказание и серверное подтверждение. |
+| `applyInput` | function | `(arg0: any) -> any` — Ввод, локальное предсказание и серверное подтверждение. |
+| `authority` | function | `(arg0: any) -> any` — Режим владения и признак локального авторитета. |
+| `available` | function | `() -> any` — Состояние high-level сессии и доступность встроенного транспорта. |
+| `broadcast` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Отправить сообщение одному peer или всем. delivery: reliable, state, input, bulk. |
+| `connect` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Начать исходящее peer-подключение; join выбирает authoritative client. |
+| `delayed` | function | `() -> any` — Смоделировать потери/задержку и прочитать настройки очереди. |
+| `describe` | function | `() -> any` — Счётчики сети и короткая строка статуса для UI. |
+| `disconnect` | function | `(arg0: any) -> any` — Закрыть peer или всю сессию. |
+| `entities` | function | `() -> any` — Зарегистрировать или убрать сущности из автоматической репликации; короче — .net(options) на выборке. |
+| `handle` | function | `(arg0: any, arg1: any) -> any` — Вызвать зарегистрированное именованное действие по сети. |
+| `host` | function | `(arg0: any, arg1: any) -> any` — Открыть host или входящий listener. |
+| `input` | function | `(arg0: any, arg1: any) -> any` — Ввод, локальное предсказание и серверное подтверждение. |
+| `interpolationDelay` | function | `(arg0: any) -> any` — Настроить частоту снимков и буфер интерполяции. |
+| `isAuthority` | function | `() -> any` — Режим владения и признак локального авторитета. |
+| `join` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Начать исходящее peer-подключение; join выбирает authoritative client. |
+| `leave` | function | `() -> any` — Закрыть peer или всю сессию. |
+| `listen` | function | `(arg0: any, arg1: any) -> any` — Открыть host или входящий listener. |
+| `off` | function | `(arg0: any, arg1: any) -> any` — Подписаться или снять подписку на сетевые события. |
+| `on` | function | `(arg0: any, arg1: any) -> any` — Подписаться или снять подписку на сетевые события. |
+| `online` | function | `() -> any` — Состояние high-level сессии и доступность встроенного транспорта. |
+| `peer` | function | `(arg0: any) -> any` — Локальный порт, подключения, RTT, число peers и номер кадра сети. |
+| `peers` | function | `() -> any` — Локальный порт, подключения, RTT, число peers и номер кадра сети. |
+| `playerCount` | function | `() -> any` — Локальный порт, подключения, RTT, число peers и номер кадра сети. |
+| `port` | function | `() -> any` — Локальный порт, подключения, RTT, число peers и номер кадра сети. |
+| `predict` | function | `(arg0: any) -> any` — Ввод, локальное предсказание и серверное подтверждение. |
+| `prediction` | function | `() -> any` — Ввод, локальное предсказание и серверное подтверждение. |
+| `relay` | object | — — Игровой host пересылает сообщения между подключёнными peers |
+| `replicate` | function | `(arg0: any, arg1: any) -> any` — Зарегистрировать или убрать сущности из автоматической репликации; короче — .net(options) на выборке. |
+| `reset` | function | `() -> any` — Сбросить состояние сети для перезапуска игрового раунда. |
+| `room` | object | — |
+| `rpc` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Вызвать зарегистрированное именованное действие по сети. |
+| `send` | function | `(arg0: any, arg1: any) -> any` — Отправить сообщение одному peer или всем. delivery: reliable, state, input, bulk. |
+| `simulate` | function | `(arg0: any) -> any` — Смоделировать потери/задержку и прочитать настройки очереди. |
+| `simulation` | function | `() -> any` — Смоделировать потери/задержку и прочитать настройки очереди. |
+| `start` | function | `(arg0: any) -> any` — Открыть listener и подключиться к одному или нескольким peers. |
+| `stats` | function | `() -> any` — Счётчики сети и короткая строка статуса для UI. |
+| `status` | function | `() -> any` — Состояние high-level сессии и доступность встроенного транспорта. |
+| `syncRate` | function | `(arg0: any) -> any` — Настроить частоту снимков и буфер интерполяции. |
+| `tick` | function | `() -> any` — Локальный порт, подключения, RTT, число peers и номер кадра сети. |
+| `topology` | function | `(arg0: any) -> any` — Прочитать или выбрать authoritative, mesh, relay, custom. |
+| `unhandle` | function | `(arg0: any) -> any` — Вызвать зарегистрированное именованное действие по сети. |
+| `unreplicate` | function | `(arg0: any) -> any` — Зарегистрировать или убрать сущности из автоматической репликации; короче — .net(options) на выборке. |
+
+## $.net.relay
+
+| Name | Kind | Signature / value |
+|---|---|---|
+| `broadcast` | function | `(arg0: any, arg1: any) -> any` — Включить игровую пересылку через текущий host или отправить relay-сообщение. |
+| `disable` | function | `() -> any` — Включить игровую пересылку через текущий host или отправить relay-сообщение. |
+| `enable` | function | `(arg0: any) -> any` — Включить игровую пересылку через текущий host или отправить relay-сообщение. |
+| `enabled` | function | `() -> any` — Включить игровую пересылку через текущий host или отправить relay-сообщение. |
+| `forward` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Включить игровую пересылку через текущий host или отправить relay-сообщение. |
+
+## $.net.room
+
+| Name | Kind | Signature / value |
+|---|---|---|
+| `create` | function | `(arg0: any, arg1: any) -> any` — Создать/войти в комнату и прочитать её текущее состояние. |
+| `current` | function | `() -> any` — Создать/войти в комнату и прочитать её текущее состояние. |
+| `join` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` — Создать/войти в комнату и прочитать её текущее состояние. |
+| `leave` | function | `() -> any` — Создать/войти в комнату и прочитать её текущее состояние. |
+| `peers` | function | `() -> any` — Создать/войти в комнату и прочитать её текущее состояние. |
 
 ## $.noise
 
@@ -2699,6 +2696,7 @@ Entries: 4129
 | `navTarget` | function | `() -> any` — Цель { x, y } или null |
 | `navigateTo` | function | `(arg0: any, arg1: any) -> any` — Ставит узел на маршрут к цели. target — узел, обёртка, id/селектор или { x, y }; цель пере-разрешается при каждом пересчёте. Возвращает ту же обёртку, поэтому метод цепной. |
 | `nearest` | function | `(arg0: any) -> any` — Один ближайший узел по квадрату расстояния между центрами. Возвращается обёртка из одного узла (или пустая, если выборка пуста). Равные расстояния разрешает порядок реестра, а не порядок выборки, — результат детерминирован и воспроизводится в реплеях. |
+| `net` | function | `(arg0: any) -> any` — Применить сетевые параметры к узлам выборки и вернуть выборку для цепочки. |
 | `nid` | function | `() -> any` — Возвращает стабильный идентификатор узла в реестре движка. |
 | `nodes` | array | — — Возвращает лежащие внутри выборки объекты узлов. |
 | `not` | function | `(arg0: any) -> any` — Исключает из выборки узлы, соответствующие заданному селектору или объекту. |
@@ -3005,7 +3003,7 @@ Entries: 4129
 | `seek` | function | `(arg0: any, arg1: any) -> any` — перемотка и позиция |
 | `sfxVolume` | function | `(arg0: any) -> any` — только сеттер, геттера нет: вызов без аргумента ничего не читает и возвращает $.sound. Текущий уровень эффектов читается через $.audio |
 | `stems` | function | `(arg0: any, arg1: any) -> any` — музыкальные слои с общим транспортом (§25) |
-| `stemsState` | function | `() -> any` — Слои музыки: $.sound.stemsState() — публичное состояние транспорта ({ count, playing, paused, loopStart, loops, remaining }), ровно те же поля, что у внутреннего engine.audio.stemsState(): игре больше не нужно читать биндинг. |
+| `stemsState` | function | `() -> any` — Состояние музыкальных слоёв ровно в том виде, в каком его отдаёт движок: { count, playing, paused, loopStart, loops, remaining }. Публичная обёртка нужна, чтобы игре не приходилось читать внутренний биндинг engine.audio.stemsState() (пункт H5 отчёта BASHNYA). |
 | `stop` | function | `(arg0: any, arg1: any) -> any` — останавливает ОДИН канал с затуханием в миллисекундах (stop(0, 50)). Без канала останавливает канал 0, а не всё: проверено — после stop() playing(0) = false, playing(1) = true. Остановить всё — $.sound.stopAll(fadeMs) |
 | `stopAll` | function | `(arg0: any) -> any` — управление каналами |
 | `stopMusic` | function | `(arg0: any) -> any` — Останавливает текущий музыкальный трек. |
@@ -3601,7 +3599,7 @@ Entries: 4129
 | Name | Kind | Signature / value |
 |---|---|---|
 | `actions` | function | `() -> any` — имена всех объявленных действий |
-| `altDown` | function | `() -> any` — удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false |
+| `altDown` | function | `() -> any` — удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false. altDown() — это и Option на macOS (SDL называет клавишу «Option»; имена 'alt'/'lalt'/'ralt' для down/pressed тоже ведут на неё) |
 | `axis` | function | `(arg0: any, arg1: any) -> any` — направление по двум действиям (-1/0/1) |
 | `axisAction` | function | `(arg0: any, arg1: any) -> any` — ось как действие с гистерезисом |
 | `axisActions` | function | `() -> any` — объявленные действия-оси (карта «имя → описание»); без объявлений — {}. Это карта, а не массив |
@@ -3614,7 +3612,7 @@ Entries: 4129
 | `consumed` | function | `() -> any` — кто и что съел в этом кадре (для DevTools) |
 | `context` | function | `(arg0: any, arg1: any) -> any` — объявить/настроить контекст |
 | `contextOff` | function | `(arg0: any) -> any` — явно выключить контекст ввода (парная к $.input.context(name).active(true)) |
-| `ctrlDown` | function | `() -> any` — удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false |
+| `ctrlDown` | function | `() -> any` — удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false. altDown() — это и Option на macOS (SDL называет клавишу «Option»; имена 'alt'/'lalt'/'ralt' для down/pressed тоже ведут на неё) |
 | `cursor` | function | `(arg0: any) -> any` — форма и видимость курсора |
 | `cursorVisible` | function | `(arg0: any) -> any` — без аргумента — видим ли курсор; с аргументом — задать видимость и вернуть ЗАПРОШЕННОЕ значение. В headless-прогоне геттер всегда false: курсора в кадре нет |
 | `deadzone` | function | `(arg0: any) -> any` — $.input.deadzone(value) задаёт мёртвую зону (0..1, по умолчанию 0.2), $.input.deadzone() — читает её. Значение применяется в axis() и к аналоговому стику в vec(), чтобы стик не «дрожал», а клавиатурные оси работали как раньше. |
@@ -3871,7 +3869,7 @@ Entries: 4129
 | `seek` | function | `(arg0: any, arg1: any) -> any` — перемотка и позиция |
 | `sfxVolume` | function | `(arg0: any) -> any` — только сеттер, геттера нет: вызов без аргумента ничего не читает и возвращает $.sound. Текущий уровень эффектов читается через $.audio |
 | `stems` | function | `(arg0: any, arg1: any) -> any` — музыкальные слои с общим транспортом (§25) |
-| `stemsState` | function | `() -> any` — Слои музыки: $.sound.stemsState() — публичное состояние транспорта ({ count, playing, paused, loopStart, loops, remaining }), ровно те же поля, что у внутреннего engine.audio.stemsState(): игре больше не нужно читать биндинг. |
+| `stemsState` | function | `() -> any` — Состояние музыкальных слоёв ровно в том виде, в каком его отдаёт движок: { count, playing, paused, loopStart, loops, remaining }. Публичная обёртка нужна, чтобы игре не приходилось читать внутренний биндинг engine.audio.stemsState() (пункт H5 отчёта BASHNYA). |
 | `stop` | function | `(arg0: any, arg1: any) -> any` — останавливает ОДИН канал с затуханием в миллисекундах (stop(0, 50)). Без канала останавливает канал 0, а не всё: проверено — после stop() playing(0) = false, playing(1) = true. Остановить всё — $.sound.stopAll(fadeMs) |
 | `stopAll` | function | `(arg0: any) -> any` — управление каналами |
 | `stopMusic` | function | `(arg0: any) -> any` — Останавливает текущий музыкальный трек. |
@@ -4339,7 +4337,7 @@ Entries: 4129
 | `WHITE` | number | — |
 | `addShape` | function | `(arg0: any, arg1: any) -> any` |
 | `agent` | boolean | — |
-| `applyImpulse` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `applyImpulse` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Отдача. У узла с телом Box2D это engine.applyImpulse по направлению удара — дальше работает физика (масса, трение, затухание). У узла без тела позиция сдвигается на force · 0.06 пикселей с затуханием за ms, и узел остаётся сдвинутым: движение без физики — дело игры. |
 | `async` | object | — |
 | `audio` | object | — |
 | `basePath` | string | — |
@@ -4349,7 +4347,7 @@ Entries: 4129
 | `bodyGeneration` | function | `(arg0: any) -> any` |
 | `bodyMass` | function | `(arg0: any) -> any` |
 | `bsp` | object | — |
-| `castShape` | function | `(arg0: any) -> any` |
+| `castShape` | function | `(arg0: any) -> any` — маска запроса |
 | `clearClip` | function | `() -> any` |
 | `clearPhysicsErrors` | function | `() -> any` |
 | `clipCount` | function | `() -> any` |
@@ -4358,7 +4356,7 @@ Entries: 4129
 | `contactStay` | function | `(arg0: any) -> any` |
 | `contacts` | function | `() -> any` |
 | `contactsOf` | function | `(arg0: any, arg1: any) -> any` |
-| `createBody` | function | `(arg0: any) -> any` |
+| `createBody` | function | `(arg0: any) -> any` — Для каждого тела вызывается engine.createBody с прямоугольником формы; layerBits/mask/group/oneWay/oneWayAngle/sensor передаются как есть. Полигоны и наклонные формы через таблицу пока не выражаются: локальная геометрия — только axis-aligned прямоугольники (одна клетка может дать несколько тел). |
 | `createJoint` | function | `(arg0: any) -> any` |
 | `createSprite` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
 | `cursorVisible` | function | `(arg0: any) -> any` |
@@ -4409,13 +4407,13 @@ Entries: 4129
 | `light` | object | — |
 | `lightMap` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `lightMaskPasses` | function | `() -> any` |
-| `limits` | function | `() -> any` |
+| `limits` | function | `() -> any` — Зачем слияние. Реестр тел динамический (старт 1024, дальше растёт), но каждое тело — это память и работа Box2D, поэтому число тел важно даже без жёсткого потолка. Раньше тела строились по горизонтальным полосам: плотная карта 200×100 просила до 10 000 полос, и часть тайлов оставалась вообще без коллизий — игрок проваливался сквозь пол. Теперь число тел зависит от площади прямоугольников, а не от числа строк; на патологических узорах (диагональная шахматка) срабатывает бюджет engine.limits().bodies_max — см. §19: модуль возвращает failed result и по умолчанию не публикует неполную коллизию. |
 | `loadFont` | function | `(arg0: any, arg1: any) -> any` |
 | `loadTexture` | function | `(arg0: any) -> any` |
 | `log` | function | `(arg0: any) -> any` |
 | `markUI` | function | `() -> any` |
 | `markUnlit` | function | `() -> any` |
-| `measureText` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `measureText` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Обе функции внутри зовут нативный engine.measureText (internal/NATIVE.md); игре доступны только они. |
 | `mouseDX` | number | — |
 | `mouseDY` | number | — |
 | `mouseDelta` | function | `() -> any` |
@@ -4424,17 +4422,8 @@ Entries: 4129
 | `mousePressed` | function | `(arg0: any) -> any` |
 | `mouseX` | number | — |
 | `mouseY` | number | — |
-| `netClose` | function | `() -> any` |
-| `netDelayed` | function | `() -> any` |
-| `netHost` | function | `(arg0: any) -> any` |
-| `netJoin` | function | `(arg0: any, arg1: any) -> any` |
-| `netMode` | function | `() -> any` |
-| `netPoll` | function | `() -> any` |
-| `netSend` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
-| `netSimulate` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
-| `netStatus` | function | `() -> any` |
 | `nodes` | object | — |
-| `noise` | object | — |
+| `noise` | object | — — Внутренний нативный backend FastNoiseLite для фасада $.noise; игровые сценарии используют высокоуровневые методы $.noise. |
 | `now` | function | `() -> any` |
 | `oneWayIgnore` | function | `(arg0: any) -> any` |
 | `padAxis` | function | `(arg0: any) -> any` |
@@ -4453,30 +4442,30 @@ Entries: 4129
 | `pixel_height` | number | — |
 | `pixel_width` | number | — |
 | `postSupported` | function | `() -> any` |
-| `profile` | function | `() -> any` |
+| `profile` | function | `() -> any` — Профиль остаётся машиночитаемым: engine.profile() отдаёт zones, frame_ms и gpu_available/gpu_ms; GPU-время называется GPU-временем только если timestamp'ы действительно сняты, иначе поле остаётся пустым, а не подменяется CPU-временем. |
 | `profileEnabled` | function | `(arg0: any) -> any` |
 | `profileReset` | function | `() -> any` |
 | `queryBox` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
-| `queryCircle` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
+| `queryCircle` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` — Первые n узлов выборки. n <= 0, NaN, нечисло — пустая выборка; Infinity — вся выборка. Ограничение режет УЖЕ отфильтрованный результат: оно не ускоряет запрос и не заменяет нативный лимит engine.queryCircle. |
 | `queryPoint` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `queryStats` | function | `() -> any` |
 | `quit` | function | `() -> any` |
-| `raycast` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any) -> any` |
+| `raycast` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any) -> any` — Без engine.raycast (сборка без физики, юнит-тест) оператор возвращает пустую выборку и один раз пишет диагностику. «Всё видно» было бы выдуманным ответом; если луч не нужен, берите .within(). |
 | `re2d` | object | — |
 | `readBytes` | function | `(arg0: any) -> any` |
 | `real2d` | object | — |
 | `reloadPending` | function | `() -> any` |
-| `reloadTexture` | function | `(arg0: any, arg1: any) -> any` |
+| `reloadTexture` | function | `(arg0: any, arg1: any) -> any` — { kind: 'texture', path, texture \| resource }. Перезагрузка на месте: engine.reloadTexture читает картинку и заливает её в ту же текстуру — handle не меняется, узлы и спрайты продолжают работать, новых handle'ов не появляется. Смена размера отклоняется (R2D_RELOAD_TEXTURE_SIZE): спрайты хранят uv-прямоугольник, нормированный по старому размеру. |
 | `reloads` | number | — |
 | `renderInfo` | function | `() -> any` |
 | `requestReload` | function | `(arg0: any) -> any` |
-| `rgba` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
+| `rgba` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` — Экспортируются из src/highlevel/particles.js и не требуют движка (кроме цвета — engine.rgba из мока): |
 | `rotSpriteChanged` | function | `(arg0: any) -> any` |
 | `rotSpriteConfig` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
 | `rotSpriteDispose` | function | `(arg0: any) -> any` |
 | `rotSpriteFileStamp` | function | `(arg0: any) -> any` |
 | `rotSpriteInfo` | function | `(arg0: any) -> any` |
-| `rotSpriteLoad` | function | `(arg0: any) -> any` |
+| `rotSpriteLoad` | function | `(arg0: any) -> any` — Низкий уровень: engine.rotSpriteLoad(path), rotSpritePose(handle,yaw,pitch, eyes?,mouth?,brows?), rotSpriteRig(handle,body,phase,stride,armLeft,armRight, headYaw), rotSpritePart(handle,path,mask), rotSpriteChanged(handle), rotSpriteStyle(handle,style), rotSpriteFileStamp(path), rotSpriteInfo(handle), rotSpriteDispose(handle). Игра использует $; masks и файловые stamp — детали обёртки. |
 | `rotSpriteModelPose` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `rotSpritePart` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `rotSpritePose` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
@@ -4490,7 +4479,7 @@ Entries: 4129
 | `setAgentQuery` | function | `(arg0: any) -> any` |
 | `setAngularVelocity` | function | `(arg0: any, arg1: any) -> any` |
 | `setAwake` | function | `(arg0: any, arg1: any) -> any` |
-| `setBodyEnabled` | function | `(arg0: any, arg1: any) -> any` |
+| `setBodyEnabled` | function | `(arg0: any, arg1: any) -> any` — physics: false вызывает engine.setBodyEnabled(id, false): тело выключено, не падает, не сталкивается и не двигается, его sensor-формы молчат. Это не сон: спящее тело продолжает участвовать в мире и просыпается от толчка. Box2D при выключении обнуляет скорость, поэтому после physics: true тело начнёт движение с нуля — если нужно сохранить импульс, не выключайте тело, а остановите логику (update: false) и обнулите скорость сами. |
 | `setBodyFilter` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
 | `setBullet` | function | `(arg0: any, arg1: any) -> any` |
 | `setClearColor` | function | `(arg0: any, arg1: any, arg2: any, arg3: any) -> any` |
@@ -4514,23 +4503,23 @@ Entries: 4129
 | `setSnap` | function | `(arg0: any) -> any` |
 | `setSnapshot` | function | `(arg0: any) -> any` |
 | `setSpriteFilter` | function | `(arg0: any) -> any` |
-| `setTimeScale` | function | `(arg0: any) -> any` |
+| `setTimeScale` | function | `(arg0: any) -> any` — Масштаб принимает только конечные неотрицательные числа: отрицательное и NaN читаются как 0 (полный стоп — так же их трактует C, engine.setTimeScale), Infinity — как потолок SCALE_MAX = 100. Не-конечный множитель ушёл бы в шаг Box2D и вернулся NaN-позициями тел, поэтому потолок стоит до моста в C. |
 | `setUpdate` | function | `(arg0: any) -> any` |
-| `setVelocity` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `setVelocity` | function | `(arg0: any, arg1: any, arg2: any) -> any` — у узла есть тело — агенту задаётся скорость (engine.setVelocity), тело ведёт физика; тела нет — узел смещается на speed dt за кадр. |
 | `shapeCount` | function | `(arg0: any) -> any` |
 | `shapeEnabled` | function | `(arg0: any, arg1: any) -> any` |
-| `shapeOverlaps` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
+| `shapeOverlaps` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` — engine.shapeOverlaps(body, index, layer, mask, cap) — сырой биндинг: он передаёт фильтр в Box2D как есть, то есть остаётся двусторонним. Публичный .areaOverlap() — поверх него и следует правилу выше; прежнее двустороннее поведение доступно явно: .areaOverlap('hurt', { both: true }). |
 | `spriteFilter` | function | `() -> any` |
 | `spriteInfo` | function | `(arg0: any) -> any` |
 | `startScene` | null | — |
 | `submitLightTriangles` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
-| `submitMesh` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `submitMesh` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Третий аргумент engine.submitMesh — id текстуры (или ничего). С текстурой u/v сэмплят её, а цвет вершин умножается: 255 — «как есть». Раньше меш всегда биндил белую текстуру, поэтому u/v были мертвы и текстурированный псевдо-3D был невозможен. Треугольники собираются своим батчем, рисуются первыми в проходе сцены: меш пишет глубину, спрайты потом по ней проверяются. |
 | `submitSprites` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any) -> any` |
 | `submitTriangles` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
 | `textInput` | function | `() -> any` |
-| `textInputArea` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
+| `textInputArea` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` — IME. Незавершённая композиция (nihao → 你好) приходит событием SDL_EVENT_TEXT_EDITING; сам текст вставляется только по завершении. Окно кандидатов показывается у поля: движку передаётся прямоугольник поля (engine.textInputArea) — без этого кандидаты всплывали в углу окна. |
 | `textureAverageColor` | function | `(arg0: any) -> any` |
-| `textureFromPixels` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `textureFromPixels` | function | `(arg0: any, arg1: any, arg2: any) -> any` — Сразу пиксели RGBA: серый канал round((value 0.5 + 0.5) 255), альфа 255, зажим в 0..255. Массив годится прямо в engine.textureFromPixels(w, h, pixels). |
 | `textureList` | function | `() -> any` |
 | `textureSize` | function | `(arg0: any) -> any` |
 | `textureSprites` | function | `(arg0: any) -> any` |
@@ -4548,7 +4537,7 @@ Entries: 4129
 | `userShaderError` | function | `() -> any` |
 | `userShaderPreamble` | function | `() -> any` |
 | `userShadersSupported` | function | `() -> any` |
-| `version` | string | — |
+| `version` | string | — — ID движка и сборки. Движок отдаёт engine.version (версия проекта из CMake); игру можно уточнить через $.replay.identity({ version, build }) — явное значение важнее. Неизвестное честно помечается null, а не «0.0.0» |
 | `viewport` | object | — |
 | `wheel` | number | — |
 | `whiteSprite` | number | — |

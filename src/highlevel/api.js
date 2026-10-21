@@ -126,6 +126,7 @@ const BLEND_MODES = new Set(['alpha', 'add', 'multiply', 'none']);
 const frame = {
     ready: [],
     update: [],
+    updateFor: [],   // [{ node, fn }] — подписки, принадлежащие узлу
     render: [],
     exit: [],
     started: false,
@@ -510,6 +511,17 @@ export function createApi() {
     // tickTime/tickWindow и вызывайте её из цикла ниже.
     $.ready = (fn) => { frame.ready.push(fn); return $; };
     $.update = (fn) => { frame.update.push(fn); return $; };
+    // Покадровая подписка, принадлежащая узлу: снимается сама, когда узел
+    // удалён (node.removed). Возвращает disposer — сниппеты и generated JS
+    // отдают его владельцу, повторный вызов безопасен.
+    $.updateFor = (target, fn) => {
+        const node = target && target.nodes ? target.nodes[0] : target;
+        if (!node || typeof node !== 'object') throw new TypeError('$.updateFor: нужен узел');
+        if (typeof fn !== 'function') throw new TypeError('$.updateFor: нужна функция');
+        const sub = { node, fn, off: false };
+        frame.updateFor.push(sub);
+        return () => { sub.off = true; };
+    };
 
     $.render = (fn) => { frame.render.push(fn); return $; };
     $.exit = (fn) => { frame.exit.push(fn); return $; };
@@ -656,7 +668,7 @@ export function createApi() {
     installReplay($);            // реплеи: запись ввода и воспроизведение
     installCutscene($, placeBody);   // катсцены в текущей сцене: $.cutscene
     installAlive($);             // психика NPC и режиссёр рейда: $.alive
-    installNet($);               // сеть, только авторитарная: $.net
+    installNet($);               // high-level multiplayer поверх ENet: $.net
     installWidgets($);
     installTriggers($);
     installI18n($);
@@ -2413,6 +2425,11 @@ function installFrameHooks($) {
         // 1. Свежие трансформы из физики.
         prof('синк физики'); ctx.world.sync(dt);
 
+        // Сеть опрашивается движком автоматически до логики игры: события
+        // подключения, RPC и состояния сущностей готовы в этом же кадре.
+        prof('сеть');
+        if (typeof ctx._netStep === 'function') ctx._netStep(dt);
+
         // 2. События контакта за прошедший шаг физики: collide/separate/hit.
         prof('контакты'); dispatchContacts();
 
@@ -2441,6 +2458,17 @@ function installFrameHooks($) {
         }
         for (const fn of frame.update) {
             try { fn(dt, $); } catch (e) { reportError('$.update', e); }
+        }
+        if (frame.updateFor.length) {
+            const subs = frame.updateFor;
+            let w = 0;
+            for (let i = 0; i < subs.length; i++) {
+                const sub = subs[i];
+                if (sub.off || sub.node.removed) continue;
+                try { sub.fn(dt, $(sub.node), $); } catch (e) { reportError('$.updateFor', e); }
+                if (!sub.off && !sub.node.removed) subs[w++] = sub;
+            }
+            subs.length = w;   // добавленные во время прохода тоже пройдены и сжаты
         }
 
         // 7. Подсистемы после аудита API. Порядок: сначала те, кто меняет

@@ -112,16 +112,12 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "авто-режим: комната считается по зоне слушателя"
     },
-    "$.audio.obstacles": {
+    "$.audio.damping": {
         "kind": "function",
-        "arity": 2,
+        "arity": 1,
         "args": [
             {
                 "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
                 "type": "any"
             }
         ],
@@ -148,12 +144,16 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "препятствия и глушение"
     },
-    "$.audio.damping": {
+    "$.audio.obstacles": {
         "kind": "function",
-        "arity": 1,
+        "arity": 2,
         "args": [
             {
                 "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
                 "type": "any"
             }
         ],
@@ -416,15 +416,15 @@ export const API_DOCS_CATALOG = {
         "kind": "number",
         "description": "0.72 — порог стресса, на котором проверяется срыв"
     },
+    "$.alive.PULSE_MAX": {
+        "kind": "number",
+        "description": "62 / 200 / 140 — пульс покоя, предел, порог туннельного зрения"
+    },
     "$.alive.PULSE_REST": {
         "kind": "number",
         "description": "62 / 200 / 140 — пульс покоя, предел, порог туннельного зрения"
     },
     "$.alive.PULSE_TUNNEL": {
-        "kind": "number",
-        "description": "62 / 200 / 140 — пульс покоя, предел, порог туннельного зрения"
-    },
-    "$.alive.PULSE_MAX": {
         "kind": "number",
         "description": "62 / 200 / 140 — пульс покоя, предел, порог туннельного зрения"
     },
@@ -962,13 +962,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "остановить клип / с отменой / все плееры"
     },
-    "$.anim.stopAll": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "остановить клип / с отменой / все плееры"
-    },
     "$.anim.stop": {
         "kind": "function",
         "arity": 1,
@@ -981,7 +974,14 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "остановить клип / с отменой / все плееры"
     },
-    "$.anim.skip": {
+    "$.anim.stopAll": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "остановить клип / с отменой / все плееры"
+    },
+    "$.anim.restore": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -1013,7 +1013,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "перемотка/пропуск/восстановление"
     },
-    "$.anim.restore": {
+    "$.anim.skip": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -1048,6 +1048,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "домен часов: сеттер (цепочка) или геттер"
     },
+    "$.anim.openWindows": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "gameplay-окна"
+    },
     "$.anim.window": {
         "kind": "function",
         "arity": 1,
@@ -1060,26 +1067,12 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "gameplay-окна"
     },
-    "$.anim.openWindows": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "gameplay-окна"
-    },
     "$.anim.clipName": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
         "description": "имя играющего клипа"
-    },
-    "$.anim.values": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "значения дорожек"
     },
     "$.anim.value": {
         "kind": "function",
@@ -1094,6 +1087,13 @@ export const API_DOCS_CATALOG = {
                 "type": "any"
             }
         ],
+        "returns": "any",
+        "description": "значения дорожек"
+    },
+    "$.anim.values": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
         "returns": "any",
         "description": "значения дорожек"
     },
@@ -1164,7 +1164,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "имена клипов плеера"
     },
-    "$.anim.load": {
+    "$.anim.clipJSON": {
         "kind": "function",
         "arity": 1,
         "args": [
@@ -1176,7 +1176,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "загрузить клипы из JSON/объекта"
     },
-    "$.anim.clipJSON": {
+    "$.anim.load": {
         "kind": "function",
         "arity": 1,
         "args": [
@@ -1219,13 +1219,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "очистить реестр, возвращает $"
     },
-    "$.anim.bindings": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "зарегистрировать/перечислить адаптеры свойств"
-    },
     "$.anim.bind": {
         "kind": "function",
         "arity": 2,
@@ -1242,10 +1235,26 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "зарегистрировать/перечислить адаптеры свойств"
     },
-    "$.anim.actions": {
+    "$.anim.bindings": {
         "kind": "function",
         "arity": 0,
         "args": [],
+        "returns": "any",
+        "description": "зарегистрировать/перечислить адаптеры свойств"
+    },
+    "$.anim.action": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
         "returns": "any",
         "description": "реестр действий method-дорожек"
     },
@@ -1261,19 +1270,10 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "реестр действий method-дорожек"
     },
-    "$.anim.action": {
+    "$.anim.actions": {
         "kind": "function",
-        "arity": 2,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            }
-        ],
+        "arity": 0,
+        "args": [],
         "returns": "any",
         "description": "реестр действий method-дорожек"
     },
@@ -1655,6 +1655,18 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "эффективная громкость с учётом родителей, mute и solo"
     },
+    "$.audio.masterVolume": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "прокси к $.sound без дублирования логики"
+    },
     "$.audio.musicVolume": {
         "kind": "function",
         "arity": 1,
@@ -1668,18 +1680,6 @@ export const API_DOCS_CATALOG = {
         "description": "прокси к $.sound без дублирования логики"
     },
     "$.audio.sfxVolume": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "прокси к $.sound без дублирования логики"
-    },
-    "$.audio.masterVolume": {
         "kind": "function",
         "arity": 1,
         "args": [
@@ -3108,6 +3108,18 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "маска запроса"
     },
+    "engine.castShape": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "маска запроса"
+    },
     "$.selection.areaOverlap": {
         "kind": "function",
         "arity": 0,
@@ -3126,6 +3138,34 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "$.collision.mask(выражение) отдаёт число — его можно передать в ядерные .mask(bits), .collidesWith(bits, false) и так далее."
+    },
+    "engine.shapeOverlaps": {
+        "kind": "function",
+        "arity": 5,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            },
+            {
+                "name": "arg3",
+                "type": "any"
+            },
+            {
+                "name": "arg4",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "engine.shapeOverlaps(body, index, layer, mask, cap) — сырой биндинг: он передаёт фильтр в Box2D как есть, то есть остаётся двусторонним. Публичный .areaOverlap() — поверх него и следует правилу выше; прежнее двустороннее поведение доступно явно: .areaOverlap('hurt', { both: true })."
     },
     "$.collision": {
         "kind": "object",
@@ -3817,17 +3857,61 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "Узлы, которые физически видны из центра цели. Для каждого узла пускается луч engine.raycast от центра цели к центру узла — те же коллизии, маски и мир, что у .ground() и $.world.raycast. Пиксели рендера (камера, спрайты, прозрачность, слои отрисовки) на результат не влияют."
     },
-    "$.debug.nativePasses": {
+    "engine.queryCircle": {
         "kind": "function",
-        "arity": 1,
+        "arity": 4,
         "args": [
             {
                 "name": "arg0",
                 "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            },
+            {
+                "name": "arg3",
+                "type": "any"
             }
         ],
         "returns": "any",
-        "description": "нативные проходы кадра (src/nodes.c): синк физики, события мира, наведение, сортировка и сборка батча. false возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (true по умолчанию в движке, false без движка)"
+        "description": "Первые n узлов выборки. n <= 0, NaN, нечисло — пустая выборка; Infinity — вся выборка. Ограничение режет УЖЕ отфильтрованный результат: оно не ускоряет запрос и не заменяет нативный лимит engine.queryCircle."
+    },
+    "engine.raycast": {
+        "kind": "function",
+        "arity": 6,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            },
+            {
+                "name": "arg3",
+                "type": "any"
+            },
+            {
+                "name": "arg4",
+                "type": "any"
+            },
+            {
+                "name": "arg5",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Без engine.raycast (сборка без физики, юнит-тест) оператор возвращает пустую выборку и один раз пишет диагностику. «Всё видно» было бы выдуманным ответом; если луч не нужен, берите .within()."
     },
     "$.csv.jsonParse": {
         "kind": "function",
@@ -4380,6 +4464,18 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "факты о JS-куче: { bytes, used, objects, arrays, strings, atoms, shapes, native_tweens } (QuickJS JS_ComputeMemoryUsage); без движка — null. Растущее objects между кадрами — утечка, а не шум"
     },
+    "$.debug.nativePasses": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "нативные проходы кадра (src/nodes.c): синк физики, события мира, наведение, сортировка и сборка батча. false возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (true по умолчанию в движке, false без движка)"
+    },
     "$.debug.profiler": {
         "kind": "object",
         "description": "покадровый профайлер подсистем: включить (без аргумента), выключить on(false), прочитать состояние"
@@ -4443,6 +4539,26 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "Читает или задаёт глубину последующих примитивов отрисовки."
+    },
+    "engine.submitMesh": {
+        "kind": "function",
+        "arity": 3,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Третий аргумент engine.submitMesh — id текстуры (или ничего). С текстурой u/v сэмплят её, а цвет вершин умножается: 255 — «как есть». Раньше меш всегда биндил белую текстуру, поэтому u/v были мертвы и текстурированный псевдо-3D был невозможен. Треугольники собираются своим батчем, рисуются первыми в проходе сцены: меш пишет глубину, спрайты потом по ней проверяются."
     },
     "$.devtools.tab": {
         "kind": "function",
@@ -4897,6 +5013,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "панель; в сборке без RmlUi open() честно вернёт false. toggle() открывает закрытую и закрывает открытую (возвращает true при открытии)"
     },
+    "$.devtools.isOpen": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "панель; в сборке без RmlUi open() честно вернёт false. toggle() открывает закрытую и закрывает открытую (возвращает true при открытии)"
+    },
     "$.devtools.open": {
         "kind": "function",
         "arity": 0,
@@ -4905,13 +5028,6 @@ export const API_DOCS_CATALOG = {
         "description": "панель; в сборке без RmlUi open() честно вернёт false. toggle() открывает закрытую и закрывает открытую (возвращает true при открытии)"
     },
     "$.devtools.toggle": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "панель; в сборке без RmlUi open() честно вернёт false. toggle() открывает закрытую и закрывает открытую (возвращает true при открытии)"
-    },
-    "$.devtools.isOpen": {
         "kind": "function",
         "arity": 0,
         "args": [],
@@ -5142,13 +5258,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "uid узла под курсором (или null)"
     },
-    "$.devtools.copySelector": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "скопировать селектор / стабильный nid / $('#id')-код; bool"
-    },
     "$.devtools.copyJs": {
         "kind": "function",
         "arity": 0,
@@ -5157,6 +5266,13 @@ export const API_DOCS_CATALOG = {
         "description": "скопировать селектор / стабильный nid / $('#id')-код; bool"
     },
     "$.devtools.copyNodeId": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "скопировать селектор / стабильный nid / $('#id')-код; bool"
+    },
+    "$.devtools.copySelector": {
         "kind": "function",
         "arity": 0,
         "args": [],
@@ -5267,6 +5383,13 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "Путь проверяется, а не «чинится молча»: dir — до 4 относительных сегментов [A-Za-z0-9._-], timestamp — одно такое имя без ведущей точки; абсолютные пути, .., ~, : и разделители внутри сегментов отклоняются с { ok: false, path: null, files: [], error } и без единой записи. Отказ $.fs.write (диск только для чтения) возвращает частичный files и текст ошибки с путём — молчания нет."
+    },
+    "engine.profile": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Профиль остаётся машиночитаемым: engine.profile() отдаёт zones, frame_ms и gpu_available/gpu_ms; GPU-время называется GPU-временем только если timestamp'ы действительно сняты, иначе поле остаётся пустым, а не подменяется CPU-временем."
     },
     "$.diag": {
         "kind": "object",
@@ -5441,13 +5564,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "закрыть диалог (end с reason manual)"
     },
-    "$.dialog.isTyping": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "открыт ли диалог и печатается ли текст прямо сейчас"
-    },
     "$.dialog.isOpen": {
         "kind": "function",
         "arity": 0,
@@ -5455,12 +5571,12 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "открыт ли диалог и печатается ли текст прямо сейчас"
     },
-    "$.dialog.node": {
+    "$.dialog.isTyping": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
-        "description": "id текущей реплики и открытого диалога; вне диалога — null"
+        "description": "открыт ли диалог и печатается ли текст прямо сейчас"
     },
     "$.dialog.definition": {
         "kind": "function",
@@ -5469,14 +5585,21 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "id текущей реплики и открытого диалога; вне диалога — null"
     },
-    "$.dialog.pageCount": {
+    "$.dialog.node": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "id текущей реплики и открытого диалога; вне диалога — null"
+    },
+    "$.dialog.page": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
         "description": "номер страницы (с нуля) и их число; вне диалога — -1 и 0"
     },
-    "$.dialog.page": {
+    "$.dialog.pageCount": {
         "kind": "function",
         "arity": 0,
         "args": [],
@@ -5490,6 +5613,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "полный текст страницы"
     },
+    "$.dialog.choiceFocus": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "подсвеченный вариант и его сдвиг по кругу; без видимых вариантов focusChoice возвращает false"
+    },
     "$.dialog.focusChoice": {
         "kind": "function",
         "arity": 1,
@@ -5499,13 +5629,6 @@ export const API_DOCS_CATALOG = {
                 "type": "any"
             }
         ],
-        "returns": "any",
-        "description": "подсвеченный вариант и его сдвиг по кругу; без видимых вариантов focusChoice возвращает false"
-    },
-    "$.dialog.choiceFocus": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
         "returns": "any",
         "description": "подсвеченный вариант и его сдвиг по кругу; без видимых вариантов focusChoice возвращает false"
     },
@@ -5551,7 +5674,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "обёртка панели диалога или null"
     },
-    "$.dialog.on": {
+    "$.dialog.off": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -5567,7 +5690,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "подписки на события; off() без имени снимает все подписки, с именем и без fn — все подписки события"
     },
-    "$.dialog.off": {
+    "$.dialog.on": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -6803,6 +6926,26 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "размер кольца эмиттеров искр, диапазон 1..64 (выше 64 живых эмиттеров больше, чем ударов успевает случиться за кадр, и пул перестаёт экономить узлы). Без аргумента — геттер (по умолчанию 8); $.hits.pool(16) → true, $.hits.pool(99) → false (вне диапазона)"
     },
+    "engine.applyImpulse": {
+        "kind": "function",
+        "arity": 3,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Отдача. У узла с телом Box2D это engine.applyImpulse по направлению удара — дальше работает физика (масса, трение, затухание). У узла без тела позиция сдвигается на force · 0.06 пикселей с затуханием за ms, и узел остаётся сдвинутым: движение без физики — дело игры."
+    },
     "$.hits": {
         "kind": "object",
         "description": "Модуль src/highlevel/hits.js: из события контакта делает полный отклик — искры в точке попадания, вспышку узла и экрана, тряску камеры, hit-stop, отдачу и squash & stretch спрайта. Одна строка в игре:"
@@ -7400,6 +7543,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "позиция системного окна кандидатов IME в координатах окна; алиас $.ввод.textInputArea(...)"
     },
+    "$.input.clipboard": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "системный буфер обмена: текст или null / записать → bool"
+    },
     "$.input.setClipboard": {
         "kind": "function",
         "arity": 1,
@@ -7409,13 +7559,6 @@ export const API_DOCS_CATALOG = {
                 "type": "any"
             }
         ],
-        "returns": "any",
-        "description": "системный буфер обмена: текст или null / записать → bool"
-    },
-    "$.input.clipboard": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
         "returns": "any",
         "description": "системный буфер обмена: текст или null / записать → bool"
     },
@@ -7572,14 +7715,14 @@ export const API_DOCS_CATALOG = {
         "arity": 0,
         "args": [],
         "returns": "any",
-        "description": "удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false"
+        "description": "удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false. altDown() — это и Option на macOS (SDL называет клавишу «Option»; имена 'alt'/'lalt'/'ralt' для down/pressed тоже ведут на неё)"
     },
     "$.input.ctrlDown": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
-        "description": "удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false"
+        "description": "удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false. altDown() — это и Option на macOS (SDL называет клавишу «Option»; имена 'alt'/'lalt'/'ralt' для down/pressed тоже ведут на неё)"
     },
     "$.input.released": {
         "kind": "function",
@@ -7946,11 +8089,11 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "вид первого узла выборки ('2d' для пустой)"
     },
-    "$.kinds.Re2D": {
+    "$.Re2D": {
         "kind": "string",
         "description": "константа 're2d'"
     },
-    "$.Re2D": {
+    "$.kinds.Re2D": {
         "kind": "string",
         "description": "константа 're2d'"
     },
@@ -8527,18 +8670,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "то же, с ожиданием загрузки и ресурсов (§45)"
     },
-    "$.ui.doc": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "RmlUi-документ: .show() / .hide() / .visible() / .text(id, t) / .html(id, m) / .cls(id, name, add) / .style(id, prop, value) / .on(id, event, fn) → id / .off(id, event, fn?) → снято / .listeners() / .unload()"
-    },
     "$.loading.value": {
         "kind": "function",
         "arity": 0,
@@ -8873,7 +9004,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "Единичный вектор; нулевой остаётся нулевым"
     },
-    "$.math.vecSub": {
+    "$.math.vecAdd": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -8889,7 +9020,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "Сумма и разность (a - b)"
     },
-    "$.math.vecAdd": {
+    "$.math.vecSub": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -9394,9 +9525,76 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "1. узлы по селекторам tags (по умолчанию ['wall']) — включая узлы без физического тела, по их габаритам (nodeBounds); 2. все статические/кинематические тела, попавшие в габарит сетки ($.world.bodiesIn) — поэтому препятствием становится и стена без тега <wall>."
     },
+    "engine.setVelocity": {
+        "kind": "function",
+        "arity": 3,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "у узла есть тело — агенту задаётся скорость (engine.setVelocity), тело ведёт физика; тела нет — узел смещается на speed dt за кадр."
+    },
     "$.nav": {
         "kind": "object",
         "description": "(tx, ty) → bool, клеточная занятость"
+    },
+    "$.net.relay": {
+        "kind": "object",
+        "description": "Игровой host пересылает сообщения между подключёнными peers"
+    },
+    "$.net.topology": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Прочитать или выбрать authoritative, mesh, relay, custom."
+    },
+    "$.net.authority": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Режим владения и признак локального авторитета."
+    },
+    "$.net.isAuthority": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Режим владения и признак локального авторитета."
+    },
+    "$.net.start": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Открыть listener и подключиться к одному или нескольким peers."
     },
     "$.net.host": {
         "kind": "function",
@@ -9412,7 +9610,43 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "сервер: мир считает этот узел"
+        "description": "Открыть host или входящий listener."
+    },
+    "$.net.listen": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Открыть host или входящий listener."
+    },
+    "$.net.connect": {
+        "kind": "function",
+        "arity": 3,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Начать исходящее peer-подключение; join выбирает authoritative client."
     },
     "$.net.join": {
         "kind": "function",
@@ -9432,100 +9666,89 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "клиент: только ввод и рендер"
+        "description": "Начать исходящее peer-подключение; join выбирает authoritative client."
+    },
+    "$.net.available": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Состояние high-level сессии и доступность встроенного транспорта."
+    },
+    "$.net.online": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Состояние high-level сессии и доступность встроенного транспорта."
+    },
+    "$.net.status": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Состояние high-level сессии и доступность встроенного транспорта."
+    },
+    "$.net.peer": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Локальный порт, подключения, RTT, число peers и номер кадра сети."
+    },
+    "$.net.peers": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Локальный порт, подключения, RTT, число peers и номер кадра сети."
+    },
+    "$.net.playerCount": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Локальный порт, подключения, RTT, число peers и номер кадра сети."
+    },
+    "$.net.port": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Локальный порт, подключения, RTT, число peers и номер кадра сети."
+    },
+    "$.net.tick": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Локальный порт, подключения, RTT, число peers и номер кадра сети."
+    },
+    "$.net.disconnect": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Закрыть peer или всю сессию."
     },
     "$.net.leave": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
-        "description": "выйти / сбросить всё"
+        "description": "Закрыть peer или всю сессию."
     },
-    "$.net.role": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "состояние узла"
-    },
-    "$.net.describe": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "строка и счётчики; stats.lastSendOk — ушёл ли последний пакет"
-    },
-    "$.net.addPlayer": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "сервер: игрок пришёл / ушёл (события join/leave)"
-    },
-    "$.net.replicate": {
-        "kind": "function",
-        "arity": 2,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "сервер объявляет узел реплицируемым; возвращает сетевой id"
-    },
-    "$.net.unreplicate": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "снять с репликации"
-    },
-    "$.net.idOf": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "сетевой id и обратно"
-    },
-    "$.net.confirmed": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "два последних подтверждённых состояния"
-    },
-    "$.net.get": {
-        "kind": "function",
-        "arity": 2,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "значение из подтверждённого"
-    },
-    "$.net.polated": {
+    "$.net.broadcast": {
         "kind": "function",
         "arity": 3,
         "args": [
@@ -9543,96 +9766,7 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "своё — подтверждённое, чужое — интерполированное"
-    },
-    "$.net.nextInput": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "следующий номер ввода для отправки"
-    },
-    "$.net.isServer": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "узел — сервер (мир считает он)"
-    },
-    "$.net.isClient": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "узел — клиент (только ввод и рендер)"
-    },
-    "$.net.online": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "роль не offline"
-    },
-    "$.net.port": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "порт текущей сессии (0 — не в сети)"
-    },
-    "$.net.reset": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "полный сброс сети (новый мир, тесты)"
-    },
-    "$.net.tick": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "номер сетевого тика (растёт в snapshotNow)"
-    },
-    "$.net.attach": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "подключить свой транспорт: { listen, connect, close, send, poll, simulate? }"
-    },
-    "$.net.transport": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "текущий транспорт"
-    },
-    "$.net.bindEngine": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "взять транспорт движка (SDL3_net, R2D_ENABLE_NET); сам ставит listen/connect/send/poll/close/simulate и возит сообщения байтами (JSON)"
-    },
-    "$.net.engineBound": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "подключён ли именно транспорт движка (а не свой через attach)"
-    },
-    "$.net.poll": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "опросить транспорт и раздать сообщения в receive; движок зовёт раз в кадр"
+        "description": "Отправить сообщение одному peer или всем. delivery: reliable, state, input, bulk."
     },
     "$.net.send": {
         "kind": "function",
@@ -9648,66 +9782,9 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "отправить сообщение в канал (может и сервер: он рассылает снапшоты)"
+        "description": "Отправить сообщение одному peer или всем. delivery: reliable, state, input, bulk."
     },
-    "$.net.receive": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "пришло сообщение из транспорта: { channel, data, from?, player? }"
-    },
-    "$.net.lastChannel": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "канал последнего принятого сообщения (диагностика)"
-    },
-    "$.net.playerCount": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "сколько игроков в столе"
-    },
-    "$.net.removePlayer": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "сервер: игрок ушёл (заодно снимается привязка адреса)"
-    },
-    "$.net.peers": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "адреса пиров, уже привязанные к игрокам (диагностика сервера)"
-    },
-    "$.net.ownerOf": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "номер игрока или 0"
-    },
-    "$.net.owns": {
+    "$.net.handle": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -9721,149 +9798,9 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "может ли игрок управлять узлом"
+        "description": "Вызвать зарегистрированное именованное действие по сети."
     },
-    "$.net.ownedBy": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "массив сетевых id"
-    },
-    "$.net.nodeOfId": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "узел по сетевому id"
-    },
-    "$.net.snapshotNow": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "сервер: собрать снапшот из описанных узлов и увеличить tick"
-    },
-    "$.net.deltaFrom": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "сервер: снапшот с дельтой от предыдущего подтверждённого"
-    },
-    "$.net.apply": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "клиент: применить снапшот (то же, что receive) и выпустить applied"
-    },
-    "$.net.previous": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "клиент: предыдущее подтверждённое (для интерполяции)"
-    },
-    "$.net.ping": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "клиент: отправить «пинг» (игра зовёт раз в секунду-две, не каждый кадр); now — время игры в мс"
-    },
-    "$.net.rtt": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "миллисекунды (0 — ещё не измерена)"
-    },
-    "$.net.latency": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "половина задержки — столько клиент ждал подтверждения"
-    },
-    "$.net.pings": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "сколько пингов отправлено"
-    },
-    "$.net.simulate": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "симуляция плохой сети: loss (0…100 %), delay (мс), jitter (мс, добавка [0, jitter)), seed; задержка — очередью отложенных отправок, а не сном в кадре"
-    },
-    "$.net.simulation": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "настроенная симуляция (или нули)"
-    },
-    "$.net.simulateOff": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "выключить симуляцию (все нули)"
-    },
-    "$.net.delayed": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "сколько пакетов ждёт своей задержки (видно, что она работает)"
-    },
-    "$.net.record": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "сервер: запомнить подтверждённое состояние в историю (now — время игры)"
-    },
-    "$.net.rewind": {
+    "$.net.rpc": {
         "kind": "function",
         "arity": 3,
         "args": [
@@ -9881,16 +9818,9 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "сервер: где был узел на момент «сейчас минус задержка» (проверка попадания); delay по умолчанию — latency()"
+        "description": "Вызвать зарегистрированное именованное действие по сети."
     },
-    "$.net.history": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "история подтверждённых состояний"
-    },
-    "$.net.predict": {
+    "$.net.unhandle": {
         "kind": "function",
         "arity": 1,
         "args": [
@@ -9900,28 +9830,9 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "включить предсказание клиента: simulate(state, input) — та же чистая функция шага, что на сервере"
+        "description": "Вызвать зарегистрированное именованное действие по сети."
     },
-    "$.net.prediction": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "включённое предсказание"
-    },
-    "$.net.applyInput": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "клиент: применить свой ввод немедленно (перед отправкой)"
-    },
-    "$.net.on": {
+    "$.net.acknowledge": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -9935,7 +9846,300 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "подписаться на канал/событие (join, leave, input, snapshot, pong, start, stop, applied, любой свой канал)"
+        "description": "Ввод, локальное предсказание и серверное подтверждение."
+    },
+    "$.net.applyInput": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Ввод, локальное предсказание и серверное подтверждение."
+    },
+    "$.net.input": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Ввод, локальное предсказание и серверное подтверждение."
+    },
+    "$.net.predict": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Ввод, локальное предсказание и серверное подтверждение."
+    },
+    "$.net.prediction": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Ввод, локальное предсказание и серверное подтверждение."
+    },
+    "$.net.entities": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Зарегистрировать или убрать сущности из автоматической репликации; короче — .net(options) на выборке."
+    },
+    "$.net.replicate": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Зарегистрировать или убрать сущности из автоматической репликации; короче — .net(options) на выборке."
+    },
+    "$.net.unreplicate": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Зарегистрировать или убрать сущности из автоматической репликации; короче — .net(options) на выборке."
+    },
+    "$.fn.net": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Применить сетевые параметры к узлам выборки и вернуть выборку для цепочки."
+    },
+    "$.selection.net": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Применить сетевые параметры к узлам выборки и вернуть выборку для цепочки."
+    },
+    "$.net.interpolationDelay": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Настроить частоту снимков и буфер интерполяции."
+    },
+    "$.net.syncRate": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Настроить частоту снимков и буфер интерполяции."
+    },
+    "$.net.room.create": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Создать/войти в комнату и прочитать её текущее состояние."
+    },
+    "$.net.room.current": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Создать/войти в комнату и прочитать её текущее состояние."
+    },
+    "$.net.room.join": {
+        "kind": "function",
+        "arity": 4,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            },
+            {
+                "name": "arg3",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Создать/войти в комнату и прочитать её текущее состояние."
+    },
+    "$.net.room.leave": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Создать/войти в комнату и прочитать её текущее состояние."
+    },
+    "$.net.room.peers": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Создать/войти в комнату и прочитать её текущее состояние."
+    },
+    "$.net.relay.broadcast": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Включить игровую пересылку через текущий host или отправить relay-сообщение."
+    },
+    "$.net.relay.disable": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Включить игровую пересылку через текущий host или отправить relay-сообщение."
+    },
+    "$.net.relay.enable": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Включить игровую пересылку через текущий host или отправить relay-сообщение."
+    },
+    "$.net.relay.enabled": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Включить игровую пересылку через текущий host или отправить relay-сообщение."
+    },
+    "$.net.relay.forward": {
+        "kind": "function",
+        "arity": 3,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Включить игровую пересылку через текущий host или отправить relay-сообщение."
+    },
+    "$.net.delayed": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Смоделировать потери/задержку и прочитать настройки очереди."
+    },
+    "$.net.simulate": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Смоделировать потери/задержку и прочитать настройки очереди."
+    },
+    "$.net.simulation": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Смоделировать потери/задержку и прочитать настройки очереди."
+    },
+    "$.net.describe": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Счётчики сети и короткая строка статуса для UI."
+    },
+    "$.net.stats": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Счётчики сети и короткая строка статуса для UI."
     },
     "$.net.off": {
         "kind": "function",
@@ -9951,40 +10155,9 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "отписаться (без fn — снять всех)"
+        "description": "Подписаться или снять подписку на сетевые события."
     },
-    "$.net.emit": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "выпустить событие вручную"
-    },
-    "$.net.stats": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "счётчики для интерфейса"
-    },
-    "$.net.createIdTable": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "стол сетевых id: один узел — один номер, номера не переиспользуются"
-    },
-    "$.net.createInputQueue": {
+    "$.net.on": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -9998,153 +10171,18 @@ export const API_DOCS_CATALOG = {
             }
         ],
         "returns": "any",
-        "description": "очередь ввода клиента: номера по порядку, старые вытесняются"
+        "description": "Подписаться или снять подписку на сетевые события."
     },
-    "$.net.createAuthority": {
+    "$.net.reset": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
-        "description": "стол игроков и владения реплицируемыми узлами"
-    },
-    "$.net.createClientState": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "подтверждённое/предыдущее состояние клиента и его интерполяция"
-    },
-    "$.net.createHistory": {
-        "kind": "function",
-        "arity": 2,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "история подтверждённых состояний для перемотки"
-    },
-    "$.net.createPrediction": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "предсказание клиента с подтверждением и сглаживанием отката"
-    },
-    "$.net.diffSnapshot": {
-        "kind": "function",
-        "arity": 3,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "дельта: только изменившиеся поля, null — удаление сущности"
-    },
-    "$.net.applySnapshot": {
-        "kind": "function",
-        "arity": 2,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "применить снапшот: сначала удаления, потом патчи (вход не меняется)"
-    },
-    "$.net.interpolate": {
-        "kind": "function",
-        "arity": 3,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "интерполяция чужой сущности между снапшотами; t — доля 0…1"
-    },
-    "$.net.sameValue": {
-        "kind": "function",
-        "arity": 3,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            },
-            {
-                "name": "arg2",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "сравнение значений: числа — с допуском (epsilon по умолчанию 0.0001)"
-    },
-    "$.net.encodeMessage": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "сообщение → байты (JSON) для транспорта движка"
-    },
-    "$.net.decodeMessage": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "объект или null, если не разобралось"
+        "description": "Сбросить состояние сети для перезапуска игрового раунда."
     },
     "$.net": {
         "kind": "object",
-        "description": "Решение проекта. В высокоуровневом API $ существует только авторитарный мультиплеер: один узел — хост-сервер, его симуляция всегда права; клиенты не вычисляют игровое состояние, а присылают ввод и рисуют то, что подтвердил сервер. Peer-to-peer, детерминированный лок-степ и «у каждого своя правда» в API не выставляются: там, где выбор есть, побеждает состояние сервера."
+        "description": "$.net — высокоуровневое мультиплеерное API поверх встроенного ENet. ENet обрабатывает peer-соединения, доставку, фрагментацию и RTT. Игровой код работает с топологиями, сообщениями, комнатами и обычными $-сущностями; сокетных методов в игровом API нет."
     },
     "$.noise.simplex2": {
         "kind": "function",
@@ -10327,6 +10365,26 @@ export const API_DOCS_CATALOG = {
         "args": [],
         "returns": "any",
         "description": "$.noise.fractals() — список режимов."
+    },
+    "engine.textureFromPixels": {
+        "kind": "function",
+        "arity": 3,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Сразу пиксели RGBA: серый канал round((value 0.5 + 0.5) 255), альфа 255, зажим в 0..255. Массив годится прямо в engine.textureFromPixels(w, h, pixels)."
     },
     "$.noise": {
         "kind": "object",
@@ -10571,6 +10629,30 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "то же, что $.particles.inBox"
+    },
+    "engine.rgba": {
+        "kind": "function",
+        "arity": 4,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            },
+            {
+                "name": "arg3",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Экспортируются из src/highlevel/particles.js и не требуют движка (кроме цвета — engine.rgba из мока):"
     },
     "$.hits.reduced": {
         "kind": "function",
@@ -10908,7 +10990,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "восстановить мир; opts: { clear: true } — сначала очистить"
     },
-    "$.prefab.toJSON": {
+    "$.prefab.fromJSON": {
         "kind": "function",
         "arity": 1,
         "args": [
@@ -10920,7 +11002,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "строка JSON и обратно"
     },
-    "$.prefab.fromJSON": {
+    "$.prefab.toJSON": {
         "kind": "function",
         "arity": 1,
         "args": [
@@ -11696,13 +11778,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "доступные, взятые и готовые задания выдающего"
     },
-    "$.quest.save": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "снимок и восстановление состояния"
-    },
     "$.quest.load": {
         "kind": "function",
         "arity": 1,
@@ -11712,6 +11787,13 @@ export const API_DOCS_CATALOG = {
                 "type": "any"
             }
         ],
+        "returns": "any",
+        "description": "снимок и восстановление состояния"
+    },
+    "$.quest.save": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
         "returns": "any",
         "description": "снимок и восстановление состояния"
     },
@@ -12212,6 +12294,10 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "Проверка снимка без исключения"
     },
+    "engine.noise": {
+        "kind": "object",
+        "description": "Внутренний нативный backend FastNoiseLite для фасада $.noise; игровые сценарии используют высокоуровневые методы $.noise."
+    },
     "$.re2dWorld.load": {
         "kind": "function",
         "arity": 1,
@@ -12588,6 +12674,18 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "отсоединить объект"
     },
+    "engine.rotSpriteLoad": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Низкий уровень: engine.rotSpriteLoad(path), rotSpritePose(handle,yaw,pitch, eyes?,mouth?,brows?), rotSpriteRig(handle,body,phase,stride,armLeft,armRight, headYaw), rotSpritePart(handle,path,mask), rotSpriteChanged(handle), rotSpriteStyle(handle,style), rotSpriteFileStamp(path), rotSpriteInfo(handle), rotSpriteDispose(handle). Игра использует $; masks и файловые stamp — детали обёртки."
+    },
     "$.real2d.load": {
         "kind": "function",
         "arity": 1,
@@ -12847,6 +12945,34 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "выводит из эксплуатации старую версию ресурса/узла после перезагрузки; false, если выводить нечего"
+    },
+    "engine.reloadTexture": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "{ kind: 'texture', path, texture | resource }. Перезагрузка на месте: engine.reloadTexture читает картинку и заливает её в ту же текстуру — handle не меняется, узлы и спрайты продолжают работать, новых handle'ов не появляется. Смена размера отклоняется (R2D_RELOAD_TEXTURE_SIZE): спрайты хранят uv-прямоугольник, нормированный по старому размеру."
+    },
+    "$.ui.doc": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "RmlUi-документ: .show() / .hide() / .visible() / .text(id, t) / .html(id, m) / .cls(id, name, add) / .style(id, prop, value) / .on(id, event, fn) → id / .off(id, event, fn?) → снято / .listeners() / .unload()"
     },
     "$.reload.value": {
         "kind": "function",
@@ -13759,6 +13885,10 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "внутреннее: запись кадра ядром в обход проверки режима; публичный record принимает сборщик ввода, поэтому хук зовёт _push. Используется src/highlevel/replay.js и tests/js/replay_test.mjs"
+    },
+    "engine.version": {
+        "kind": "string",
+        "description": "ID движка и сборки. Движок отдаёт engine.version (версия проекта из CMake); игру можно уточнить через $.replay.identity({ version, build }) — явное значение важнее. Неизвестное честно помечается null, а не «0.0.0»"
     },
     "$.replay": {
         "kind": "object",
@@ -16056,13 +16186,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "файлы банка ПО ЕГО ИМЕНИ (не по индексу); неизвестное имя — []"
     },
-    "$.sound.stemsState": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "Слои музыки: $.sound.stemsState() — публичное состояние транспорта ({ count, playing, paused, loopStart, loops, remaining }), ровно те же поля, что у внутреннего engine.audio.stemsState(): игре больше не нужно читать биндинг."
-    },
     "$.sound": {
         "kind": "object",
         "description": "Эффекты, позиционное звучание, музыка. Позиционность приблизительная: SDL_mixer умеет панораму (pan −1..1) и громкость, поэтому «где звучит» вычисляется относительно камеры. Для 2D этого достаточно: источник слева — в левом ухе."
@@ -16676,6 +16799,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "автосохранение по игровому времени (по умолчанию 30000 мс, пишет только при изменениях)"
     },
+    "$.fs.documentsPath": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "системный каталог «Документы» текущего пользователя на этой ОС"
+    },
     "$.store.setAll": {
         "kind": "function",
         "arity": 1,
@@ -17011,6 +17141,26 @@ export const API_DOCS_CATALOG = {
     "$.test": {
         "kind": "object",
         "description": "Мини-фреймворк проверок внутри игры: те же строки ok/FAIL, что печатает агентский прогон, но проверку пишет сама игра (в сценарии или в отладочной ветке). Счётчики копятся до $.test.reset()."
+    },
+    "engine.measureText": {
+        "kind": "function",
+        "arity": 3,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Обе функции внутри зовут нативный engine.measureText (internal/NATIVE.md); игре доступны только они."
     },
     "$.tilemap.create": {
         "kind": "function",
@@ -17864,6 +18014,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "bit16: N=1, E=2, S=4, W=8 → визуальный тайл base + mask (16 тайлов); blob47: N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128 → тайл base + $.tilemap.blob47Index(mask) (47 форм)."
     },
+    "engine.limits": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Зачем слияние. Реестр тел динамический (старт 1024, дальше растёт), но каждое тело — это память и работа Box2D, поэтому число тел важно даже без жёсткого потолка. Раньше тела строились по горизонтальным полосам: плотная карта 200×100 просила до 10 000 полос, и часть тайлов оставалась вообще без коллизий — игрок проваливался сквозь пол. Теперь число тел зависит от площади прямоугольников, а не от числа строк; на патологических узорах (диагональная шахматка) срабатывает бюджет engine.limits().bodies_max — см. §19: модуль возвращает failed result и по умолчанию не публикует неполную коллизию."
+    },
     "$.tilemap.tileDef": {
         "kind": "function",
         "arity": 3,
@@ -17883,6 +18040,18 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "opts.tiles можно задать и на конкретном слое массива layers. Читается дескриптор через $.tilemap.tileDef(tm, id [, layer])."
+    },
+    "engine.createBody": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Для каждого тела вызывается engine.createBody с прямоугольником формы; layerBits/mask/group/oneWay/oneWayAngle/sensor передаются как есть. Полигоны и наклонные формы через таблицу пока не выражаются: локальная геометрия — только axis-aligned прямоугольники (одна клетка может дать несколько тел)."
     },
     "$.world.bounds": {
         "kind": "function",
@@ -18234,6 +18403,18 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "снимает метку времени по имени (без имени — все метки), парная к $.time.mark; возвращает $.time"
+    },
+    "engine.setTimeScale": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Масштаб принимает только конечные неотрицательные числа: отрицательное и NaN читаются как 0 (полный стоп — так же их трактует C, engine.setTimeScale), Infinity — как потолок SCALE_MAX = 100. Не-конечный множитель ушёл бы в шаг Box2D и вернулся NaN-позициями тел, поэтому потолок стоит до моста в C."
     },
     "$.time": {
         "kind": "object",
@@ -18728,6 +18909,22 @@ export const API_DOCS_CATALOG = {
         "args": [],
         "returns": "any",
         "description": "снять ВСЕ наблюдения (смена сцены, тесты): ручки помечаются alive = false; возвращает $.activation"
+    },
+    "engine.setBodyEnabled": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "physics: false вызывает engine.setBodyEnabled(id, false): тело выключено, не падает, не сталкивается и не двигается, его sensor-формы молчат. Это не сон: спящее тело продолжает участвовать в мире и просыпается от толчка. Box2D при выключении обнуляет скорость, поэтому после physics: true тело начнёт движение с нуля — если нужно сохранить импульс, не выключайте тело, а остановите логику (update: false) и обнулите скорость сами."
     },
     "$.triggers": {
         "kind": "object",
@@ -19588,14 +19785,14 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "обёртка узла в фокусе или null"
     },
-    "$.ui.focusPrev": {
+    "$.ui.focusNext": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
         "description": "следующий/предыдущий контрол"
     },
-    "$.ui.focusNext": {
+    "$.ui.focusPrev": {
         "kind": "function",
         "arity": 0,
         "args": [],
@@ -19742,6 +19939,34 @@ export const API_DOCS_CATALOG = {
         "args": [],
         "returns": "any",
         "description": "логический размер / размер в пикселях"
+    },
+    "engine.textInputArea": {
+        "kind": "function",
+        "arity": 5,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            },
+            {
+                "name": "arg3",
+                "type": "any"
+            },
+            {
+                "name": "arg4",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "IME. Незавершённая композиция (nihao → 你好) приходит событием SDL_EVENT_TEXT_EDITING; сам текст вставляется только по завершении. Окно кандидатов показывается у поля: движку передаётся прямоугольник поля (engine.textInputArea) — без этого кандидаты всплывали в углу окна."
     },
     "$.window.title": {
         "kind": "function",
@@ -21777,6 +22002,13 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "Остановить музыку: то же, что stopMusic(ms), но под очевидным именем — игра ищет именно его (разведка inspector-backend: musicStop не существовал, хотя music/musicPitch/musicPlaying есть)."
+    },
+    "$.sound.stemsState": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Состояние музыкальных слоёв ровно в том виде, в каком его отдаёт движок: { count, playing, paused, loopStart, loops, remaining }. Публичная обёртка нужна, чтобы игре не приходилось читать внутренний биндинг engine.audio.stemsState() (пункт H5 отчёта BASHNYA)."
     },
     "$.sound.position": {
         "kind": "function",
@@ -30990,6 +31222,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "позиция системного окна кандидатов IME в координатах окна; алиас $.ввод.textInputArea(...)"
     },
+    "$.ввод.clipboard": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "системный буфер обмена: текст или null / записать → bool"
+    },
     "$.ввод.setClipboard": {
         "kind": "function",
         "arity": 1,
@@ -30999,13 +31238,6 @@ export const API_DOCS_CATALOG = {
                 "type": "any"
             }
         ],
-        "returns": "any",
-        "description": "системный буфер обмена: текст или null / записать → bool"
-    },
-    "$.ввод.clipboard": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
         "returns": "any",
         "description": "системный буфер обмена: текст или null / записать → bool"
     },
@@ -31162,14 +31394,14 @@ export const API_DOCS_CATALOG = {
         "arity": 0,
         "args": [],
         "returns": "any",
-        "description": "удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false"
+        "description": "удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false. altDown() — это и Option на macOS (SDL называет клавишу «Option»; имена 'alt'/'lalt'/'ralt' для down/pressed тоже ведут на неё)"
     },
     "$.ввод.ctrlDown": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
-        "description": "удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false"
+        "description": "удержан ли модификатор (левый ИЛИ правый) в этом кадре; без ввода — false. altDown() — это и Option на macOS (SDL называет клавишу «Option»; имена 'alt'/'lalt'/'ralt' для down/pressed тоже ведут на неё)"
     },
     "$.ввод.released": {
         "kind": "function",
@@ -32381,13 +32613,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "файлы банка ПО ЕГО ИМЕНИ (не по индексу); неизвестное имя — []"
     },
-    "$.звук.stemsState": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "Слои музыки: $.sound.stemsState() — публичное состояние транспорта ({ count, playing, paused, loopStart, loops, remaining }), ровно те же поля, что у внутреннего engine.audio.stemsState(): игре больше не нужно читать биндинг."
-    },
     "$.звук": {
         "kind": "object",
         "description": "Эффекты, позиционное звучание, музыка. Позиционность приблизительная: SDL_mixer умеет панораму (pan −1..1) и громкость, поэтому «где звучит» вычисляется относительно камеры. Для 2D этого достаточно: источник слева — в левом ухе."
@@ -32443,6 +32668,13 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "Остановить музыку: то же, что stopMusic(ms), но под очевидным именем — игра ищет именно его (разведка inspector-backend: musicStop не существовал, хотя music/musicPitch/musicPlaying есть)."
+    },
+    "$.звук.stemsState": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "Состояние музыкальных слоёв ровно в том виде, в каком его отдаёт движок: { count, playing, paused, loopStart, loops, remaining }. Публичная обёртка нужна, чтобы игре не приходилось читать внутренний биндинг engine.audio.stemsState() (пункт H5 отчёта BASHNYA)."
     },
     "$.звук.position": {
         "kind": "function",
@@ -34015,14 +34247,14 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "обёртка узла в фокусе или null"
     },
-    "$.интерфейс.focusPrev": {
+    "$.интерфейс.focusNext": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
         "description": "следующий/предыдущий контрол"
     },
-    "$.интерфейс.focusNext": {
+    "$.интерфейс.focusPrev": {
         "kind": "function",
         "arity": 0,
         "args": [],
@@ -34985,13 +35217,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "остановить клип / с отменой / все плееры"
     },
-    "$.анимация.stopAll": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "остановить клип / с отменой / все плееры"
-    },
     "$.анимация.stop": {
         "kind": "function",
         "arity": 1,
@@ -35004,7 +35229,14 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "остановить клип / с отменой / все плееры"
     },
-    "$.анимация.skip": {
+    "$.анимация.stopAll": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "остановить клип / с отменой / все плееры"
+    },
+    "$.анимация.restore": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -35036,7 +35268,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "перемотка/пропуск/восстановление"
     },
-    "$.анимация.restore": {
+    "$.анимация.skip": {
         "kind": "function",
         "arity": 2,
         "args": [
@@ -35071,6 +35303,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "домен часов: сеттер (цепочка) или геттер"
     },
+    "$.анимация.openWindows": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "gameplay-окна"
+    },
     "$.анимация.window": {
         "kind": "function",
         "arity": 1,
@@ -35083,26 +35322,12 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "gameplay-окна"
     },
-    "$.анимация.openWindows": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "gameplay-окна"
-    },
     "$.анимация.clipName": {
         "kind": "function",
         "arity": 0,
         "args": [],
         "returns": "any",
         "description": "имя играющего клипа"
-    },
-    "$.анимация.values": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "значения дорожек"
     },
     "$.анимация.value": {
         "kind": "function",
@@ -35117,6 +35342,13 @@ export const API_DOCS_CATALOG = {
                 "type": "any"
             }
         ],
+        "returns": "any",
+        "description": "значения дорожек"
+    },
+    "$.анимация.values": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
         "returns": "any",
         "description": "значения дорожек"
     },
@@ -35187,7 +35419,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "имена клипов плеера"
     },
-    "$.анимация.load": {
+    "$.анимация.clipJSON": {
         "kind": "function",
         "arity": 1,
         "args": [
@@ -35199,7 +35431,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "загрузить клипы из JSON/объекта"
     },
-    "$.анимация.clipJSON": {
+    "$.анимация.load": {
         "kind": "function",
         "arity": 1,
         "args": [
@@ -35242,13 +35474,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "очистить реестр, возвращает $"
     },
-    "$.анимация.bindings": {
-        "kind": "function",
-        "arity": 0,
-        "args": [],
-        "returns": "any",
-        "description": "зарегистрировать/перечислить адаптеры свойств"
-    },
     "$.анимация.bind": {
         "kind": "function",
         "arity": 2,
@@ -35265,10 +35490,26 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "зарегистрировать/перечислить адаптеры свойств"
     },
-    "$.анимация.actions": {
+    "$.анимация.bindings": {
         "kind": "function",
         "arity": 0,
         "args": [],
+        "returns": "any",
+        "description": "зарегистрировать/перечислить адаптеры свойств"
+    },
+    "$.анимация.action": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
         "returns": "any",
         "description": "реестр действий method-дорожек"
     },
@@ -35284,19 +35525,10 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "реестр действий method-дорожек"
     },
-    "$.анимация.action": {
+    "$.анимация.actions": {
         "kind": "function",
-        "arity": 2,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            },
-            {
-                "name": "arg1",
-                "type": "any"
-            }
-        ],
+        "arity": 0,
+        "args": [],
         "returns": "any",
         "description": "реестр действий method-дорожек"
     },
@@ -35475,18 +35707,6 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "Смешать значения двух анимационных состояний для интерполяции перехода; не путать с переходом клипов $.animplayer."
     },
-    "$.отладка.nativePasses": {
-        "kind": "function",
-        "arity": 1,
-        "args": [
-            {
-                "name": "arg0",
-                "type": "any"
-            }
-        ],
-        "returns": "any",
-        "description": "нативные проходы кадра (src/nodes.c): синк физики, события мира, наведение, сортировка и сборка батча. false возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (true по умолчанию в движке, false без движка)"
-    },
     "$.отладка.draw": {
         "kind": "object",
         "description": "рисование поверх кадра"
@@ -35572,6 +35792,18 @@ export const API_DOCS_CATALOG = {
         "args": [],
         "returns": "any",
         "description": "факты о JS-куче: { bytes, used, objects, arrays, strings, atoms, shapes, native_tweens } (QuickJS JS_ComputeMemoryUsage); без движка — null. Растущее objects между кадрами — утечка, а не шум"
+    },
+    "$.отладка.nativePasses": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "нативные проходы кадра (src/nodes.c): синк физики, события мира, наведение, сортировка и сборка батча. false возвращает прежний JS-путь — для сверки «C против JS»; без аргумента — включены ли сейчас (true по умолчанию в движке, false без движка)"
     },
     "$.отладка.profiler": {
         "kind": "object",
@@ -37017,7 +37249,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "восстановить мир; opts: { clear: true } — сначала очистить"
     },
-    "$.префаб.toJSON": {
+    "$.префаб.fromJSON": {
         "kind": "function",
         "arity": 1,
         "args": [
@@ -37029,7 +37261,7 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "строка JSON и обратно"
     },
-    "$.префаб.fromJSON": {
+    "$.префаб.toJSON": {
         "kind": "function",
         "arity": 1,
         "args": [
