@@ -1,0 +1,65 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.spawn",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Появление"
+  },
+  "description": {
+    "ru": "Появление с клипом и затуханием из прозрачности; ввод включается после."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.active"
+    },
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.fadeTo"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "clip",
+      "label": "Клип",
+      "type": "string",
+      "default": "0-5@12"
+    },
+    {
+      "id": "ms",
+      "label": "Длительность",
+      "type": "int",
+      "default": 500,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "появление"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

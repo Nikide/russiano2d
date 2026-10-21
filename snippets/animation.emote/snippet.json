@@ -1,0 +1,92 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.emote",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Эмоция над персонажем"
+  },
+  "description": {
+    "ru": "Иконка эмоции над объектом на время: событие emote { icon }."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.ui.hasIcon"
+    },
+    {
+      "api": "$.ui.icon"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "ms",
+      "label": "Показ",
+      "type": "int",
+      "default": 1500,
+      "min": 100,
+      "max": 20000,
+      "unit": "мс"
+    },
+    {
+      "id": "size",
+      "label": "Размер",
+      "type": "int",
+      "default": 18,
+      "min": 6,
+      "max": 96
+    }
+  ],
+  "tags": [
+    "эмоция",
+    "NPC"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

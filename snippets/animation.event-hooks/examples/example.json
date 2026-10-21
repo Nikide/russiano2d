@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "hooks": [
+      "2=hit"
+    ]
+  }
+}

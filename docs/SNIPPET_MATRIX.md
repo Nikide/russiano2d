@@ -3,7 +3,7 @@
 Сгенерировано `python3 scripts/snippet_matrix.py` из §12 [ТЗ](SNIPPET_SYSTEM_PROJECT.md),
 каталога `snippets/` и `api.schema.json`. Руками не править.
 
-Реализовано: **287 из 500**. Строк с пробелом API: **0**.
+Реализовано: **343 из 500**. Строк с пробелом API: **0**.
 
 Колонка API: для реализованного пакета — фактические `requires`; для
 запланированного — опорные пространства `$` по префиксу ID (предварительно,
@@ -360,80 +360,80 @@
 | 279 | `world.streamed-room` | ✅ | `$.emit`, `$.fn.active`, `$.fn.attr`, `$.fn.emit`, `$.fn.height`, `$.fn.pos`, `$.fn.width`, `$.updateFor` | — |
 | 280 | `world.level-exit` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.overlaps`, `$.save`, `$.save.get`, `$.save.set`, `$.scene.load`, `$.selection.get`, `$.time.now`, `$.updateFor` | — |
 
-## O. Камера и экранное представление — 4/20
+## O. Камера и экранное представление — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 281 | `camera.follow` | ✅ | `$.camera.follow` | — |
-| 282 | `camera.deadzone` | ⬜ | `$.camera` | — |
-| 283 | `camera.lookahead` | ⬜ | `$.camera` | — |
-| 284 | `camera.smoothing` | ⬜ | `$.camera` | — |
+| 282 | `camera.deadzone` | ✅ | `$.camera.deadzone` | — |
+| 283 | `camera.lookahead` | ✅ | `$.camera.lookahead` | — |
+| 284 | `camera.smoothing` | ✅ | `$.camera.at`, `$.camera.follow`, `$.camera.isOnScreen`, `$.camera.unfollow`, `$.fn.at`, `$.fn.pos`, `$.updateFor` | — |
 | 285 | `camera.bounds` | ✅ | `$.camera.limits` | — |
-| 286 | `camera.room-lock` | ⬜ | `$.camera` | — |
+| 286 | `camera.room-lock` | ✅ | `$.camera.follow`, `$.camera.limits`, `$.camera.panTo`, `$.camera.unfollow`, `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.height`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.updateFor` | — |
 | 287 | `camera.screen-shake` | ✅ | `$.camera.shake`, `$.fn.hp`, `$.fn.shake`, `$.updateFor` | — |
-| 288 | `camera.trauma` | ⬜ | `$.camera` | — |
+| 288 | `camera.trauma` | ✅ | `$.camera.shake`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.shake`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.updateFor` | — |
 | 289 | `camera.zoom` | ✅ | `$.camera.zoom`, `$.camera.zoomTo` | — |
-| 290 | `camera.split-screen` | ⬜ | `$.camera` | — |
-| 291 | `camera.transition` | ⬜ | `$.camera` | — |
-| 292 | `camera.death-focus` | ⬜ | `$.camera` | — |
-| 293 | `camera.cutscene-rail` | ⬜ | `$.camera` | — |
-| 294 | `camera.look-at-target` | ⬜ | `$.camera` | — |
-| 295 | `camera.parallax-focus` | ⬜ | `$.camera` | — |
-| 296 | `render.tint-profile` | ⬜ | `$.gfx`, `$.fx` | — |
-| 297 | `render.fade` | ⬜ | `$.gfx`, `$.fx` | — |
-| 298 | `render.flash` | ⬜ | `$.gfx`, `$.fx` | — |
-| 299 | `render.vignette` | ⬜ | `$.gfx`, `$.fx` | — |
-| 300 | `render.accessibility-filter` | ⬜ | `$.gfx`, `$.fx` | — |
+| 290 | `camera.split-screen` | ✅ | `$.camera.at`, `$.camera.split`, `$.camera.viewAt`, `$.emit`, `$.fn.at`, `$.fn.emit`, `$.fn.pos`, `$.updateFor` | — |
+| 291 | `camera.transition` | ✅ | `$.camera.follow`, `$.camera.panTo`, `$.camera.unfollow`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.off`, `$.on`, `$.time.wait` | — |
+| 292 | `camera.death-focus` | ✅ | `$.camera.panTo`, `$.camera.unfollow`, `$.camera.zoomTo`, `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.scale`, `$.time.scale`, `$.time.wait` | — |
+| 293 | `camera.cutscene-rail` | ✅ | `$.camera.at`, `$.camera.follow`, `$.camera.unfollow`, `$.emit`, `$.fn.at`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.updateFor` | — |
+| 294 | `camera.look-at-target` | ✅ | `$.camera.follow`, `$.camera.panTo`, `$.camera.unfollow`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.off`, `$.on`, `$.time.wait` | — |
+| 295 | `camera.parallax-focus` | ✅ | `$.fn.filter`, `$.fn.map`, `$.fn.parallax`, `$.layers.parallax` | — |
+| 296 | `render.tint-profile` | ✅ | `$.fn.color`, `$.fn.filter`, `$.fn.map`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.off`, `$.on`, `$.updateFor`, `$.world.color`, `$.world.getBackground` | — |
+| 297 | `render.fade` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.style`, `$.off`, `$.on`, `$.ui.markup`, `$.updateFor` | — |
+| 298 | `render.flash` | ✅ | `$.fn.flash`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.vfx.flash` | — |
+| 299 | `render.vignette` | ✅ | `$.fn.show`, `$.ui.markup` | — |
+| 300 | `render.accessibility-filter` | ✅ | `$.emit`, `$.fn.color`, `$.fn.emit`, `$.store`, `$.store.set`, `$.world.color` | — |
 
-## P. Анимация и визуальные состояния — 0/20
-
-| № | ID | Статус | API | Пробел |
-|---|---|---|---|---|
-| 301 | `animation.idle-run` | ⬜ | `$.anim`, `$.tween` | — |
-| 302 | `animation.jump-fall` | ⬜ | `$.anim`, `$.tween` | — |
-| 303 | `animation.attack` | ⬜ | `$.anim`, `$.tween` | — |
-| 304 | `animation.damage` | ⬜ | `$.anim`, `$.tween` | — |
-| 305 | `animation.death` | ⬜ | `$.anim`, `$.tween` | — |
-| 306 | `animation.direction-4` | ⬜ | `$.anim`, `$.tween` | — |
-| 307 | `animation.direction-8` | ⬜ | `$.anim`, `$.tween` | — |
-| 308 | `animation.weapon-overlay` | ⬜ | `$.anim`, `$.tween` | — |
-| 309 | `animation.blend-profile` | ⬜ | `$.anim`, `$.tween` | — |
-| 310 | `animation.cancel-rules` | ⬜ | `$.anim`, `$.tween` | — |
-| 311 | `animation.event-hooks` | ⬜ | `$.anim`, `$.tween` | — |
-| 312 | `animation.loop-profile` | ⬜ | `$.anim`, `$.tween` | — |
-| 313 | `animation.speed-scale` | ⬜ | `$.anim`, `$.tween` | — |
-| 314 | `animation.hit-pause` | ⬜ | `$.anim`, `$.tween` | — |
-| 315 | `animation.afterimage` | ⬜ | `$.anim`, `$.tween` | — |
-| 316 | `animation.flash-overlay` | ⬜ | `$.anim`, `$.tween` | — |
-| 317 | `animation.emote` | ⬜ | `$.anim`, `$.tween` | — |
-| 318 | `animation.spawn` | ⬜ | `$.anim`, `$.tween` | — |
-| 319 | `animation.respawn` | ⬜ | `$.anim`, `$.tween` | — |
-| 320 | `animation.atlas-binding` | ⬜ | `$.anim`, `$.tween` | — |
-
-## Q. Звук и обратная связь — 0/20
+## P. Анимация и визуальные состояния — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 321 | `audio.one-shot` | ⬜ | `$.audio`, `$.sound` | — |
-| 322 | `audio.loop` | ⬜ | `$.audio`, `$.sound` | — |
-| 323 | `audio.music-zone` | ⬜ | `$.audio`, `$.sound` | — |
-| 324 | `audio.music-transition` | ⬜ | `$.audio`, `$.sound` | — |
-| 325 | `audio.ambience` | ⬜ | `$.audio`, `$.sound` | — |
-| 326 | `audio.footsteps` | ⬜ | `$.audio`, `$.sound` | — |
-| 327 | `audio.weapon` | ⬜ | `$.audio`, `$.sound` | — |
-| 328 | `audio.damage` | ⬜ | `$.audio`, `$.sound` | — |
-| 329 | `audio.ui` | ⬜ | `$.audio`, `$.sound` | — |
-| 330 | `audio.dialogue` | ⬜ | `$.audio`, `$.sound` | — |
-| 331 | `audio.distance-profile` | ⬜ | `$.audio`, `$.sound` | — |
-| 332 | `audio.ducking` | ⬜ | `$.audio`, `$.sound` | — |
-| 333 | `feedback.hit-stop` | ⬜ | `$.hitFx`, `$.fx`, `$.camera` | — |
-| 334 | `feedback.camera-shake` | ⬜ | `$.hitFx`, `$.fx`, `$.camera` | — |
-| 335 | `feedback.particles` | ⬜ | `$.hitFx`, `$.fx`, `$.camera` | — |
-| 336 | `feedback.screen-pulse` | ⬜ | `$.hitFx`, `$.fx`, `$.camera` | — |
-| 337 | `feedback.controller-rumble` | ⬜ | `$.hitFx`, `$.fx`, `$.camera` | — |
-| 338 | `feedback.combo-popup` | ⬜ | `$.hitFx`, `$.fx`, `$.camera` | — |
-| 339 | `feedback.quest-toast` | ⬜ | `$.hitFx`, `$.fx`, `$.camera` | — |
-| 340 | `feedback.error-prompt` | ⬜ | `$.hitFx`, `$.fx`, `$.camera` | — |
+| 301 | `animation.idle-run` | ✅ | `$.fn.animate`, `$.fn.data`, `$.fn.flip`, `$.fn.velocity`, `$.updateFor` | — |
+| 302 | `animation.jump-fall` | ✅ | `$.fn.animate`, `$.fn.data`, `$.fn.onFloor`, `$.fn.velocity`, `$.updateFor` | — |
+| 303 | `animation.attack` | ✅ | `$.fn.animate`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 304 | `animation.damage` | ✅ | `$.fn.animate`, `$.fn.data`, `$.fn.off`, `$.fn.on`, `$.updateFor` | — |
+| 305 | `animation.death` | ✅ | `$.fn.animate`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.updateFor` | — |
+| 306 | `animation.direction-4` | ✅ | `$.fn.animate`, `$.fn.data`, `$.fn.velocity`, `$.updateFor` | — |
+| 307 | `animation.direction-8` | ✅ | `$.fn.animate`, `$.fn.data`, `$.fn.filter`, `$.fn.map`, `$.fn.velocity`, `$.updateFor` | — |
+| 308 | `animation.weapon-overlay` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.localAt`, `$.fn.lookAt`, `$.fn.pos`, `$.fn.remove`, `$.fn.sprite`, `$.input.mouseWorld`, `$.updateFor` | — |
+| 309 | `animation.blend-profile` | ✅ | `$.anim.crossfade`, `$.anim.has`, `$.anim.target`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.updateFor` | — |
+| 310 | `animation.cancel-rules` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on` | — |
+| 311 | `animation.event-hooks` | ✅ | `$.fn.emit`, `$.fn.frame`, `$.updateFor` | — |
+| 312 | `animation.loop-profile` | ✅ | `$.fn.animate`, `$.fn.data`, `$.fn.frame`, `$.fn.stopAnim`, `$.updateFor` | — |
+| 313 | `animation.speed-scale` | ✅ | `$.fn.animate`, `$.fn.data`, `$.fn.max`, `$.fn.min`, `$.fn.velocity`, `$.updateFor` | — |
+| 314 | `animation.hit-pause` | ✅ | `$.fn.off`, `$.fn.on`, `$.selection.get`, `$.store.get`, `$.time.hitStop` | — |
+| 315 | `animation.afterimage` | ✅ | `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.fadeTo`, `$.fn.height`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.sprite`, `$.fn.width`, `$.selection.get`, `$.updateFor`, `$.world` | — |
+| 316 | `animation.flash-overlay` | ✅ | `$.fn.filter`, `$.fn.flash`, `$.fn.map`, `$.fn.off`, `$.fn.on` | — |
+| 317 | `animation.emote` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.height`, `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.show`, `$.fn.text`, `$.ui.hasIcon`, `$.ui.icon`, `$.updateFor`, `$.world` | — |
+| 318 | `animation.spawn` | ✅ | `$.fn.active`, `$.fn.alpha`, `$.fn.animate`, `$.fn.data`, `$.fn.emit`, `$.fn.fadeTo` | — |
+| 319 | `animation.respawn` | ✅ | `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.particles.preset`, `$.time.wait`, `$.updateFor`, `$.world` | — |
+| 320 | `animation.atlas-binding` | ✅ | `$.atlas.get`, `$.atlas.load`, `$.fn.animate`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.frames`, `$.fn.map`, `$.selection.get`, `$.updateFor` | — |
+
+## Q. Звук и обратная связь — 20/20
+
+| № | ID | Статус | API | Пробел |
+|---|---|---|---|---|
+| 321 | `audio.one-shot` | ✅ | `$.audio.play`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
+| 322 | `audio.loop` | ✅ | `$.audio.play`, `$.fn.off`, `$.fn.on`, `$.fn.stop`, `$.off`, `$.on` | — |
+| 323 | `audio.music-zone` | ✅ | `$.fn.overlaps`, `$.sound.crossfade`, `$.sound.stopMusic`, `$.updateFor` | — |
+| 324 | `audio.music-transition` | ✅ | `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.sound.crossfade` | — |
+| 325 | `audio.ambience` | ✅ | `$.audio.play`, `$.fn.stop`, `$.random`, `$.random.pick`, `$.random.range`, `$.updateFor` | — |
+| 326 | `audio.footsteps` | ✅ | `$.audio.playAt`, `$.fn.emit`, `$.fn.filter`, `$.fn.find`, `$.fn.hasClass`, `$.fn.height`, `$.fn.map`, `$.fn.onFloor`, `$.fn.pos`, `$.fn.some`, `$.fn.velocity`, `$.updateFor`, `$.world.query` | — |
+| 327 | `audio.weapon` | ✅ | `$.audio.playAt`, `$.fn.off`, `$.fn.on`, `$.fn.pos` | — |
+| 328 | `audio.damage` | ✅ | `$.audio.playAt`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.time.now` | — |
+| 329 | `audio.ui` | ✅ | `$.audio.play`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
+| 330 | `audio.dialogue` | ✅ | `$.audio.play`, `$.dialog`, `$.dialog.define`, `$.dialog.play`, `$.fn.off`, `$.fn.on` | — |
+| 331 | `audio.distance-profile` | ✅ | `$.audio.play`, `$.fn.distanceTo`, `$.fn.max`, `$.fn.min`, `$.fn.stop`, `$.fn.volume`, `$.updateFor` | — |
+| 332 | `audio.ducking` | ✅ | `$.audio.musicVolume`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.updateFor` | — |
+| 333 | `feedback.hit-stop` | ✅ | `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.time.hitStop` | — |
+| 334 | `feedback.camera-shake` | ✅ | `$.camera.shake`, `$.fn.off`, `$.fn.on`, `$.fn.shake`, `$.selection.get`, `$.store.get` | — |
+| 335 | `feedback.particles` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.particles.preset`, `$.time.wait`, `$.world` | — |
+| 336 | `feedback.screen-pulse` | ✅ | `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.style`, `$.off`, `$.on`, `$.ui.markup`, `$.updateFor` | — |
+| 337 | `feedback.controller-rumble` | ✅ | `$.fn.filter`, `$.fn.map`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.input.rumble`, `$.input.rumbleSupported`, `$.off`, `$.on`, `$.selection.get`, `$.store.get` | — |
+| 338 | `feedback.combo-popup` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.data`, `$.fn.emit`, `$.fn.height`, `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.show`, `$.fn.text`, `$.updateFor`, `$.world` | — |
+| 339 | `feedback.quest-toast` | ✅ | `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.style`, `$.fn.text`, `$.off`, `$.on`, `$.quest.def`, `$.ui.markup`, `$.updateFor` | — |
+| 340 | `feedback.error-prompt` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.style`, `$.fn.text`, `$.off`, `$.on`, `$.ui.markup`, `$.updateFor` | — |
 
 ## R. RmlUi-интерфейс и HUD — 0/20
 

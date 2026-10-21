@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.death",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Анимация смерти"
+  },
+  "description": {
+    "ru": "Клип смерти и удаление узла после него (или оставить тело)."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "clip",
+      "label": "Клип",
+      "type": "string",
+      "default": "22-27@10"
+    },
+    {
+      "id": "duration",
+      "label": "Длительность",
+      "type": "int",
+      "default": 600,
+      "min": 10,
+      "max": 20000,
+      "unit": "мс"
+    },
+    {
+      "id": "remove",
+      "label": "Удалить после",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "анимация",
+    "смерть"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

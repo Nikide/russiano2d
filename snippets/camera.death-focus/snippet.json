@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.death-focus",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Фокус на гибели"
+  },
+  "description": {
+    "ru": "При гибели объекта камера наезжает на место и задерживается."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.panTo"
+    },
+    {
+      "api": "$.camera.unfollow"
+    },
+    {
+      "api": "$.camera.zoomTo"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.scale"
+    },
+    {
+      "api": "$.time.scale"
+    },
+    {
+      "api": "$.time.wait"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "zoom",
+      "label": "Приближение",
+      "type": "number",
+      "default": 1.6,
+      "min": 1,
+      "max": 6,
+      "step": 0.1
+    },
+    {
+      "id": "hold",
+      "label": "Задержка",
+      "type": "int",
+      "default": 1500,
+      "min": 0,
+      "max": 20000,
+      "unit": "мс"
+    },
+    {
+      "id": "slowmo",
+      "label": "Замедление",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "камера",
+    "смерть"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

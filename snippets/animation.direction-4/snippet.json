@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.direction-4",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Четыре направления"
+  },
+  "description": {
+    "ru": "Клипы вверх/вниз/влево/вправо по скорости (top-down)."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "animation",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "down",
+      "label": "Вниз",
+      "type": "string",
+      "default": "0-3@8"
+    },
+    {
+      "id": "up",
+      "label": "Вверх",
+      "type": "string",
+      "default": "4-7@8"
+    },
+    {
+      "id": "left",
+      "label": "Влево",
+      "type": "string",
+      "default": "8-11@8"
+    },
+    {
+      "id": "right",
+      "label": "Вправо",
+      "type": "string",
+      "default": "12-15@8"
+    },
+    {
+      "id": "threshold",
+      "label": "Порог",
+      "type": "number",
+      "default": 5,
+      "min": 0,
+      "max": 1000
+    }
+  ],
+  "tags": [
+    "анимация",
+    "top-down"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

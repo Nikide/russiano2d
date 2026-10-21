@@ -1,0 +1,61 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.cancel-rules",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Прерывание клипа"
+  },
+  "description": {
+    "ru": "Правила прерывания: событие снимает блокировку анимации, если разрешено: «событие=можно ли»."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "rules",
+      "label": "Правила (событие=да/нет)",
+      "type": "list",
+      "default": [
+        "roll=да",
+        "damaged=да",
+        "attack=нет"
+      ]
+    }
+  ],
+  "tags": [
+    "анимация",
+    "прерывание"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

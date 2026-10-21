@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "feedback.screen-pulse",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Пульс экрана"
+  },
+  "description": {
+    "ru": "Краткий контрастный экранный сигнал (вспышка-рамка) на событие."
+  },
+  "kind": "behavior",
+  "category": "Обратная связь",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.style"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "event",
+      "label": "Событие",
+      "type": "string",
+      "default": "danger"
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#ff2020"
+    },
+    {
+      "id": "ms",
+      "label": "Длительность",
+      "type": "int",
+      "default": 300,
+      "min": 10,
+      "max": 5000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "экран",
+    "сигнал"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

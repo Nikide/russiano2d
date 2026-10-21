@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.footsteps",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Шаги"
+  },
+  "description": {
+    "ru": "Звук шага по типу поверхности под ногами: «класс поверхности=файл»."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.playAt"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.hasClass"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.onFloor"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world.query"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "surfaces",
+      "label": "Поверхности (класс=файл)",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "default",
+      "label": "По умолчанию",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "stride",
+      "label": "Шаг каждые",
+      "type": "number",
+      "default": 40,
+      "min": 4,
+      "max": 1000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "шаги",
+    "звук"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

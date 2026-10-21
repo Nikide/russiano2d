@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "feedback.hit-stop",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Hit-stop"
+  },
+  "description": {
+    "ru": "Короткое замедление игрового времени на событие сильного удара."
+  },
+  "kind": "behavior",
+  "category": "Обратная связь",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.time.hitStop"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "event",
+      "label": "Событие",
+      "type": "string",
+      "default": "explosion"
+    },
+    {
+      "id": "ms",
+      "label": "Длительность",
+      "type": "int",
+      "default": 70,
+      "min": 0,
+      "max": 500,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "удар",
+    "feedback"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

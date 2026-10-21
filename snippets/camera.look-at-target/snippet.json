@@ -1,0 +1,91 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.look-at-target",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Взгляд на объект"
+  },
+  "description": {
+    "ru": "Временный фокус камеры на объекте по событию, затем возврат."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.follow"
+    },
+    {
+      "api": "$.camera.panTo"
+    },
+    {
+      "api": "$.camera.unfollow"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.time.wait"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "event",
+      "label": "Событие",
+      "type": "string",
+      "default": "look:door"
+    },
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "hold",
+      "label": "Держать",
+      "type": "int",
+      "default": 1200,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "ms",
+      "label": "Переход",
+      "type": "int",
+      "default": 400,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "камера",
+    "фокус"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

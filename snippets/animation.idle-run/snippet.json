@@ -1,0 +1,80 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.idle-run",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Покой и бег"
+  },
+  "description": {
+    "ru": "Клип покоя или бега по скорости узла и разворот по направлению."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "animation",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.flip"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "idle",
+      "label": "Покой (кадры a-b@скорость)",
+      "type": "string",
+      "default": "0-3@6"
+    },
+    {
+      "id": "run",
+      "label": "Бег",
+      "type": "string",
+      "default": "4-9@12"
+    },
+    {
+      "id": "threshold",
+      "label": "Порог скорости",
+      "type": "number",
+      "default": 10,
+      "min": 0,
+      "max": 1000,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "flip",
+      "label": "Разворачивать",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "анимация",
+    "бег"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

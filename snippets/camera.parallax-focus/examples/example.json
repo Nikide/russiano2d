@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "layers": [
+      ".sky=0.1"
+    ]
+  }
+}

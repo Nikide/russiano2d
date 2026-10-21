@@ -1,0 +1,55 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.parallax-focus",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Глубина параллакса"
+  },
+  "description": {
+    "ru": "Коэффициенты параллакса слоёв по глубине: «селектор=коэффициент»."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.parallax"
+    },
+    {
+      "api": "$.layers.parallax"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "layers",
+      "label": "Слои (селектор=коэффициент)",
+      "type": "list",
+      "default": [
+        ".bg-far=0.2",
+        ".bg-near=0.6"
+      ]
+    }
+  ],
+  "tags": [
+    "параллакс",
+    "глубина"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

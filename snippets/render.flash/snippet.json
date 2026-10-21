@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "render.flash",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Вспышка экрана"
+  },
+  "description": {
+    "ru": "Полноэкранная вспышка по событию ($.vfx.flash)."
+  },
+  "kind": "behavior",
+  "category": "Экран и цвет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.flash"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.vfx.flash"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "event",
+      "label": "Событие",
+      "type": "string",
+      "default": "explosion"
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#fff3c4"
+    },
+    {
+      "id": "ms",
+      "label": "Длительность",
+      "type": "int",
+      "default": 110,
+      "min": 10,
+      "max": 3000,
+      "unit": "мс"
+    },
+    {
+      "id": "alpha",
+      "label": "Сила",
+      "type": "number",
+      "default": 0.55,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "вспышка",
+    "эффект"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

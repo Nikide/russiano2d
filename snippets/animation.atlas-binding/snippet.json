@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.atlas-binding",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Клипы из атласа"
+  },
+  "description": {
+    "ru": "Клип узла из тега атласа (Aseprite/атлас SDK): «состояние=тег»."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.atlas.get"
+    },
+    {
+      "api": "$.atlas.load"
+    },
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.frames"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "atlas",
+      "label": "Атлас (*.atlas.json)",
+      "type": "asset",
+      "assetKind": "animation",
+      "required": true
+    },
+    {
+      "id": "name",
+      "label": "Имя атласа",
+      "type": "string",
+      "default": "hero"
+    },
+    {
+      "id": "tags",
+      "label": "Теги (состояние=тег)",
+      "type": "list",
+      "default": [
+        "idle=idle",
+        "run=run"
+      ]
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 120,
+      "unit": "кадр/с"
+    }
+  ],
+  "tags": [
+    "атлас",
+    "клипы"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

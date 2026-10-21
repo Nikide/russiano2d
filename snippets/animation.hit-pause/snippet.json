@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.hit-pause",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Пауза при попадании"
+  },
+  "description": {
+    "ru": "Короткая остановка игрового времени при попадании (hit-stop)."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.time.hitStop"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "ms",
+      "label": "Пауза",
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 500,
+      "unit": "мс"
+    },
+    {
+      "id": "minDamage",
+      "label": "От урона",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "удар",
+    "hit-stop"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

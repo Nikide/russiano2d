@@ -1,0 +1,114 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.afterimage",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Следы спрайта"
+  },
+  "description": {
+    "ru": "Полупрозрачные копии спрайта за объектом во время рывка или быстрой атаки."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.fadeTo"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.sprite"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "events",
+      "label": "Включать событиями",
+      "type": "list",
+      "default": [
+        "dash",
+        "roll"
+      ]
+    },
+    {
+      "id": "duration",
+      "label": "Длительность следа",
+      "type": "int",
+      "default": 250,
+      "min": 10,
+      "max": 5000,
+      "unit": "мс"
+    },
+    {
+      "id": "every",
+      "label": "Копия раз в",
+      "type": "int",
+      "default": 30,
+      "min": 5,
+      "max": 1000,
+      "unit": "мс"
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#80c0ff"
+    }
+  ],
+  "tags": [
+    "рывок",
+    "эффект"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

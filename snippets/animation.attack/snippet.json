@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.attack",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Анимация атаки"
+  },
+  "description": {
+    "ru": "Клип атаки по событию (attack/melee/weapon:fire) с окном действия."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "clip",
+      "label": "Клип",
+      "type": "string",
+      "default": "16-19@14"
+    },
+    {
+      "id": "events",
+      "label": "События",
+      "type": "list",
+      "default": [
+        "attack",
+        "melee"
+      ]
+    },
+    {
+      "id": "duration",
+      "label": "Длительность",
+      "type": "int",
+      "default": 300,
+      "min": 10,
+      "max": 10000,
+      "unit": "мс"
+    },
+    {
+      "id": "activeFrom",
+      "label": "Окно удара с",
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    },
+    {
+      "id": "activeTo",
+      "label": "Окно удара до",
+      "type": "int",
+      "default": 200,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "анимация",
+    "атака"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

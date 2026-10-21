@@ -1,0 +1,49 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.deadzone",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Зона свободы камеры"
+  },
+  "description": {
+    "ru": "Камера стоит, пока игрок в прямоугольной зоне экрана."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.deadzone"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "camera.follow"
+    }
+  ],
+  "fields": [
+    {
+      "id": "size",
+      "label": "Размер зоны",
+      "type": "vec2",
+      "default": [
+        200,
+        120
+      ]
+    }
+  ],
+  "tags": [
+    "камера"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "render.vignette",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Виньетка"
+  },
+  "description": {
+    "ru": "Затемнённые края экрана (RmlUi-оверлей) с заданной силой."
+  },
+  "kind": "behavior",
+  "category": "Экран и цвет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.ui.markup"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "amount",
+      "label": "Сила",
+      "type": "number",
+      "default": 0.35,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "id": "edge",
+      "label": "Ширина края",
+      "type": "int",
+      "default": 120,
+      "min": 4,
+      "max": 1000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "виньетка",
+    "атмосфера"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.split-screen",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Разделённый экран"
+  },
+  "description": {
+    "ru": "Две камеры для двух локальных игроков; общий экран, когда игроки рядом."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.at"
+    },
+    {
+      "api": "$.camera.split"
+    },
+    {
+      "api": "$.camera.viewAt"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "p1",
+      "label": "Игрок 1",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "p2",
+      "label": "Игрок 2",
+      "type": "entity",
+      "default": "#hero2",
+      "required": true
+    },
+    {
+      "id": "mergeAt",
+      "label": "Общий экран ближе",
+      "type": "number",
+      "default": 400,
+      "min": 0,
+      "max": 100000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "кооператив",
+    "сплитскрин"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

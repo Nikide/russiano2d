@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.loop-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Режим повтора"
+  },
+  "description": {
+    "ru": "Воспроизведение кадров: по кругу, туда-обратно или один раз."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "animation",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.frame"
+    },
+    {
+      "api": "$.fn.stopAnim"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "clip",
+      "label": "Кадры (a-b@скорость)",
+      "type": "string",
+      "default": "0-5@10"
+    },
+    {
+      "id": "mode",
+      "label": "Режим",
+      "type": "enum",
+      "default": "loop",
+      "options": [
+        "loop",
+        "ping-pong",
+        "once"
+      ]
+    }
+  ],
+  "tags": [
+    "анимация",
+    "цикл"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

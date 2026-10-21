@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.ambience",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Атмосфера"
+  },
+  "description": {
+    "ru": "Фоновый эмбиент сцены (зацикленный) и редкие случайные звуки."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.play"
+    },
+    {
+      "api": "$.fn.stop"
+    },
+    {
+      "api": "$.random"
+    },
+    {
+      "api": "$.random.pick"
+    },
+    {
+      "api": "$.random.range"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "bed",
+      "label": "Фон",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "randoms",
+      "label": "Случайные звуки",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "every",
+      "label": "В среднем раз в",
+      "type": "int",
+      "default": 8000,
+      "min": 500,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "volume",
+      "label": "Громкость",
+      "type": "number",
+      "default": 0.6,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "атмосфера",
+    "звук"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "feedback.quest-toast",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Уведомление о цели"
+  },
+  "description": {
+    "ru": "Тост о взятом, выполненном задании или награде (RmlUi)."
+  },
+  "kind": "behavior",
+  "category": "Обратная связь",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.style"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest.def"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "ms",
+      "label": "Показ",
+      "type": "int",
+      "default": 2500,
+      "min": 300,
+      "max": 20000,
+      "unit": "мс"
+    },
+    {
+      "id": "color",
+      "label": "Фон",
+      "type": "color",
+      "default": "#203040"
+    }
+  ],
+  "tags": [
+    "уведомление",
+    "квест"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

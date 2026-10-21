@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.smoothing",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сглаживание камеры"
+  },
+  "description": {
+    "ru": "Плавное следование с ограничением времени догоняния."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "camera",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.camera.at"
+    },
+    {
+      "api": "$.camera.follow"
+    },
+    {
+      "api": "$.camera.isOnScreen"
+    },
+    {
+      "api": "$.camera.unfollow"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "target",
+      "label": "За кем",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "smooth",
+      "label": "Плавность",
+      "type": "number",
+      "default": 0.15,
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "id": "maxLag",
+      "label": "Догнать не дольше",
+      "type": "int",
+      "default": 600,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "камера",
+    "плавность"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

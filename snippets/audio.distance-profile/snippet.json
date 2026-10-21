@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.distance-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Дальность звука"
+  },
+  "description": {
+    "ru": "Профиль слышимости источника: громкость по расстоянию до слушателя."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.play"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.stop"
+    },
+    {
+      "api": "$.fn.volume"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "sound",
+      "label": "Звук-петля",
+      "type": "asset",
+      "assetKind": "audio",
+      "required": true
+    },
+    {
+      "id": "listener",
+      "label": "Слушатель",
+      "type": "entity",
+      "default": "#hero"
+    },
+    {
+      "id": "near",
+      "label": "Полная громкость до",
+      "type": "number",
+      "default": 64,
+      "min": 0,
+      "max": 100000,
+      "unit": "пикс."
+    },
+    {
+      "id": "far",
+      "label": "Тишина от",
+      "type": "number",
+      "default": 600,
+      "min": 1,
+      "max": 100000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "звук",
+    "3D"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

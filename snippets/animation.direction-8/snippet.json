@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.direction-8",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Восемь направлений"
+  },
+  "description": {
+    "ru": "Клипы восьми направлений по углу скорости: «направление=a-b@скорость»."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "animation",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "clips",
+      "label": "Клипы (e, se, s, sw, w, nw, n, ne)",
+      "type": "list",
+      "default": [
+        "e=0-3",
+        "se=4-7",
+        "s=8-11",
+        "sw=12-15",
+        "w=16-19",
+        "nw=20-23",
+        "n=24-27",
+        "ne=28-31"
+      ]
+    },
+    {
+      "id": "threshold",
+      "label": "Порог",
+      "type": "number",
+      "default": 5,
+      "min": 0,
+      "max": 1000
+    }
+  ],
+  "tags": [
+    "анимация",
+    "изометрия"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

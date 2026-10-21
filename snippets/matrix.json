@@ -6174,12 +6174,14 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.deadzone"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "camera.follow"
+   ]
   },
   {
    "n": 283,
@@ -6188,12 +6190,14 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.lookahead"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "camera.follow"
+   ]
   },
   {
    "n": 284,
@@ -6202,9 +6206,15 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.at",
+    "$.camera.follow",
+    "$.camera.isOnScreen",
+    "$.camera.unfollow",
+    "$.fn.at",
+    "$.fn.pos",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6230,9 +6240,20 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.follow",
+    "$.camera.limits",
+    "$.camera.panTo",
+    "$.camera.unfollow",
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.width",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6263,9 +6284,19 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.shake",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.shake",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6292,9 +6323,16 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.at",
+    "$.camera.split",
+    "$.camera.viewAt",
+    "$.emit",
+    "$.fn.at",
+    "$.fn.emit",
+    "$.fn.pos",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6306,9 +6344,19 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.follow",
+    "$.camera.panTo",
+    "$.camera.unfollow",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.off",
+    "$.on",
+    "$.time.wait"
    ],
    "gaps": [],
    "dependencies": []
@@ -6320,12 +6368,24 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.panTo",
+    "$.camera.unfollow",
+    "$.camera.zoomTo",
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.scale",
+    "$.time.scale",
+    "$.time.wait"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 293,
@@ -6334,9 +6394,23 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.at",
+    "$.camera.follow",
+    "$.camera.unfollow",
+    "$.emit",
+    "$.fn.at",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6348,9 +6422,17 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.camera.follow",
+    "$.camera.panTo",
+    "$.camera.unfollow",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.off",
+    "$.on",
+    "$.time.wait"
    ],
    "gaps": [],
    "dependencies": []
@@ -6362,9 +6444,12 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.camera"
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.parallax",
+    "$.layers.parallax"
    ],
    "gaps": [],
    "dependencies": []
@@ -6376,10 +6461,20 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.gfx",
-    "$.fx"
+    "$.fn.color",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.slice",
+    "$.off",
+    "$.on",
+    "$.updateFor",
+    "$.world.color",
+    "$.world.getBackground"
    ],
    "gaps": [],
    "dependencies": []
@@ -6391,10 +6486,20 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.gfx",
-    "$.fx"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.style",
+    "$.off",
+    "$.on",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6406,10 +6511,16 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.gfx",
-    "$.fx"
+    "$.fn.flash",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.vfx.flash"
    ],
    "gaps": [],
    "dependencies": []
@@ -6421,10 +6532,10 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.gfx",
-    "$.fx"
+    "$.fn.show",
+    "$.ui.markup"
    ],
    "gaps": [],
    "dependencies": []
@@ -6436,10 +6547,14 @@
    "section": "O",
    "section_title": "Камера и экранное представление",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.gfx",
-    "$.fx"
+    "$.emit",
+    "$.fn.color",
+    "$.fn.emit",
+    "$.store",
+    "$.store.set",
+    "$.world.color"
    ],
    "gaps": [],
    "dependencies": []
@@ -6451,10 +6566,13 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.flip",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6466,10 +6584,13 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.onFloor",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6481,10 +6602,14 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6496,13 +6621,18 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.off",
+    "$.fn.on",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 305,
@@ -6511,13 +6641,20 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 306,
@@ -6526,10 +6663,12 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6541,10 +6680,14 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6556,10 +6699,17 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.localAt",
+    "$.fn.lookAt",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.sprite",
+    "$.input.mouseWorld",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6571,10 +6721,17 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.anim.crossfade",
+    "$.anim.has",
+    "$.anim.target",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6586,10 +6743,14 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -6601,10 +6762,11 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.emit",
+    "$.fn.frame",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6616,10 +6778,13 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.frame",
+    "$.fn.stopAnim",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6631,10 +6796,14 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6646,13 +6815,18 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.off",
+    "$.fn.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.time.hitStop"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 315,
@@ -6661,10 +6835,24 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.alpha",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.fadeTo",
+    "$.fn.height",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.fn.sprite",
+    "$.fn.width",
+    "$.selection.get",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -6676,10 +6864,13 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.filter",
+    "$.fn.flash",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -6691,10 +6882,22 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.height",
+    "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.show",
+    "$.fn.text",
+    "$.ui.hasIcon",
+    "$.ui.icon",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -6706,10 +6909,14 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.active",
+    "$.fn.alpha",
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.fadeTo"
    ],
    "gaps": [],
    "dependencies": []
@@ -6721,13 +6928,24 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.fn.alpha",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.particles.preset",
+    "$.time.wait",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 320,
@@ -6736,10 +6954,18 @@
    "section": "P",
    "section_title": "Анимация и визуальные состояния",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.anim",
-    "$.tween"
+    "$.atlas.get",
+    "$.atlas.load",
+    "$.fn.animate",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.frames",
+    "$.fn.map",
+    "$.selection.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6751,10 +6977,15 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.play",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -6766,10 +6997,14 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.play",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.stop",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -6781,10 +7016,12 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.fn.overlaps",
+    "$.sound.crossfade",
+    "$.sound.stopMusic",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6796,10 +7033,15 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.sound.crossfade"
    ],
    "gaps": [],
    "dependencies": []
@@ -6811,10 +7053,14 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.play",
+    "$.fn.stop",
+    "$.random",
+    "$.random.pick",
+    "$.random.range",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6826,10 +7072,21 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.playAt",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.find",
+    "$.fn.hasClass",
+    "$.fn.height",
+    "$.fn.map",
+    "$.fn.onFloor",
+    "$.fn.pos",
+    "$.fn.some",
+    "$.fn.velocity",
+    "$.updateFor",
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -6841,13 +7098,17 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.playAt",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base"
+   ]
   },
   {
    "n": 328,
@@ -6856,13 +7117,18 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.playAt",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.time.now"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 329,
@@ -6871,10 +7137,15 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.play",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -6886,10 +7157,14 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.play",
+    "$.dialog",
+    "$.dialog.define",
+    "$.dialog.play",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -6901,10 +7176,15 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.play",
+    "$.fn.distanceTo",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.stop",
+    "$.fn.volume",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6916,10 +7196,14 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.audio",
-    "$.sound"
+    "$.audio.musicVolume",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6931,11 +7215,15 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.hitFx",
-    "$.fx",
-    "$.camera"
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get",
+    "$.time.hitStop"
    ],
    "gaps": [],
    "dependencies": []
@@ -6947,14 +7235,19 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.hitFx",
-    "$.fx",
-    "$.camera"
+    "$.camera.shake",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.shake",
+    "$.selection.get",
+    "$.store.get"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 335,
@@ -6963,11 +7256,19 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.hitFx",
-    "$.fx",
-    "$.camera"
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.particles.preset",
+    "$.time.wait",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -6979,11 +7280,17 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.hitFx",
-    "$.fx",
-    "$.camera"
+    "$.fn.max",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.style",
+    "$.off",
+    "$.on",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -6995,11 +7302,20 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.hitFx",
-    "$.fx",
-    "$.camera"
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.input.rumble",
+    "$.input.rumbleSupported",
+    "$.off",
+    "$.on",
+    "$.selection.get",
+    "$.store.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -7011,11 +7327,23 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.hitFx",
-    "$.fx",
-    "$.camera"
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.show",
+    "$.fn.text",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -7027,11 +7355,18 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.hitFx",
-    "$.fx",
-    "$.camera"
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.style",
+    "$.fn.text",
+    "$.off",
+    "$.on",
+    "$.quest.def",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -7043,11 +7378,21 @@
    "section": "Q",
    "section_title": "Звук и обратная связь",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.hitFx",
-    "$.fx",
-    "$.camera"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.style",
+    "$.fn.text",
+    "$.off",
+    "$.on",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []

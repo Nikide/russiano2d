@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "render.fade",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Затемнение"
+  },
+  "description": {
+    "ru": "Экран затемняется и проясняется по событиям (RmlUi-оверлей)."
+  },
+  "kind": "behavior",
+  "category": "Экран и цвет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.style"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "outEvent",
+      "label": "Затемнить",
+      "type": "string",
+      "default": "fade:out"
+    },
+    {
+      "id": "inEvent",
+      "label": "Проявить",
+      "type": "string",
+      "default": "fade:in"
+    },
+    {
+      "id": "ms",
+      "label": "Длительность",
+      "type": "int",
+      "default": 500,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#000000"
+    }
+  ],
+  "tags": [
+    "экран",
+    "переход"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

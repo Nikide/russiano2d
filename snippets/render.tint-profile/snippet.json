@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "render.tint-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цветовой профиль"
+  },
+  "description": {
+    "ru": "Смена тона сцены по событию: «событие=цвет фона» и модуляция слоя мира."
+  },
+  "kind": "behavior",
+  "category": "Экран и цвет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world.color"
+    },
+    {
+      "api": "$.world.getBackground"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "profiles",
+      "label": "Профили (событие=цвет)",
+      "type": "list",
+      "default": [
+        "night=#101828",
+        "day=#87b5e8"
+      ]
+    },
+    {
+      "id": "ms",
+      "label": "Переход",
+      "type": "int",
+      "default": 600,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "цвет",
+    "атмосфера"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

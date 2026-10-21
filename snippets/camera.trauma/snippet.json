@@ -1,0 +1,101 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.trauma",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Травма камеры"
+  },
+  "description": {
+    "ru": "Встряска от накопленной «травмы»: удары копят, она спадает; тряска ∝ травма²."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.shake"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.shake"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "perHit",
+      "label": "Травма за единицу урона",
+      "type": "number",
+      "default": 0.02,
+      "min": 0,
+      "max": 1,
+      "step": 0.005
+    },
+    {
+      "id": "decay",
+      "label": "Спад",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 10,
+      "unit": "/с",
+      "step": 0.1
+    },
+    {
+      "id": "max",
+      "label": "Максимальная тряска",
+      "type": "number",
+      "default": 14,
+      "min": 0,
+      "max": 100,
+      "unit": "пикс."
+    },
+    {
+      "id": "watch",
+      "label": "Чей урон",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "камера",
+    "тряска"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

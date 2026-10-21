@@ -1,0 +1,107 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.cutscene-rail",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Рельсы камеры"
+  },
+  "description": {
+    "ru": "Камера проходит список точек по событию; затем возвращается к игроку."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.at"
+    },
+    {
+      "api": "$.camera.follow"
+    },
+    {
+      "api": "$.camera.unfollow"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "event",
+      "label": "Запуск событием",
+      "type": "string",
+      "default": "rail:start"
+    },
+    {
+      "id": "points",
+      "label": "Точки (x,y через ;)",
+      "type": "string",
+      "default": "100,100; 600,100"
+    },
+    {
+      "id": "segment",
+      "label": "Отрезок",
+      "type": "int",
+      "default": 1500,
+      "min": 50,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    }
+  ],
+  "tags": [
+    "камера",
+    "катсцена"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

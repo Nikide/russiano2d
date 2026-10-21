@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.ducking",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Приглушение музыки"
+  },
+  "description": {
+    "ru": "Музыка приглушается на время важного события (реплика, взрыв)."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.musicVolume"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "events",
+      "label": "События",
+      "type": "list",
+      "default": [
+        "say",
+        "explosion"
+      ]
+    },
+    {
+      "id": "level",
+      "label": "Уровень музыки",
+      "type": "number",
+      "default": 0.3,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    },
+    {
+      "id": "hold",
+      "label": "Держать",
+      "type": "int",
+      "default": 1500,
+      "min": 0,
+      "max": 30000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "музыка",
+    "микс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

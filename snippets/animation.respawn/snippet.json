@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.respawn",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Возрождение с эффектом"
+  },
+  "description": {
+    "ru": "После respawn — мигание и частицы на точке возвращения."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.particles.preset"
+    },
+    {
+      "api": "$.time.wait"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "blinkMs",
+      "label": "Мигание",
+      "type": "int",
+      "default": 900,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    },
+    {
+      "id": "particles",
+      "label": "Пресет частиц",
+      "type": "string",
+      "default": "sparks"
+    }
+  ],
+  "tags": [
+    "возрождение",
+    "эффект"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

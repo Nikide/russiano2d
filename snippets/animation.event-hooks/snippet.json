@@ -1,0 +1,51 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.event-hooks",
+  "version": "1.0.0",
+  "title": {
+    "ru": "События на кадрах"
+  },
+  "description": {
+    "ru": "Игровые события на кадрах анимации: «кадр=событие» (шаги, удар, звук)."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.frame"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "hooks",
+      "label": "Хуки (кадр=событие)",
+      "type": "list",
+      "default": [
+        "5=footstep",
+        "9=footstep"
+      ]
+    }
+  ],
+  "tags": [
+    "анимация",
+    "события"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

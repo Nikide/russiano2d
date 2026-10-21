@@ -1,0 +1,84 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "feedback.particles",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Частицы на событие"
+  },
+  "description": {
+    "ru": "Эффект частиц (пресет Particle-студии) на месте объекта по его событию."
+  },
+  "kind": "behavior",
+  "category": "Обратная связь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.particles.preset"
+    },
+    {
+      "api": "$.time.wait"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "effects",
+      "label": "Эффекты (событие=пресет)",
+      "type": "list",
+      "default": [
+        "damaged=sparks",
+        "death=smoke"
+      ]
+    },
+    {
+      "id": "life",
+      "label": "Жизнь эмиттера",
+      "type": "int",
+      "default": 1200,
+      "min": 100,
+      "max": 20000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "частицы",
+    "эффект"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

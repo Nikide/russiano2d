@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.one-shot",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Звук на событие"
+  },
+  "description": {
+    "ru": "Короткий звук по глобальному событию: «событие=файл»."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.play"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "sounds",
+      "label": "Звуки (событие=файл)",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "bus",
+      "label": "Шина",
+      "type": "string",
+      "default": "sfx"
+    }
+  ],
+  "tags": [
+    "звук",
+    "события"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

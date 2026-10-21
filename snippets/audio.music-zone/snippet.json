@@ -1,0 +1,74 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.music-zone",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Музыка области"
+  },
+  "description": {
+    "ru": "Своя музыка, пока игрок в области; на выходе — музыка по умолчанию."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.sound.crossfade"
+    },
+    {
+      "api": "$.sound.stopMusic"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "music",
+      "label": "Музыка",
+      "type": "asset",
+      "assetKind": "audio",
+      "required": true
+    },
+    {
+      "id": "outside",
+      "label": "Снаружи",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "fade",
+      "label": "Переход",
+      "type": "int",
+      "default": 800,
+      "min": 0,
+      "max": 20000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "музыка",
+    "зона"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

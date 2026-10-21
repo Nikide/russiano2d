@@ -1,0 +1,57 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.dialogue",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Голос и текст"
+  },
+  "description": {
+    "ru": "Голосовая реплика по событию say { text, voice } и текст в диалоговом окне."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.play"
+    },
+    {
+      "api": "$.dialog"
+    },
+    {
+      "api": "$.dialog.define"
+    },
+    {
+      "api": "$.dialog.play"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "speaker",
+      "label": "Говорящий",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "голос",
+    "диалог"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.damage",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Звук попадания"
+  },
+  "description": {
+    "ru": "Звук получения урона с защитой от перегруза (не чаще интервала)."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.playAt"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.time.now"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "sound",
+      "label": "Звук",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "minGap",
+      "label": "Не чаще",
+      "type": "int",
+      "default": 80,
+      "min": 0,
+      "max": 5000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "звук",
+    "урон"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "feedback.combo-popup",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Серия"
+  },
+  "description": {
+    "ru": "Счётчик серии успешных действий: «x5!» над объектом; серия рвётся паузой."
+  },
+  "kind": "behavior",
+  "category": "Обратная связь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "events",
+      "label": "Действия серии",
+      "type": "list",
+      "default": [
+        "attack",
+        "weapon:hit"
+      ]
+    },
+    {
+      "id": "window",
+      "label": "Окно серии",
+      "type": "int",
+      "default": 1500,
+      "min": 100,
+      "max": 20000,
+      "unit": "мс"
+    },
+    {
+      "id": "size",
+      "label": "Размер",
+      "type": "int",
+      "default": 16,
+      "min": 6,
+      "max": 96
+    }
+  ],
+  "tags": [
+    "комбо",
+    "счёт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

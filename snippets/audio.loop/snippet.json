@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.loop",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Зацикленный звук"
+  },
+  "description": {
+    "ru": "Зацикленный звук объекта: играет, пока объект жив или до события остановки."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.play"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.stop"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "sound",
+      "label": "Звук",
+      "type": "asset",
+      "assetKind": "audio",
+      "required": true
+    },
+    {
+      "id": "stopEvent",
+      "label": "Событие остановки",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "volume",
+      "label": "Громкость",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "звук",
+    "петля"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

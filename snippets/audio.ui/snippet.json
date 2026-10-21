@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.ui",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Звуки интерфейса"
+  },
+  "description": {
+    "ru": "Наведение, выбор и отказ: глобальные события ui:hover/ui:select/ui:deny."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.play"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "hover",
+      "label": "Наведение",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "select",
+      "label": "Выбор",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "deny",
+      "label": "Отказ",
+      "type": "asset",
+      "assetKind": "audio"
+    }
+  ],
+  "tags": [
+    "UI",
+    "звук"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

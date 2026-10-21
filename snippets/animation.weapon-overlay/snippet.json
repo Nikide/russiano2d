@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.weapon-overlay",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Слой оружия"
+  },
+  "description": {
+    "ru": "Отдельный дочерний узел-спрайт оружия у точки крепления, поворачивается к прицелу."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.localAt"
+    },
+    {
+      "api": "$.fn.lookAt"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.sprite"
+    },
+    {
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "sprite",
+      "label": "Спрайт оружия",
+      "type": "asset",
+      "assetKind": "image",
+      "required": true
+    },
+    {
+      "id": "offset",
+      "label": "Точка крепления",
+      "type": "vec2",
+      "default": [
+        10,
+        0
+      ]
+    },
+    {
+      "id": "aim",
+      "label": "К мыши",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "оружие",
+    "спрайт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

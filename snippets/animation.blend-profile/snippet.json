@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.blend-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Переходы клипов $.anim"
+  },
+  "description": {
+    "ru": "Клипы плеера $.anim с плавным переходом по состоянию узла (data state)."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.anim.crossfade"
+    },
+    {
+      "api": "$.anim.has"
+    },
+    {
+      "api": "$.anim.target"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "states",
+      "label": "Состояния (state=клип)",
+      "type": "list",
+      "default": [
+        "idle=idle",
+        "run=run"
+      ]
+    },
+    {
+      "id": "blend",
+      "label": "Переход",
+      "type": "int",
+      "default": 150,
+      "min": 0,
+      "max": 5000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "анимация",
+    "переходы"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

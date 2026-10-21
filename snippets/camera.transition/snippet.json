@@ -1,0 +1,84 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.transition",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Переход камеры"
+  },
+  "description": {
+    "ru": "По событию «событие=селектор» камера плавно переходит к новой цели и следует за ней."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.follow"
+    },
+    {
+      "api": "$.camera.panTo"
+    },
+    {
+      "api": "$.camera.unfollow"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.time.wait"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "cues",
+      "label": "Переходы (событие=селектор)",
+      "type": "list",
+      "default": [
+        "boss:spawn=#boss"
+      ]
+    },
+    {
+      "id": "ms",
+      "label": "Переход",
+      "type": "int",
+      "default": 600,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "камера",
+    "переход"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

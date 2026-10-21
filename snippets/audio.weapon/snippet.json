@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "audio.weapon",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Звуки оружия"
+  },
+  "description": {
+    "ru": "Выстрел, перезарядка и сухой щелчок по событиям оружия объекта."
+  },
+  "kind": "behavior",
+  "category": "Звук",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.playAt"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "fire",
+      "label": "Выстрел",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "reload",
+      "label": "Перезарядка",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "dry",
+      "label": "Пустой магазин",
+      "type": "asset",
+      "assetKind": "audio"
+    }
+  ],
+  "tags": [
+    "оружие",
+    "звук"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

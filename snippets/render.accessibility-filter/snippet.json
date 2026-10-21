@@ -1,0 +1,63 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "render.accessibility-filter",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цветовая коррекция"
+  },
+  "description": {
+    "ru": "Поддерживаемая коррекция: высокий контраст или монохром через тон мира и данные для UI."
+  },
+  "kind": "behavior",
+  "category": "Экран и цвет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.world.color"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "mode",
+      "label": "Режим",
+      "type": "enum",
+      "default": "none",
+      "options": [
+        "none",
+        "high-contrast",
+        "grayscale"
+      ]
+    }
+  ],
+  "tags": [
+    "доступность",
+    "контраст"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

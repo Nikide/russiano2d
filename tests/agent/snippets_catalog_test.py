@@ -37,6 +37,13 @@ def r2d(*args):
     return json.loads([l for l in out.splitlines() if l.startswith("{")][-1])
 
 
+ASSET_BY_KIND = {"data": "maps/level.tilemap.json", "audio": "sfx/beep.ogg", "animation": "art/hero.atlas.json"}
+
+
+def asset_for(field):
+    return ASSET_BY_KIND.get(field.get("assetKind"), "art/hero.png")
+
+
 def slug(pid):
     return "o_" + pid.replace(".", "_").replace("-", "_")
 
@@ -52,6 +59,10 @@ def main():
     os.makedirs(os.path.join(game, "art"))
     shutil.copy(os.path.join(ROOT, "assets/atlas.png"), os.path.join(game, "art/hero.png"))
     os.makedirs(os.path.join(game, "maps"))
+    # Атлас — штатной командой SDK, как его сделал бы пользователь.
+    r2d("atlas-grid", os.path.join(game, "art/hero.png"), "--out", os.path.join(game, "art/hero.atlas.json"), "--cols", "2", "--rows", "1", "--tags", "idle:0-0,run:1-1")
+    os.makedirs(os.path.join(game, "sfx"))
+    shutil.copy(os.path.join(ROOT, "assets/audio/sfx/pickup_01.ogg"), os.path.join(game, "sfx/beep.ogg"))
     json.dump({"version": 1, "tile": 16, "cols": 4, "solid": [1], "layers": [{"name": "ground", "depth": 0, "solid": True, "data": [[1, 1, 1, 1], [1, 0, 0, 1], [1, 1, 1, 1]]}]}, open(os.path.join(game, "maps/level.tilemap.json"), "w"))
     lines = ["$.ready(() => {",
              "    $('<ground>', { id: 'floor' }).at(640, 700).size(1280, 20).body('static').appendTo($.world);",
@@ -76,9 +87,9 @@ def main():
         values = dict(example.get("values", {}))
         for f in p.get("fields", []):
             if f["type"] == "asset" and f.get("required") and f["id"] not in values:
-                values[f["id"]] = "maps/level.tilemap.json" if f.get("assetKind") == "data" else "art/hero.png"
+                values[f["id"]] = asset_for(f)
             if f["type"] == "asset" and values.get(f["id"]) and not os.path.exists(os.path.join(game, values[f["id"]])):
-                values[f["id"]] = "art/hero.png" if f.get("assetKind") in ("image", "animation") else None
+                values[f["id"]] = asset_for(f)
         pairs = ["%s=%s" % (k, json.dumps(v)) for k, v in values.items() if v is not None]
         if pairs and p["kind"] == "behavior":
             iid = "snippet:%s:%s" % (owner.split(":")[-1], p["id"])
@@ -87,7 +98,7 @@ def main():
     # Обязательные ресурсы и у экземпляров-зависимостей (добавлены автоматически).
     fields = {p["id"]: p.get("fields", []) for p in pkgs}
     for inst in json.load(open(os.path.join(game, "project.json")))["editor"]["snippets"]["instances"]:
-        miss = ["%s=%s" % (f["id"], json.dumps("maps/level.tilemap.json" if f.get("assetKind") == "data" else "art/hero.png"))
+        miss = ["%s=%s" % (f["id"], json.dumps(asset_for(f)))
                 for f in fields.get(inst["package"], []) if f["type"] == "asset" and f.get("required") and f["id"] not in inst.get("values", {})]
         if miss:
             r2d("snippet", "set", game, inst["id"], *miss)

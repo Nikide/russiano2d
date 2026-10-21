@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.damage",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Реакция на урон"
+  },
+  "description": {
+    "ru": "Клип получения удара и возврат к прежнему состоянию."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [
+    {
+      "id": "clip",
+      "label": "Клип",
+      "type": "string",
+      "default": "20-21@12"
+    },
+    {
+      "id": "duration",
+      "label": "Длительность",
+      "type": "int",
+      "default": 250,
+      "min": 10,
+      "max": 10000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "анимация",
+    "урон"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

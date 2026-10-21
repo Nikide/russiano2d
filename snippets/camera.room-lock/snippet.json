@@ -1,0 +1,86 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "camera.room-lock",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Камера в комнате"
+  },
+  "description": {
+    "ru": "Пока игрок в области-комнате, камера стоит в её центре (или ограничена ей)."
+  },
+  "kind": "behavior",
+  "category": "Камера",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.follow"
+    },
+    {
+      "api": "$.camera.limits"
+    },
+    {
+      "api": "$.camera.panTo"
+    },
+    {
+      "api": "$.camera.unfollow"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "mode",
+      "label": "Режим",
+      "type": "enum",
+      "default": "center",
+      "options": [
+        "center",
+        "clamp"
+      ]
+    }
+  ],
+  "tags": [
+    "камера",
+    "комната"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

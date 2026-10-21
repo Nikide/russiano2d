@@ -1,0 +1,91 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "feedback.error-prompt",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Подсказка об отказе"
+  },
+  "description": {
+    "ru": "Понятная подсказка, почему действие невозможно (события *:denied, need-key, locked)."
+  },
+  "kind": "behavior",
+  "category": "Обратная связь",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.style"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "messages",
+      "label": "Тексты (событие=текст)",
+      "type": "list",
+      "default": [
+        "door:need-key=Нужен ключ",
+        "money:denied=Не хватает денег",
+        "shop:denied=Купить нельзя"
+      ]
+    },
+    {
+      "id": "ms",
+      "label": "Показ",
+      "type": "int",
+      "default": 1800,
+      "min": 300,
+      "max": 20000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "подсказка",
+    "доступность"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

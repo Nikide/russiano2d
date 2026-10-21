@@ -1,0 +1,66 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.flash-overlay",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цветовая вспышка действия"
+  },
+  "description": {
+    "ru": "Временная цветовая вспышка узла на событиях: «событие=цвет»."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.flash"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "flashes",
+      "label": "Вспышки (событие=цвет)",
+      "type": "list",
+      "default": [
+        "attack=#ffffff",
+        "heal=#40ff80"
+      ]
+    },
+    {
+      "id": "ms",
+      "label": "Длительность",
+      "type": "int",
+      "default": 120,
+      "min": 10,
+      "max": 3000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "вспышка",
+    "feedback"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

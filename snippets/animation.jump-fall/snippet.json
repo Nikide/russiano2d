@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "animation.jump-fall",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Прыжок и падение"
+  },
+  "description": {
+    "ru": "Клипы прыжка, падения и приземления по вертикальной скорости и касанию земли."
+  },
+  "kind": "behavior",
+  "category": "Анимация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.animate"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.onFloor"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "jump",
+      "label": "Прыжок",
+      "type": "string",
+      "default": "10-11@8"
+    },
+    {
+      "id": "fall",
+      "label": "Падение",
+      "type": "string",
+      "default": "12-13@8"
+    },
+    {
+      "id": "land",
+      "label": "Приземление",
+      "type": "string",
+      "default": "14-15@14"
+    },
+    {
+      "id": "landMs",
+      "label": "Длительность приземления",
+      "type": "int",
+      "default": 120,
+      "min": 0,
+      "max": 2000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "анимация",
+    "прыжок"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}
