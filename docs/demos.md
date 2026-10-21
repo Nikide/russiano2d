@@ -2,12 +2,13 @@
 
 `demos/` — отдельная игра на движке: несколько сцен-демо, каждая показывает свой
 слой движка — платформер (Box2D и анимация), «Типичная ночь в Мытищинском лесу»
-(свет, частицы, волны), новелла «Руси-тян» (`$.timeline` и интерфейс на RmlUi),
-Re2DSprite (поворот головы из одной развёртки всего персонажа) и Re2D World
-(2.5D от первого лица). Модулей демо шесть — `launcher`, `platformer`,
-`shooter_witch`, `russi_vn`, `rotsprite` (сцена `re2dsprite`) и `re2d_world`;
-остальные сцены из таблицы ниже открываются отдельными проектами
-(`--game demos/<имя>`).
+(свет, частицы, волны), Re2DSprite (поворот головы из одной развёртки всего
+персонажа) и Re2D World (2.5D от первого лица). Основные игровые модули —
+`launcher`, `platformer`,
+`shooter_witch`, `rotsprite` (сцена `re2dsprite`) и `re2d_world`. Отдельные
+проекты из таблицы ниже открываются напрямую (`--game demos/<имя>`). Новый
+платформер и новая ВН, созданные через Editor, лежат в
+`demos/platformer-editor-demo` и `demos/rusya-love-vn`.
 Запускается тем же бинарником, что и `game/`, и выбирается флагом `--game`.
 
 ## Запуск
@@ -19,8 +20,6 @@ Re2DSprite (поворот головы из одной развёртки вс�
 "$R2D_BINARY" --game demos                      # меню выбора
 "$R2D_BINARY" --game demos --scene platformer   # сразу конкретная сцена
 "$R2D_BINARY" --game demos --scene re2dsprite    # маскот из одной развёртки
-"$R2D_BINARY" --game demos --scene russi_vn \
-    --screenshot /tmp/s.png --screenshot-at 3 --seconds 5
 ```
 
 Точка входа — `<каталог>/main.js`, то есть [`demos/main.js`](../demos/main.js).
@@ -93,20 +92,23 @@ export default function install($) {
 | `re2d_dust2` | **Dust II по маршрутам** — оригинальная карта из ячеек: A/B, спавны, двери, тоннели, рампы, клуб с музыкой (HRTF), NPC Re2DSprite, шаги и ветер. Запуск: `$R2D_BINARY --game demos/re2d_dust2 --seed 7`. [README](../demos/re2d_dust2/README.md) | `$.re2dWorldAudio(world)`, `.sky` (EXR), контроллер в стиле Quake |
 | `re2dsprite` | **один атлас всего тела Руси-тян**: прототип головы, yaw −180..180°, pitch, nearest и привязка к пикселям. Стрелки — вращение, пробел — авто, Esc — меню. Базовый PNG и описание — [README](../demos/rotsprite/README.md) | `$.re2dSprite.create`, `.re2dPose`, `$.ui.doc` |
 | `real2d` (отдельный проект) | **Real2D v4, стадия A**: голова из отдельных семантических компонентов — каждый угол yaw вычислен (12 anchors, Фурье K=3, растеризация реальных texels), RmlUi-HUD, автоповорот, перечитывание контейнера. Запуск: `$R2D_BINARY --game demos/real2d`. [README](../demos/real2d/README.md), план — [STAGE_A_PLAN.md](../demos/real2d/STAGE_A_PLAN.md) | `$.real2d.load/frame/info/provenance`, `<real2d>`, `.real2dPose` |
+| `platformer-editor-demo` (отдельный проект) | Небольшой платформер, созданный через Project Manager, Tilemap Studio и Code Editor; прыжки по платформам до флага | `$R2D_BINARY --game demos/platformer-editor-demo`; [README](../demos/platformer-editor-demo/README.md), [Editor walkthrough](EDITOR_GUIDE.md) |
 | `platformer` | Box2D, листы анимации, монеты, враги, параллакс, HUD, пауза | `.controls`, `.frames`, `.animate`, `.on('death')`, `<ui.*>` |
 | `shooter_witch` | **ночной лес**: зомби-шутер в духе Vampire Survivors — авто-стрельба по ближайшему, волны, опыт, карты апгрейдов, фонари как единственный свет, тени от стволов, кровь и лужи | `<tilemap>` + `.autotile()`, `$.gfx.light.polygon`, `$.audio.zone/obstacles/damping`, `$.fx.*`, `$.gfx.postPreset` |
-| `russi_vn` | **визуальная новелла «Руси-тян: Бака!»**: цундэрэ-маскот объясняет, чем JS лучше Python; интерфейс на RmlUi, пять локаций, тряска экрана, семь поз, озвучка реплик, три выбора и две концовки | `$.animatedTimelineScene2d`, `$.timeline.state`, `$.ui.doc`, `$.camera.shake`, `{ ending }` с флагом в `$.store` |
+| `rusya-love-vn` (отдельный проект) | **«Весна до последней электрички»** — новая примерно 15-минутная романтическая ВН о Руси-тян: четыре решения, хорошая и плохая концовки; история редактируется в Narrative Studio, новая графика создана для этой демки | `$.story`, `$.dialog`, Narrative Studio, RmlUi theme; [README](../demos/rusya-love-vn/README.md), [Editor walkthrough](EDITOR_GUIDE.md) |
 
 Демо `re2d_world`, `re2d_bsp_world`, `re2d_world_renderer_lab`, `re2d_dust2`,
 `re2dsprite` и `real2d` показывают отклонённый 3D-авторинг Re2D/Real2D: они
 собираются и запускаются только при `-DR2D_ENABLE_RE2D=ON` и не входят в первую
 продакшн-цель (2D-платформер). Инструментов Re2D в SDK больше нет.
 
-| Платформер | Типичная ночь в Мытищинском лесу | Руси-тян |
+| Платформер | Типичная ночь в Мытищинском лесу | Новая ВН: хорошая концовка |
 |---|---|---|
-| ![Платформер](screenshots/platformer.png) | ![Типичная ночь в Мытищинском лесу](screenshots/shooter_witch.png) | ![Руси-тян](screenshots/russi_vn.png) |
+| ![Платформер](screenshots/platformer.png) | ![Типичная ночь в Мытищинском лесу](screenshots/shooter_witch.png) | ![Новая ВН о Руси-тян](editor/images/20-vn-good-ending.png) |
 
-Скриншоты обновляются одной командой: `python3 tools/make_screenshots.py`.
+Скриншоты сцен проекта `demos/` обновляются командой
+`python3 tools/make_screenshots.py`. Кадры Editor-проектов сняты во время
+создания и опубликованы в [EDITOR_GUIDE.md](EDITOR_GUIDE.md).
 
 ## Управление
 

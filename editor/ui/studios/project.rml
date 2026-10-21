@@ -1,4 +1,4 @@
-<rml><head><link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="project.rcss"/><title>Project Settings</title></head><body>
+<rml><head><link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="project.rcss"/><title>Настройки проекта</title></head><body>
 <div class="st-root ps-root">
  <div class="st-bar">
   <button id="ps-tab-settings" class="st-btn on">Настройки</button>

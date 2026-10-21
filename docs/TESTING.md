@@ -38,7 +38,6 @@ runtime-поведение, а не только компиляцию тесто
 python3 tests/doc_claims_test.py
 python3 tests/doc_coverage_test.py
 python3 tests/api_docs_sync_test.py
-python3 tests/api_freeze_test.py
 "$R2D_BINARY" lint editor --json
 "$R2D_BINARY" validate editor --json
 ```

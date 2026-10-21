@@ -12,7 +12,7 @@ import * as K from '../lib/shared/kinds/input.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc } from '../lib/studio_kit.js';
 
-export const meta = { id: 'input', title: 'Input', icon: 'sports_esports', match: (p) => /\.input\.json$/i.test(p) };
+export const meta = { id: 'input', title: 'Управление', icon: 'sports_esports', match: (p) => /\.input\.json$/i.test(p) };
 
 const ACTION_RE = /^[A-Za-z0-9_\-]{1,48}$/;
 const KEY_ALIASES = { ' ': 'space', return: 'enter', 'left shift': 'leftshift', 'right shift': 'rightshift', 'left ctrl': 'leftctrl',
@@ -101,7 +101,7 @@ export function create(host) {
     }
 
     const def = {
-        kind: K, title: 'Input', listTitle: 'Действия',
+        kind: K, title: 'Управление', listTitle: 'Действия',
         init(w) {
             Object.assign(w.ext, { lit: {}, capturing: false, saved: null, savedDeadzone: undefined });
             w.doc.cls('aw-bottom', 'in-bottom-host', true);

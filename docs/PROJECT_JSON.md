@@ -27,7 +27,8 @@ Editor.
   "runtime": {
     "entry": "main.js",
     "start_scene": "game",
-    "window": {"title": "Neon Courier", "width": 1280, "height": 720, "fullscreen": false}
+    "window": {"title": "Neon Courier", "width": 1280, "height": 720, "fullscreen": false},
+    "multiplayer": {"topology": "authoritative", "port": 7777, "max_peers": 8, "sync_rate": 20}
   },
   "toolHost": false,
   "editor": {"graph": { "…": "см. §3" }}
@@ -42,8 +43,18 @@ Editor.
 | `runtime.window.title` | `project.name` | заголовок окна |
 | `runtime.window.width`/`height` | 1280 × 720 | размер окна, целое 1…16384; флаги `--width`/`--height` старше |
 | `runtime.window.fullscreen` | `false` | полный экран при старте (в `--headless` не включается) |
+| `runtime.multiplayer.topology` | `authoritative` | схема, которую Editor запишет в `multiplayer.js`: `authoritative`, `mesh`, `relay` или `custom` |
+| `runtime.multiplayer.port` | `7777` | порт по умолчанию для созданного сетевого bootstrap-модуля; `0` выбирает свободный порт |
+| `runtime.multiplayer.max_peers` | `8` | лимит peers для сгенерированного host bootstrap, 1…256 |
+| `runtime.multiplayer.sync_rate` | `20` | частота репликации сущностей в секунду, 1…120 |
 | `toolHost` | `false` | мост инструментов `$.sdk` для проектов-инструментов (не для игр); остаётся на верхнем уровне |
 | `editor.graph` | нет | граф проекта, §3; рантайм его **не интерпретирует** как сцену |
+
+`runtime.multiplayer` — настройки генератора в Project Settings для schema 2.
+Сам рантайм не подключается к сети автоматически: проект выбирает момент
+входа в host/room из игрового кода. В минимальном манифесте Editor всё равно
+позволяет создать `multiplayer.js` со значениями по умолчанию; schema 2 для
+этого шага включать не нужно.
 
 Пути — относительные, без `..` и абсолютных. Неизвестные поля Editor и индексатор
 сохраняют как есть. Значения по умолчанию в JSON не пишутся, пока их явно не

@@ -13,7 +13,7 @@ import * as K from '../lib/shared/kinds/fonts.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
-export const meta = { id: 'fonts', title: 'Fonts', icon: 'text_fields', match: (p) => /\.fonts\.json$/i.test(p) };
+export const meta = { id: 'fonts', title: 'Шрифты', icon: 'text_fields', match: (p) => /\.fonts\.json$/i.test(p) };
 
 const FONT_FILE = /\.(ttf|otf)$/i;
 const SAMPLE = 'Съешь ещё этих мягких французских булок — The quick brown fox 0123';
@@ -107,7 +107,8 @@ export function create(host) {
         let html = '<div class="ft-bottom"><div class="st-field"><label>Образец</label><input id="ft-sample" class="st-in" type="text" value="' + esc(e.sample) + '"/>' + button('sample', 'Показать') + '</div>';
         if (n !== undefined) {
             const r = K.resolve(styles(w), n), width = $.font.measure(e.sample, pv(w, n));
-            html += '<div class="ft-facts"><span class="st-label">Цепочка</span>' + esc(['default'].concat(K.chain(styles(w), n).reverse()).filter((x, i, a) => a.indexOf(x) === i).join(' > ')) +
+            const chain = ['default'].concat(K.chain(styles(w), n).reverse()).filter((x, i, a) => a.indexOf(x) === i);
+            html += '<div class="ft-facts"><span class="st-label">Цепочка</span>' + esc(chain.map((x) => x === 'default' ? 'По умолчанию' : x).join(' > ')) +
                 '<span class="st-label">Итог</span>' + esc(r.size + 'px · ' + r.color + ' · ' + r.align + ' · ×' + r.lineHeight + (r.font ? ' · ' + r.font : '')) +
                 '<span class="st-label">Ширина образца</span>' + Math.round(width || 0) + ' px</div>';
         }
@@ -115,7 +116,7 @@ export function create(host) {
     }
 
     const def = {
-        kind: K, title: 'Fonts', listTitle: 'Стили',
+        kind: K, title: 'Шрифты', listTitle: 'Стили',
         init(w) {
             Object.assign(w.ext, { sample: SAMPLE, nodes: [], defined: [], loaded: [], fontErrors: [], lines: [], scroll: 0, contentH: 0, files: null });
             w.doc.cls('aw-bottom', 'ft-bottom-host', true);
@@ -131,12 +132,12 @@ export function create(host) {
             const n = curName(w), others = names(w).filter((x) => x !== n);
             return [
                 { key: '__name', label: 'Имя' },
-                { key: 'size', label: 'size, px', number: true, optional: true },
-                { key: 'color', label: 'color', optional: true },
-                { key: 'align', label: 'align', options: K.ALIGNS, optional: true },
-                { key: 'lineHeight', label: 'lineHeight', number: true, optional: true },
-                { key: 'base', label: 'base', options: others, optional: true },
-                { key: 'font', label: 'font', options: ['default'].concat(fonts(w).map((f) => f.name)), optional: true },
+                { key: 'size', label: 'Размер, px', number: true, optional: true },
+                { key: 'color', label: 'Цвет', optional: true },
+                { key: 'align', label: 'Выравнивание', options: K.ALIGNS, optional: true },
+                { key: 'lineHeight', label: 'Высота строки', number: true, optional: true },
+                { key: 'base', label: 'Основа', options: others, optional: true },
+                { key: 'font', label: 'Файл шрифта', options: ['default'].concat(fonts(w).map((f) => f.name)), optional: true },
             ];
         },
         selected(w) { const n = curName(w); if (n !== undefined) w.doc.setValue('f-__name', n); },

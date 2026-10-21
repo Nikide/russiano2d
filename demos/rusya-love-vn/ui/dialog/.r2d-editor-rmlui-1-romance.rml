@@ -1,0 +1,13 @@
+<rml>
+<head>
+    <link type="text/rcss" href=".r2d-editor-rmlui-1-romance.rcss"/>
+    <title>Пример</title>
+</head>
+<body id="r2d-pv-root">
+<div id="sample" class="panel">
+    <h1 id="title">Заголовок</h1>
+    <p id="text">Абзац текста.</p>
+    <button id="btn" class="btn">Кнопка</button>
+</div>
+</body>
+</rml>

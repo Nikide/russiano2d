@@ -35,6 +35,10 @@ jobs:
         run: |
           xmake f -y -p linux -a x86_64 -m release -o build-xmake/linux-x86_64
           xmake build -y -j 4 r2d
+      - name: API documentation freshness
+        env:
+          R2D_BINARY: build-xmake/linux-x86_64/linux/x86_64/release/r2d
+        run: python3 scripts/api_docs_pipeline.py check
       - name: Unity and JavaScript tests
         run: xmake test -y -j 4
       - name: Editor entry and code-first smoke

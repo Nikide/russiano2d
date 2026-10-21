@@ -5,9 +5,9 @@ import { createHistory } from '../lib/shared/history.js';
 import { studioDoc, mousePx, keys as studioKeys, diag, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
 export const meta = {
-    id: 'narrative', title: 'Narrative', icon: 'chat',
+    id: 'narrative', title: 'Истории', icon: 'chat',
     match: (p) => /\.(scene|story)$/i.test(p),
-    summary: (s) => s ? [['Состояние', s.dirty ? 'не сохранён' : 'сохранён'], ['Команд', s.commandCount], ['Выбрана', s.selectedCommand + 1], ['Preview', s.previewRunning ? 'играет' : 'остановлен']] : [],
+    summary: (s) => s ? [['Состояние', s.dirty ? 'не сохранён' : 'сохранён'], ['Команд', s.commandCount], ['Выбрана', s.selectedCommand + 1], ['Предпросмотр', s.previewRunning ? 'играет' : 'остановлен']] : [],
 };
 
 export function create(host) {
@@ -585,10 +585,10 @@ export function create(host) {
             selectedCommand: s.sel, commandCount: visible().length, previewRunning: previewRunning(),
             previewIndex: s.previewLine, validation: s.validation, validationStale: !!s.validationStale }; },
         commands() { return [
-            { label: 'Narrative: проверить черновик', run: validate },
-            { label: 'Narrative: проиграть сцену', run: ops.playScene },
-            { label: 'Narrative: проиграть с выбранной строки', run: ops.playFromHere },
-            { label: 'Narrative: остановить preview', run: stopPreview },
+            { label: 'Истории: проверить черновик', run: validate },
+            { label: 'Истории: проиграть сцену', run: ops.playScene },
+            { label: 'Истории: проиграть с выбранной строки', run: ops.playFromHere },
+            { label: 'Истории: остановить предпросмотр', run: stopPreview },
         ]; },
     };
 }

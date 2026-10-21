@@ -26,7 +26,7 @@ Russiano2D собирается через Xmake (`xmake.lua` и `xmake/packages
 | tinyexr | vendored, `third_party/tinyexr` | BSD-3-Clause |
 | ufbx | vendored, `third_party/ufbx` | MIT **или** public domain (на выбор) |
 | stb_truetype (`nothings/stb`) | `2c980bb` (1.26) | public domain / MIT (dual) |
-| SDL_net | `30dd38a` | zlib |
+| ENet (`zpl-c/enet`) | `v2.7.0` (`8b43b925`) | MIT |
 | FastNoiseLite | vendored, `third_party/fastnoise_lite` (`785f37a`, `Cpp/FastNoiseLite.h`) | MIT |
 | Tracy | `v0.14.1` (`30997d5`) — только при `-DR2D_TRACY=ON` | BSD-3-Clause |
 | zstd | `v1.5.7` (`ac66b19`) — только при `R2D_ENABLE_ZSTD=ON` (по умолчанию) | BSD-3-Clause |

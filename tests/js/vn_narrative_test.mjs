@@ -223,6 +223,7 @@ test('dialog: themeDefine/themePush/hotReload keep state and release tokens', ()
     truthy(dialog.play('t'), 'dialog opens');
     const token = dialog.themePush('memory');
     truthy(token && dialog.theme() === 'memory', 'pushed theme active');
+    truthy(backend.calls.some((call) => call[0] === 'load' && call[1] === 'dialog://memory'), 'RmlUi document uses the registered dialog:// resource scheme');
     const backendCalls = backend.calls.length;
     truthy(dialog.hotReload(), 'hot reload succeeds');
     truthy(backend.calls.length > backendCalls, 'reload reloads the document');

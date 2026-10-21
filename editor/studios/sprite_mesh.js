@@ -4,9 +4,9 @@ import { createHistory } from '../lib/shared/history.js';
 import { studioDoc, uiScale, mousePx, inside, numberOf, screenCamera, diag } from '../lib/studio_kit.js';
 
 export const meta = {
-    id:'sprite-mesh',title:'SpriteMesh',icon:'box',match:()=>false,
+    id:'sprite-mesh',title:'Меш спрайта',icon:'box',match:()=>false,
     also:p=>/\.(atlas\.json|png)$/i.test(p),
-    summary:s=>s ? [['Кадров',s.frames],['Настройки',s.dirty?'не сохранены':'сохранены'],['Cache',s.cacheStale?'нужен bake':'актуален']] : [],
+    summary:s=>s ? [['Кадров',s.frames],['Настройки',s.dirty?'не сохранены':'сохранены'],['Кэш',s.cacheStale?'нужно пересобрать':'актуален']] : [],
 };
 export function create(host) {
     const $=host.$,doc=host.document||studioDoc($,'sprite_mesh');
@@ -28,7 +28,7 @@ export function create(host) {
     }
     function readAtlas(path) {
         const raw = $.fs.readText(path);
-        if (!raw) throw new Error('Не удалось прочитать Sprite/Atlas asset: ' + path);
+        if (!raw) throw new Error('Не удалось прочитать ресурс спрайта или атласа: ' + path);
         return JSON.parse(raw);
     }
     function normalize(data) {
@@ -76,15 +76,15 @@ export function create(host) {
         doc.html('sm-animation', Object.keys(s.tags).map(n=>`<option value="${escapeHtml(n)}" ${n===s.animation?'selected':''}>${escapeHtml(n)}</option>`).join(''));
         s.updatingAnimationList=false;
         const f=s.frames[frameIndex()], m=s.cache&&s.cache.frames[frameIndex()];
-        doc.html('sm-stats', m ? `Кадр ${frameIndex()+1} / ${s.frames.length}<br/>Непрозрачные пиксели: ${m.opaquePixels.toLocaleString()}<br/>Вершины: ${m.vertices.length/8|0}<br/>Треугольники: ${m.vertices.length/24|0}<br/>Кэш: ${s.cache.bytes.toLocaleString()} байт` : 'Mesh cache ещё не собран. Нажмите «Bake всех кадров».');
-        if(s.previewStale)doc.text('sm-state','ПРЕДПРОСМОТР УСТАРЕЛ · Bake preview');
+        doc.html('sm-stats', m ? `Кадр ${frameIndex()+1} / ${s.frames.length}<br/>Непрозрачные пиксели: ${m.opaquePixels.toLocaleString()}<br/>Вершины: ${m.vertices.length/8|0}<br/>Треугольники: ${m.vertices.length/24|0}<br/>Кэш: ${s.cache.bytes.toLocaleString()} байт` : 'Кэш меша ещё не создан. Нажмите «Создать меш для всех кадров».');
+        if(s.previewStale)doc.text('sm-state','ПРЕДПРОСМОТР УСТАРЕЛ · обновите меш');
         doc.text('sm-hud', f ? `${f.name} · ${frameIndex()+1}/${s.frames.length} · ${s.playing?'воспроизведение':'пауза'}` : '—');
     }
     function requireResult(result) {
-        if (!result || !result.json) throw Object.assign(new Error('Backend не вернул JSON'), {code:'SDK_BACKEND_NO_JSON'});
+        if (!result || !result.json) throw Object.assign(new Error('Инструмент редактора не вернул JSON'), {code:'SDK_BACKEND_NO_JSON'});
         if (!result.ok || !result.json.ok) {
             const ds = result.json.diagnostics || [];
-            throw Object.assign(new Error(ds.map(d=>d.message).join('\n') || 'Bake завершился с ошибкой'), {diagnostics:ds});
+            throw Object.assign(new Error(ds.map(d=>d.message).join('\n') || 'Не удалось создать меш'), {diagnostics:ds});
         }
         return result.json;
     }
@@ -107,7 +107,7 @@ export function create(host) {
     function edit(next, override) {
         if(closed || s.busy)return false;
         if(!override){next.pivotX=0;next.pivotY=0;}
-        history.run('Mesh Settings',()=>{model.settings=next;model.pivotOverride=override;});
+        history.run('Настройки меша',()=>{model.settings=next;model.pivotOverride=override;});
         s.previewStale=true;changed();return true;
     }
     async function bake(outputPath, saved) {
@@ -122,18 +122,18 @@ export function create(host) {
             if(closed)return false;
             const cache=$.spriteMesh.loadCache(temp);cache.bytes=report.bytes;
             s.cache=cache;s.previewStale=false;s.error='';s.diags=[];
-            status(s.cacheStale?'ПРЕДПРОСМОТР · cache не сохранён':'ПРЕДПРОСМОТР');renderLists();return true;
+            status(s.cacheStale?'ПРЕДПРОСМОТР · кэш не сохранён':'ПРЕДПРОСМОТР');renderLists();return true;
         } catch(e) { return failure(e); }
         finally { $.fs.remove(temp);s.busy=false;if(!closed)host.changed(); }
     }
     async function saveAndBake() {
         if(closed || s.busy || !s.asset)return false;
-        if(s.data && $.fs.readText(s.asset)!==s.savedSource)return failure(Object.assign(new Error('Atlas изменён на диске; переоткройте вкладку'),{code:'SDK_SPRITEMESH_WRITE_CONFLICT'}));
+        if(s.data && $.fs.readText(s.asset)!==s.savedSource)return failure(Object.assign(new Error('Атлас изменён на диске; переоткройте вкладку'),{code:'SDK_SPRITEMESH_WRITE_CONFLICT'}));
         // First validate geometry with a scratch bake; source is unchanged on failure.
         if(!await bake() || closed)return false;
         s.busy=true;let wrote=false,next=s.savedSource;
         try {
-            if(s.data && $.fs.readText(s.asset)!==s.savedSource)throw Object.assign(new Error('Atlas изменён во время bake'),{code:'SDK_SPRITEMESH_WRITE_CONFLICT'});
+            if(s.data && $.fs.readText(s.asset)!==s.savedSource)throw Object.assign(new Error('Атлас изменён во время создания меша'),{code:'SDK_SPRITEMESH_WRITE_CONFLICT'});
             const data=s.data ? JSON.parse(s.savedSource) : null;
             if(data && (history.dirty() || !data.re2d || !data.re2d.spriteMesh || data.re2d.spriteMesh.enabled!==true)) {
                 data.re2d=data.re2d||{};
@@ -142,7 +142,7 @@ export function create(host) {
                 data.re2d.spriteMesh=Object.assign({},data.re2d.spriteMesh||{},cfg);
                 if(!s.pivotOverride){delete data.re2d.spriteMesh.pivotX;delete data.re2d.spriteMesh.pivotY;}
                 next=JSON.stringify(data,null,2)+'\n';
-                if($.fs.write(s.asset,next)===false)throw Object.assign(new Error('Не удалось записать Atlas'),{code:'SDK_WRITE_FAILED'});
+                if($.fs.write(s.asset,next)===false)throw Object.assign(new Error('Не удалось записать атлас'),{code:'SDK_WRITE_FAILED'});
                 wrote=true;
             }
             // Native command publishes the persistent cache with atomic rename.
@@ -152,7 +152,7 @@ export function create(host) {
             return true;
         } catch(e) {
             if(wrote && ($.fs.readText(s.asset)!==next || $.fs.write(s.asset,s.savedSource)===false))
-                return failure(Object.assign(new Error('Bake не выполнен; не удалось восстановить Atlas'),{code:'SDK_SPRITEMESH_ROLLBACK'}));
+                return failure(Object.assign(new Error('Не удалось создать меш и восстановить атлас'),{code:'SDK_SPRITEMESH_ROLLBACK'}));
             return failure(e);
         } finally { s.busy=false;if(!closed)host.changed(); }
     }
@@ -168,7 +168,7 @@ export function create(host) {
     }
     function undo() { if(closed||s.busy||!history.undo())return false;s.previewStale=true;changed();return true; }
     function redo() { if(closed||s.busy||!history.redo())return false;s.previewStale=true;changed();return true; }
-    function play() { if(!s.animation||!s.tags[s.animation])return;s.playing=true;s.elapsed=0;status(s.cacheStale||s.dirty?'ПРЕДПРОСМОТР · cache не сохранён':'АКТУАЛЕН'); }
+    function play() { if(!s.animation||!s.tags[s.animation])return;s.playing=true;s.elapsed=0;status(s.cacheStale||s.dirty?'ПРЕДПРОСМОТР · кэш не сохранён':'АКТУАЛЕН'); }
     function tick(dt) {
         if(!s.active)return;
         if(s.playing) {
@@ -240,7 +240,7 @@ export function create(host) {
     }
 
     async function open(path) {
-        if(!path)throw new Error('Откройте существующий Sprite asset из Asset Browser');
+        if(!path)throw new Error('Откройте существующий ресурс спрайта из списка ресурсов');
         s.asset=path;s.cachePath=path+'.sprite-mesh.cache';
         if(path.endsWith('.atlas.json')) {
             s.savedSource=$.fs.readText(path);s.data=readAtlas(path);
@@ -252,7 +252,7 @@ export function create(host) {
             if(!size||size[0]<=0||size[1]<=0)throw new Error('Не удалось прочитать PNG');
             s.frames=[{name:path.split('/').pop(),x:0,y:0,w:size[0],h:size[1],duration:100,page:0,pivotX:size[0]/2,pivotY:size[1]/2}];
         }
-        if(!s.frames.length)throw new Error('В Sprite asset нет кадров');
+        if(!s.frames.length)throw new Error('В ресурсе спрайта нет кадров');
         s.animation=Object.keys(s.tags)[0]||'';
         if(s.data) {
             const sheet=$.atlas.load('sprite-mesh-'+doc.id,path);
@@ -285,7 +285,7 @@ export function create(host) {
         close(){closed=true;s.active=false;s.playing=false;s.drag=null;doc.hide();doc.place(null);return true;},
         selectFrame:choose,selectAnimation(name){if(!s.tags[name])return false;s.animation=name;s.elapsed=0;choose(s.frames.findIndex(f=>f.name===s.tags[name].frames[0]));return true;},
         play,pause(){s.playing=false;renderLists();},ops:{applySettings,preview:bake},
-        commands:()=>[{label:'SpriteMesh: Bake preview',run:bake},{label:'SpriteMesh: Save + Bake',run:saveAndBake}],
+        commands:()=>[{label:'Меш спрайта: обновить предпросмотр',run:bake},{label:'Меш спрайта: сохранить и создать меш',run:saveAndBake}],
     };
     return api;
 }

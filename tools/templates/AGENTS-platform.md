@@ -16,7 +16,7 @@
 ## Режим агента
 
 ```bash
-{{RUN}} --agent --headless --fixed-dt 0.0166666667 --scene russi_vn
+{{RUN}} --agent --headless --fixed-dt 0.0166666667
 ```
 
 * `--agent` — кадры двигаются командой `step`, протокол на stdin/stdout;
@@ -57,7 +57,7 @@ printf '%s\n' \
   '{"cmd":"keys","hold":[]}' \
   '{"cmd":"screenshot","path":"shot.png"}' \
   '{"cmd":"quit"}' \
-| {{RUN}} --agent --headless --scene russi_vn --fixed-dt 0.0166666667
+| {{RUN}} --agent --headless --fixed-dt 0.0166666667
 ```
 
 Проверенный ответ (сокращённо):

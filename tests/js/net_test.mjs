@@ -191,223 +191,40 @@ test('клиентское состояние: подтверждённое, п�
 
 // --- Подсистема: модель целиком ---
 
-test('$.net: роли и запрет двойного входа', () => {
+test('$.net: high-level surface and topology defaults', () => {
     const $ = createApi();
-    eq($.net.role(), 'offline');
+    eq($.net.topology(), 'authoritative');
+    eq($.net.authority(), 'host');
     falsy($.net.online());
-    truthy($.net.host(7777, { maxPlayers: 4 }));
-    eq($.net.role(), 'server');
-    truthy($.net.isServer());
-    falsy($.net.host(8888), 'второй host отклонён');
-    $.net.leave();
-    eq($.net.role(), 'offline');
-    truthy($.net.join('127.0.0.1', 7777));
-    eq($.net.role(), 'client');
-    truthy($.net.isClient());
-    falsy($.net.join('127.0.0.1', 7777), 'второй join отклонён');
-    $.net.leave();
-    falsy($.net.leave(), 'повторный leave — нечего выключать');
+    eq(typeof $.net.start, 'function');
+    eq(typeof $.net.room.create, 'function');
+    eq(typeof $.net.relay.enable, 'function');
+    eq(typeof $.net.simulate, 'function');
+    // Gameplay scripts do not receive transport hooks or frame polling.
+    eq($.net.attach, undefined);
+    eq($.net.bindEngine, undefined);
+    eq($.net.poll, undefined);
+    eq($.net.step, undefined);
+    $.net.topology('mesh');
+    eq($.net.topology(), 'mesh');
+    $.net.topology('custom');
+    eq($.net.topology(), 'custom');
+    $.net.topology('authoritative');
+    eq($.net.start({ listen: 7777 }), false, 'offline JS harness has no native ENet');
+    falsy($.net.online());
 });
 
-test('$.net: инвариант — только сервер объявляет репликацию', () => {
+test('$.net: host/client API exposes high-level helpers only', () => {
     const $ = createApi();
-    const hero = fakeNode(1, 1, 100);
-    $.net.join('127.0.0.1', 7777);
-    eq($.net.replicate(hero, { owner: 1 }), 0, 'клиент не реплицирует');
-    $.net.leave();
-    $.net.host(7777);
-    const id = $.net.replicate(hero, { owner: 1 });
-    truthy(id > 0, 'сервер объявил');
-    eq($.net.idOf(hero), id, 'id тот же');
-    eq($.net.ownerOf(hero), 1);
-    truthy($.net.owns(1, hero));
-    falsy($.net.owns(2, hero));
-    eq($.net.ownedBy(1)[0], hero);
-    eq($.net.nodeOfId(id), hero);
-});
-
-test('$.net: сервер считает мир, клиент рисует подтверждённое', () => {
-    const $ = createApi();
-    $.net.host(7777);
-    const player = $.net.addPlayer();
-    eq(player, 1);
-    const hero = fakeNode(100, 200, 80);
-    $.net.replicate(hero, { owner: player });
-    const snap = $.net.snapshotNow();
-    truthy(snap.entities.e1, 'узел в снапшоте');
-    eq(snap.entities.e1.owner, 1);
-    eq(snap.entities.e1.x, 100);
-    eq(snap.entities.e1.hp, 80);
-    eq(snap.tick, 1);
-
-    // Клиент принимает снапшот и видит ровно то, что подтвердил сервер.
-    const client = createApi();
-    client.net.attach({ poll: () => [], send: () => {} });
-    client.net.join('127.0.0.1', 7777);
-    let got = null;
-    client.net.on('snapshot', (s) => { got = s; });
-    client.net.receive({ channel: 'snapshot', data: snap });
-    truthy(got, 'событие snapshot пришло');
-    eq(client.net.get('e1', 'x'), 100, 'клиент видит подтверждённое');
-    eq(client.net.get('e1', 'hp'), 80);
-
-    // Клиент шлёт ввод — сервер его получает ТОЛЬКО как ввод, не как состояние.
-    const received = [];
-    $.net.on('input', (p, data) => received.push({ p, data }));
-    client.net.attach({ poll: () => [], send: (m) => $.net.receive(Object.assign({ player: 1 }, m)) });
-    client.net.send('input', { seq: 1, right: true });
-    eq(received.length, 1, 'сервер принял ввод');
-    eq(received[0].p, 1);
-    eq(received[0].data.right, true);
-    // На клиенте схема мира не поменялась от его же ввода.
-    eq(client.net.get('e1', 'x'), 100, 'ввод клиента не меняет авторитетное');
-});
-
-test('$.net: сервер тоже ОТПРАВЛЯЕТ (регрессия на односторонний обмен)', () => {
-    // Раньше send работал только у клиента, и серверный ответ не уходил в
-    // транспорт вовсе: обратного пути не было, хотя модель его предполагает.
-    const sent = [];
-    const transport = { listen: () => true, connect: () => true, poll: () => [],
-                        send: (m) => { sent.push(m); return true; }, close: () => {} };
-
-    const server = createApi();
-    server.net.attach(transport);
-    server.net.host(7777);
-    server.net.send('snapshot', { tick: 1, entities: { e1: { x: 1 } } });
-    eq(sent.length, 1, 'сервер отправил снапшот');
-    eq(sent[0].channel, 'snapshot');
-    eq(sent[0].data.entities.e1.x, 1);
-
-    const client = createApi();
-    client.net.attach(transport);
-    client.net.join('127.0.0.1', 7777);
-    client.net.send('input', { seq: 1 });
-    eq(sent.length, 2, 'клиент тоже отправил');
-    eq(sent[1].channel, 'input');
-
-    // Вне сети отправлять некуда.
-    const offline = createApi();
-    offline.net.attach(transport);
-    offline.net.send('snapshot', { tick: 2 });
-    eq(sent.length, 2, 'вне сети отправки нет');
-    eq(server.net.stats().lastSendOk, true, 'результат отправки виден игре');
-});
-
-test('$.net: клиент не может применить чужой ввод', () => {
-    const $ = createApi();
-    $.net.join('127.0.0.1', 7777);
-    let called = false;
-    $.net.on('input', () => { called = true; });
-    eq($.net.receive({ channel: 'input', player: 1, data: { seq: 1 } }), false, 'клиент отклоняет ввод');
-    falsy(called, 'событие не пришло');
-});
-
-test('$.net: дельта уменьшает снапшот', () => {
-    const $ = createApi();
-    $.net.host(7777);
-    $.net.addPlayer();
-    const hero = fakeNode(0, 0, 100);
-    const crate = fakeNode(50, 50, 10);
-    $.net.replicate(hero, { owner: 1 });
-    $.net.replicate(crate, {});
-    const first = $.net.snapshotNow();
-    const full = diffSnapshot(null, first, first.tick);
-    eq(Object.keys(full.entities).length, 2, 'первый снапшот полный');
-    // Сдвинулся только герой.
-    hero._x = 5;
-    const second = $.net.snapshotNow();
-    const delta = diffSnapshot({ tick: first.tick, entities: first.entities }, second, second.tick);
-    eq(Object.keys(delta.entities).join(','), 'e1', 'в дельте только подвинувшийся');
-    eq(Object.keys(delta.entities.e1).join(','), 'x');
-    // Ничего не двигалось — пустая дельта.
-    const third = $.net.snapshotNow();
-    const empty = diffSnapshot({ tick: second.tick, entities: second.entities }, third, third.tick);
-    eq(empty.changed, 0, 'пустая дельта');
-});
-
-test('$.net: игрок ушёл — событие и освобождение узлов', () => {
-    const $ = createApi();
-    $.net.host(7777);
-    const p1 = $.net.addPlayer();
-    const hero = fakeNode(0, 0, 100);
-    $.net.replicate(hero, { owner: p1 });
-    const events = [];
-    $.net.on('leave', (p) => events.push(p));
-    truthy($.net.removePlayer(p1));
-    eq(events.join(','), String(p1));
-    eq($.net.ownerOf(hero), 0, 'узлы освобождены');
-    falsy($.net.removePlayer(99), 'чужого игрока нет');
-    eq($.net.playerCount(), 0);
-});
-
-test('$.net: события, stats и describe', () => {
-    const $ = createApi();
-    $.net.host(7777);
-    const joins = [];
-    $.net.on('join', (p) => joins.push(p));
-    $.net.addPlayer();
-    $.net.addPlayer();
-    eq(joins.join(','), '1,2');
-    eq($.net.playerCount(), 2);
-    const st = $.net.stats();
-    truthy(st.snapshots >= 0 && st.inputs >= 0, 'счётчики есть');
-    truthy($.net.describe().includes('server'), $.net.describe());
-    $.net.off('join');
-    $.net.addPlayer();
-    eq(joins.length, 2, 'слушатель снят');
-});
-
-test('$.net: лимит игроков соблюдается', () => {
-    const $ = createApi();
-    $.net.host(7777, { maxPlayers: 2 });
-    eq($.net.addPlayer(), 1);
-    eq($.net.addPlayer(), 2);
-    eq($.net.addPlayer(), 0, 'сверх лимита не пускаем');
-    eq($.net.playerCount(), 2);
-});
-
-test('$.net: транспорт подключается и опрашивается', () => {
-    const $ = createApi();
-    const sent = [];
-    let polled = 0;
-    $.net.attach({
-        listen(port, opts) { this.listened = { port, opts }; },
-        send(message) { sent.push(message); },
-        poll() { polled++; return [{ channel: 'snapshot', data: { tick: 1, entities: { e1: { x: 7 } } } }]; },
-    });
-    $.net.join('127.0.0.1', 7777);
-    eq($.net.transport().listened, undefined, 'клиент не слушает порт');
-    $.net.send('input', { seq: 1 });
-    eq(sent.length, 1, 'транспорт отправил');
-    eq(sent[0].channel, 'input');
-    eq($.net.poll(), 1, 'сообщение из транспорта принято');
-    eq($.net.get('e1', 'x'), 7, 'снапшот применился');
-    eq(polled, 1);
-});
-
-test('$.net: reset чистит сеть целиком', () => {
-    const $ = createApi();
-    $.net.host(7777);
-    $.net.addPlayer();
-    $.net.replicate(fakeNode(0, 0, 1), { owner: 1 });
-    $.net.on('join', () => {});
-    $.net.reset();
-    eq($.net.role(), 'offline');
-    eq($.net.playerCount(), 0);
-    eq($.net.stats().snapshots, 0);
-    eq($.net.confirmed().tick, 0);
-});
-
-test('$.net: клиент интерполирует чужие, своё берёт как есть', () => {
-    const $ = createApi();
-    $.net.join('127.0.0.1', 7777, { player: 1 });
-    $.net.receive({ channel: 'snapshot', data: { tick: 1, entities: { e1: { x: 0 }, e2: { x: 100 } } } });
-    $.net.receive({ channel: 'snapshot', data: { tick: 2, entities: { e1: { x: 20 }, e2: { x: 200 } } } });
-    const own = $.net.polated('e1', true, 0.5);
-    near(own.x, 20, 1e-9, 'своё — подтверждённое');
-    const other = $.net.polated('e2', false, 0.5);
-    near(other.x, 150, 1e-9, 'чужое — половина пути');
-    eq($.net.previous().entities.e2.x, 100, 'предыдущий снапшот цел');
+    eq($.net.available(), false, 'unit harness has no native transport');
+    eq($.net.host(7777), false, 'host reports unavailable transport');
+    eq($.net.join('127.0.0.1', 7777), false, 'join reports unavailable transport');
+    eq($.net.send('input', { seq: 1 }), false, 'offline send is rejected');
+    eq($.net.leave(), false, 'leaving an offline session is a no-op');
+    const prediction = $.net.predict((state, input) => ({ x: (state.x || 0) + input.dx }));
+    eq(typeof prediction.apply, 'function');
+    eq(typeof $.net.room.join, 'function');
+    eq(typeof $.net.relay.forward, 'function');
 });
 
 // --- История (лаг-компенсация) ---
@@ -506,85 +323,6 @@ test('предсказание: чужой правды не выдумывае�
     const passthrough = createPrediction(null);
     passthrough.apply({ seq: 1, dx: 5 });
     eq(passthrough.state().seq, 1, 'шаг по умолчанию — тождество');
-});
-
-test('$.net: RTT считается по ping/pong', () => {
-    const client = createApi();
-    const sent = [];
-    const server = createApi();
-    server.net.attach({
-        listen: () => true, connect: () => true, close: () => {},
-        poll: () => [],
-        send: (m) => { sent.push(m); return true; },
-    });
-    client.net.attach({
-        listen: () => true, connect: () => true, close: () => {},
-        poll: () => [],
-        // Пинг уходит на сервер, ответ сервера возвращается клиенту.
-        send: (m) => {
-            if (m.channel === 'ping') {
-                server.net.receive({ channel: 'ping', data: m.data, from: '127.0.0.1' });
-                for (const reply of sent) client.net.receive({ channel: reply.channel, data: reply.data });
-                sent.length = 0;
-            }
-            return true;
-        },
-    });
-    server.net.host(7777);
-    client.net.join('127.0.0.1', 7777);
-    eq(client.net.rtt(), 0, 'до пинга задержка неизвестна');
-    eq(client.net.ping(1000), 1, 'пинг отправлен');
-    // Сервер ответил мгновенно: RTT = 0 мс (время не шло).
-    eq(client.net.rtt(), 0);
-    // Второй пинг с задержкой во времени.
-    client.net.ping(1000);
-    eq(client.net.pings(), 2);
-    truthy(client.net.latency() >= 0, 'половина задержки читается');
-    // Чужой pong без пинга игнорируем.
-    eq(client.net.receive({ channel: 'pong', data: { seq: 999, at: 5 } }), true);
-    eq(client.net.rtt(), 0, 'ответ без пинга ничего не портит');
-});
-
-test('$.net: сервер ведёт историю и умеет перемотать', () => {
-    const $ = createApi();
-    $.net.host(7777);
-    $.net.addPlayer();
-    const hero = fakeNode(0, 0, 100);
-    $.net.replicate(hero, { owner: 1 });
-    eq($.net.history(), null, 'до записи истории нет');
-    $.net.record(0);
-    hero._x = 50;
-    $.net.record(0.2);
-    hero._x = 100;
-    $.net.record(0.4);
-    const info = $.net.history();
-    eq(info.size, 3, 'три кадра в истории');
-    eq(info.range.to, 0.4);
-    // Перемотка на 0.2 назад от 0.4 — состояние на 0.2.
-    const past = $.net.rewind(hero, 0.4, 0.2);
-    eq(past.x, 50, 'на момент задержки было 50');
-    eq($.net.rewind(hero, 0.4, 0).x, 100, 'без задержки — текущее');
-    // На клиенте перемотки нет.
-    const client = createApi();
-    client.net.join('127.0.0.1', 7777);
-    eq(client.net.record(0), 0, 'клиент историю не ведёт');
-    eq(client.net.rewind(hero, 1, 0), null);
-});
-
-test('$.net: предсказание клиента и подтверждение снапшотом', () => {
-    const $ = createApi();
-    $.net.join('127.0.0.1', 7777);
-    truthy($.net.predict(moveSim), 'предсказание включено');
-    $.net.applyInput({ seq: 1, dx: 4 });
-    $.net.applyInput({ seq: 2, dx: 4 });
-    eq($.net.prediction().state().x, 8, 'клиент видит себя сразу');
-    // Пришёл снапшот: сервер подтвердил первый ввод и говорит x = 5.
-    $.net.receive({ channel: 'snapshot', data: { tick: 1, entities: { e1: { x: 5, seq: 1 } } } });
-    const st = $.net.prediction().state();
-    eq($.net.prediction().acknowledged(), 1);
-    eq($.net.prediction().pending(), 1, 'второй ввод ещё ждёт');
-    eq(st.x, 9, 'к правде применён неподтверждённый ввод (5 + 4)');
-    eq($.net.prediction().state().x, 9);
 });
 
 // --- сглаживание откатов ---

@@ -13,7 +13,7 @@ import * as K from '../lib/shared/kinds/collision.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc } from '../lib/studio_kit.js';
 
-export const meta = { id: 'collision', title: 'Collision', icon: 'crop_square', match: (p) => /\.collision\.json$/i.test(p) };
+export const meta = { id: 'collision', title: 'Столкновения', icon: 'crop_square', match: (p) => /\.collision\.json$/i.test(p) };
 
 const COLORS = { wall: '#ffb03a', trigger: '#4ad991', area: '#6cc7ff' };
 const TOOLS = [['select', 'Выбор'], ['box', '+ Прямоуг.'], ['circle', '+ Круг'], ['capsule', '+ Капсула'], ['polygon', '+ Полигон']];
@@ -79,11 +79,11 @@ export function create(host) {
         if (kind === 'circle') f.push({ key: 'radius', label: 'Радиус', number: true });
         if (kind === 'capsule') f.push({ key: 'radius', label: 'Радиус', number: true }, { key: 'h', label: 'Высота', number: true });
         if (kind === 'polygon') f.push({ key: 'points', label: 'Вершины', json: true });
-        f.push({ key: 'sensor', label: 'sensor', bool: true, options: ['true', 'false'], optional: true },
-            { key: 'oneWay', label: 'oneWay', bool: true, options: ['true', 'false'], optional: true },
-            { key: 'oneWayAngle', label: 'oneWay угол', number: true, optional: true },
-            { key: 'layerBits', label: 'layerBits', number: true, int: true, optional: true },
-            { key: 'mask', label: 'mask', number: true, int: true, optional: true });
+        f.push({ key: 'sensor', label: 'Датчик', bool: true, options: ['true', 'false'], optional: true },
+            { key: 'oneWay', label: 'Одностороннее', bool: true, options: ['true', 'false'], optional: true },
+            { key: 'oneWayAngle', label: 'Угол одностороннего столкновения', number: true, optional: true },
+            { key: 'layerBits', label: 'Биты слоя', number: true, int: true, optional: true },
+            { key: 'mask', label: 'Маска', number: true, int: true, optional: true });
         return f;
     }
 
@@ -269,7 +269,7 @@ export function create(host) {
     }
 
     const def = {
-        kind: K, title: 'Collision', listTitle: 'Фигуры',
+        kind: K, title: 'Столкновения', listTitle: 'Фигуры',
         init(w) {
             Object.assign(w.ext, { vx: 0, vy: 0, zoom: 1, tool: 'select', snap: 8, phys: false, balls: [], queue: [], drag: null, hover: -1, userView: false, rectKey: '' });
         },

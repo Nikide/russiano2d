@@ -39,12 +39,6 @@ const DEMOS = [
         hint: 'Ночной лес, свет от фонарей, волны врагов',
     },
     {
-        scene: 'russi_vn',
-        icon: 'favorite',
-        title: 'Руси-тян (ВН)',
-        hint: 'Визуальная новелла: озвучка, выбор и две концовки',
-    },
-    {
         scene: 're2d_world',
         icon: 'view_in_ar',
         title: 'Re2D · мир-коробка',

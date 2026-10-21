@@ -1,13 +1,13 @@
 <rml><head>
 <link type="text/rcss" href="splash-theme.rcss"/>
 <link type="text/rcss" href="splash.rcss"/>
-<title>Russiano2D Editor</title>
+    <title>Редактор Russiano2D</title>
 </head><body>
 <div class="splash">
   <img id="splash-img" class="splash-img" src="../assets/splash.jpg"/>
   <div class="splash-shade"></div>
   <div class="splash-panel">
-    <div class="splash-kicker">R2D · EDITOR</div>
+    <div class="splash-kicker">R2D · РЕДАКТОР</div>
     <div id="splash-title" class="splash-title">РЕДАКТОР ПРОЕКТОВ</div>
     <div id="splash-stage" class="splash-stage">подготовка…</div>
     <div id="splash-track" class="splash-track"><div id="splash-bar" class="splash-bar"><div id="splash-fill" class="splash-fill"></div></div></div>

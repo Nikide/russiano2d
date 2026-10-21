@@ -1,27 +1,27 @@
 <rml>
 <head>
 <link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="atlas.rcss"/>
-<title>Atlas</title>
+<title>Атлас</title>
 </head>
 <body>
 <div class="st-root">
   <div class="st-bar">
-    <button id="at-mode-sprite" class="st-btn on" title="Кадры атласа">Sprite</button>
-    <button id="at-mode-anim" class="st-btn" title="Теги-анимации (Tab)">Animation</button>
+    <button id="at-mode-sprite" class="st-btn on" title="Кадры атласа">Кадры</button>
+    <button id="at-mode-anim" class="st-btn" title="Теги-анимации (Tab)">Анимация</button>
     <span class="st-sep"></span>
     <span id="at-sprite-tools">
-      <button id="at-tool-select" class="st-btn on" title="Выбор, перенос и рисование кадра">Select</button>
-      <button id="at-tool-pivot" class="st-btn" title="Пивот выбранного кадра (P)">Pivot</button>
-      <button id="at-grid" class="st-btn on" title="Сетка пикселей при масштабе ×8+ (G)">Grid</button>
+      <button id="at-tool-select" class="st-btn on" title="Выбор, перенос и рисование кадра">Выбор</button>
+      <button id="at-tool-pivot" class="st-btn" title="Точка привязки кадра (P)">Точка привязки</button>
+      <button id="at-grid" class="st-btn on" title="Сетка пикселей при масштабе ×8+ (G)">Сетка</button>
       <span class="st-sep"></span>
       <button id="at-zoom-out" class="st-btn">−</button>
       <span id="at-zoom" class="st-pill">×1</span>
       <button id="at-zoom-in" class="st-btn">+</button>
-      <button id="at-fit" class="st-btn" title="Вписать (F)">Fit</button>
+      <button id="at-fit" class="st-btn" title="Вписать (F)">Вписать</button>
     </span>
     <span class="st-sep"></span>
-    <button id="at-validate" class="st-btn" title="r2d validate текущего состояния (черновик, если не сохранено)">Validate</button>
-    <button id="at-spritemesh" class="st-btn" title="Открыть этот атлас в SpriteMesh">SpriteMesh…</button>
+    <button id="at-validate" class="st-btn" title="Проверить текущее состояние командой r2d validate; несохранённые правки проверяются как черновик">Проверить</button>
+    <button id="at-spritemesh" class="st-btn" title="Открыть атлас в редакторе меша спрайта">Меш спрайта…</button>
     <span class="st-grow"></span>
     <span id="at-dirty" class="st-dirty"></span>
     <span id="at-status" class="st-pill ok">—</span>
@@ -44,7 +44,7 @@
       <div id="at-strip" class="at-strip st-hidden">
         <div class="at-strip-row">
           <button id="at-prev" class="st-btn">|&lt;</button>
-          <button id="at-play" class="st-btn primary">Pause</button>
+          <button id="at-play" class="st-btn primary">Пауза</button>
           <button id="at-next" class="st-btn">&gt;|</button>
           <span class="st-sep"></span>
           <span class="st-label">Скорость</span>
@@ -84,8 +84,8 @@
           <span id="at-t-title" class="st-h">Тег</span>
           <div class="st-field"><label>Имя</label><input id="at-t-name" class="st-in" type="text" value=""/></div>
           <div class="st-field"><label>Кадры</label><input id="at-t-from" class="st-in" type="text" value=""/><input id="at-t-to" class="st-in" type="text" value=""/></div>
-          <div class="st-field"><label>Порядок</label><select id="at-t-dir" class="st-in"><option value="forward">forward</option><option value="reverse">reverse</option><option value="pingpong">pingpong</option></select></div>
-          <div class="st-field"><label>Повтор</label><select id="at-t-loop" class="st-in"><option value="loop">loop</option><option value="once">once</option></select></div>
+          <div class="st-field"><label>Порядок</label><select id="at-t-dir" class="st-in"><option value="forward">Вперёд</option><option value="reverse">Назад</option><option value="pingpong">Туда и обратно</option></select></div>
+          <div class="st-field"><label>Повтор</label><select id="at-t-loop" class="st-in"><option value="loop">Повторять</option><option value="once">Один раз</option></select></div>
           <div class="st-field"><label>Мс/кадр</label><input id="at-t-dur" class="st-in" type="text" value=""/></div>
           <div class="st-btns"><button id="at-t-apply" class="st-btn primary">Применить тег</button><button id="at-t-delete" class="st-btn danger">Удалить тег</button></div>
           <span class="st-note">Длительность тега пишется во все его кадры; игра берёт её по первому кадру.</span>

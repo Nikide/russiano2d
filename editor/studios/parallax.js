@@ -13,7 +13,7 @@ import * as K from '../lib/shared/kinds/layers.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc, numberOf, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
-export const meta = { id: 'parallax', title: 'Parallax', icon: 'layers', match: (p) => /\.layers\.json$/i.test(p) };
+export const meta = { id: 'parallax', title: 'Параллакс', icon: 'layers', match: (p) => /\.layers\.json$/i.test(p) };
 
 const IMAGE = /\.(png|jpe?g|webp|bmp)$/i;
 const clone = (v) => JSON.parse(JSON.stringify(v));
@@ -106,7 +106,7 @@ export function create(host) {
                 '<div class="st-field"><label>w, h</label><input id="px-w" class="st-in" type="text" value="' + esc(s.w === undefined ? '' : s.w) + '"/><input id="px-h" class="st-in" type="text" value="' + esc(s.h === undefined ? '' : s.h) + '"/></div>' +
                 '<div class="st-btns">' + button('sprite:apply', 'Применить') + button('sprite:del', 'Удалить') + button('sprite:row', 'Ряд ×') + '<input id="px-count" class="st-in px-n" type="text" value="3"/></div>';
         } else html += '<span class="st-note">Выберите спрайт в списке или в превью.</span>';
-        html += '<span class="st-h">Общий оттенок</span><div class="st-field"><label>цвет, alpha</label><input id="px-mcolor" class="st-in" type="text" value="' + esc(m.color || '') + '"/><input id="px-malpha" class="st-in" type="text" value="' + esc(m.alpha === undefined ? '' : m.alpha) + '"/>' + button('modulate', 'OK') + '</div>';
+        html += '<span class="st-h">Общий оттенок</span><div class="st-field"><label>Цвет и прозрачность</label><input id="px-mcolor" class="st-in" type="text" value="' + esc(m.color || '') + '"/><input id="px-malpha" class="st-in" type="text" value="' + esc(m.alpha === undefined ? '' : m.alpha) + '"/>' + button('modulate', 'Применить') + '</div>';
         return html + '</div></div>';
     }
 
@@ -127,7 +127,7 @@ export function create(host) {
     }
 
     const def = {
-        kind: K, title: 'Parallax', listTitle: 'Слои',
+        kind: K, title: 'Параллакс', listTitle: 'Слои',
         init(w) {
             Object.assign(w.ext, { panX: 0, panY: 0, auto: false, t: 0, base: baseOf(w), names: [], sprite: -1, drag: null, images: null, cam0: null, nodes: [] });
             w.doc.cls('aw-bottom', 'px-bottom-host', true);
@@ -142,10 +142,10 @@ export function create(host) {
         target: cur,
         fields: () => [
             { key: 'name', label: 'Имя' },
-            { key: 'order', label: 'order', number: true, optional: true },
-            { key: 'parallax', label: 'parallax', number: true, optional: true },
+            { key: 'order', label: 'Порядок', number: true, optional: true },
+            { key: 'parallax', label: 'Параллакс', number: true, optional: true },
             { key: 'modulate', label: 'оттенок', optional: true },
-            { key: 'visible', label: 'visible', bool: true, options: ['true', 'false'], optional: true },
+            { key: 'visible', label: 'Видимый', bool: true, options: ['true', 'false'], optional: true },
         ],
         tools: (w) => button('auto', 'Автопрокрутка', w.ext.auto) + button('home', 'В начало'),
         actions: () => button('layer:add', '+ Слой') + button('layer:up', 'Выше') + button('layer:down', 'Ниже') + button('layer:del', 'Удалить'),

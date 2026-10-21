@@ -2497,7 +2497,7 @@ Third-party warnings не чинить форками без необходим�
 - SDL3;
 - SDL3_image;
 - SDL3_mixer;
-- SDL3_net;
+- zpl-c/enet v2.7.0 (private transport for `$.net`);
 - QuickJS-ng;
 - Box2D;
 - RmlUi;
@@ -2511,38 +2511,12 @@ Third-party warnings не чинить форками без необходим�
 
 ---
 
-# 63. API Freeze
+# 63. Свободное развитие API
 
-После выполнения P0 и обязательных P1 ввести временный freeze public high-level API.
-
-**Объявлено.** Заморозка проверяется машинно: `tests/api_freeze_test.py` снимает публичную
-поверхность с живого движка (имена неймспейсов `$.` с их методами, **публичные константы со
-значениями** — `$.alive.PULSE_MAX = 200` — и биндинги `engine.*`; снимок 2026-10-16 — 3012
-имён, из них 11 констант) и сверяет со снимком `tests/api_freeze_baseline.txt`. Появление,
-исчезновение или **изменение значения** имени валит гейт; намеренное изменение возможно только
-осознанным обновлением снимка
-(`python3 tests/api_freeze_test.py --write`) вместе с объяснением в `CHANGELOG.md`, почему это
-не ломает игры. Переименования, смены сигнатур, семантики и схем (JSON/prefab/room/atlas/save)
-по-прежнему требуют отдельного обоснования по правилам ниже.
-
-Нельзя без отдельного обоснования:
-
-- переименовывать namespaces;
-- менять signatures;
-- ломать semantics;
-- менять JSON schema;
-- менять prefab schema;
-- менять room schema;
-- менять atlas schema;
-- менять save contract.
-
-Новая функция допустима только если:
-
-1. существует реальный missing primitive;
-2. существующий API не решает проблему корректно;
-3. функция универсальна;
-4. есть tests;
-5. есть docs.
+Решение от 2026-10-21: API freeze и оба снимочных гейта удалены. Во время полной
+перестройки движка разрешены новые имена, переименования, смена сигнатур и
+изменение схем. `api.schema.json` остаётся генерируемым описанием текущей
+поверхности для Editor и документации, а не baseline совместимости.
 
 ---
 
@@ -2674,7 +2648,7 @@ Third-party warnings не чинить форками без необходим�
 - full Windows/Linux GitHub CI;
 - standalone packages;
 - reproducibility;
-- API freeze;
+- закрытие API freeze (выполнено 2026-10-21; ограничения сняты);
 - push version tag;
 - automatic GitHub Release creation;
 - upload Windows/Linux artifacts from CI;
@@ -2793,6 +2767,6 @@ job CI), у каждого незакрытого пункта — причин�
 - [x] no P0 defects — §6.3 закрыт: сползание на склоне 30° без ввода не больше 1 px за 120 кадров (после правки измерено 0.000 px) и не больше 2 px за 600 кадров, `tests/agent/slope_hold_test.py` + `tests/agent/highlevel_physics_slopes_test.py`
 - [x] Windows/Linux CI green — `.github/workflows/ci.yml` (валидация), релизные артефакты собираются локально
 - [x] локальный macOS acceptance green — `tests/macos_package_smoke_test.py` + полный локальный набор `tools/run_tests.py`
-- [x] API freeze declared — §63 объявлен и проверяется машинно: `tests/api_freeze_test.py` сверяет публичную поверхность (`$.`-неймспейсы с методами, публичные константы со значениями и биндинги `engine.*`, снимок 2026-10-16 — 3012 имён) со снимком `tests/api_freeze_baseline.txt`. Любое появление, исчезновение или изменение значения имени валит гейт; намеренное изменение — только осознанным обновлением снимка (`--write`) с объяснением в CHANGELOG
+- [x] API freeze удалён 2026-10-21 — публичная поверхность свободно меняется при перестройке движка; schema генерируется из текущего runtime API.
 
 ---

@@ -12,44 +12,44 @@ import * as K from '../lib/shared/kinds/particles.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc, mousePx, inside, FILTERS } from '../lib/studio_kit.js';
 
-export const meta = { id: 'particles', title: 'Particles', icon: 'auto_awesome', match: (p) => /\.particles\.json$/i.test(p) };
+export const meta = { id: 'particles', title: 'Частицы', icon: 'auto_awesome', match: (p) => /\.particles\.json$/i.test(p) };
 
 const SECTIONS = [
     { id: 'emit', label: 'Эмиссия', fields: [
-        { key: 'amount', label: 'amount', number: true, int: true, optional: true },
-        { key: 'lifetime', label: 'lifetime, мс', pair: 'range', optional: true },
-        { key: 'rate', label: 'rate', number: true, optional: true },
-        { key: 'max_particles', label: 'max', number: true, int: true, optional: true },
-        { key: 'one_shot', label: 'one_shot', bool: true, options: ['true', 'false'], optional: true },
-        { key: 'emitting', label: 'emitting', bool: true, options: ['true', 'false'], optional: true },
+        { key: 'amount', label: 'Количество', number: true, int: true, optional: true },
+        { key: 'lifetime', label: 'Время жизни, мс', pair: 'range', optional: true },
+        { key: 'rate', label: 'Частота', number: true, optional: true },
+        { key: 'max_particles', label: 'Максимум', number: true, int: true, optional: true },
+        { key: 'one_shot', label: 'Однократно', bool: true, options: ['true', 'false'], optional: true },
+        { key: 'emitting', label: 'Создавать частицы', bool: true, options: ['true', 'false'], optional: true },
     ] },
     { id: 'motion', label: 'Движение', fields: [
-        { key: 'speed', label: 'speed', pair: 'range', optional: true },
-        { key: 'direction', label: 'direction°', number: true, optional: true },
-        { key: 'spread', label: 'spread°', number: true, optional: true },
-        { key: 'gravity', label: 'gravity x, y', pair: 'vec', optional: true },
-        { key: 'damping', label: 'damping', number: true, optional: true },
-        { key: 'angle', label: 'angle', pair: 'range', optional: true },
+        { key: 'speed', label: 'Скорость', pair: 'range', optional: true },
+        { key: 'direction', label: 'Направление, °', number: true, optional: true },
+        { key: 'spread', label: 'Разброс, °', number: true, optional: true },
+        { key: 'gravity', label: 'Гравитация x, y', pair: 'vec', optional: true },
+        { key: 'damping', label: 'Затухание', number: true, optional: true },
+        { key: 'angle', label: 'Угол', pair: 'range', optional: true },
         { key: 'angular_velocity', label: 'вращение', pair: 'range', optional: true },
-        { key: 'local', label: 'local', bool: true, options: ['true', 'false'], optional: true },
+        { key: 'local', label: 'Локальные координаты', bool: true, options: ['true', 'false'], optional: true },
     ] },
     { id: 'look', label: 'Вид', fields: [
-        { key: 'size', label: 'size', pair: 'range', optional: true },
-        { key: 'end_size', label: 'end_size', pair: 'range', optional: true },
-        { key: 'color', label: 'color', optional: true },
-        { key: 'end_color', label: 'end_color', optional: true },
+        { key: 'size', label: 'Размер', pair: 'range', optional: true },
+        { key: 'end_size', label: 'Конечный размер', pair: 'range', optional: true },
+        { key: 'color', label: 'Цвет', optional: true },
+        { key: 'end_color', label: 'Конечный цвет', optional: true },
         { key: 'src', label: 'текстура', optional: true, file: { filters: FILTERS.image } },
-        { key: 'blend', label: 'blend', options: K.BLENDS, optional: true },
-        { key: 'layer', label: 'layer', optional: true },
-        { key: 'depth', label: 'depth', number: true, optional: true },
+        { key: 'blend', label: 'Смешивание', options: K.BLENDS, optional: true },
+        { key: 'layer', label: 'Слой', optional: true },
+        { key: 'depth', label: 'Глубина', number: true, optional: true },
     ] },
     { id: 'zone', label: 'Зона и зерно', fields: [
         { key: 'emit_zone', label: 'зона', options: K.ZONES, optional: true },
         { key: 'emit_zone_w', label: 'ширина', number: true, optional: true },
         { key: 'emit_zone_h', label: 'высота', number: true, optional: true },
         { key: 'emit_zone_radius', label: 'радиус', number: true, optional: true },
-        { key: 'seed', label: 'seed', number: true, int: true, optional: true },
-        { key: 'name', label: 'name', optional: true },
+        { key: 'seed', label: 'Зерно генератора', number: true, int: true, optional: true },
+        { key: 'name', label: 'Имя', optional: true },
     ] },
 ];
 
@@ -165,7 +165,7 @@ export function create(host) {
         if (sel) {
             html += '<span class="st-sep"></span><span class="st-label">t</span><input id="pt-p-t" class="st-in pt-small" type="text" value="' + esc(sel.t) + '"/>' +
                 '<span class="st-label">' + (kind === 'color' ? 'цвет' : 'значение') + '</span><input id="pt-p-v" class="st-in pt-small" type="text" value="' + esc(K.stopValue(sel, kind)) + '"/>' +
-                button('point:apply', 'OK');
+                button('point:apply', 'Применить');
         }
         return html + '</div><div id="pt-graph" class="pt-graph"></div></div>';
     }
@@ -259,7 +259,7 @@ export function create(host) {
     }
 
     const def = {
-        kind: K, title: 'Particles', listTitle: 'Параметры',
+        kind: K, title: 'Частицы', listTitle: 'Параметры',
         init(w) {
             Object.assign(w.ext, { ramp: 'color', rampSel: -1, drag: null, graphSig: '', emitting: true, loop: true, offX: 0, offY: 0, age: 0, moving: false });
             w.doc.cls('aw-bottom', 'pt-bottom', true);
@@ -272,7 +272,7 @@ export function create(host) {
         actions: () => button('reset', 'Сбросить к умолчанию'),
         library(w) {
             const file = String(w.file.state.path).split('/').pop();
-            return '<span class="st-h">Пресеты $.particles</span>' +
+            return '<span class="st-h">Готовые настройки частиц</span>' +
                 K.PRESETS.map((p) => '<div class="st-row" data-key="preset:' + p + '">' + esc(p) + '<span class="st-sub">' + esc(PRESET_HINT[p] || '') + '</span></div>').join('') +
                 '<span class="st-note">Пресет заменяет параметры (Cmd/Ctrl+Z вернёт прежние).</span>' +
                 '<span class="st-h">В игре</span><div class="pt-code">' + esc(K.snippet(file)) + '</div>';

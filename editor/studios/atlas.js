@@ -18,7 +18,7 @@ import { esc, studioDoc, uiScale, mousePx, inside, screenCamera, diag, keys, num
 
 export const meta = {
     id: 'atlas',
-    title: 'Atlas',
+    title: 'Атлас',
     icon: 'grid_view',
     match: (p) => /\.atlas\.json$/i.test(p),
     // PNG без атласа — режим «создать атлас сеткой».
@@ -164,7 +164,7 @@ export function create(host) {
             if (current !== conflict.disk) return setConflict(current, 'Файл снова изменён извне: проверьте новую версию ' + s.path);
             if (typeof conflict.disk !== 'string') { s.error = 'Файл удалён извне; перезапись подтвердит его создание заново'; renderTop(); return false; }
             let model;
-            try { model = M.parseAtlasDoc(JSON.parse(conflict.disk)); } catch (e) { s.error = 'Внешний файл нельзя открыть как Atlas: ' + (e.message || String(e)); renderTop(); return false; }
+            try { model = M.parseAtlasDoc(JSON.parse(conflict.disk)); } catch (e) { s.error = 'Внешний файл нельзя открыть как атлас: ' + (e.message || String(e)); renderTop(); return false; }
             s.source = conflict.disk; s.model = model; s.conflict = null;
             measure(); s.history = createHistory(s.model); s.history.markSaved();
             s.sel = s.model.frames.length ? 0 : -1; s.tag = s.model.tags.length ? 0 : -1; s.needFit = true;
@@ -527,7 +527,8 @@ export function create(host) {
         doc.html('at-frames', d.frames.length ? d.frames.map((f, i) => row(i, '<span class="at-idx">' + i + '</span>' + esc(f.name) +
             '<span class="st-sub">' + f.w + '×' + f.h + (f.duration ? ' · ' + f.duration + 'мс' : '') + (f.pivot ? ' · ◦' : '') + '</span>', i === s.sel ? 'sel' : '')).join('')
             : '<span class="st-empty">Кадров нет: протяните мышью по картинке или нарежьте сеткой.</span>');
-        doc.html('at-tags', d.tags.length ? d.tags.map((t, i) => row(i, esc(t.name) + '<span class="st-sub">' + t.from + '–' + t.to + ' · ' + t.direction + (t.loop === false ? ' · once' : '') + '</span>', i === s.tag ? 'sel' : '')).join('')
+        const directionName = (direction) => direction === 'forward' ? 'вперёд' : direction === 'reverse' ? 'назад' : direction === 'pingpong' ? 'туда и обратно' : direction;
+        doc.html('at-tags', d.tags.length ? d.tags.map((t, i) => row(i, esc(t.name) + '<span class="st-sub">' + t.from + '–' + t.to + ' · ' + directionName(t.direction) + (t.loop === false ? ' · один раз' : '') + '</span>', i === s.tag ? 'sel' : '')).join('')
             : '<span class="st-empty">Тегов нет.</span>');
         doc.text('at-count', d.frames.length + ' кадров · ' + d.tags.length + ' тегов');
     }
@@ -556,7 +557,7 @@ export function create(host) {
         doc.html('at-custom', d.custom && Object.keys(d.custom).length ? Object.keys(d.custom).map((k) => row(k, esc(k) + '<span class="st-sub">' + esc(d.custom[k]) + '</span>')).join('')
             : '<span class="st-empty">нет</span>');
         doc.html('at-diags', s.diags.length ? s.diags.map((x) => '<span class="st-diag ' + esc(x.severity) + '">' + esc(x.code) + ': ' + esc(x.message) + '</span>').join('')
-            : '<span class="st-empty">' + (s.history ? 'нет сообщений (проверка — кнопка Validate)' : '') + '</span>');
+            : '<span class="st-empty">' + (s.history ? 'нет сообщений (проверка — кнопка «Проверить»)' : '') + '</span>');
         doc.cls('at-create', 'st-hidden', !s.create);
         doc.cls('at-edit', 'st-hidden', !!s.create);
     }
@@ -574,17 +575,17 @@ export function create(host) {
             return '<div class="at-thumb' + (i === cur ? ' on' : '') + '" data-key="' + i + '"><img src="' + esc(s.imageAbs) + '" rect="' + f.x + ' ' + f.y + ' ' + f.w + ' ' + f.h +
                 '" style="width: ' + Math.max(1, Math.round(f.w * z)) + 'px; height: ' + Math.max(1, Math.round(f.h * z)) + 'px;"/><span class="at-thumb-n">' + esc(f.duration || 100) + 'мс</span></div>';
         }).join(''));
-        doc.text('at-play', s.playing ? 'Pause' : 'Play');
+        doc.text('at-play', s.playing ? 'Пауза' : 'Пуск');
         for (let i = 0; i < SPEEDS.length; i++) doc.cls('at-speed-' + i, 'on', i === s.speed);
         const play = M.tagPlayback(s.model, t.name);
-        doc.text('at-anim-info', play ? 'кадр ' + (cur + 1) + '/' + order.length + ' · ' + play.interval + ' мс/кадр (по первому кадру, как в игре) · ' + (play.loop ? 'loop' : 'once') + (t.direction === 'pingpong' ? ' · pingpong в $.atlas идёт как forward' : '') : '');
+        doc.text('at-anim-info', play ? 'кадр ' + (cur + 1) + '/' + order.length + ' · ' + play.interval + ' мс/кадр (по первому кадру, как в игре) · ' + (play.loop ? 'повторять' : 'один раз') + (t.direction === 'pingpong' ? ' · в $.atlas режим «туда и обратно» работает как «вперёд»' : '') : '');
     }
 
     function renderConflict() {
         if (!s.conflict) { doc.cls('at-conflict', 'st-hidden', true); doc.html('at-conflict', ''); return; }
         doc.cls('at-conflict', 'st-hidden', false);
         const missing = s.conflict.disk === null;
-        doc.html('at-conflict', '<div class="at-conflict-shade"></div><div class="at-conflict-card"><span class="st-title">Атлас изменён вне Editor</span><span class="st-note">Перезагрузка заменит несохранённые правки. Перезапись сохранит текущую версию поверх файла.</span><span class="at-conflict-path">' + esc(s.path) + (missing ? '<br/>Файл удалён' : '') + '</span><div class="st-btns">' + (missing ? '' : '<button class="st-btn" data-key="reload">Перезагрузить</button>') + '<button class="st-btn primary" data-key="overwrite">Перезаписать</button><button class="st-btn" data-key="cancel">Отмена</button></div></div>');
+        doc.html('at-conflict', '<div class="at-conflict-shade"></div><div class="at-conflict-card"><span class="st-title">Атлас изменён вне редактора</span><span class="st-note">Перезагрузка заменит несохранённые правки. Перезапись сохранит текущую версию поверх файла.</span><span class="at-conflict-path">' + esc(s.path) + (missing ? '<br/>Файл удалён' : '') + '</span><div class="st-btns">' + (missing ? '' : '<button class="st-btn" data-key="reload">Перезагрузить</button>') + '<button class="st-btn primary" data-key="overwrite">Перезаписать</button><button class="st-btn" data-key="cancel">Отмена</button></div></div>');
     }
     function renderAll() { if (!s.model) return; renderTop(); renderLeft(); renderRight(); renderStrip(); renderOverlay(); renderConflict(); }
 
@@ -660,10 +661,10 @@ export function create(host) {
         },
         commands() {
             return [
-                { label: 'Atlas: режим Sprite', run: () => setMode('sprite') },
-                { label: 'Atlas: режим Animation', run: () => setMode('animation') },
-                { label: 'Atlas: проверить черновик (r2d validate)', run: () => validate(true) },
-                { label: 'Atlas: вписать картинку', run: () => fit() },
+                { label: 'Атлас: режим кадров', run: () => setMode('sprite') },
+                { label: 'Атлас: режим анимации', run: () => setMode('animation') },
+                { label: 'Атлас: проверить черновик (r2d validate)', run: () => validate(true) },
+                { label: 'Атлас: вписать картинку', run: () => fit() },
             ];
         },
         // Операции для агента и тестов — те же, что у кнопок.

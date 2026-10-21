@@ -14,7 +14,7 @@ import { mousePx, inside, esc } from './studio_kit.js';
 const ZOOMS = [0.5, 0.65, 0.8, 1, 1.25, 1.5];
 const MIN_H = 120;
 const HEAD_H = 36;
-const VIEWS = [['overview', 'Обзор'], ['world', 'World'], ['scenes', 'Сцены'], ['resources', 'Ресурсы']];
+const VIEWS = [['overview', 'Обзор'], ['world', 'Мир'], ['scenes', 'Сцены'], ['resources', 'Ресурсы']];
 
 export function createGraphPanel($, doc, host) {
     const icon = (name) => $.ui.icon(name) || '';

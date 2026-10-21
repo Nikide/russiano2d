@@ -199,7 +199,7 @@ dialogView: {
 ### 3.5 Озвучка реплик
 
 ```js
-voice: { dir: 'demos/russi_vn/voice', ext: 'mp3', volume: 1, who: 'russi' },
+voice: { dir: 'assets/voice', ext: 'mp3', volume: 1, who: 'hero' },
 ```
 
 Файл ищется по id реплики: `<dir>/<id>.<ext>`, где `id` — тот же, что отдаёт
@@ -425,14 +425,18 @@ $.timeline.state();
 # юнит-тесты модуля: биты, выборы, ветки, метки, концовки, авто-режим
 build/_deps/quickjs-build/qjs tests/js/timeline_test.mjs
 
-# живая новелла целиком: агент сам жмёт «дальше» и доходит до концовки
-python3 tools/vn_playthrough.py --route love --out build/vn_shots
-python3 tools/vn_playthrough.py --route hate --out build/vn_shots
+# runtime-интеграция timeline в игровой сцене
+python3 tests/agent/showcase_test.py
+
+# новая Editor-authored ВН (отдельная подсистема $.story), обе концовки
+python3 tests/agent/rusya_love_vn_test.py
 ```
 
-Готовый пример на все возможности — демо
-[«Руси-тян: Бака!»](../../demos/russi_vn/README.md): пять локаций, семь поз,
-три выбора, две концовки, тряска, вспышки и HUD с «руси-метром».
+Готовый короткий пример интеграции timeline —
+[демо Showcase](../../demos/showcase/README.md): вставка диалога в обычную
+игровую сцену, события-маркеры, музыка и переход обратно в игру. Новая
+самостоятельная романтическая ВН на `$.story` описана в
+[EDITOR_GUIDE.md](../EDITOR_GUIDE.md).
 
 
 ## Полный перечень имён: прогон, подписки, ветки

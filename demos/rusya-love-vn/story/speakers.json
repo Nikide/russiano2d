@@ -1,0 +1,23 @@
+{
+  "speakers": {
+    "Руси-тян": {
+      "name": "Руси-тян",
+      "slot": "right",
+      "expressions": [
+        "neutral",
+        "shy",
+        "happy"
+      ],
+      "portraits": {
+        "neutral": "assets/characters/rusya_neutral.png",
+        "shy": "assets/characters/rusya_shy.png",
+        "happy": "assets/characters/rusya_happy.png"
+      }
+    },
+    "ТЫ": {
+      "name": "Ты",
+      "slot": "left",
+      "expressions": []
+    }
+  }
+}

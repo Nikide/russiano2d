@@ -245,7 +245,7 @@ directories are allowed; a missing group path fails the section.
 | native tests | Xmake native/JS targets; see current test gate |
 | xmake | single r2d executable; see docs/BUILD.md |
 | site build | `python3 site/build-doc.py` PASS |
-| docs/API guards | doc_claims, doc_coverage, api_docs_sync, api_freeze, site_prune PASS |
+| docs/API guards | doc_claims, doc_coverage, api_docs_sync, site_prune PASS |
 | BASHNYA repro | exit 0; packaged runtime reports `large_save` serialization error, repo build succeeds with 4097 spans |
 | BASHNYA play | exit 0, `FINAL complete` (key, MAP2, seal, checkpoint, boss victory) |
 | agent suite | acceptance subset 15/15 in 65.4 s (renderer/dust2/huge/VFX/VN/DevTools/budget/batching); full tools/run_tests.py wedged on audio_hrtf and is not claimed green |
@@ -302,7 +302,6 @@ xmake test -y -j 8
 python3 tests/doc_claims_test.py
 python3 tests/doc_coverage_test.py
 python3 tests/api_docs_sync_test.py
-python3 tests/api_freeze_test.py
 python3 tests/site_prune_test.py
 python3 site/build-doc.py
 python3 tools/run_tests.py

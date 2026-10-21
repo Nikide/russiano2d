@@ -1,0 +1,39 @@
+{
+  "schema_version": 2,
+  "project": {"name": "Multiplayer Editor Demo", "version": "0.1.0"},
+  "runtime": {"entry": "main.js", "window": {"title": "Multiplayer Editor Demo", "width": 1280, "height": 720}},
+  "editor": {
+    "graph": {
+      "format": 1,
+      "status": "current",
+      "sources": [
+        {"path": "main.js", "hash": "b6c6252222b46394"},
+        {"path": "multiplayer.js", "hash": "51e58a527a23558b"}
+      ],
+      "diagnostics": [],
+      "areas": [
+        {"key": "project:main", "type": "project", "label": "Проект", "origin": "code"},
+        {"key": "world:main", "type": "world", "label": "World", "runtime_root": "$.world", "origin": "code"}
+      ],
+      "entities": [
+        {"key": "script:main.js", "area": "project:main", "type": "script", "origin": "code", "path": "main.js", "entry": true, "source": {"file": "main.js", "line": 1}},
+        {"key": "object:main:text:1", "area": "world:main", "type": "object", "origin": "code", "tag": "text", "source": {"file": "main.js", "line": 17}},
+        {"key": "object:net-status", "area": "world:main", "type": "object", "origin": "code", "tag": "text", "public_id": "net-status", "source": {"file": "main.js", "line": 19}},
+        {"key": "object:main:text:2", "area": "world:main", "type": "object", "origin": "code", "tag": "text", "source": {"file": "main.js", "line": 22}},
+        {"key": "object:main:text:3", "area": "world:main", "type": "object", "origin": "code", "tag": "text", "source": {"file": "main.js", "line": 26}},
+        {"key": "object:main:text:4", "area": "world:main", "type": "object", "origin": "code", "tag": "text", "source": {"file": "main.js", "line": 27}},
+        {"key": "object:shared-mascot", "area": "world:main", "type": "object", "origin": "code", "tag": "sprite", "public_id": "shared-mascot", "source": {"file": "main.js", "line": 29}},
+        {"key": "script:multiplayer.js", "area": "project:main", "type": "script", "origin": "code", "path": "multiplayer.js", "source": {"file": "multiplayer.js", "line": 1}}
+      ],
+      "edges": [
+        {"key": "edge:spatial_parent:world:main>object:main:text:1", "type": "spatial_parent", "from": "world:main", "to": "object:main:text:1", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 18}},
+        {"key": "edge:spatial_parent:world:main>object:net-status", "type": "spatial_parent", "from": "world:main", "to": "object:net-status", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 21}},
+        {"key": "edge:spatial_parent:world:main>object:main:text:2", "type": "spatial_parent", "from": "world:main", "to": "object:main:text:2", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 25}},
+        {"key": "edge:spatial_parent:world:main>object:main:text:3", "type": "spatial_parent", "from": "world:main", "to": "object:main:text:3", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 26}},
+        {"key": "edge:spatial_parent:world:main>object:main:text:4", "type": "spatial_parent", "from": "world:main", "to": "object:main:text:4", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 27}},
+        {"key": "edge:spatial_parent:world:main>object:shared-mascot", "type": "spatial_parent", "from": "world:main", "to": "object:shared-mascot", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 34}}
+      ],
+      "views": {}
+    }
+  }
+}

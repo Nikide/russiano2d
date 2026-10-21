@@ -1,7 +1,7 @@
 #include "api_metadata.h"
 
 // Deterministic: paths sorted; values are only primitives/arrays; objects are
-// walked exactly one level (same surface as tests/api_freeze_baseline.txt).
+// walked exactly one level (same surface as the generated api.schema.json).
 static const char *const snapshot =
 "(() => {\n"
 "  const out = [];\n"
@@ -44,7 +44,11 @@ static const char *const snapshot =
 "    }\n"
 "  }\n"
 "  if (typeof engine === 'object' && engine) {\n"
-"    for (const key of Object.keys(engine).sort()) add('engine.' + key, engine[key]);\n"
+"    const privateNet = new Set(['netOpen', 'netConnect', 'netDisconnect', 'netClose', 'netStatus', 'netSend', 'netPoll']);\n"
+"    for (const key of Object.keys(engine).sort()) {\n"
+"      if (privateNet.has(key)) continue;\n"
+"      add('engine.' + key, engine[key]);\n"
+"    }\n"
 "  }\n"
 "  try {\n"
 "    const probe = $('<sprite>');\n"

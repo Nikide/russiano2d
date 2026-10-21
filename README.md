@@ -45,7 +45,9 @@ Xmake собирает единственный executable `r2d`: он откр�
 проектами на публичном `$` API и запускаются напрямую через `r2d --game`.
 
 В репозитории `game/` — платформер (рабочий пример). В **релизных пакетах**
-игра по умолчанию — демо визуальной новеллы «Руси-тян: Бака!» (`game_vn/`).
+игра по умолчанию пока задаётся отдельным legacy-проектом `game_vn/`; новый
+Editor-authored платформер и романтическая ВН находятся в `demos/` и не
+подменяют релизную игру.
 
 Зависимости для локальной сборки: `xmake`, `mingw-w64` (Windows), `m4` для autotools-зависимостей; `zig` нужен только для
 opt-in Linux-кросс-сборки (`R2D_BUILD_LINUX=1`).
@@ -79,6 +81,7 @@ GitHub Releases.
 | [docs/HIGH_LEVEL_API.md](docs/HIGH_LEVEL_API.md) | справочник `$` API |
 | [docs/tutorial-platformer.md](docs/tutorial-platformer.md) | первый платформер шаг за шагом |
 | [docs/EDITOR.md](docs/EDITOR.md) | Project Manager, Editor и встроенные студии |
+| [docs/EDITOR_GUIDE.md](docs/EDITOR_GUIDE.md) | практическая работа в Editor со скриншотами платформера и ВН |
 | [docs/VN_MAKER.md](docs/VN_MAKER.md) | Visual Novel Maker |
 | [docs/FEATURE_FREEZE.md](docs/FEATURE_FREEZE.md) | feature freeze и правила новых engine-возможностей |
 | [docs/RELEASING.md](docs/RELEASING.md) | локальный релизный процесс |

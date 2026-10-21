@@ -28,7 +28,8 @@ $ API (runtime) → api dump → api.schema.json / russiano2d.d.ts / API referen
 ## API metadata
 
 `api dump` запускает runtime в режиме `--dump-api`: тот обходит живой `$` и
-`engine.*` после загрузки скриптов. В снимок входят:
+доступную агентам часть `engine.*` после загрузки скриптов. Внутренний ENet-мост
+не попадает в схему: игровая сеть доступна только через `$.net`. В снимок входят:
 
 * `path`, `kind` (`function/object/number/string/boolean/array/null`);
 * для функций — `arity`, `args[{name,type}]`, `returns`;
@@ -49,17 +50,25 @@ $ API (runtime) → api dump → api.schema.json / russiano2d.d.ts / API referen
 namespace → member, argument → type и method → return type. `api check`
 сравнивает весь сгенерированный schema-граф и документацию с runtime.
 
-После правок high-level docs/JSDoc пересоберите runtime, обновите каталог и
-повторно снимите schema/reference:
+После правок `$` API, high-level docs, JSDoc или описаний запустите единый
+workflow. Он дважды собирает embedding runtime при необходимости, обновляет
+schema/typings/reference и каталог Editor, затем проверяет результат:
 
 ```bash
-xmake build -y -j 8 r2d
-build-xmake/macos-arm64/macosx/arm64/release/r2d api generate --game tests/fixtures/hello --out-dir .
-python3 scripts/generate_api_docs_catalog.py
-xmake build -y -j 8 r2d
-build-xmake/macos-arm64/macosx/arm64/release/r2d api generate --game tests/fixtures/hello --out-dir .
-build-xmake/macos-arm64/macosx/arm64/release/r2d api check --game tests/fixtures/hello --schema api.schema.json
+xmake api_docs
 ```
+
+Для CI и локальной read-only проверки после сборки:
+
+```bash
+R2D_BINARY=build-xmake/macos-arm64/macosx/arm64/release/r2d \
+  python3 scripts/api_docs_pipeline.py check
+```
+
+Команда `check` сравнивает Editor-каталог с его генератором, schema с runtime,
+typings и API reference с runtime и запускает проверку покрытия API описаниями.
+Она не переписывает файлы. CI выполняет эту проверку на собранном Linux-бинарнике;
+docs quality job отдельно проверяет актуальность Editor-каталога.
 
 ```bash
 "$R2D_BINARY" api check --game game
@@ -71,7 +80,7 @@ build-xmake/macos-arm64/macosx/arm64/release/r2d api check --game tests/fixtures
 
 | Файл | Что это |
 |---|---|
-| `api.schema.json` | нормализованный снимок для lint/CI/GUI |
+| `api.schema.json` | актуальная генерируемая схема для lint/CI/GUI; не фиксирует допустимое развитие API |
 | `russiano2d.d.ts` | TypeScript declarations (tooling layer, игра остаётся JS) |
 | `docs/api/API_REFERENCE.md` | generated reference по namespaces/методам/константам с описаниями там, где они добавлены |
 

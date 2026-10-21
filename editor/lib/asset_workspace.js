@@ -8,7 +8,7 @@ export const button=(id,label,on)=>'<button class="st-btn'+(on?' on':'')+'" data
 export function form(fields,prefix='f') {
     return fields.map(f=>f.group?'<div class="st-field-group"><span class="st-h">'+esc(f.label||f.key)+'</span>'+form(f.group,prefix+'-'+f.key)+'</div>':'<div class="st-field"><label>'+esc(f.label||f.key)+'</label>'+
         (f.pair?'<input id="'+prefix+'-'+esc(f.key)+'-0" class="st-in" type="text"/><input id="'+prefix+'-'+esc(f.key)+'-1" class="st-in" type="text"/>':
-        f.options?'<select id="'+prefix+'-'+esc(f.key)+'" class="st-in">'+(f.optional?['']:[]).concat(f.options).map(v=>'<option value="'+esc(v)+'">'+esc(v===''?'—':v)+'</option>').join('')+'</select>':
+        f.options?'<select id="'+prefix+'-'+esc(f.key)+'" class="st-in">'+(f.optional?['']:[]).concat(f.options).map(option=>{const v=option&&typeof option==='object'?option.value:option,label=option&&typeof option==='object'?option.label:f.bool&&(v==='true'||v==='false')?(v==='true'?'Да':'Нет'):v;return '<option value="'+esc(v)+'">'+esc(label===''?'—':label)+'</option>';}).join('')+'</select>':
         f.json?'<textarea id="'+prefix+'-'+esc(f.key)+'" class="st-area"></textarea>':'<input id="'+prefix+'-'+esc(f.key)+'" class="st-in" type="text"/>')+
         (f.file?'<button class="st-btn st-browse" data-key="browse:'+esc(prefix)+':'+esc(f.key)+'">…</button>':'')+'</div>').join('');
 }
@@ -88,7 +88,7 @@ export function createWorkspace(host,def) {
         if(!c){doc.cls('aw-conflict','st-hidden',true);doc.html('aw-conflict','');return;}
         const missing=typeof c.disk!=='string';
         doc.cls('aw-conflict','st-hidden',false);
-        doc.html('aw-conflict','<div class="aw-conflict-shade"></div><div class="aw-conflict-card"><span class="aw-conflict-title">Файл изменён вне Editor</span><span class="aw-conflict-message">На диске есть другая версия. Перезагрузка заменит несохранённые правки. Перезапись сохранит текущий документ Editor поверх версии на диске.</span><span class="aw-conflict-path">'+esc(file.state.path)+(missing?' · файл удалён':'')+'</span><div class="aw-conflict-actions">'+
+        doc.html('aw-conflict','<div class="aw-conflict-shade"></div><div class="aw-conflict-card"><span class="aw-conflict-title">Файл изменён вне редактора</span><span class="aw-conflict-message">На диске есть другая версия. Перезагрузка заменит несохранённые правки. Перезапись сохранит текущий документ редактора поверх версии на диске.</span><span class="aw-conflict-path">'+esc(file.state.path)+(missing?' · файл удалён':'')+'</span><div class="aw-conflict-actions">'+
             (missing?'':'<button id="aw-conflict-reload" class="st-btn" data-key="reload">Перезагрузить</button>')+
             '<button id="aw-conflict-overwrite" class="st-btn primary" data-key="overwrite">Перезаписать</button><button id="aw-conflict-cancel" class="st-btn" data-key="cancel">Отмена</button></div></div>');
     }

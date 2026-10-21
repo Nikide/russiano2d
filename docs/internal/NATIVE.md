@@ -832,22 +832,14 @@ engine.submitTriangles(tri, v);   // → число принятых верши�
 * Смешивать с `drawSprite`/`drawRect`/`submitSprites` можно свободно: всё
   попадает в общий кадр отрисовки.
 
-### `engine.netSimulate(loss, delay?, seed?, jitter?)` / `engine.netDelayed()`
+### Приватный multiplayer-транспорт ENet
 
-Симуляция плохой сети для тестов. `loss` — процент потерь `0..100`,
-`delay` — задержка в мс, `seed` — сид (воспроизводимость), `jitter` — добавка
-к задержке `[0, jitter)` мс.
-
-**Задержка — очередь отложенных отправок, не сон**: пакет кладётся с временем
-«когда отправить» и уходит из `engine.netPoll()`, когда время придёт. Спать в
-кадре нельзя. Очередь на 64 пакета; при переполнении — предупреждение в журнал.
-
-`engine.netDelayed()` — сколько пакетов ждёт задержки (видно, что она работает).
-Потери применяются при постановке, поэтому потерянный пакет очередь не занимает.
-
-В высокоуровневом API — `$.net.simulate({loss, delay, jitter, seed})`,
-`$.net.simulation()`, `$.net.delayed()`, `$.net.simulateOff()`
-(см. [highlevel/net.md](../highlevel/net.md) §8).
+`src/net.c` встраивает закреплённый upstream `zpl-c/enet` v2.7.0. C API
+создаёт ENet host, инициирует peer-подключения, отправляет сообщения по четырём
+каналам доставки и возвращает события connect/disconnect/receive. Приватные
+`engine.net*` bindings доступны только `src/highlevel/net.js` и исключены из
+публичной API schema; игровые скрипты работают через `$.net`. Потери и задержка
+для отладки моделируются очередью high-level сообщений без блокировки кадра.
 
 ### `engine.addShape(body, desc)` / `engine.shapeCount(body)`
 
@@ -2582,7 +2574,7 @@ internal/NATIVE.md описывает то, на чём стоит `$`; част
 | `engine.re2d.view/project/unproject/sprite/mesh/info`, `engine.re2d.worldStep(dt)`, флаг `engine.re2d.NO_SPLIT` — перспектива вида от первого лица | §16 выше, [RE2D.md](../RE2D.md) |
 | `engine.now()` — монотонное время, мс; `engine.mouseLock(on)` — захват курсора; `engine.setBodyEnabled`/`bodyEnabled` | §16 выше, [highlevel/window.md](../highlevel/window.md) |
 | `engine.bodyEnabled`/`engine.isAwake`/`engine.setAwake`/`engine.setGravityScale`, `engine.contactsOf`, `engine.contactBetween` | §8 выше |
-| `engine.netHost`/`engine.netJoin`/`engine.netClose`/`engine.netMode`/`engine.netStatus`/`engine.netSend`/`engine.netPoll` | [highlevel/net.md](../highlevel/net.md), `$.net` |
+| Приватный ENet bridge `engine.netOpen`/`netConnect`/`netDisconnect`/`netClose`/`netStatus`/`netSend`/`netPoll` | Реализация `$.net`; не является gameplay API и исключён из schema |
 | `engine.setCursor`/`cursorVisible`, `requestReload`/`reloadPending`/`hotReload` | [highlevel/window.md](../highlevel/window.md), [highlevel/script.md](../highlevel/script.md) |
 | `engine.audio.*` — шины, комнаты, группы, 3D | §10 выше, [highlevel/audiobus.md](../highlevel/audiobus.md) |
 | `engine.bodyGeneration`, `engine.contactStay`/`setContactStay`, `engine.physicsErrors`/`clearPhysicsErrors`, `engine.setSnap` | подраздел «Контакты, ошибки физики и снаппинг вершин» ниже |

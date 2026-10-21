@@ -1,14 +1,14 @@
 <rml>
 <head>
 <link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="re2dsprite.rcss"/>
-<title>Re2DSprite</title>
+<title>Персонаж Re2D</title>
 </head>
 <body>
 <div class="st-root">
   <div class="st-bar">
     <span class="st-label">Вид</span>
-    <button id="rs-style-anime" class="st-btn" title="Стиль превью (описание — справа)">anime</button>
-    <button id="rs-style-pixel" class="st-btn">pixel</button>
+    <button id="rs-style-anime" class="st-btn" title="Стиль предпросмотра (описание — справа)">Аниме</button>
+    <button id="rs-style-pixel" class="st-btn">Пиксельный</button>
     <span class="st-sep"></span>
     <button id="rs-front" class="st-btn" title="yaw 0">Спереди</button>
     <button id="rs-three" class="st-btn" title="yaw 30, pitch 8">3/4</button>
@@ -16,9 +16,9 @@
     <button id="rs-back" class="st-btn" title="yaw 180">Сзади</button>
     <button id="rs-turntable" class="st-btn" title="Вращать автоматически">Вертушка</button>
     <span class="st-sep"></span>
-    <button id="rs-reload" class="st-btn" title="Перечитать описание, анимации и PNG с диска (несохранённые правки остаются)">Reload</button>
+    <button id="rs-reload" class="st-btn" title="Перечитать описание, анимации и PNG с диска (несохранённые правки остаются)">Перечитать</button>
     <span class="st-grow"></span>
-    <span id="rs-pose" class="st-pill">yaw 0°</span>
+    <span id="rs-pose" class="st-pill">Поворот 0°</span>
     <span id="rs-dirty" class="st-dirty"></span>
     <span id="rs-status" class="st-pill ok">—</span>
   </div>
@@ -42,34 +42,34 @@
     <div class="st-center">
       <div id="rs-view" class="st-canvas"></div>
       <div class="rs-transport">
-        <button id="rs-playpause" class="st-btn primary">Pause</button>
+        <button id="rs-playpause" class="st-btn primary">Пауза</button>
         <div id="rs-timeline" class="rs-timeline"><div id="rs-playhead" class="rs-playhead"></div></div>
         <span id="rs-time" class="st-label">—</span>
         <button id="rs-default" class="st-btn" title="Записать текущий клип и эмоцию в defaults описания">Сделать умолчанием</button>
       </div>
-      <div class="st-hud">ЛКМ по персонажу — вращение yaw/pitch · таймлайн — перемотка · Cmd/Ctrl+Z — отмена правок описания</div>
+      <div class="st-hud">ЛКМ по персонажу — вращение по горизонтали и вертикали · шкала времени — перемотка · Cmd/Ctrl+Z — отмена правок описания</div>
     </div>
 
     <div class="st-right">
       <div class="st-scroll">
         <span class="st-title">Описание</span>
-        <div class="st-field"><label>style</label><select id="rs-f-style" class="st-in"><option value="">—</option><option value="anime">anime</option><option value="pixel">pixel</option></select></div>
-        <div class="st-field"><label>raster</label><input id="rs-f-raster" class="st-in" type="text" value=""/></div>
-        <div class="st-field"><label>detail</label><input id="rs-f-detail" class="st-in" type="text" value=""/></div>
-        <div class="st-field"><label>bodyScale</label><input id="rs-f-body" class="st-in" type="text" value=""/></div>
-        <div class="st-field"><label>portrait</label><input id="rs-f-portrait" class="st-in" type="text" value=""/></div>
-        <div class="st-field"><label>motion</label><select id="rs-f-motion" class="st-in"></select></div>
-        <div class="st-field"><label>expression</label><select id="rs-f-expression" class="st-in"></select></div>
+        <div class="st-field"><label>Стиль</label><select id="rs-f-style" class="st-in"><option value="">—</option><option value="anime">Аниме</option><option value="pixel">Пиксельный</option></select></div>
+        <div class="st-field"><label>Растеризация</label><input id="rs-f-raster" class="st-in" type="text" value=""/></div>
+        <div class="st-field"><label>Детализация</label><input id="rs-f-detail" class="st-in" type="text" value=""/></div>
+        <div class="st-field"><label>Масштаб тела</label><input id="rs-f-body" class="st-in" type="text" value=""/></div>
+        <div class="st-field"><label>Портрет</label><input id="rs-f-portrait" class="st-in" type="text" value=""/></div>
+        <div class="st-field"><label>Движение</label><select id="rs-f-motion" class="st-in"></select></div>
+        <div class="st-field"><label>Выражение лица</label><select id="rs-f-expression" class="st-in"></select></div>
         <button id="rs-apply" class="st-btn primary wide" title="Пустое поле — убрать ключ из описания">Применить</button>
 
         <div id="rs-eq-panel" class="st-hidden">
           <span id="rs-eq-title" class="st-h">Экипировка</span>
-          <div class="st-field"><label>socket</label><select id="rs-e-socket" class="st-in"></select></div>
-          <div class="st-field"><label>pose</label><select id="rs-e-pose" class="st-in"></select></div>
-          <div class="st-field"><label>offset</label><input id="rs-e-offset" class="st-in" type="text" value=""/></div>
-          <div class="st-field"><label>rotation</label><input id="rs-e-rotation" class="st-in" type="text" value=""/></div>
-          <div class="st-field"><label>scale</label><input id="rs-e-scale" class="st-in" type="text" value=""/></div>
-          <span class="st-note">offset/rotation/scale — JSON (число или массив), пусто — убрать.</span>
+        <div class="st-field"><label>Точка крепления</label><select id="rs-e-socket" class="st-in"></select></div>
+        <div class="st-field"><label>Поза</label><select id="rs-e-pose" class="st-in"></select></div>
+        <div class="st-field"><label>Смещение</label><input id="rs-e-offset" class="st-in" type="text" value=""/></div>
+        <div class="st-field"><label>Поворот</label><input id="rs-e-rotation" class="st-in" type="text" value=""/></div>
+        <div class="st-field"><label>Масштаб</label><input id="rs-e-scale" class="st-in" type="text" value=""/></div>
+          <span class="st-note">Смещение, поворот и масштаб — JSON (число или массив); пустое поле удалит значение.</span>
           <button id="rs-e-apply" class="st-btn wide">Применить к экипировке</button>
         </div>
 

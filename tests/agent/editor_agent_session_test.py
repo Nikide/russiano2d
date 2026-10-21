@@ -45,7 +45,7 @@ def _run():
             agent.eval(E + ".openFile('smoke.agent.json');1")
             settle(agent, E + ".activeTab() && " + E + ".activeTab().path==='smoke.agent.json'")
             agent.eval(E + ".openPalette('commands');1")
-            agent.eval('$.ui.doc("ui/editor.rml").setValue("palette-input",">Тесты: выполнить активную .agent.json сессию");1')
+            agent.eval('$.ui.doc("ui/editor.rml").setValue("palette-input",">Агент: выполнить активный сценарий .agent.json");1')
             agent.step(3)
             check(agent, E + '.state.palette.list.some(x=>x.item.cmd && x.item.cmd.id==="agent-session")',
                   'Command Palette offers the active agent session action')
@@ -59,7 +59,7 @@ def _run():
                   E + '.state.agentReport.report.responses.length===2',
                   'Editor retains ready handshake and structured request responses')
             check(agent, E + '.state.bottom==="output" && ' +
-                  E + '.state.outputEntries.some(e=>e.text.includes("Agent session завершена"))',
+                  E + '.state.outputEntries.some(e=>e.text.includes("Сеанс агента завершён"))',
                   'passing session produces a visible Output result')
 
             agent.eval(E + ".openFile('failure.agent.json');1")

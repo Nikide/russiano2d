@@ -164,10 +164,10 @@ export function createSession(app, opts) {
                     code: 'SDK_WORLD_READ', severity: 'error', asset: path, location: null,
                     message: 'не удалось прочитать ' + path, details: null,
                 }]);
-                throw new Error('World Editor: не удалось прочитать ' + path);
+                throw new Error('Редактор карт: не удалось прочитать ' + path);
             }
             const parsed = parseMapText(text, path);
-            if (!parsed) throw new Error('World Editor: ' + (state.diagnostics[0] ? state.diagnostics[0].message : 'ошибка разбора'));
+            if (!parsed) throw new Error('Редактор карт: ' + (state.diagnostics[0] ? state.diagnostics[0].message : 'ошибка разбора'));
             state.map = parsed;
         } else {
             state.map = createMap(undefined);
@@ -454,7 +454,7 @@ export function createSession(app, opts) {
                 state.debugView = state.debugView || 'final';
             }
             const ok = !!json && json.ok === true && !hasErrors(diags) && preview;
-            logLine((write === false ? 'info' : 'compile') + ': ' + (ok ? 'ok' : 'ошибки') + (preview ? ', preview готов' : ''));
+            logLine((write === false ? 'проверка' : 'сборка') + ': ' + (ok ? 'готово' : 'ошибки') + (preview ? ', предпросмотр готов' : ''));
             return { ok: ok, diagnostics: state.diagnostics, stats: state.stats, out: out, preview: preview, json: json };
         } finally {
             $.fs.remove(draft);

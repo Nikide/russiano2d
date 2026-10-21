@@ -12,7 +12,7 @@ import * as K from '../lib/shared/kinds/audio.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
-export const meta = { id: 'audio', title: 'Audio', icon: 'graphic_eq', match: (p) => /\.audio\.json$/i.test(p) };
+export const meta = { id: 'audio', title: 'Звук', icon: 'graphic_eq', match: (p) => /\.audio\.json$/i.test(p) };
 
 const AUDIO_FILE = /\.(ogg|wav|mp3|flac)$/i;
 const NAME_RE = /^[A-Za-z0-9_\-]{1,48}$/;
@@ -99,11 +99,11 @@ export function create(host) {
             const bus = buses(w)[e.id], fx = FX_FIELDS[bus && bus.effect];
             return [
                 { key: '__name', label: 'Имя' },
-                { key: 'volume', label: 'volume 0..1', number: true, optional: true },
-                { key: 'parent', label: 'parent', options: ['master'].concat(Object.keys(buses(w)).filter((n) => n !== e.id)), optional: true },
-                { key: 'muted', label: 'muted', bool: true, options: ['true', 'false'], optional: true },
-                { key: 'solo', label: 'solo', bool: true, options: ['true', 'false'], optional: true },
-                { key: 'effect', label: 'effect', options: K.EFFECTS, optional: true },
+                { key: 'volume', label: 'Громкость 0..1', number: true, optional: true },
+                { key: 'parent', label: 'Родительская шина', options: ['master'].concat(Object.keys(buses(w)).filter((n) => n !== e.id)), optional: true },
+                { key: 'muted', label: 'Без звука', bool: true, options: ['true', 'false'], optional: true },
+                { key: 'solo', label: 'Соло', bool: true, options: ['true', 'false'], optional: true },
+                { key: 'effect', label: 'Эффект', options: K.EFFECTS, optional: true },
                 ...(fx ? [{ key: 'effectParams', label: 'Параметры ' + bus.effect, group: fx.map((field) => Object.assign({ number: true }, field)) }] : []),
             ];
         }
@@ -111,9 +111,9 @@ export function create(host) {
             { key: '__name', label: 'Имя' },
             { key: 'path', label: 'файл', file: { filters: FILTERS.audio } },
             { key: 'bus', label: 'шина', options: Object.keys(buses(w)), optional: true },
-            { key: 'volume', label: 'volume 0..1', number: true, optional: true },
-            { key: 'pitch', label: 'pitch', number: true, optional: true },
-            { key: 'loop', label: 'loop', bool: true, options: ['true', 'false'], optional: true },
+            { key: 'volume', label: 'Громкость 0..1', number: true, optional: true },
+            { key: 'pitch', label: 'Высота тона', number: true, optional: true },
+            { key: 'loop', label: 'Повторять', bool: true, options: ['true', 'false'], optional: true },
         ];
         return [
             { key: 'name', label: 'Имя' },
@@ -170,7 +170,7 @@ export function create(host) {
         let html = '<div class="au-bottom"><div class="st-bar"><span class="st-label">Звуки</span>' + button('stopall', 'Остановить всё') + '</div><div class="au-sounds">';
         html += list.length ? list.map((n) => {
             const x = sounds(w)[n], on = cur && cur.type === 'snd' && cur.id === n, h = w.ext.handles[n], playing = !!(h && h.playing && h.playing());
-            return '<div class="st-row' + (on ? ' sel' : '') + '" data-key="pick:snd:' + esc(n) + '">' + esc(n) + '<span class="st-sub">' + esc(String(x.path || '').split('/').pop()) + (x.bus ? ' > ' + esc(x.bus) : '') + (x.loop ? ' · loop' : '') + '</span>' +
+            return '<div class="st-row' + (on ? ' sel' : '') + '" data-key="pick:snd:' + esc(n) + '">' + esc(n) + '<span class="st-sub">' + esc(String(x.path || '').split('/').pop()) + (x.bus ? ' > ' + esc(x.bus) : '') + (x.loop ? ' · повтор' : '') + '</span>' +
                 '<span class="au-tx">' + button('play:' + n, playing ? 'Ещё раз' : 'Играть', playing) + button('stop:' + n, 'Стоп') + '</span></div>';
         }).join('') : '<span class="st-empty">Звуков нет — «+ Звук» или файл из библиотеки.</span>';
         return html + '</div></div>';
@@ -250,7 +250,7 @@ export function create(host) {
     }
 
     const def = {
-        kind: K, title: 'Audio', listTitle: 'Шины · звуки · зоны',
+        kind: K, title: 'Звук', listTitle: 'Шины · звуки · зоны',
         init(w) {
             Object.assign(w.ext, { handles: {}, created: [], gains: {}, files: null, zoneDrag: null, zoneFrame: null, tick: 0 });
             w.doc.cls('aw-bottom', 'au-bottom-host', true);

@@ -48,17 +48,13 @@ def check(condition, message):
 
 SERVER_SETUP = """
 globalThis.__log = [];
-$.net.bindEngine();
-$.net.host(%d, { maxPlayers: 4 });
-$.net.on('input', (player, data) => __log.push('input:' + data.seq));
-$.update(() => { $.net.poll(); });
+$.net.host(%d, { maxPeers: 4 });
+$.net.on('input', (data, peerId) => __log.push('input:' + data.seq + ':' + peerId));
 """
 
 CLIENT_SETUP = """
 globalThis.__log = [];
-$.net.bindEngine();
 $.net.join('127.0.0.1', %d);
-$.update(() => { $.net.poll(); });
 """
 
 
@@ -73,8 +69,6 @@ def main():
     port = free_port()
     print(f"  порт: {port}")
     with Agent(game=GAME, seed=5) as server, Agent(game=GAME, seed=6) as client:
-        check(server.eval("typeof engine.netDelayed") == "function",
-              "engine.netDelayed есть (видно очередь задержки)")
         check(server.eval("typeof $.net.simulate") == "function",
               "$.net.simulate есть")
 
@@ -82,9 +76,9 @@ def main():
         client.eval(CLIENT_SETUP % port)
         for _ in range(60):
             pump(server, client)
-            if client.eval("engine.netStatus().connected") is True:
+            if client.eval("$.net.peers().length") > 0:
                 break
-        check(client.eval("engine.netStatus().connected") is True,
+        check(client.eval("$.net.peers().length") > 0,
               "клиент подключился к серверу")
 
         # --- БЕЗ задержки: пакет доходит сразу ---
@@ -112,7 +106,7 @@ def main():
         t0 = time.monotonic()
         pump(server, client, 1)
         frame_seconds = time.monotonic() - t0
-        delayed = client.eval("engine.netDelayed()")
+        delayed = client.eval("$.net.delayed()")
         early = "input:2" in server.eval("__log.join('|')")
         print(f"  сразу после отправки: в очереди {delayed}, у сервера {early},"
               f" кадр занял {frame_seconds * 1000:.0f} мс из 200 мс задержки")
@@ -137,9 +131,9 @@ def main():
         check(waited >= 0.1, f"и это заняло заметное время ({waited:.2f} с)")
 
         # --- Задержка снимается ---
-        client.eval("$.net.simulateOff()")
+        client.eval("$.net.simulate({ loss: 0, delay: 0, jitter: 0 })")
         check('"delay":0' in client.eval("JSON.stringify($.net.simulation())"),
-              "simulateOff снял задержку")
+              "нулевые параметры сняли симуляцию задержки")
         server.eval("__log.length = 0")
         client.eval("$.net.send('input', { seq: 3 })")
         fast = False
@@ -160,7 +154,7 @@ def main():
         print(f"  при 100% потерь до сервера дошло: {lost!r}")
         check("input:" not in lost, f"100% потерь — ничего не дошло ({lost})")
 
-        client.eval("$.net.simulateOff()")
+        client.eval("$.net.simulate({ loss: 0, delay: 0, jitter: 0 })")
 
     print()
     if FAILURES:

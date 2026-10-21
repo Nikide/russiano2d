@@ -17,7 +17,7 @@ import * as M from '../lib/shared/rml_model.js';
 import { createHistory } from '../lib/shared/history.js';
 import { studioDoc, esc, diag, mousePx, inside } from '../lib/studio_kit.js';
 
-export const meta = { id: 'rmlui', title: 'RmlUi', icon: 'web', match: (p) => /\.(rml|rcss)$/i.test(p) };
+export const meta = { id: 'rmlui', title: 'Интерфейс RmlUi', icon: 'web', match: (p) => /\.(rml|rcss)$/i.test(p) };
 
 const BODY_ID = 'r2d-pv-root';
 const ROOTS = new Set(['rml', 'head', 'body']);
@@ -279,7 +279,7 @@ export function create(host) {
         if (!s.history || s.closed || s.busy) return false;
         if (!dirty()) return true;
         const errs = s.live.filter((d) => d.severity === 'error');
-        if (errs.length) { s.native = errs; status('Save заблокирован: ' + errs[0].message, true); changed(); return false; }
+        if (errs.length) { s.native = errs; status('Сохранение отменено: ' + errs[0].message, true); changed(); return false; }
         const expected = options.overwrite ? (options.expected || {}) : {};
         const expectedDisk = (f) => Object.prototype.hasOwnProperty.call(expected, f) ? expected[f] : s.disk[f];
         const detectConflicts = () => {
@@ -354,7 +354,7 @@ export function create(host) {
         if (!c) { doc.cls('rm-conflict', 'st-hidden', true); doc.html('rm-conflict', ''); return; }
         const paths = Object.keys(c), missing = paths.includes(s.path) && c[s.path] === null;
         doc.cls('rm-conflict', 'st-hidden', false);
-        doc.html('rm-conflict', '<div class="rm-conflict-shade"></div><div class="rm-conflict-card"><span class="rm-conflict-title">Документ или стиль изменён вне Editor</span><span class="rm-conflict-message">Перезагрузка заменит все несохранённые правки документа и связанных стилей. Перезапись сохранит текущую версию поверх перечисленных файлов.</span><span class="rm-conflict-path">'+paths.map(esc).join('<br/>')+(paths.some((f)=>c[f]===null)?'<br/>Файл удалён':'')+'</span><div class="rm-conflict-actions">'+
+        doc.html('rm-conflict', '<div class="rm-conflict-shade"></div><div class="rm-conflict-card"><span class="rm-conflict-title">Документ или стиль изменён вне редактора</span><span class="rm-conflict-message">Перезагрузка заменит все несохранённые правки документа и связанных стилей. Перезапись сохранит текущую версию поверх перечисленных файлов.</span><span class="rm-conflict-path">'+paths.map(esc).join('<br/>')+(paths.some((f)=>c[f]===null)?'<br/>Файл удалён':'')+'</span><div class="rm-conflict-actions">'+
             (missing?'':'<button id="rm-conflict-reload" class="st-btn" data-key="reload">Перезагрузить</button>')+
             '<button id="rm-conflict-overwrite" class="st-btn primary" data-key="overwrite">Перезаписать</button><button id="rm-conflict-cancel" class="st-btn" data-key="cancel">Отмена</button></div></div>');
     }
@@ -525,7 +525,7 @@ export function create(host) {
             return { asset: s.path, virtual: s.virtual, dirty: dirty(), elements: s.parsed.nodes.length, selected: n ? M.label(n) : null, sel: s.sel,
                 sheets: s.sheets.map((x) => x.path), activeSheet: s.activeSheet, preview: !!s.preview, bodyId: s.bodyId, status: s.status, problems: diagnostics().length };
         },
-        commands: () => [{ label: 'RmlUi: обновить превью', run: rebuildPreview }, { label: 'RmlUi: проверить (r2d validate)', run: validate }],
+        commands: () => [{ label: 'RmlUi: обновить предпросмотр', run: rebuildPreview }, { label: 'RmlUi: проверить (r2d validate)', run: validate }],
         ops: Object.assign({}, ops, { resolveConflict }),
         close() { s.closed = true; s.active = false; disposeDrafts(); doc.unload(); },
     };

@@ -1,7 +1,7 @@
 <rml>
 <head>
 <link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="rmlui.rcss"/>
-<title>RmlUi</title>
+<title>Редактор интерфейсов RmlUi</title>
 </head>
 <body>
 <div class="st-root">

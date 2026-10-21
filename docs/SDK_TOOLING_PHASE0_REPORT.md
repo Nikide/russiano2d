@@ -38,7 +38,7 @@ Repository Cleanup). Отчёт фиксирует фактически выпо
 python3 tests/doc_claims_test.py     ok
 python3 tests/doc_coverage_test.py   ok
 python3 tests/api_docs_sync_test.py  ok
-python3 tests/api_freeze_test.py     ok
+API snapshot gate удалён 2026-10-21; текущая схема генерируется через `r2d api generate`.
 ```
 
 Примеры из документации проверяются гейтами API-freeze/docs-sync; полный

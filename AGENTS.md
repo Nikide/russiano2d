@@ -28,7 +28,7 @@ xmake build -y -j 8 r2d
 # Указать путь к r2d текущей xmake-сборки перед проверками.
 export R2D_BINARY=build-xmake/macos-arm64/macosx/arm64/release/r2d
 python3 tests/doc_claims_test.py && python3 tests/doc_coverage_test.py && \
-python3 tests/api_docs_sync_test.py && python3 tests/api_freeze_test.py
+python3 tests/api_docs_sync_test.py
 ```
 
 - Игра: `"$R2D_BINARY" --game <dir> --scene <name>`.

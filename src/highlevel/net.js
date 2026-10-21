@@ -1,36 +1,11 @@
 // ===========================================================================
-// Сеть — $.net (только авторитарная модель)
-//
-// Решение проекта: в высокоуровневом API `$` есть ТОЛЬКО авторитарный
-// мультиплеер. Один узел — хост-сервер, его симуляция всегда права; клиенты не
-// вычисляют игровое состояние, а присылают ввод и рисуют то, что подтвердил
-// сервер. Peer-to-peer, детерминированный лок-степ и «у каждого своя правда» в
-// API не выставляются: там, где выбор есть, побеждает состояние сервера.
-//
-//   $.net.host(7777, { maxPlayers: 8 });     // сервер: авторитет
-//   $.net.join('127.0.0.1', 7777);           // клиент: только ввод и рендер
-//   $.net.on('join',  p => spawnPlayer(p));
-//   $.net.send('input', { seq, left, right });      // клиент → сервер
-//   $.net.on('input', (p, d) => applyInput(p, d));  // только на сервере
-//   $.net.replicate('#hero', { owner: p });          // сервер объявляет
-//   $.net.on('snapshot', s => $.net.apply(s));       // клиент применяет правду
-//
-// Что здесь есть СЕЙЧАС: вся модель, кроме транспорта — идентификаторы, стол
-// владельцев, снапшоты с дельтой, ввод по номеру, инвариант «клиент не пишет
-// авторитетное». Транспорт подключается снаружи (см. `$.net.attach`) — движок
-// даёт каркас, а сокеты ставит игра или следующая версия на SDL3_net.
-//
-// Почему так: транспорт (сокеты, пересылка, симуляция потерь) не влияет на
-// МОДЕЛЬ, а модель — это то, что легко сломать и что нужно проверять тестом.
-// Снапшоты и дельту пишем сами: библиотека этого не даёт.
-//
-// Ядро (installNet и его генераторы) не касается движка напрямую: это числа,
-// строки и объекты, поэтому поведение целиком проверяет юнит-тест
-// (tests/js/net_test.mjs).
+// $.net: высокоуровневый multiplayer над приватным ENet транспортом.
+// По умолчанию рекомендует authoritative host, но поддерживает mesh, relay и
+// пользовательские схемы; сетевой код прикрепляется к обычным $-сущностям.
 // ===========================================================================
 
 import { engine } from './native.js';
-import { ctx, query } from './core.js';
+import { ctx, def, wrap, wrapOne } from './core.js';
 
 // ---------------------------------------------------------------------------
 // Чистое ядро: сетевые идентификаторы
@@ -369,19 +344,41 @@ export function createClientState() {
  */
 export function encodeMessage(message) {
     const text = JSON.stringify(message || {});
-    const bytes = new Uint8Array(text.length);
+    const bytes = [];
     for (let i = 0; i < text.length; ++i) {
-        const code = text.charCodeAt(i);
-        bytes[i] = code < 256 ? code : 63;   // «?» вместо не-латиницы
+        let code = text.charCodeAt(i);
+        if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+            const low = text.charCodeAt(i + 1);
+            if (low >= 0xdc00 && low <= 0xdfff) {
+                code = 0x10000 + ((code - 0xd800) << 10) + (low - 0xdc00);
+                i++;
+            }
+        }
+        if (code < 0x80) bytes.push(code);
+        else if (code < 0x800) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+        else if (code < 0x10000) bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+        else bytes.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 0x3f), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
     }
-    return bytes;
+    return new Uint8Array(bytes);
 }
 
-/** Байты → сообщение (или null, если разобрать не удалось). */
 export function decodeMessage(data) {
     if (!data || data.length === 0) return null;
     let text = '';
-    for (let i = 0; i < data.length; ++i) text += String.fromCharCode(data[i]);
+    for (let i = 0; i < data.length;) {
+        const a = data[i++] & 0xff;
+        let code;
+        if (a < 0x80) code = a;
+        else if ((a & 0xe0) === 0xc0 && i < data.length) code = ((a & 0x1f) << 6) | (data[i++] & 0x3f);
+        else if ((a & 0xf0) === 0xe0 && i + 1 < data.length) code = ((a & 0x0f) << 12) | ((data[i++] & 0x3f) << 6) | (data[i++] & 0x3f);
+        else if ((a & 0xf8) === 0xf0 && i + 2 < data.length) {
+            code = ((a & 7) << 18) | ((data[i++] & 0x3f) << 12) | ((data[i++] & 0x3f) << 6) | (data[i++] & 0x3f);
+            code -= 0x10000;
+            text += String.fromCharCode(0xd800 + (code >> 10), 0xdc00 + (code & 0x3ff));
+            continue;
+        } else return null;
+        text += String.fromCharCode(code);
+    }
     try {
         const parsed = JSON.parse(text);
         return parsed && typeof parsed === 'object' ? parsed : null;
@@ -623,34 +620,36 @@ export function createPrediction(simulate) {
 // Подсистема
 // ---------------------------------------------------------------------------
 
-/** Роли узла в сети. */
-export const ROLES = ['offline', 'server', 'client'];
+/** Поддерживаемые сетевые схемы. Authoritative — рекомендуемый вариант. */
+export const TOPOLOGIES = ['authoritative', 'mesh', 'relay', 'custom'];
+const DELIVERY = { reliable: 0, state: 1, input: 2, bulk: 3 };
+const CHANNEL_DELIVERY = ['reliable', 'state', 'input', 'bulk'];
+const DEFAULT_ENTITY_FIELDS = ['x', 'y', 'angle', 'hp'];
 
 export function installNet($) {
-    let role = 'offline';
-    let port = 0;
-    let host = '';
-    let maxPlayers = 8;
-    const listeners = new Map();     // событие → [fn]
-    const authority = createAuthority();
-    const client = createClientState();
-    let transport = null;            // ставят снаружи через attach()
-    let bound = null;                 // транспорт движка (SDL3_net), если есть
-    let lastChannel = '';             // канал последнего принятого сообщения
-    const peerByAddress = new Map();  // адрес пира → номер игрока (сервер)
-    let tick = 0;
-    let droppedInputs = 0;
-    // Задержка: клиент шлёт 'ping' с временем, сервер отвечает 'pong' тем же
-    // числом — по разнице и считаем RTT.
-    let rtt = 0;
-    let sim = { loss: 0, delay: 0, jitter: 0, seed: 1 };
-    let pingSeq = 0;
-    const pingSent = new Map();   // номер → время отправки
-    let pings = 0;
-    // Лаг-компенсация: история подтверждённых состояний на сервере.
-    let history = null;
+    let topology = 'authoritative';
+    let authority = 'host';
+    let active = false;
+    let listening = false;
+    let localPort = 0;
+    let syncInterval = 50;
+    let syncElapsed = 0;
+    let interpolationDelay = 100;
+    let localPeer = 'p' + Math.floor(Math.random() * 0x7fffffff).toString(36);
+    let roomState = null;
+    let relayEnabled = false;
+    let tickNumber = 0;
+    let messageSequence = 0;
     let prediction = null;
-    const stats = { sent: 0, received: 0, snapshots: 0, inputs: 0 };
+    let simulation = { loss: 0, delay: 0, jitter: 0, seed: 1 };
+    let randomState = 1;
+    const listeners = new Map();
+    const peers = new Map();
+    const entities = new Map();
+    const samples = new Map();
+    const rpcHandlers = new Map();
+    const delayed = [];
+    const stats = { sent: 0, received: 0, dropped: 0, snapshots: 0, inputs: 0, bytesSent: 0, bytesReceived: 0 };
 
     function emit(name, ...args) {
         const list = listeners.get(String(name));
@@ -658,573 +657,551 @@ export function installNet($) {
         let count = 0;
         for (const fn of list) {
             try { fn(...args); count++; }
-            catch (e) { ctx.reportError ? ctx.reportError(`$.net.on('${name}')`, e) : ctx.log(`$.net: ошибка в '${name}': ${e}`); }
+            catch (e) { ctx.reportError ? ctx.reportError('$.net.on(' + name + ')', e) : ctx.log('$.net: ' + e); }
         }
         return count;
     }
 
-    const api = {
-        /** Роль узла: `offline` | `server` | `client`. */
-        role() { return role; },
-        isServer() { return role === 'server'; },
-        isClient() { return role === 'client'; },
-        online() { return role !== 'offline'; },
-        port() { return port; },
-        playerCount() { return authority.playerCount(); },
+    function nativeStatus() {
+        if (!engine || typeof engine.netStatus !== 'function') return { available: false, open: false };
+        try { return engine.netStatus() || { available: false, open: false }; }
+        catch (e) { return { available: false, open: false, error: String(e) }; }
+    }
 
-        /** Сервер: мир считает этот узел. */
-        host(newPort, opts) {
-            if (role !== 'offline') { ctx.log('$.net.host: узел уже в сети — сначала $.net.leave()'); return false; }
-            const o = opts || {};
-            port = Math.max(0, Math.floor(Number(newPort) || 0));
-            maxPlayers = Math.max(1, Math.floor(Number(o.maxPlayers) || 8));
-            role = 'server';
-            if (transport && typeof transport.listen === 'function') {
-                transport.listen(port, { maxPlayers });
-            }
-            emit('start', { role, port, maxPlayers });
-            return true;
-        },
+    function open(port, maxPeers) {
+        const status = nativeStatus();
+        if (!status.available || !engine || typeof engine.netOpen !== 'function') return false;
+        if (status.open) { active = true; return true; }
+        const ok = !!engine.netOpen(Math.max(0, Math.floor(Number(port) || 0)),
+                                   Math.max(1, Math.floor(Number(maxPeers) || 16)));
+        if (ok) {
+            active = true;
+            localPort = Math.max(0, Math.floor(Number(port) || 0));
+        }
+        return ok;
+    }
 
-        /** Клиент: только ввод и рендер подтверждённого. */
-        join(address, newPort, opts) {
-            if (role !== 'offline') { ctx.log('$.net.join: узел уже в сети — сначала $.net.leave()'); return false; }
-            const o = opts || {};
-            host = String(address || '127.0.0.1');
-            port = Math.max(0, Math.floor(Number(newPort) || 0));
-            role = 'client';
-            const player = o.player === undefined ? 0 : Math.floor(Number(o.player) || 0);
-            if (player > 0) authority.addPlayer();
-            if (transport && typeof transport.connect === 'function') {
-                transport.connect(host, port, { player });
-            }
-            emit('start', { role, host, port, player });
-            return true;
-        },
+    function channelFor(delivery) {
+        const key = String(delivery || 'reliable');
+        return Object.prototype.hasOwnProperty.call(DELIVERY, key) ? DELIVERY[key] : DELIVERY.reliable;
+    }
 
-        /** Выйти из сети: роль, снапшоты и ввод забываются. */
-        leave() {
-            if (role === 'offline') return false;
-            if (transport) {
-                if (typeof transport.close === 'function') transport.close();
-            }
-            const was = role;
-            role = 'offline';
-            port = 0;
-            host = '';
-            client.reset();
-            emit('stop', { role: was });
-            return true;
-        },
+    function random01() {
+        let x = randomState || 1;
+        x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+        randomState = x >>> 0;
+        return randomState / 0x100000000;
+    }
 
-        /**
-         * Подключить транспорт: `{ listen(port, opts), connect(host, port, opts),
-         * close(), send(bytes), poll() }`. Движок зовёт `poll()` раз в кадр.
-         */
-        attach(value) {
-            transport = value || null;
-            bound = null;
-            return api;
-        },
-        transport() { return transport; },
-
-        /**
-         * Транспорт ДВИЖКА на SDL3_net, если он собран (R2D_ENABLE_NET).
-         *
-         * Работает бинарными пакетами: $.net сериализует сообщение в байты
-         * (JSON), движок возит их датаграммами. Возвращает false, если сети в
-         * сборке нет — тогда игра ставит свой транспорт через `attach`.
-         */
-        bindEngine() {
-            if (typeof engine === 'undefined' || !engine
-                || typeof engine.netStatus !== 'function') {
-                return false;
-            }
-            const status = engine.netStatus();
-            if (!status || !status.available) return false;
-            bound = {
-                engine: true,
-                listen(port) { return !!engine.netHost(port); },
-                connect(host, port) { return !!engine.netJoin(host, port); },
-                send(message) {
-                    return !!engine.netSend(encodeMessage(message), '', 0);
-                },
-                poll() {
-                    const raw = engine.netPoll() || [];
-                    const out = [];
-                    for (const packet of raw) {
-                        const decoded = decodeMessage(packet.data);
-                        if (!decoded) continue;
-                        // Адрес отправителя нужен серверу, чтобы связать пира с
-                        // игроком: клиент не должен называть себя сам.
-                        decoded.from = packet.from;
-                        decoded.fromPort = packet.fromPort;
-                        out.push(decoded);
-                    }
-                    return out;
-                },
-                close() { engine.netClose(); },
-                status() { return engine.netStatus(); },
-                simulate(loss, delay, seed) {
-                    if (typeof engine.netSimulate === 'function') {
-                        engine.netSimulate(loss, delay, seed);
-                    }
-                },
-            };
-            transport = bound;
-            return true;
-        },
-
-        /** Подключён ли транспорт движка (а не свой через attach). */
-        engineBound() { return !!(bound && transport === bound); },
-
-        /** Опрос транспорта: движок зовёт раз в кадр. */
-        poll() {
-            if (!transport || typeof transport.poll !== 'function') return 0;
-            let count = 0;
-            try {
-                const messages = transport.poll();
-                for (const message of messages || []) {
-                    api.receive(message);
-                    count++;
-                }
-            } catch (e) {
-                ctx.log(`$.net.poll: транспорт упал: ${e}`);
-            }
-            return count;
-        },
-
-        /** Сколько кадров сети прошло (номер тика). */
-        tick() { return tick; },
-
-        // --- Задержка (RTT) ---
-
-        /**
-         * Отправить «пинг». Сервер отвечает тем же числом, и по разнице
-         * считается RTT. Игра зовёт раз в секунду-две, не каждый кадр.
-         */
-        ping(now) {
-            if (role !== 'client') return 0;
-            const seq = ++pingSeq;
-            pingSent.set(seq, Number(now) || 0);
-            api.send('ping', { seq, at: Number(now) || 0 });
-            pings++;
-            return seq;
-        },
-
-        /** Круговая задержка в МИЛЛИСЕКУНДАХ (0 — ещё не измерена). */
-        rtt() { return rtt; },
-        /** Половина задержки в секундах: столько клиент ждал подтверждения. */
-        latency() { return rtt / 2000; },
-        /** Сколько пингов отправлено. */
-        pings() { return pings; },
-
-        /**
-         * Симуляция плохой сети — для тестов и отладки: `$.net.simulate({
-         * loss: 10, delay: 150, jitter: 30, seed: 7 })`.
-         *
-         * Задержка делается ОЧЕРЕДЬЮ отложенных отправок, а не сном: спать в
-         * кадре нельзя. Пакет уходит из `poll()`, когда придёт его время.
-         *
-         * `loss` — процент потерь (`0..100`), `delay` — миллисекунды,
-         * `jitter` — случайная добавка `[0, jitter)`, `seed` — для
-         * воспроизводимости. Всё нулевое выключает симуляцию.
-         */
-        simulate(opts) {
-            const o = opts || {};
-            const pick = (v, fallback) => {
-                const n = Number(v);
-                return Number.isFinite(n) ? n : fallback;
-            };
-            const loss = pick(o.loss, 0);
-            const delay = pick(o.delay, 0);
-            const jitter = pick(o.jitter, 0);
-            const seed = pick(o.seed, 1);
-            if (transport && typeof transport.simulate === 'function') {
-                transport.simulate(loss, delay, seed, jitter);
-            }
-            sim = { loss, delay, jitter, seed };
-            return sim;
-        },
-
-        /** Настроенная симуляция сети (или нули). */
-        simulation() { return { ...sim }; },
-
-        /** Сколько пакетов ждёт своей задержки — видно, что она РАБОТАЕТ. */
-        delayed() {
-            if (typeof engine === 'undefined' || !engine
-                || typeof engine.netDelayed !== 'function') return 0;
-            return engine.netDelayed();
-        },
-
-        /** Выключить симуляцию. */
-        simulateOff() { return api.simulate({ loss: 0, delay: 0, jitter: 0 }); },
-
-        // --- Лаг-компенсация (только сервер) ---
-
-        /**
-         * История подтверждённых состояний: сервер зовёт её в своём кадре.
-         * `$.net.record(now)` — запомнить текущее подтверждённое состояние.
-         */
-        record(now) {
-            if (role !== 'server') return 0;
-            if (!history) history = createHistory(120, 1);
-            const entities = {};
-            for (const id of authority.ids.ids()) {
-                const node = authority.ids.nodeOf(id);
-                if (!node) continue;
-                const entry = { owner: authority.ownerOf(node) };
-                if (typeof node.pos === 'function') {
-                    try { const p = node.pos(); entry.x = p.x; entry.y = p.y; } catch (e) { /* без позиции */ }
-                }
-                entities[authority.ids.key(id)] = entry;
-            }
-            history.push(Number(now) || 0, entities);
-            return history.size();
-        },
-
-        /**
-         * Где был узел на момент «сейчас минус задержка» — по этому состоянию
-         * сервер проверяет попадание, а не по текущему.
-         */
-        rewind(what, now, delay) {
-            if (role !== 'server' || !history) return null;
-            const node = nodeOf(what, 'net.rewind', 'верну null');
-            if (!node) return null;
-            const key = authority.ids.key(authority.ids.idOf(node));
-            const d = delay === undefined ? api.latency() : Number(delay) || 0;
-            return history.rewind(Number(now) || 0, d, key);
-        },
-
-        /** История (или null): размер и окно — для интерфейса и тестов. */
-        history() {
-            if (!history) return null;
-            return { size: history.size(), range: history.range() };
-        },
-
-        // --- Предсказание клиента ---
-
-        /**
-         * Включить предсказание: `$.net.predict(simulate)`.
-         * `simulate(state, input)` — чистая функция шага (та же, что на сервере).
-         */
-        predict(simulate) {
-            prediction = createPrediction(simulate);
-            return prediction;
-        },
-        /** Предсказание (или null). */
-        prediction() { return prediction; },
-
-        /**
-         * Применить свой ввод немедленно: клиент зовёт перед отправкой.
-         * Возвращает предсказанное состояние (или null, если не включено).
-         */
-        applyInput(input) {
-            if (!prediction) return null;
-            return prediction.apply(input);
-        },
-        /** Канал последнего принятого сообщения (диагностика). */
-        lastChannel() { return lastChannel; },
-        /** Адреса пиров, уже привязанные к игрокам (диагностика сервера). */
-        peers() { return [...peerByAddress.keys()]; },
-        /** Счётчики для интерфейса: отправлено, получено, снапшотов, вводов. */
-        stats() { return Object.assign({}, stats, { dropped: droppedInputs }); },
-
-        // --- События ---
-
-        on(name, fn) {
-            if (typeof fn !== 'function') return api;
-            const key = String(name);
-            if (!listeners.has(key)) listeners.set(key, []);
-            listeners.get(key).push(fn);
-            return api;
-        },
-        off(name, fn) {
-            const list = listeners.get(String(name));
-            if (list && fn) {
-                const at = list.indexOf(fn);
-                if (at >= 0) list.splice(at, 1);
-            } else if (!fn) {
-                listeners.delete(String(name));
-            }
-            return api;
-        },
-        emit,
-
-        // --- Игроки и владение ---
-
-        /** Сервер: новый игрок (обычно из события транспорта). */
-        addPlayer() {
-            if (role !== 'server') return 0;
-            if (authority.playerCount() >= maxPlayers) return 0;
-            const player = authority.addPlayer(() => { droppedInputs++; });
-            emit('join', player);
-            return player;
-        },
-        /** Сервер: игрок ушёл. */
-        removePlayer(player) {
-            if (role !== 'server') return false;
-            const p = Math.floor(Number(player) || 0);
-            if (!authority.inputOf(p)) return false;
-            authority.removePlayer(p);
-            for (const [address, known] of [...peerByAddress]) {
-                if (known === p) peerByAddress.delete(address);
-            }
-            emit('leave', p);
-            return true;
-        },
-
-        /** Сервер: объявить узел реплицируемым. */
-        replicate(what, opts) {
-            const node = nodeOf(what, 'net.replicate', 'верну 0');
-            if (!node) return 0;
-            if (role !== 'server') { ctx.log('$.net.replicate: только сервер объявляет репликацию'); return 0; }
-            return authority.replicate(node, opts);
-        },
-        /** Сервер: узел больше не реплицируется. */
-        unreplicate(what) {
-            const node = nodeOf(what, 'net.unreplicate', 'верну 0');
-            if (!node) return 0;
-            return authority.unreplicate(node);
-        },
-        /** Чей узел: номер игрока или 0. */
-        ownerOf(what) {
-            const node = nodeOf(what, 'net.ownerOf', 'верну 0');
-            return node ? authority.ownerOf(node) : 0;
-        },
-        /** Может ли игрок управлять узлом. */
-        owns(player, what) {
-            const node = nodeOf(what, 'net.owns', 'верну false');
-            return node ? authority.owns(player, node) : false;
-        },
-        /** Узлы игрока. */
-        ownedBy(player) { return authority.ownedBy(player); },
-        /** Сетевой id узла (0 — нет). */
-        idOf(what) {
-            const node = nodeOf(what, 'net.idOf', 'верну 0');
-            return node ? authority.ids.idOf(node) : 0;
-        },
-        /** Узел по сетевому id. */
-        nodeOfId(id) { return authority.ids.nodeOf(id); },
-
-        /**
-         * Ввод: клиент отправляет, сервер принимает.
-         * `$.net.send('input', { seq, left, right })`.
-         */
-        send(channel, data) {
-            const name = String(channel);
+    function nativeSend(peerId, message, delivery) {
+        if (!engine || typeof engine.netSend !== 'function') return false;
+        const bytes = encodeMessage(message);
+        const channel = channelFor(delivery);
+        const reliable = channel !== DELIVERY.state;
+        const ok = !!engine.netSend(peerId || 0, channel, reliable, bytes);
+        if (ok) {
             stats.sent++;
-            // Отправлять может И СЕРВЕР: именно он рассылает снапшоты и
-            // события. Раньше здесь стояло `role === 'client'`, и серверный
-            // ответ не уходил в транспорт вовсе — обратного пути не было.
-            if (transport && typeof transport.send === 'function' && role !== 'offline') {
-                const ok = transport.send({ channel: name, data });
-                stats.lastSendOk = !!ok;
-            }
-            if (name === 'input') {
-                stats.inputs++;
-                // Локально применяем только своё: сервер — источник истины.
-                const queue = authority.inputOf(1);
-                if (queue && data && data.seq !== undefined) queue.push(data);
-            }
-            return api;
-        },
+            stats.bytesSent += bytes.length;
+        }
+        return ok;
+    }
 
-        /** Пришло сообщение из транспорта. */
-        receive(message) {
-            if (!message || typeof message !== 'object') return false;
-            const channel = String(message.channel || '');
-            lastChannel = channel;   // диагностика: видно, что дошло
-            stats.received++;
-            if (channel === 'snapshot') {
-                stats.snapshots++;
-                client.apply(message.data);
-                // Подтверждение предсказания: сервер присылает номер последнего
-                // обработанного ввода, и клиент откатывается к его состоянию.
-                if (prediction && message.data) {
-                    const entities = message.data.entities || {};
-                    let ack = 0;
-                    let own = null;
-                    for (const key of Object.keys(entities)) {
-                        const entry = entities[key];
-                        if (!entry || typeof entry.seq !== 'number') continue;
-                        if (entry.seq >= ack) { ack = entry.seq; own = entry; }
-                    }
-                    if (own) prediction.acknowledge(own, ack);
-                }
-                emit('snapshot', message.data);
-                return true;
+    function sendEnvelope(peerId, message, delivery) {
+        if (!active) return false;
+        if (simulation.loss > 0 && random01() * 100 < simulation.loss) {
+            stats.dropped++;
+            return true;
+        }
+        const extra = simulation.delay > 0 || simulation.jitter > 0
+            ? simulation.delay + Math.floor(random01() * Math.max(1, simulation.jitter + 1)) : 0;
+        if (extra > 0) {
+            delayed.push({ due: Date.now() + extra, peerId: peerId || 0, message, delivery });
+            return true;
+        }
+        return nativeSend(peerId, message, delivery);
+    }
+
+    function envelope(type, data, peer) {
+        return { v: 1, type: String(type), data: data === undefined ? null : data,
+                 from: localPeer, seq: ++messageSequence, at: Date.now(), peer: peer || 0 };
+    }
+
+    function peersExcept(except) {
+        const out = [];
+        for (const peer of peers.values()) if (peer.id !== except) out.push(peer.id);
+        return out;
+    }
+
+    function fanout(type, data, except, delivery) {
+        const message = envelope(type, data, except);
+        const ids = peersExcept(except);
+        let sent = 0;
+        for (const id of ids) if (sendEnvelope(id, message, delivery)) sent++;
+        return sent;
+    }
+
+    function targetId(node, options) {
+        const explicit = options && (options.id || options.netId);
+        return String(explicit || node.netId || node.nid || node.id || ('u' + node.uid));
+    }
+
+    function readEntity(entry) {
+        const node = entry.node;
+        if (!node || node.removed) return null;
+        const wrapper = wrapOne(node);
+        const state = { id: entry.id, owner: entry.owner };
+        for (const field of entry.fields) {
+            if (field === 'x' || field === 'y') state[field] = Number(node[field]) || 0;
+            else if (field === 'angle') state.angle = Number(node.angle) || 0;
+            else if (typeof node.get === 'function') {
+                const value = node.get(field);
+                if (value !== undefined && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null)) state[field] = value;
+            } else if (node[field] !== undefined) state[field] = node[field];
+        }
+        state.x = Number.isFinite(state.x) ? state.x : wrapper.x;
+        state.y = Number.isFinite(state.y) ? state.y : wrapper.y;
+        return state;
+    }
+
+    function writeEntity(entry, state) {
+        const node = entry && entry.node;
+        if (!node || node.removed || !state) return;
+        const wrapper = wrapOne(node);
+        if (Number.isFinite(Number(state.x)) && Number.isFinite(Number(state.y))) wrapper.at(Number(state.x), Number(state.y));
+        if (Number.isFinite(Number(state.angle))) wrapper.angle(Number(state.angle));
+        for (const field of entry.fields) {
+            if (field === 'x' || field === 'y' || field === 'angle' || state[field] === undefined) continue;
+            if (typeof node.set === 'function') node.set(field, state[field]);
+            else node[field] = state[field];
+        }
+    }
+
+    function registerNode(node, options) {
+        if (!node || node.removed) return;
+        const o = options || {};
+        const id = targetId(node, o);
+        const fields = Array.isArray(o.fields) ? o.fields.map(String) : DEFAULT_ENTITY_FIELDS.slice();
+        if (!fields.includes('x')) fields.push('x');
+        if (!fields.includes('y')) fields.push('y');
+        if (!fields.includes('angle')) fields.push('angle');
+        const owner = String(o.owner || (topology === 'mesh' ? 'remote' : 'host'));
+        const entry = { id, node, owner, fields, interpolation: o.interpolation !== false };
+        entities.set(id, entry);
+        node.netId = id;
+        return entry;
+    }
+
+    function selected(what) {
+        if (typeof what === 'string') return $(what);
+        if (what && typeof what.eachNode === 'function') return what;
+        if (what && typeof what === 'object') return wrapOne(what);
+        return wrap([]);
+    }
+
+    function register(what, options) {
+        const collection = selected(what);
+        if (!collection || typeof collection.eachNode !== 'function') return 0;
+        let count = 0;
+        collection.eachNode((_, node) => { if (registerNode(node, options)) count++; });
+        return count;
+    }
+
+    function applyRemoteSnapshot(data, peerId) {
+        if (!data || !Array.isArray(data.entities)) return false;
+        const receivedAt = Date.now();
+        for (const state of data.entities) {
+            if (!state || state.id === undefined) continue;
+            const id = String(state.id);
+            const entry = entities.get(id);
+            if (!entry || entry.owner === 'local') continue;
+            let track = samples.get(id);
+            if (!track) samples.set(id, track = []);
+            track.push({ time: receivedAt, state });
+            while (track.length > 3) track.shift();
+            if (topology === 'authoritative' && authority === 'host' && entry.owner === 'client')
+                fanout('entity', state, peerId, 'state');
+        }
+        stats.snapshots++;
+        emit('snapshot', data);
+        return true;
+    }
+
+    function processMessage(event) {
+        const message = decodeMessage(event.data);
+        if (!message || message.v !== 1 || typeof message.type !== 'string') return;
+        stats.received++;
+        const peerId = event.peerId;
+        const peer = peers.get(peerId);
+        if (peer) peer.rtt = event.rtt || peer.rtt;
+        if (relayEnabled && !message.relayed && message.type !== 'relay'
+            && message.type.indexOf('room:') !== 0) {
+            const relayed = Object.assign({}, message, { relayed: true, relayPeer: peerId });
+            for (const target of peersExcept(peerId)) sendEnvelope(target, relayed, CHANNEL_DELIVERY[event.channel] || 'reliable');
+        }
+        if (message.type === 'entity') { applyRemoteSnapshot({ entities: [message.data] }, peerId); return; }
+        if (message.type === 'entities') { applyRemoteSnapshot(message.data, peerId); return; }
+        if (message.type === 'rpc') {
+            const payload = message.data || {};
+            const handler = rpcHandlers.get(String(payload.name));
+            if (handler) {
+                try { handler(payload.data, peerId); } catch (e) { ctx.reportError ? ctx.reportError('$.net.rpc(' + payload.name + ')', e) : ctx.log(String(e)); }
             }
-            if (channel === 'input') {
-                // Ввод применяет ТОЛЬКО сервер, и только к своему игроку.
-                if (role !== 'server') return false;
-                // Игрок определяется АДРЕСОМ пира, а не тем, что он о себе
-                // написал: клиент не может назваться чужим номером. Первый
-                // пакет с нового адреса заводит игрока.
-                let player = Math.floor(Number(message.player) || 0);
-                if (player > 0 && authority.inputOf(player)) {
-                    // Номер назван и он есть в столе — принимаем.
-                } else {
-                    const address = String(message.from || '');
-                    player = peerByAddress.get(address) || 0;
-                    if (!player) {
-                        if (authority.playerCount() >= maxPlayers) return false;
-                        player = authority.addPlayer();
-                        peerByAddress.set(address, player);
-                        emit('join', player);
-                    }
-                }
-                const queue = authority.inputOf(player);
-                if (!queue) return false;
-                queue.push(message.data);
-                emit('input', player, message.data);
-                return true;
+            emit('rpc', payload.name, payload.data, peerId);
+            emit('rpc:' + payload.name, payload.data, peerId);
+            return;
+        }
+        if (message.type === 'input') {
+            stats.inputs++;
+            emit('input', message.data, peerId);
+            if (authority === 'host' && topology === 'authoritative') fanout('input', message.data, peerId, 'input');
+            return;
+        }
+        if (message.type === 'ack') {
+            if (prediction) prediction.acknowledge(message.data && message.data.state, message.data && message.data.seq);
+            emit('ack', message.data, peerId);
+            return;
+        }
+        if (message.type === 'room:join') {
+            if (!roomState) roomState = { id: String(message.data && message.data.id || 'default'), name: '', peers: [] };
+            if (!roomState.peers.includes(peerId)) roomState.peers.push(peerId);
+            sendEnvelope(peerId, envelope('room:joined', { id: roomState.id, peers: peersExcept(peerId) }), 'reliable');
+            fanout('room:peer-joined', { peerId }, peerId, 'reliable');
+            emit('room:join', peerId, roomState);
+            return;
+        }
+        if (message.type === 'room:leave') {
+            if (roomState) roomState.peers = roomState.peers.filter((id) => id !== peerId);
+            fanout('room:peer-left', { peerId }, peerId, 'reliable');
+            emit('room:leave', peerId, roomState);
+            return;
+        }
+        if (message.type === 'room:joined') {
+            roomState = Object.assign({}, message.data, { peers: message.data.peers || [] });
+            emit('room:joined', roomState);
+            return;
+        }
+        if (message.type === 'room:peer-joined' || message.type === 'room:peer-left') {
+            emit(message.type, message.data);
+            return;
+        }
+        if (message.type === 'relay') { emit('relay', message.data, peerId); return; }
+        emit(message.type, message.data, peerId, message);
+    }
+
+    function applyInterpolated(now) {
+        const renderTime = now - interpolationDelay;
+        for (const [id, track] of samples) {
+            const entry = entities.get(id);
+            if (!entry || !entry.interpolation || !track.length) continue;
+            if (track.length === 1) { writeEntity(entry, track[0].state); continue; }
+            let from = track[0], to = track[track.length - 1];
+            for (let i = 1; i < track.length; ++i) {
+                if (track[i].time >= renderTime) { from = track[i - 1]; to = track[i]; break; }
             }
-            if (channel === 'ping') {
-                // Сервер отвечает тем же числом: по разнице клиент считает RTT.
-                if (role !== 'server') return false;
-                api.send('pong', message.data);
-                return true;
+            const span = Math.max(1, to.time - from.time);
+            const t = Math.max(0, Math.min(1, (renderTime - from.time) / span));
+            writeEntity(entry, interpolate(from.state, to.state, t));
+        }
+    }
+
+    function sendEntitySnapshot() {
+        const batch = [];
+        for (const entry of entities.values()) {
+            const ownedHere = entry.owner === 'local';
+            const hostState = topology === 'authoritative' && authority === 'host' && entry.owner !== 'client';
+            if (ownedHere || hostState) {
+                const state = readEntity(entry);
+                if (state) batch.push(state);
             }
-            if (channel === 'pong') {
-                if (role !== 'client') return false;
-                const data = message.data || {};
-                const at = pingSent.get(Math.floor(Number(data.seq) || 0));
-                if (at !== undefined) {
-                    pingSent.delete(Math.floor(Number(data.seq) || 0));
-                    rtt = Math.max(0, (Number(data.at) || 0) - at);
-                }
-                emit('pong', data);
-                return true;
+        }
+        if (!batch.length) return 0;
+        if (topology === 'mesh') {
+            let sent = 0;
+            for (const state of batch) sent += fanout('entity', state, 0, 'state');
+            return sent;
+        }
+        return fanout('entities', { tick: tickNumber, entities: batch }, 0, 'state');
+    }
+
+    function step(dt) {
+        if (!active) return 0;
+        tickNumber++;
+        let work = 0;
+        try {
+            const events = engine.netPoll ? engine.netPoll() || [] : [];
+            for (const event of events) {
+                work++;
+                if (event.type === 'connect') {
+                    const peer = { id: event.peerId, rtt: event.rtt || 0, connectedAt: Date.now() };
+                    peers.set(peer.id, peer);
+                    emit('connect', Object.assign({}, peer));
+                    if (roomState && roomState.joining) sendEnvelope(peer.id, envelope('room:join', { id: roomState.id }), 'reliable');
+                } else if (event.type === 'disconnect') {
+                    const peer = peers.get(event.peerId);
+                    peers.delete(event.peerId);
+                    if (roomState) roomState.peers = roomState.peers.filter((id) => id !== event.peerId);
+                    emit('disconnect', peer ? Object.assign({}, peer) : { id: event.peerId });
+                } else if (event.type === 'receive') processMessage(event);
             }
-            if (channel === 'join' && role === 'server') {
-                const player = api.addPlayer();
-                emit('join', player);
-                return true;
-            }
-            emit(channel, message);
+        } catch (e) { ctx.log('$.net: ENet poll: ' + e); }
+        const now = Date.now();
+        for (let i = 0; i < delayed.length;) {
+            if (delayed[i].due > now) { i++; continue; }
+            const item = delayed.splice(i, 1)[0];
+            nativeSend(item.peerId, item.message, item.delivery);
+        }
+        syncElapsed += Math.max(0, Number(dt) || 0) * 1000;
+        if (syncElapsed >= syncInterval) {
+            syncElapsed %= syncInterval;
+            work += sendEntitySnapshot();
+        }
+        applyInterpolated(now);
+        return work;
+    }
+
+    const room = {
+        create(name, options) {
+            const o = options || {};
+            if (o.port !== undefined && !api.host(o.port, o)) return false;
+            const roomId = String(o.id || name || ('room-' + localPeer));
+            roomState = { id: roomId, name: String(name || roomId), peers: [], joining: false };
+            emit('room:create', Object.assign({}, roomState));
+            return Object.assign({}, roomState);
+        },
+        join(address, port, name, options) {
+            const o = options || {};
+            roomState = { id: String(o.id || name || 'default'), name: String(name || ''), peers: [], joining: true };
+            if (!api.connect(address, port, o)) { roomState = null; return false; }
+            emit('room:connecting', Object.assign({}, roomState));
             return true;
         },
-
-        /** Сервер: собрать снапшот из описанных узлов. */
-        snapshotNow() {
-            tick++;
-            const entities = {};
-            for (const id of authority.ids.ids()) {
-                const node = authority.ids.nodeOf(id);
-                if (!node) continue;
-                const entry = { owner: authority.ownerOf(node) };
-                if (typeof node.pos === 'function') {
-                    try { const p = node.pos(); entry.x = p.x; entry.y = p.y; } catch (e) { /* без позиции */ }
-                }
-                if (typeof node.get === 'function') {
-                    const hp = node.get('hp');
-                    if (hp !== undefined) entry.hp = hp;
-                }
-                entities[authority.ids.key(id)] = entry;
-            }
-            return { tick, entities };
+        leave() {
+            if (!roomState) return false;
+            if (active) sendEnvelope(0, envelope('room:leave', { id: roomState.id }), 'reliable');
+            const previous = roomState;
+            roomState = null;
+            emit('room:exit', previous);
+            return true;
         },
-
-        /** Сервер: снапшот с дельтой от предыдущего подтверждённого. */
-        deltaFrom(base) { return diffSnapshot(base, api.snapshotNow(), tick); },
-
-        /** Клиент: применить снапшот (то же, что `receive`). */
-        apply(snapshot) {
-            client.apply(snapshot);
-            emit('applied', snapshot);
-            return api;
-        },
-
-        /** Клиент: подтверждённое состояние. */
-        confirmed() { return client.confirmed(); },
-        previous() { return client.previous(); },
-        /** Клиент: значение из подтверждённого. */
-        get(key, field) { return client.get(key, field); },
-        /** Клиент: интерполированное (чужое) или подтверждённое (своё). */
-        polated(key, own, t) { return client.polated(key, own, t); },
-        /** Клиент: следующий номер ввода. */
-        nextInput() { return client.nextInput(); },
-
-        /** Строка состояния для отладки. */
-        describe() {
-            const lag = rtt > 0 ? `, RTT ${rtt.toFixed(0)} мс` : '';
-            return `${role}${port ? ` :${port}` : ''} — ${authority.describe()}, `
-                 + `снапшотов ${stats.snapshots}, вводов ${stats.inputs}${lag}`;
-        },
-
-        /** Сброс всей сети (новый мир, тесты). */
-        reset() {
-            role = 'offline';
-            port = 0;
-            host = '';
-            listeners.clear();
-            client.reset();
-            authority.reset();
-            peerByAddress.clear();
-            stats.sent = 0; stats.received = 0; stats.snapshots = 0; stats.inputs = 0;
-            rtt = 0; pingSeq = 0; pings = 0; pingSent.clear();
-            history = null;
-            if (prediction) prediction.reset();
-            droppedInputs = 0;
-            tick = 0;
-            return api;
-        },
-
-        /** Чистые ядра — для тестов и своей реализации транспорта. */
-        encodeMessage,
-        decodeMessage,
-        createIdTable,
-        createAuthority,
-        createClientState,
-        createInputQueue,
-        createHistory,
-        createPrediction,
-        diffSnapshot,
-        applySnapshot,
-        interpolate,
-        sameValue,
+        current() { return roomState ? Object.assign({}, roomState, { peers: roomState.peers.slice() }) : null; },
+        peers() { return roomState ? roomState.peers.slice() : []; },
     };
 
+    const relay = {
+        enable(options) {
+            topology = 'relay';
+            if (options && options.listen !== undefined) {
+                authority = 'host';
+                const started = api.listen(options.listen, options);
+                relayEnabled = !!started;
+                if (started) emit('relay:start', api.status());
+                return started;
+            }
+            relayEnabled = true;
+            emit('relay:start', api.status());
+            return true;
+        },
+        disable() { relayEnabled = false; emit('relay:stop'); return api; },
+        enabled() { return relayEnabled; },
+        forward(type, data, except) { return fanout(String(type), data, Number(except) || 0, 'reliable'); },
+        broadcast(type, data) { return fanout(String(type), data, 0, 'reliable'); },
+    };
+
+    const api = {
+        topology(value) {
+            if (value === undefined) return topology;
+            const key = String(value);
+            if (!TOPOLOGIES.includes(key)) throw new TypeError('$.net.topology: ' + TOPOLOGIES.join(', '));
+            topology = key;
+            return api;
+        },
+        authority(value) {
+            if (value === undefined) return authority;
+            authority = String(value);
+            return api;
+        },
+        isAuthority() { return authority === 'host' || authority === 'local'; },
+        online() { return active; },
+        available() { return !!nativeStatus().available; },
+        status() { return Object.assign({}, nativeStatus(), { active, listening, topology, authority, room: room.current() }); },
+        port() { return localPort || Number(nativeStatus().port) || 0; },
+        peers() { return [...peers.values()].map((peer) => Object.assign({}, peer)); },
+        peer(id) { const peer = peers.get(Number(id)); return peer ? Object.assign({}, peer) : null; },
+        playerCount() { return peers.size + 1; },
+        tick() { return tickNumber; },
+        room,
+        relay,
+
+        host(port, options) {
+            const o = options || {};
+            topology = String(o.topology || 'authoritative');
+            authority = 'host';
+            relayEnabled = topology === 'relay';
+            if (!open(port, o.maxPeers)) return false;
+            listening = true;
+            localPort = Number(port) || 0;
+            emit('start', { topology, authority, port: localPort });
+            return true;
+        },
+        start(options) {
+            const o = options || {};
+            const nextTopology = String(o.topology || 'authoritative');
+            if (!TOPOLOGIES.includes(nextTopology)) throw new TypeError('$.net.start: неизвестная topology ' + nextTopology);
+            topology = nextTopology;
+            authority = String(o.authority || (topology === 'authoritative' && o.listen !== undefined ? 'host' : 'local'));
+            relayEnabled = topology === 'relay';
+            const listenPort = Math.max(0, Math.floor(Number(o.listen) || 0));
+            if (!open(listenPort, o.maxPeers)) return false;
+            listening = listenPort > 0;
+            localPort = listenPort;
+            for (const endpoint of (Array.isArray(o.connect) ? o.connect : [])) {
+                if (!endpoint || !api.connect(endpoint.host || endpoint.address, endpoint.port, { topology, authority })) return false;
+            }
+            emit('start', { topology, authority, port: localPort, peers: peers.size });
+            return true;
+        },
+        listen(port, options) {
+            const o = options || {};
+            if (!open(port, o.maxPeers)) return false;
+            listening = true;
+            localPort = Number(port) || 0;
+            if (o.topology) api.topology(o.topology);
+            emit('listen', { port: localPort, topology });
+            return true;
+        },
+        connect(address, port, options) {
+            const o = options || {};
+            if (o.topology) api.topology(o.topology);
+            if (!open(0, o.maxPeers)) return false;
+            if (!engine || typeof engine.netConnect !== 'function' || !engine.netConnect(String(address || '127.0.0.1'), Number(port) || 0)) {
+                const status = nativeStatus();
+                emit('error', status.error || 'Не удалось начать подключение');
+                return false;
+            }
+            if (o.authority) authority = String(o.authority);
+            else if (topology === 'authoritative') authority = 'client';
+            emit('connecting', { address: String(address || '127.0.0.1'), port: Number(port) || 0, topology });
+            return true;
+        },
+        join(address, port, options) {
+            const o = Object.assign({ topology: 'authoritative', authority: 'client' }, options || {});
+            return api.connect(address, port, o);
+        },
+        disconnect(peerId) { return !!(engine && engine.netDisconnect && engine.netDisconnect(Number(peerId) || 0)); },
+        leave() {
+            if (!active) return false;
+            if (roomState) room.leave();
+            if (engine && typeof engine.netClose === 'function') engine.netClose();
+            active = false; listening = false; localPort = 0; relayEnabled = false;
+            peers.clear(); samples.clear(); delayed.length = 0;
+            emit('stop');
+            return true;
+        },
+        send(type, data, options) {
+            const o = options || {};
+            const peerId = Number(o.peer || o.peerId) || 0;
+            return sendEnvelope(peerId, envelope(type, data, peerId), o.delivery || 'reliable');
+        },
+        broadcast(type, data, options) {
+            const o = options || {};
+            const message = envelope(type, data, 0);
+            let sent = 0;
+            for (const peerId of peers.keys()) if (sendEnvelope(peerId, message, o.delivery || 'reliable')) sent++;
+            return sent;
+        },
+        rpc(name, data, options) { return api.send('rpc', { name: String(name), data }, options); },
+        handle(name, fn) {
+            if (typeof fn === 'function') rpcHandlers.set(String(name), fn);
+            return api;
+        },
+        unhandle(name) { rpcHandlers.delete(String(name)); return api; },
+        input(data, options) {
+            stats.inputs++;
+            const payload = Object.assign({ seq: ++messageSequence, tick: tickNumber }, data && typeof data === 'object' ? data : { value: data });
+            return api.send('input', payload, Object.assign({ delivery: 'input' }, options || {}));
+        },
+        predict(step) {
+            prediction = createPrediction(step);
+            return prediction;
+        },
+        prediction() { return prediction; },
+        applyInput(input, applyLocal) {
+            if (!prediction) prediction = createPrediction();
+            const payload = Object.assign({ seq: ++messageSequence, tick: tickNumber }, input && typeof input === 'object' ? input : { value: input });
+            const state = prediction.apply(payload);
+            if (typeof applyLocal === 'function') applyLocal(state, input);
+            api.send('input', payload, { delivery: 'input' });
+            return state;
+        },
+        acknowledge(state, sequence) {
+            if (!prediction) return null;
+            return prediction.acknowledge(state, sequence);
+        },
+        simulate(options) {
+            const o = options || {};
+            simulation = {
+                loss: Math.max(0, Math.min(100, Number(o.loss) || 0)),
+                delay: Math.max(0, Number(o.delay) || 0),
+                jitter: Math.max(0, Number(o.jitter) || 0),
+                seed: Math.floor(Number(o.seed) || 1),
+            };
+            randomState = simulation.seed >>> 0 || 1;
+            return Object.assign({}, simulation);
+        },
+        simulation() { return Object.assign({}, simulation); },
+        delayed() { return delayed.length; },
+        syncRate(hz) {
+            if (hz === undefined) return 1000 / syncInterval;
+            const rate = Math.max(1, Math.min(120, Number(hz) || 20));
+            syncInterval = 1000 / rate;
+            return api;
+        },
+        interpolationDelay(ms) {
+            if (ms === undefined) return interpolationDelay;
+            interpolationDelay = Math.max(0, Math.min(1000, Number(ms) || 0));
+            return api;
+        },
+        replicate(what, options) { return register(what, options); },
+        unreplicate(what) {
+            const collection = selected(what);
+            if (collection && collection.eachNode) collection.eachNode((_, node) => entities.delete(String(node.netId || node.nid || node.id || ('u' + node.uid))));
+            return api;
+        },
+        entities() { return [...entities.keys()]; },
+        stats() { return Object.assign({}, stats, { peers: peers.size, delayed: delayed.length, rtt: peers.size ? Math.round([...peers.values()].reduce((sum, p) => sum + (p.rtt || 0), 0) / peers.size) : 0 }); },
+        on(name, fn) {
+            if (typeof fn !== 'function') return api;
+            const key = String(name); if (!listeners.has(key)) listeners.set(key, []);
+            listeners.get(key).push(fn); return api;
+        },
+        off(name, fn) {
+            const key = String(name), list = listeners.get(key);
+            if (!list) return api;
+            if (!fn) listeners.delete(key);
+            else { const index = list.indexOf(fn); if (index >= 0) list.splice(index, 1); }
+            return api;
+        },
+        reset() {
+            if (active && engine && engine.netClose) engine.netClose();
+            active = false; listening = false; localPort = 0; authority = 'host'; topology = 'authoritative';
+            peers.clear(); entities.clear(); samples.clear(); delayed.length = 0; rpcHandlers.clear();
+            listeners.clear(); roomState = null; relayEnabled = false; syncElapsed = 0; tickNumber = 0;
+            messageSequence = 0; prediction = null;
+            for (const key of Object.keys(stats)) stats[key] = 0;
+            return api;
+        },
+        describe() {
+            return topology + (localPort ? ' :' + localPort : '') + ' — ' + peers.size + ' peer(s), ' + entities.size + ' synced entities';
+        },
+    };
+
+    def('net', function (options) {
+        this.eachNode((_, node) => registerNode(node, options));
+        return this;
+    });
+
     ctx.net = api;
+    ctx._netStep = step;
     $.net = api;
     return api;
-}
-
-/**
- * Промах цели — ОДИН раз на пару «место + цель» (правило task-46/47/48): ключ —
- * СЫРАЯ цель, после успешного разрешения серия начинается заново. Раньше
- * `$.net.replicate` писал на каждый вызов — тик в кадре заливал журнал.
- */
-const net_missed = new Set();
-
-function missTarget(where, what, message) {
-    const key = where + ' ' + what;
-    if (net_missed.has(key)) return;
-    net_missed.add(key);
-    ctx.log(`$.${where}: ${message}`);
-}
-
-function targetResolved(where, what) { net_missed.delete(where + ' ' + what); }
-
-/**
- * Узел по обёртке, узлу или селектору. Строка сначала ищется по id (прежнее
- * поведение, `#` необязателен), затем обычным селектором: раньше `'.goblin'`
- * молча не находился.
- */
-function nodeOf(what, where, note) {
-    if (!what) return null;
-    if (typeof what === 'string') {
-        const byId = ctx.byId;
-        const id = String(what).replace(/^#/, '');
-        const node = (byId && byId.get ? byId.get(id) : null) || query(what)[0] || null;
-        if (node) {
-            if (where) targetResolved(where, what);
-            return node;
-        }
-        if (where) missTarget(where, what, `узел "${what}" не найден${note ? ' — ' + note : ''}`);
-        return null;
-    }
-    if (what.nodes) return what.nodes[0] || null;
-    return what.tag ? what : null;
 }

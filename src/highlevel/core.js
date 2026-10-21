@@ -2641,11 +2641,7 @@ export class Wrapper {
     }
 }
 
-// §63: .inside() раньше объявлялся через defGet() — присваивание делает метод
-// ENUMERABLE, и он попал в снимок публичного API (`$.fn.inside`). Теперь это
-// метод класса (non-enumerable, как .within()): без этой строки имя «пропало
-// бы» из снимка и api_freeze_test счёл бы это ломающим изменением. Новые
-// операторы (limit/nearest/visibleFrom) живут по правилу .within().
+// .inside() is enumerable to match the wrapper methods exposed by $.fn.
 Object.defineProperty(Wrapper.prototype, 'inside', {
     value: Wrapper.prototype.inside,
     enumerable: true,

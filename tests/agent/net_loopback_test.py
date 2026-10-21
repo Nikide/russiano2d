@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 # ===========================================================================
-# Сетевой тест: два экземпляра движка на localhost, транспорт SDL3_net.
+# High-level ENet loopback: two runtime instances use only $.net.
 #
-# Проверяем ТРАНСПОРТ и связку с ним: движок собрал SDL3_net, сервер слушает
-# порт, клиент подключается, датаграмма доходит до сервера, сервер связывает
-# пира с игроком по АДРЕСУ, счётчики считают байты, а симуляция потерь не
-# ломает приём.
+# This acceptance scenario deliberately does not inspect engine.net* or ENet
+# sockets. It exercises the gameplay contract: availability, authoritative host
+# and join, automatic polling, messages, stats and clean shutdown.
 #
-# Проверяем ОБА направления: сервер получает ввод клиента, клиент получает
-# подтверждённый снапшот сервера — то есть петля замкнута.
-#
-# Запуск после сборки:
+# Run after an xmake build:
 #   python3 tests/agent/net_loopback_test.py
 # ===========================================================================
 
 import os
+import socket
 import sys
 import time
 
@@ -22,9 +19,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "tools"))
 from agent_client import Agent   # noqa: E402
 
 GAME = os.path.join("tests", "fixtures", "text")
-PORT = 47911
-
 FAILURES = []
+
+
+def free_port():
+    """Reserve a UDP ephemeral port briefly, then return it for ENet."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
 
 
 def check(condition, message):
@@ -33,137 +35,80 @@ def check(condition, message):
         FAILURES.append(message)
 
 
-SERVER_SETUP = """
-globalThis.__log = [];
-$.net.bindEngine();
-$.net.host(%d, { maxPlayers: 4 });
-$.net.on('input', (player, data) => {
-    __log.push('input:' + player + ':' + data.seq);
-    // Ответ сервера: клиент должен получить подтверждённый снапшот.
-    $.net.send('snapshot', { tick: data.seq, entities: { e1: { x: 42, y: 7, owner: player } } });
-});
-$.net.on('join', (p) => __log.push('join:' + p));
-$.update(() => { $.net.poll(); });
-"""
-
-CLIENT_SETUP = """
-globalThis.__log = [];
-$.net.bindEngine();
-$.net.join('127.0.0.1', %d);
-$.net.on('snapshot', (s) => __log.push('snapshot:' + JSON.stringify(s.entities.e1)));
-$.update(() => { $.net.poll(); });
-"""
+def pump(server, client, n=1):
+    for _ in range(n):
+        server.step(1)
+        client.step(1)
+        time.sleep(0.01)
 
 
 def main():
+    port = free_port()
+    print(f"  UDP port: {port}")
     with Agent(game=GAME, seed=5) as server, Agent(game=GAME, seed=6) as client:
-        check(server.eval("typeof engine.netStatus") == "function",
-              "привязки сети есть в движке")
-        status = server.eval("JSON.stringify(engine.netStatus())")
-        check('"available":true' in status, f"SDL3_net собран и доступен: {status}")
-        check(server.eval("$.net.bindEngine()") is True,
-              "транспорт движка подключился к $.net")
+        check(server.eval("$.net.available()") is True,
+              "built-in ENet transport is available through $.net")
+        check(server.eval("$.net.topology()") == "authoritative",
+              "authoritative topology is the default")
 
-        server.eval(SERVER_SETUP % PORT)
-        check(server.eval("$.net.isServer()") is True, "сервер слушает порт")
-        client.eval(CLIENT_SETUP % PORT)
+        server.eval("""
+            globalThis.__netLog = [];
+            $.net.on('connect', peer => __netLog.push('connect:' + peer.id));
+            $.net.on('input', (data, peerId) => __netLog.push('input:' + data.seq + ':' + peerId));
+            $.net.host(%d, { maxPeers: 4 });
+        """ % port)
+        client.eval("""
+            globalThis.__netLog = [];
+            $.net.on('connect', peer => __netLog.push('connect:' + peer.id));
+            $.net.join('127.0.0.1', %d);
+        """ % port)
 
         connected = False
-        for _ in range(40):
-            server.step(1)
-            client.step(1)
-            if client.eval("engine.netStatus().connected") is True:
+        for _ in range(100):
+            pump(server, client)
+            if server.eval("$.net.peers().length") == 1 and client.eval("$.net.peers().length") == 1:
                 connected = True
                 break
-            time.sleep(0.05)
-        check(connected, "клиент разрешил адрес хоста и считает себя подключённым")
+        check(connected, "host and client established an ENet peer connection")
+        check("connect:" in server.eval("__netLog.join('|')"),
+              "host received a high-level connect event")
+        check("connect:" in client.eval("__netLog.join('|')"),
+              "client received a high-level connect event")
 
-        client.eval("$.net.send('input', { seq: 1, right: true })")
-        got_input = False
-        for _ in range(40):
-            server.step(1)
-            client.step(1)
-            if "input:1:1" in server.eval("__log.join('|')"):
-                got_input = True
+        check(client.eval("$.net.send('input', { seq: 1, moveX: 1 }, { delivery: 'input' })") is True,
+              "client sent input through $.net")
+        received = False
+        for _ in range(60):
+            pump(server, client)
+            if "input:1:" in server.eval("__netLog.join('|')"):
+                received = True
                 break
-            time.sleep(0.05)
-        log = server.eval("__log.join('|')")
-        check(got_input, f"сервер получил ввод клиента по петле: {log}")
-        check("join:1" in log, "сервер завёл игрока по адресу пира")
+        check(received, "host received the input event without manual transport polling")
+        check(client.eval("$.net.stats().sent") > 0, "high-level sent counter advanced")
+        check(server.eval("$.net.stats().received") > 0, "high-level received counter advanced")
 
-        stats = server.eval("engine.netStatus()")
-        check(stats["packetsReceived"] > 0, f"счётчик принятых пакетов: {stats['packetsReceived']}")
-        check(stats["received"] > 0, f"счётчик принятых байт: {stats['received']}")
-        check(server.eval("$.net.playerCount()") == 1, "в столе авторитета один игрок")
-        check(server.eval("$.net.peers().length") == 1, "адрес пира запомнен")
+        client.eval("$.net.simulate({ loss: 100, delay: 0, seed: 7 })")
+        before = server.eval("$.net.stats().received")
+        client.eval("$.net.send('input', { seq: 2 }, { delivery: 'input' })")
+        pump(server, client, 12)
+        check(server.eval("$.net.stats().received") == before,
+              "high-level loss simulation can drop an outgoing message")
+        check(client.eval("$.net.stats().dropped") > 0,
+              "dropped-message counter is visible through $.net.stats()")
 
-        # Несколько пакетов подряд: сервер должен принять все номера.
-        for i in range(2, 6):
-            client.eval("$.net.send('input', { seq: %d, right: false })" % i)
-            client.step(1)
-            server.step(1)
-        time.sleep(0.2)
-        for _ in range(10):
-            server.step(1)
-            client.step(1)
-        log = server.eval("__log.join('|')")
-        check("input:1:5" in log, f"дошёл последний номер ввода: {log}")
-
-        # Обратный путь: клиент применяет подтверждённое сервером состояние.
-        got_snapshot = False
-        for _ in range(40):
-            server.step(1)
-            client.step(1)
-            if "snapshot:" in client.eval("__log.join('|')"):
-                got_snapshot = True
-                break
-            time.sleep(0.05)
-        client_log = client.eval("__log.join('|')")
-        check(got_snapshot, f"клиент получил ответ сервера по петле: {client_log}")
-        check(client.eval("$.net.get('e1', 'x')") == 42,
-              "клиент применил подтверждённое состояние")
-        check(client.eval("engine.netStatus()")["packetsReceived"] > 0,
-              "счётчик принятых пакетов на клиенте вырос")
-
-        # Симуляция потерь: приём не должен сломаться (часть пакетов теряется).
-        before = server.eval("engine.netStatus()")["packetsReceived"]
-        server.eval("engine.netSimulate(40, 0, 7)")
-        for i in range(10, 20):
-            client.eval("$.net.send('input', { seq: %d })" % i)
-            client.step(1)
-            server.step(1)
-        time.sleep(0.2)
-        for _ in range(10):
-            server.step(1)
-            client.step(1)
-        after = server.eval("engine.netStatus()")["packetsReceived"]
-        check(after > before, f"при потерях пакеты всё равно доходят: {before} → {after}")
-
-        # RTT по петле: клиент шлёт пинг, сервер отвечает.
-        client.eval("$.net.ping(1.0)")
-        for _ in range(20):
-            server.step(1)
-            client.step(1)
-            if client.eval("$.net.rtt()") >= 0 and client.eval("$.net.pings()") > 0:
-                break
-            time.sleep(0.05)
-        # Через петлю время не идёт, поэтому RTT = 0 — важно, что ответ дошёл.
-        check(client.eval("$.net.pings()") > 0, "клиент отправил пинг")
-        check(client.eval("$.net.rtt()") >= 0, "RTT посчитан (по петле — около нуля)")
-
-        # Сброс: узел выходит из сети, порт освобождается.
+        client.eval("$.net.simulate({ loss: 0, delay: 0, jitter: 0 })")
         client.eval("$.net.leave()")
         server.eval("$.net.leave()")
-        check(server.eval("$.net.role()") == "offline", "сервер вышел из сети")
-        check(server.eval("engine.netMode()") == 0, "транспорт закрыт")
+        check(client.eval("$.net.online()") is False, "client session closed")
+        check(server.eval("$.net.online()") is False, "host session closed")
 
     print()
     if FAILURES:
-        print(f"ПРОВАЛОВ: {len(FAILURES)}")
-        for f in FAILURES:
-            print("  - " + f)
+        print(f"FAILURES: {len(FAILURES)}")
+        for failure in FAILURES:
+            print("  - " + failure)
         return 1
-    print("Все проверки пройдены")
+    print("All checks passed")
     return 0
 
 

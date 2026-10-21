@@ -1,6 +1,6 @@
-<rml><head><link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="asset.rcss"/><title>Asset Studio</title></head><body>
+<rml><head><link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="asset.rcss"/><title>Редактор ресурсов</title></head><body>
 <div class="st-root">
- <div class="st-bar"><span id="aw-title" class="st-title"></span><span class="st-sep"></span><div id="aw-tools" class="st-btns"></div><span class="st-grow"></span><button id="aw-validate" class="st-btn">Validate</button><button id="aw-source-toggle" class="st-btn">JSON</button><span id="aw-state" class="st-pill"></span></div>
+ <div class="st-bar"><span id="aw-title" class="st-title"></span><span class="st-sep"></span><div id="aw-tools" class="st-btns"></div><span class="st-grow"></span><button id="aw-validate" class="st-btn">Проверить</button><button id="aw-source-toggle" class="st-btn">JSON</button><span id="aw-state" class="st-pill"></span></div>
  <div class="st-main">
   <div class="st-left"><div class="st-scroll"><span id="aw-list-title" class="st-h first"></span><div id="aw-list"></div><div id="aw-library"></div></div><div class="st-foot"><div id="aw-actions" class="st-btns"></div></div></div>
   <div class="st-center"><div id="aw-canvas" class="st-canvas"><div id="aw-content" class="st-overlay"></div></div><div id="aw-bottom" class="aw-bottom"></div><div id="aw-source-panel" class="st-hidden aw-source"><textarea id="aw-source" class="st-area"></textarea><button id="aw-source-apply" class="st-btn primary">Применить JSON</button></div><div id="aw-hud" class="st-hud"></div></div>

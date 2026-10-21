@@ -1,0 +1,12 @@
+<rml><head><title>Весна до последней электрички</title></head><body>
+<div data-dialog-role="root">
+  <div class="dialog-backdrop"></div>
+  <div data-dialog-role="portrait"><img data-dialog-role="portrait-image"/></div>
+  <div data-dialog-role="box">
+    <div data-dialog-role="speaker"></div>
+    <div data-dialog-role="text"></div>
+    <div data-dialog-role="continue-indicator">◆</div>
+  </div>
+  <div data-dialog-role="choices"><button data-dialog-role="choice"></button></div>
+</div>
+</body></rml>

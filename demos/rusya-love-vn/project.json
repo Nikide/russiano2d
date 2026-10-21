@@ -1,0 +1,25 @@
+{
+  "schema_version": 2,
+  "project": {"name": "rusya-love-vn", "version": "0.1.0"},
+  "runtime": {"entry": "main.js", "window": {"title": "rusya-love-vn", "width": 1280, "height": 720}},
+  "editor": {
+    "graph": {
+      "format": 1,
+      "status": "current",
+      "sources": [
+        {"path": "game.js", "hash": "aaa3f890ebc1c544"},
+        {"path": "main.js", "hash": "c9549dc4c837633a"}
+      ],
+      "diagnostics": [],
+      "areas": [
+        {"key": "project:main", "type": "project", "label": "Проект", "origin": "code"}
+      ],
+      "entities": [
+        {"key": "script:game.js", "area": "project:main", "type": "script", "origin": "code", "path": "game.js", "source": {"file": "game.js", "line": 1}},
+        {"key": "script:main.js", "area": "project:main", "type": "script", "origin": "code", "path": "main.js", "entry": true, "source": {"file": "main.js", "line": 1}}
+      ],
+      "edges": [],
+      "views": {}
+    }
+  }
+}

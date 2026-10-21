@@ -1,7 +1,7 @@
 <rml>
 <head>
     <link type="text/rcss" href="editor.rcss"/>
-    <title>Russiano2D Editor</title>
+    <title>Редактор Russiano2D</title>
 </head>
 <body>
 <!-- Project Manager: без открытого проекта -->
@@ -9,7 +9,7 @@
     <div id="pm-top">
         <div id="pm-logo"></div>
         <div class="pm-brand">
-            <span class="pm-name">Russiano2D Editor</span>
+            <span class="pm-name">Редактор Russiano2D</span>
             <span class="pm-tag">Откройте проект или начните новый</span>
         </div>
     </div>
@@ -108,16 +108,16 @@
         </div>
 
         <div id="inspector">
-            <div class="side-title">Inspector</div>
+            <div class="side-title">Инспектор</div>
             <div id="insp-body" class="side-body"></div>
         </div>
     </div>
 
     <div id="bottom">
         <div id="bottom-tabs">
-            <span id="bt-problems" class="btab on">Problems<span id="prob-badge" class="badge zero">0</span></span>
-            <span id="bt-output" class="btab">Output</span>
-            <span id="bt-console" class="btab">Console</span>
+            <span id="bt-problems" class="btab on">Проблемы<span id="prob-badge" class="badge zero">0</span></span>
+            <span id="bt-output" class="btab">Вывод</span>
+            <span id="bt-console" class="btab">Консоль</span>
             <span id="bt-graph" class="btab">Граф</span>
             <span class="grow"></span>
             <span id="bt-toggle" class="tb-btn icon"></span>
@@ -129,7 +129,7 @@
                 <span id="gp-warn" class="gp-warn hidden"></span>
                 <input id="gp-search" type="text" class="field" value=""/>
                 <span id="gp-view-overview" class="gp-vbtn">Обзор</span>
-                <span id="gp-view-world" class="gp-vbtn">World</span>
+                <span id="gp-view-world" class="gp-vbtn">Мир</span>
                 <span id="gp-view-scenes" class="gp-vbtn">Сцены</span>
                 <span id="gp-view-resources" class="gp-vbtn">Ресурсы</span>
                 <span id="gp-backbtn" class="tb-btn icon"></span>
@@ -182,13 +182,13 @@
     <div id="file-conflict" class="hidden">
         <div class="close-scrim"></div>
         <div class="close-dialog" role="dialog" aria-modal="true" aria-labelledby="file-conflict-title">
-            <span id="file-conflict-title" class="close-title">Файл изменён вне Editor</span>
+            <span id="file-conflict-title" class="close-title">Файл изменён вне редактора</span>
             <span id="file-conflict-message" class="close-message"></span>
             <div class="close-actions">
                 <button id="file-conflict-cancel" class="btn">Отмена</button>
                 <span class="grow"></span>
                 <button id="file-conflict-reload" class="btn">Загрузить с диска</button>
-                <button id="file-conflict-overwrite" class="btn danger">Записать версию Editor</button>
+                <button id="file-conflict-overwrite" class="btn danger">Записать версию редактора</button>
             </div>
         </div>
     </div>

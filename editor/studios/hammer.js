@@ -11,18 +11,26 @@ import * as views from '../lib/shared/views.js';
 import { studioDoc, uiScale, mousePx, screenCamera, keys } from '../lib/studio_kit.js';
 
 export const meta = {
-    id: 'hammer', ownKeys: ['f5'], title: 'Hammer', icon: 'architecture',
+    id: 'hammer', ownKeys: ['f5'], title: 'Редактор карт', icon: 'architecture',
     match: (p) => /\.re2dmap(\.json)?$/i.test(p),
     summary: (snap) => snap ? [
         ['Состояние', snap.dirty ? 'изменён, не сохранён' : 'сохранён'],
         ['Инструмент', snap.tool],
         ['Выделение', snap.selection.ids.join(', ') || 'нет'],
-        ['Карта', 'brushes ' + snap.map.brushes + ' · entities ' + snap.map.entities + ' · paths ' + snap.map.paths],
-        ['Preview', snap.preview.state],
+        ['Карта', 'кистей ' + snap.map.brushes + ' · объектов ' + snap.map.entities + ' · путей ' + snap.map.paths],
+        ['Предпросмотр', snap.preview.state],
     ] : [],
 };
 
 const TOOLS = ['select', 'block', 'move', 'resize', 'rotate', 'vertex', 'clip', 'face', 'entity', 'path'];
+const BRUSH_TOOL_LABELS = {
+    solid: 'Обычная', nodraw: 'Без отрисовки', clip: 'Клип', enemyclip: 'Преграда для врагов',
+    playerclip: 'Преграда для игрока', sky: 'Небо', occluder: 'Окклюдер', hint: 'Подсказка',
+    skip: 'Пропуск', trigger: 'Триггер', areaportal: 'Портал области',
+};
+const FACE_LABELS = { side: 'Стена', floor: 'Пол', ceiling: 'Потолок' };
+const SECTION_LABELS = { cells: 'Ячейки', walls: 'Стены', portals: 'Порталы', stairs: 'Лестницы', slopes: 'Склоны', lights: 'Источники света' };
+const KIND_LABELS = { world: 'Мир', brush: 'Кисть', face: 'Грань', entity: 'Объект', path: 'Путь', visgroup: 'Группа видимости' };
 const TOOL_IDS = {
     select: 'we-tool-select', block: 'we-tool-block', move: 'we-tool-move', resize: 'we-tool-resize',
     rotate: 'we-tool-rotate', vertex: 'we-tool-vertex', clip: 'we-tool-clip', face: 'we-tool-face',
@@ -140,22 +148,22 @@ export function create(host) {
         html.push('<h4>Мир</h4>');
         const world = map.world || {};
         html.push('<div class="row' + (sel.kind === 'none' && s.tab === 'world' ? ' sel' : '') + '" data-key="world">' +
-            '<span class="row-name">World</span><span class="row-dir">' + esc(map.world ? String(world.w || 0) + 'x' + String(world.h || 0) : 'конверт не задан') + '</span></div>');
-        html.push('<h4>Brushes (' + (map.brushes || []).length + ')</h4>');
+            '<span class="row-name">Мир</span><span class="row-dir">' + esc(map.world ? String(world.w || 0) + 'x' + String(world.h || 0) : 'конверт не задан') + '</span></div>');
+        html.push('<h4>Кисти (' + (map.brushes || []).length + ')</h4>');
         for (const brush of (map.brushes || [])) {
-            row('brush', brush.id, brush.id, (brush.tool || 'solid') + (brush.visgroup ? ' / ' + brush.visgroup : ''));
+            row('brush', brush.id, brush.id, (BRUSH_TOOL_LABELS[brush.tool || 'solid'] || brush.tool || 'Обычная') + (brush.visgroup ? ' / ' + brush.visgroup : ''));
         }
         for(const [kind,section] of Object.entries(M.ELEMENT_KINDS)) {
-            html.push('<h4>'+section+' ('+(map[section]||[]).length+')</h4>');
+            html.push('<h4>'+(SECTION_LABELS[section]||section)+' ('+(map[section]||[]).length+')</h4>');
             for(const item of map[section]||[])row(kind,item.id,item.id,section);
         }
-        html.push('<h4>Entities (' + (map.entities || []).length + ')</h4>');
+        html.push('<h4>Объекты (' + (map.entities || []).length + ')</h4>');
         for (const entity of (map.entities || [])) row('entity', entity.id, entity.id, entity.kind || '');
-        html.push('<h4>Paths (' + (map.paths || []).length + ')</h4>');
+        html.push('<h4>Пути (' + (map.paths || []).length + ')</h4>');
         for (const path of (map.paths || [])) row('path', path.id, path.id, (path.nodes || []).length + ' узлов');
-        html.push('<h4>VisGroups (' + (map.visgroups || []).length + ')</h4>');
+        html.push('<h4>Группы видимости (' + (map.visgroups || []).length + ')</h4>');
         for (const group of (map.visgroups || [])) {
-            row('visgroup', group.id, group.name || group.id, (group.visible === false ? 'скрыта ' : '') + (group.locked ? 'lock' : ''));
+            row('visgroup', group.id, group.name || group.id, (group.visible === false ? 'скрыта ' : '') + (group.locked ? 'закреплена' : ''));
         }
         doc.html('we-tree', html.join(''));
     }
@@ -169,8 +177,13 @@ export function create(host) {
             const id = 'we-prop-' + field.key;
             let control;
             if (field.type === 'select') {
-                const options = (field.options || []).map((option) =>
-                    '<option value="' + esc(option) + '">' + esc(option) + '</option>').join('');
+                const options = (field.options || []).map((option) => {
+                    const value = option && typeof option === 'object' ? option.value : option;
+                    const label = option && typeof option === 'object' ? option.label :
+                        field.key === 'tool' ? (BRUSH_TOOL_LABELS[option] || option) :
+                        field.key === 'face' ? (FACE_LABELS[option] || option) : option;
+                    return '<option value="' + esc(value) + '">' + esc(label) + '</option>';
+                }).join('');
                 control = '<select id="' + esc(id) + '" class="field">' + options + '</select>';
             } else if (field.type === 'json') {
                 control = '<textarea id="' + esc(id) + '" class="area we-json">' + esc(field.value) + '</textarea>';
@@ -181,7 +194,8 @@ export function create(host) {
             values.push({ id: id, value: field.value === undefined || field.value === null ? '' : String(field.value) });
         }
         const sel = selection.snapshot();
-        doc.text('we-selection', esc(sel.kind === 'none' ? ('инспектор: ' + kind) : (sel.kind + ' · ' + sel.ids.join(', '))));
+        const kindLabel = KIND_LABELS[sel.kind] || sel.kind;
+        doc.text('we-selection', esc(sel.kind === 'none' ? ('Инспектор: ' + (KIND_LABELS[kind] || kind)) : (kindLabel + ' · ' + sel.ids.join(', '))));
         doc.html('we-inspector', parts.join(''));
         const elementSection=M.ELEMENT_KINDS[kind];
         doc.setValue('we-element-json',elementSection?JSON.stringify(M.find(session.state.map,elementSection,sel.ids[0])||{},null,2):'');
@@ -278,8 +292,8 @@ export function create(host) {
             s.fitted = true;
         }
         const hasPreview = !!session.state.world;
-        doc.text('we-3d-state', hasPreview ? (previewStale() ? 'устарел: пересоберите карту' : 'настоящий runtime') : 'скомпилируйте карту');
-        doc.text('we-3d-debug', session.state.debugView || 'final');
+        doc.text('we-3d-state', hasPreview ? (previewStale() ? 'устарел: пересоберите карту' : 'предпросмотр запущен') : 'соберите карту');
+        doc.text('we-3d-debug', ({ final: 'Итоговый вид', wireframe: 'Каркас', normals: 'Нормали', depth: 'Глубина' })[session.state.debugView] || session.state.debugView || 'Итоговый вид');
         doc.text('we-3d-backend', session.state.gpu ? 'GPU' : 'CPU');
         doc.text('we-3d-light', session.state.lighting ? 'Свет вкл' : 'Свет выкл');
     }
@@ -299,7 +313,7 @@ export function create(host) {
         const hasCellWorld = (map.cells || []).length || (map.walls || []).length || (map.portals || []).length;
         doc.style('we-map-hint', 'display', hasCellWorld ? 'flex' : 'none');
         if (hasCellWorld) doc.text('we-map-hint-text',
-            'Re2D World: cells, стены и порталы редактируются здесь; высоты и spans — в инспекторе.');
+            'Мир Re2D: ячейки, стены и порталы редактируются здесь; высоты и диапазоны — в инспекторе.');
         doc.text('we-file', esc(session.state.path || 'карта не открыта'));
         doc.setValue('we-path', session.state.path || '');
         doc.text('we-dirty', session.state.history && session.state.history.dirty() ? 'изменено' : '');
@@ -345,7 +359,7 @@ export function create(host) {
             const scale = uiScale($);
             session.state.node.visible(s.active).sprite(texture).at((rect.x + rect.w / 2) / scale, (rect.y + rect.h / 2) / scale).size(rect.w / scale, rect.h / scale);
         } catch (e) {
-            doc.text('we-3d-state', 'runtime preview: ' + (e && e.message ? e.message : String(e)));
+            doc.text('we-3d-state', 'Ошибка предпросмотра: ' + (e && e.message ? e.message : String(e)));
         }
     }
 
@@ -802,16 +816,16 @@ export function create(host) {
                 if (result && result.ok === false) {
                     note('error', 'SDK_EXTENSION_RUN_FAILED', result.message || ('Расширение отклонило действие «' + item.id + '»'),
                         { asset: item.extension || '', details: { id: item.id, kind } });
-                    setStatus('extension отклонён: ' + id, true);
+                    setStatus('Расширение отклонило действие: ' + id, true);
                 } else {
-                    setStatus('extension: ' + id, false);
+                    setStatus('Выполнено действие расширения: ' + id, false);
                 }
                 render();
             }).catch((error) => {
                 const message = error && error.message ? error.message : String(error);
                 note('error', 'SDK_EXTENSION_RUN_FAILED', 'Действие расширения «' + item.id + '» завершилось ошибкой: ' + message,
                     { asset: item.extension || '', details: { id: item.id, kind } });
-                setStatus('extension не выполнено: ' + id, true);
+                setStatus('Не удалось выполнить действие расширения: ' + id, true);
                 render();
             });
             return true;
@@ -822,13 +836,13 @@ export function create(host) {
             if (runContribution(item, item.args || {})) return;
             if (item.op) {
                 session.apply(item.op, item.args || {}).then((r) => {
-                    setStatus(r.ok ? 'extension: ' + id : 'extension отклонён', !r.ok);
+                    setStatus(r.ok ? 'Выполнено действие расширения: ' + id : 'Расширение отклонило действие', !r.ok);
                     render();
                 });
             } else if (item.command) {
                 commands.runExtensionCommand(item.command, item.args || {}).then(() => render());
             } else {
-                note('info', 'SDK_EXTENSION_TOOL', 'World tool «' + id + '» без op: только объявлен');
+                note('info', 'SDK_EXTENSION_TOOL', 'Инструмент мира «' + id + '» только объявлен: операция не задана');
                 render();
             }
             return;
@@ -851,9 +865,9 @@ export function create(host) {
                 }
             }
             if (runContribution(item, args)) return;
-            if (item.op) session.apply(item.op, args).then((r) => { setStatus(r.ok ? 'extension: ' + id : 'extension отклонён', !r.ok); render(); });
+            if (item.op) session.apply(item.op, args).then((r) => { setStatus(r.ok ? 'Выполнено действие расширения: ' + id : 'Расширение отклонило действие', !r.ok); render(); });
             else if (item.command) commands.runExtensionCommand(item.command, args).then(() => render());
-            else { note('info', 'SDK_EXTENSION_TOOL', 'Contribution «' + id + '» без op/command'); render(); }
+            else { note('info', 'SDK_EXTENSION_TOOL', 'Действие расширения «' + id + '» не связано с операцией или командой'); render(); }
         }
     }
 
@@ -876,7 +890,7 @@ export function create(host) {
             ['face', 'we-toggle-face', 'we-face-settings', 'Материалы граней'],
             ['clip', 'we-toggle-clip', 'we-clip-settings', 'Разрезать кисть'],
             ['path', 'we-toggle-path', 'we-path-settings', 'Управление путями'],
-            ['elements','we-toggle-elements','we-element-settings','Re2D World'],
+            ['elements','we-toggle-elements','we-element-settings','Мир Re2D'],
             ['build', 'we-toggle-build', 'we-build-settings', 'Журнал сборки'],
         ];
         const expanded = {};
@@ -898,15 +912,15 @@ export function create(host) {
             if (path) host.openWith(path, 'hammer');
         });
         for(const section of Object.values(M.ELEMENT_KINDS))
-            doc.on('we-add-'+section,'click',()=>commands.addWorldElement(section).then(r=>{setStatus(r.ok?'Создан '+section:'Создание отклонено',!r.ok);render();}));
-        doc.on('we-element-apply','click',()=>{try{const sel=selection.snapshot(),section=M.ELEMENT_KINDS[sel.kind];if(!section)throw new Error('Выберите объект Re2D World');commands.setWorldElement(section,sel.ids[0],JSON.parse(doc.value('we-element-json'))).then(()=>render());}catch(e){note('error','SDK_WORLD_EDIT_INSPECTOR',e.message);render();}});
+            doc.on('we-add-'+section,'click',()=>commands.addWorldElement(section).then(r=>{setStatus(r.ok?'Создано: '+(SECTION_LABELS[section]||section):'Создание отклонено',!r.ok);render();}));
+        doc.on('we-element-apply','click',()=>{try{const sel=selection.snapshot(),section=M.ELEMENT_KINDS[sel.kind];if(!section)throw new Error('Выберите объект мира Re2D');commands.setWorldElement(section,sel.ids[0],JSON.parse(doc.value('we-element-json'))).then(()=>render());}catch(e){note('error','SDK_WORLD_EDIT_INSPECTOR',e.message);render();}});
         doc.on('we-material-preview','click',()=>{try{previewMaterial(JSON.parse(doc.value('we-material-spec')));}catch(e){note('error','SDK_WORLD_MATERIAL',e.message);}render();});
         doc.on('we-wall-split','click',()=>commands.splitWall().then(()=>render()));
         doc.on('we-wall-join','click',()=>commands.joinWalls(null,String(doc.value('we-wall-other')||'').trim()).then(()=>render()));
         doc.on('we-duplicate', 'click', () => commands.duplicateSelection().then((r) => { setStatus(r.ok ? 'дублировано' : 'дублирование отклонено', !r.ok); render(); }));
         doc.on('we-delete', 'click', () => commands.deleteSelection().then((r) => { setStatus(r.ok ? 'удалено' : 'удаление отклонено', !r.ok); render(); }));
         doc.on('we-validate', 'click', () => commands.validate().then((r) => { setStatus(r.ok ? 'проверка: ошибок нет' : 'проверка: есть ошибки', !r.ok); render(); }));
-        doc.on('we-compile', 'click', () => compile(true).then((r) => { setStatus(r.ok ? 'компиляция: preview готов' : 'компиляция: ошибки', !r.ok); render(); }));
+        doc.on('we-compile', 'click', () => compile(true).then((r) => { setStatus(r.ok ? 'сборка: предпросмотр готов' : 'сборка: ошибки', !r.ok); render(); }));
         doc.on('we-run', 'click', () => { Promise.resolve(host.run()).then((run) => { setStatus(run ? 'игра запущена' : 'игра не запущена', !run); render(); }); });
         doc.on('we-build-run', 'click', buildAndRun);
         doc.on('we-grid-dec', 'click', () => { commands.stepGrid(-1); render(); });
@@ -953,18 +967,18 @@ export function create(host) {
         doc.on('we-entity-create', 'click', createEntityFromToolbar);
         doc.on('we-visgroup-create', 'click', () => {
             commands.ensureVisgroup({ name: String(doc.value('we-visgroup-name') || 'group') }).then((r) => {
-                setStatus(r.ok ? 'visgroup создан' : 'visgroup отклонён', !r.ok);
+                setStatus(r.ok ? 'Группа видимости создана' : 'Не удалось создать группу видимости', !r.ok);
                 render();
             });
         });
         doc.on('we-visgroup-hide', 'click', () => {
             const sel = selection.snapshot();
-            if (sel.kind !== 'visgroup' || !sel.ids.length) { note('warning', 'SDK_WORLD_EDIT_VISGROUP', 'Выберите visgroup'); render(); return; }
+            if (sel.kind !== 'visgroup' || !sel.ids.length) { note('warning', 'SDK_WORLD_EDIT_VISGROUP', 'Выберите группу видимости'); render(); return; }
             commands.toggleVisgroupHidden(sel.ids[0]).then(() => render());
         });
         doc.on('we-visgroup-lock', 'click', () => {
             const sel = selection.snapshot();
-            if (sel.kind !== 'visgroup' || !sel.ids.length) { note('warning', 'SDK_WORLD_EDIT_VISGROUP', 'Выберите visgroup'); render(); return; }
+            if (sel.kind !== 'visgroup' || !sel.ids.length) { note('warning', 'SDK_WORLD_EDIT_VISGROUP', 'Выберите группу видимости'); render(); return; }
             commands.toggleVisgroupLocked(sel.ids[0]).then(() => render());
         });
         doc.on('we-resize-plus', 'click', () => { const g = viewports.state.gridSize; commands.resizeSelection(g, g, 0).then(() => render()); });
@@ -982,7 +996,7 @@ export function create(host) {
             });
         });
         doc.on('we-path-loop', 'click', () => {
-            commands.setPathFields(null, { loop: true }).then((r) => { setStatus(r.ok ? 'path loop' : 'loop отклонён', !r.ok); render(); });
+            commands.setPathFields(null, { loop: true }).then((r) => { setStatus(r.ok ? 'Путь замкнут' : 'Не удалось замкнуть путь', !r.ok); render(); });
         });
         doc.on('we-ext-toolbar', 'click', (id, ev, key) => { if (key) dispatchExtension(key); });
         doc.on('we-ext-overlays', 'click', (id, ev, key) => { if (key) dispatchExtension(key); });
@@ -997,7 +1011,7 @@ export function create(host) {
 
     function buildAndRun() {
         compileAndRun().then((r) => {
-            setStatus(r.ok ? 'Build and Run: игра запущена' : 'Build and Run: этап ' + (r.stage || '?') + ' не прошёл', !r.ok);
+            setStatus(r.ok ? 'Сборка и запуск: игра запущена' : 'Сборка и запуск: этап ' + (r.stage || '?') + ' не прошёл', !r.ok);
             render();
         });
     }
@@ -1013,7 +1027,7 @@ export function create(host) {
         previewNeedsFit = true;
         viewports.focus(M.mapBounds(session.state.map));
         wire();
-        setStatus('Hammer: ' + path, false);
+        setStatus('Редактор карт: ' + path, false);
         return snapshot();
     }
 
@@ -1103,7 +1117,7 @@ export function create(host) {
 
     function previewMaterial(options) {
         const world=session.state.world;
-        if(!world)throw new Error('Сначала скомпилируйте preview');
+        if(!world)throw new Error('Сначала соберите карту для предпросмотра');
         if(!options||!options.name||!Array.isArray(options.surfaces)||!options.albedo)
             throw new Error('Нужны name, surfaces и PNG albedo');
         for(const id of options.surfaces)if(!world.surface(id))throw new Error('Поверхность '+id+' отсутствует');
@@ -1271,12 +1285,12 @@ export function create(host) {
         if (on) render();
     };
     api.commands = () => [
-        { label: 'Hammer: проверить карту', run: () => commands.validate().then(() => { render(); host.changed(); }) },
-        { label: 'Hammer: скомпилировать preview', run: () => compile(true) },
-        { label: 'Hammer: сохранить, собрать и запустить', run: compileAndRun },
-        { label: 'Hammer: все четыре вида', run: () => { viewports.restore(); renderMax(); } },
-        { label: 'Hammer: к выделению', run: focusSelection },
-        ...Object.entries(M.ELEMENT_KINDS).map(([kind,section])=>({label:'Hammer: добавить '+kind,run:()=>commands.addWorldElement(section)})),
+        { label: 'Редактор карт: проверить карту', run: () => commands.validate().then(() => { render(); host.changed(); }) },
+        { label: 'Редактор карт: создать предпросмотр', run: () => compile(true) },
+        { label: 'Редактор карт: сохранить, собрать и запустить', run: compileAndRun },
+        { label: 'Редактор карт: показать все четыре вида', run: () => { viewports.restore(); renderMax(); } },
+        { label: 'Редактор карт: перейти к выделенному', run: focusSelection },
+        ...Object.entries(M.ELEMENT_KINDS).map(([kind,section])=>({label:'Редактор карт: добавить '+kind,run:()=>commands.addWorldElement(section)})),
     ];
 
     return api;

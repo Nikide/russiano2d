@@ -1,25 +1,4 @@
-// ===========================================================================
-// Сеть — транспорт на SDL3_net
-//
-// Решение проекта: в высокоуровневом API `$` есть только АВТОРИТАРНЫЙ
-// мультиплеер. Транспорт — его нижний слой: он не знает ни про владение
-// узлами, ни про снапшоты (это делает $.net в JS). Здесь только сокеты:
-// поднять сервер, подключиться, отправить и принять пакет.
-//
-// Канал — ДАТАГРАММЫ (UDP). Почему:
-//   * сервер отвечает на адрес отправителя, не заводя соединений на каждого
-//     игрока — авторитарной модели этого достаточно;
-//   * потеря пакета не блокирует остальных: для игры это правильнее, чем
-//     голова очереди в TCP;
-//   * симуляция потерь (NET_SimulateDatagramPacketLoss) воспроизводима в тестах.
-//
-// Что движок даёт игре: r2d_net_send / r2d_net_poll. Что игра решает сама:
-// когда слать снапшот, как часто, и что считать подтверждением — это $.net.
-//
-// Без R2D_ENABLE_NET остаётся тот же интерфейс из net_stub.c: игра не
-// обрастает #ifdef, а сборка не тянет SDL3_net (см. audio.c/audio_stub.c).
-// ===========================================================================
-
+// High-level game's private ENet transport. Gameplay code only sees $.net.
 #ifndef R2D_NET_H
 #define R2D_NET_H
 
@@ -27,76 +6,39 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// Один принятый пакет. `from` — адрес отправителя в виде строки: по нему
-// сервер отличает игроков, а клиент понимает, что это ответ хоста.
-typedef struct R2DNetPacket {
-    char    from[64];
-    int     from_port;
-    uint8_t *data;
-    int      size;
-} R2DNetPacket;
+typedef enum R2DNetEventType {
+    R2D_NET_EVENT_CONNECT = 1,
+    R2D_NET_EVENT_DISCONNECT = 2,
+    R2D_NET_EVENT_RECEIVE = 3,
+} R2DNetEventType;
 
-typedef struct R2DNet R2DNet;
+typedef struct R2DNetEvent {
+    R2DNetEventType type;
+    uint32_t peer_id;          // stable for the lifetime of this connection; 0 is reserved
+    uint8_t channel;
+    uint32_t rtt_ms;
+    uint8_t *data;             // caller owns; free with r2d_net_free_events
+    int size;
+} R2DNetEvent;
 
-// --- Жизненный цикл ---------------------------------------------------------
-
-// Поднять транспорт. Идемпотентно: повторный вызов возвращает true.
 bool r2d_net_init(void);
 void r2d_net_shutdown(void);
 bool r2d_net_available(void);
-
-// --- Сервер и клиент --------------------------------------------------------
-
-// Слушать порт. Возвращает false, если порт занят или сеть недоступна.
-bool r2d_net_listen(int port);
-// Подключиться к хосту: `host` — имя или IP, разрешается асинхронно.
-// Готовность проверяется r2d_net_connected().
+bool r2d_net_is_open(void);
+bool r2d_net_open(int listen_port, int max_peers);
 bool r2d_net_connect(const char *host, int port);
-// Отключиться (клиент) или закрыть порт (сервер).
+bool r2d_net_disconnect(uint32_t peer_id);
 void r2d_net_close(void);
-// Режим: 0 — выключен, 1 — сервер, 2 — клиент.
-int  r2d_net_mode(void);
-// Подключение завершено? (у сервера — всегда true после listen)
-bool r2d_net_connected(void);
-// Строка последней ошибки (пустая — ошибок нет).
+int r2d_net_poll(R2DNetEvent *out, int max_events);
+void r2d_net_free_events(R2DNetEvent *events, int count);
+bool r2d_net_send(uint32_t peer_id, uint8_t channel, bool reliable,
+                  const void *data, int size);
 const char *r2d_net_error(void);
-// Адрес и порт, на которых слушаем (сервер).
-const char *r2d_net_local_address(void);
-int  r2d_net_local_port(void);
-
-// --- Пакеты -----------------------------------------------------------------
-
-// Отправить пакет: `to` — пусто для сервера (шлём последнему отправителю не
-// подходит) — смотрите поведение в реализации; клиент шлёт хосту.
-bool r2d_net_send(const char *to, int to_port, const void *data, int size);
-
-// Забрать до `max` пакетов. Возвращает число пакетов; владение ими у вызывающего,
-// освобождать через r2d_net_free_packets.
-int r2d_net_poll(R2DNetPacket *out, int max);
-void r2d_net_free_packets(R2DNetPacket *packets, int count);
-
-// Сколько байт отправлено и принято (для интерфейса и тестов).
+int r2d_net_port(void);
+int r2d_net_peer_count(void);
 uint64_t r2d_net_bytes_sent(void);
 uint64_t r2d_net_bytes_received(void);
 uint64_t r2d_net_packets_sent(void);
 uint64_t r2d_net_packets_received(void);
 
-// --- Тесты ------------------------------------------------------------------
-
-// Включить симуляцию потерь, задержки и разброса (воспроизводимо от сида).
-//
-// Задержка работает НЕ сном, а ОЧЕРЕДЬЮ: пакет кладётся с временем «когда
-// отправить», а реально уходит из r2d_net_tick — иначе пришлось бы блокировать
-// кадр. `jitter_ms` — добавка к задержке, случайная в [0, jitter).
-//
-// Только R2D_ENABLE_NET: без транспорта это no-op.
-void r2d_net_simulate(int loss_percent, int delay_ms, int seed, int jitter_ms);
-
-// Отправить созревшие отложенные пакеты. Зовётся раз в кадр (из poll).
-// Возвращает число реально отправленных.
-int r2d_net_tick(void);
-
-// Сколько пакетов ещё ждёт своей задержки (для тестов и интерфейса).
-int r2d_net_delayed_count(void);
-
-#endif // R2D_NET_H
+#endif

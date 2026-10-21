@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Нарезать сгенерированную озвучку новеллы на файлы по репликам.
+"""Нарезать озвучку legacy-проекта `game_vn` на файлы по репликам.
 
-На вход — один аудиофайл, в котором реплики разделены паузами (в демо-новелле
-это `<#2.5#>` в тексте MiniMax). Инструмент находит тишину, режет по ней и
+На вход — один аудиофайл, в котором реплики разделены паузами (например,
+`<#2.5#>` в исходном тексте для MiniMax). Инструмент находит тишину, режет по ней и
 раскладывает куски в `<out>/<id>.mp3`, где `id` — идентификатор реплики из
 `lines.json` (`tl3`, `tl4`, …). Именно эти имена ищет движок: см. опцию `voice`
 в `docs/highlevel/timeline.md`.
@@ -30,8 +30,8 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_MAP = os.path.join(ROOT, "demos", "russi_vn", "voice", "lines.json")
-DEFAULT_OUT = os.path.join(ROOT, "demos", "russi_vn", "voice")
+DEFAULT_MAP = os.path.join(ROOT, "game_vn", "voice", "lines.json")
+DEFAULT_OUT = os.path.join(ROOT, "game_vn", "voice")
 
 
 def need_ffmpeg() -> str:
@@ -151,7 +151,7 @@ def main(argv: list[str]) -> int:
     with open(os.path.join(args.out, "segments.json"), "w", encoding="utf-8") as handle:
         json.dump({"lines": written}, handle, ensure_ascii=False, indent=2)
     print(f"\nзаписано файлов: {len(written)} в {args.out}")
-    print("проверка: ./build/russiano2d --game demos --scene russi_vn")
+    print("проверка: ./build/russiano2d --game game_vn")
     return 0
 
 

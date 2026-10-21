@@ -119,7 +119,11 @@ Tileset & parallax backgrounds: "Generic Platformer Tileset (16x16) + Background
 
 ---
 
-## ВН «Руси-тян» (`demos/russi_vn`)
+## Legacy VN assets (`game_vn`)
+
+Эти ранее выпущенные ассеты остаются в legacy-проекте `game_vn`; новая демка
+[`rusya-love-vn`](../rusya-love-vn/README.md) использует отдельные ImageGen
+файлы из собственного каталога и не ссылается на материалы ниже.
 
 Демо-новелла: позы героини, локации, музыка и звуки.
 
@@ -167,6 +171,6 @@ WAV 36 МБ в MP3 `libmp3lame 128 kbps` (≈2,9 МБ); почему MP3, а н�
 
 Остальное — уже лежащие в демо-проекте CC0 записи Juhani Junkala (`audio/music/menu.ogg`, `action.ogg`,
 `audio/sfx/ui_click.ogg`, `jump_01.ogg`, `pickup_01.ogg`, `enemy_hit.ogg`,
-`explosion_01.ogg`). Выбор файла — в `demos/russi_vn/index.js`, расширения
+`explosion_01.ogg`). Выбор файла — в `game_vn/vn.js`, расширения
 проверяются через `$.fs.exists`, поэтому подмена любого файла на CC0-аналог
 не ломает демо.

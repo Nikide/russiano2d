@@ -2,20 +2,20 @@
 <head>
 <!-- Narrative Studio: separate RmlUi document for each Editor tab. -->
 <link type="text/rcss" href="legacy-theme.rcss"/><link type="text/rcss" href="legacy-studio.rcss"/><link type="text/rcss" href="../hammer.rcss"/><link type="text/rcss" href="../vn_maker.rcss"/>
-<link type="text/rcss" href="kit.rcss"/><title>Narrative</title>
+<link type="text/rcss" href="kit.rcss"/><title>Истории</title>
 </head>
 <body>
 <div class="hm-root">
   <div class="hm-bar">
     <button id="vnm-back" class="hm-hidden">Назад</button>
-    <button id="vnm-save" class="hm-btn" title="Сохранить сцену (Cmd/Ctrl+S)">Save</button>
-    <button id="vnm-undo" class="hm-btn" title="Отменить (Cmd/Ctrl+Z)">Undo</button>
-    <button id="vnm-redo" class="hm-btn" title="Повторить (Cmd/Ctrl+Shift+Z)">Redo</button>
+    <button id="vnm-save" class="hm-btn" title="Сохранить сцену (Cmd/Ctrl+S)">Сохранить</button>
+    <button id="vnm-undo" class="hm-btn" title="Отменить (Cmd/Ctrl+Z)">Отменить</button>
+    <button id="vnm-redo" class="hm-btn" title="Повторить (Cmd/Ctrl+Shift+Z)">Повторить</button>
     <span class="hm-sep"></span>
-    <button id="vnm-validate" class="hm-btn" title="r2d story validate: метки, goto, спикеры, ассеты, i18n">Validate Story</button>
-    <button id="vnm-play" class="hm-btn hm-primary" title="Проиграть сцену runtime $.story (поверх окна)">Play Preview</button>
+    <button id="vnm-validate" class="hm-btn" title="Проверить сцену: метки, переходы, персонажей, ресурсы и переводы">Проверить сцену</button>
+    <button id="vnm-play" class="hm-btn hm-primary" title="Проиграть сцену средствами $.story поверх окна игры">Предпросмотр</button>
     <button id="vnm-from" class="hm-btn" title="Проиграть с выбранной строки">С этой строки</button>
-    <button id="vnm-stop" class="hm-btn" title="Остановить проигрывание">Stop</button>
+    <button id="vnm-stop" class="hm-btn" title="Остановить проигрывание">Остановить</button>
     <span class="hm-sep"></span>
     <button id="vnm-source-mode" class="hm-btn" title="Исходник .scene текстом">Исходник</button>
     <button id="vnm-graph" class="hm-btn" title="Граф меток">Граф</button>
@@ -28,15 +28,15 @@
     <!-- Script -->
     <div class="vn-script">
       <div class="vn-head">
-        <span class="vn-title">Script</span>
+        <span class="vn-title">Сценарий</span>
         <span class="we-spacer"></span>
-        <button id="vnm-add" class="hm-btn" title="Реплика">+ Dialogue</button>
-        <button id="vnm-add-choice" class="hm-btn" title="Вариант выбора">+ Choice</button>
-        <button id="vnm-add-jump" class="hm-btn" title="Переход goto">+ Jump</button>
+        <button id="vnm-add" class="hm-btn" title="Реплика">+ Реплика</button>
+        <button id="vnm-add-choice" class="hm-btn" title="Вариант выбора">+ Выбор</button>
+        <button id="vnm-add-jump" class="hm-btn" title="Переход goto">+ Переход</button>
       </div>
       <div class="vn-head vn-head2">
-        <button id="vnm-add-label" class="hm-btn">+ Label</button>
-        <button id="vnm-add-image" class="hm-btn">+ Background</button>
+        <button id="vnm-add-label" class="hm-btn">+ Метка</button>
+        <button id="vnm-add-image" class="hm-btn">+ Фон</button>
         <span class="we-spacer"></span>
         <button id="vnm-up" class="hm-btn hm-sq" title="Выше">Выше</button>
         <button id="vnm-down" class="hm-btn hm-sq" title="Ниже">Ниже</button>
@@ -49,14 +49,14 @@
 
     <!-- Preview -->
     <div class="vn-center">
-      <div class="hm-pane-bar"><span class="we-pane-title">Preview</span><span class="sub">кадр выбранной команды · Play — runtime</span></div>
+      <div class="hm-pane-bar"><span class="we-pane-title">Предпросмотр</span><span class="sub">кадр выбранной команды · запуск в игре</span></div>
       <div id="vnm-preview" class="vn-preview"></div>
     </div>
 
     <!-- Inspector и данные истории -->
     <div class="hm-right vn-right">
       <div class="hm-insp">
-        <div class="hm-title">Inspector</div>
+        <div class="hm-title">Инспектор</div>
         <div id="vnm-inspector">
           <div id="vnm-insp-empty" class="hint">Выберите команду.</div>
           <div id="vnm-insp-fields" style="display:none;">
@@ -87,7 +87,7 @@
         <div class="hm-field"><button id="vnm-new" class="hm-btn">Новая сцена…</button></div>
         <div class="hm-h">Персонажи</div>
         <div id="vnm-speakers" class="vnm-list"></div>
-        <div class="hm-field"><label>id</label><input id="vnm-ch-id" class="field" type="text"/></div>
+            <div class="hm-field"><label>Идентификатор</label><input id="vnm-ch-id" class="field" type="text"/></div>
         <div class="hm-field"><label>Имя</label><input id="vnm-ch-name" class="field" type="text"/></div>
         <div class="hm-field"><label>Слот</label><input id="vnm-ch-slot" class="field" type="text"/></div>
         <div class="hm-field"><label>Звук</label><input id="vnm-ch-blip" class="field" type="text"/></div>

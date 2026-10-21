@@ -2,11 +2,13 @@
 """Generate the API docs catalog from authored high-level API documentation."""
 import json
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "api.schema.json"
 OUTPUT = ROOT / "src/highlevel/api_docs_catalog.js"
+API_PATH = r"(?:\$|engine)\.[\w$]+(?:\.[\w$]+){0,3}"
 
 
 def clean(value: str) -> str:
@@ -33,7 +35,7 @@ def jsdoc_description(comment: str) -> str:
     return text[:600].rstrip()
 
 
-def main() -> None:
+def render() -> str:
     entries = {item["path"]: item for item in json.loads(SCHEMA.read_text())["names"]}
     by_namespace = {}
     for path, item in entries.items():
@@ -70,7 +72,7 @@ def main() -> None:
                 continue
             # Only the first cell identifies the row's subject. API names in
             # the explanation are cross-references, not additional subjects.
-            paths = set(re.findall(r"\$\.[\w$]+(?:\.[\w$]+){0,3}", cells[0]))
+            paths = set(re.findall(API_PATH, cells[0]))
             # Tables often use short method names because the file already names
             # the namespace. Resolve those names against the runtime inventory.
             method = re.match(r"(?:`)?([A-Za-z_$][\w$]*)\b", cells[0])
@@ -84,7 +86,7 @@ def main() -> None:
                 candidate = f"$.selection.{node_method.group(1)}"
                 if candidate in entries:
                     paths.add(candidate)
-            for path in paths:
+            for path in sorted(paths):
                 entry = entries.get(path)
                 if not entry or path in table_paths:
                     continue
@@ -148,13 +150,13 @@ def main() -> None:
         if current:
             paragraphs.append(" ".join(current))
         for paragraph in paragraphs:
-            paths = set(re.findall(r"\$\.[\w$]+(?:\.[\w$]+){0,3}", paragraph))
+            paths = set(re.findall(API_PATH, paragraph))
             description = clean(paragraph)
             # A paragraph mentioning multiple APIs is explanatory context;
             # assigning it to every mentioned symbol produces false docs.
             if len(paths) != 1 or len(description) < 20 or len(description) > 600 or not re.search(r"[А-Яа-я]", description):
                 continue
-            for path in paths:
+            for path in sorted(paths):
                 if path not in table_paths and entries.get(path, {}).get("kind") == "function":
                     catalog.setdefault(path, {"description": description})
 
@@ -269,16 +271,34 @@ def main() -> None:
         signature = {key: runtime[key] for key in ("kind", "arity", "args", "returns") if key in runtime}
         catalog[path] = {**signature, **metadata}
 
-    output = (
+    return (
         "// Generated from authored docs, API JSDoc, and api_symbol_descriptions.json.\n"
         "// Run `python3 scripts/generate_api_docs_catalog.py` after editing source docs.\n"
         "export const API_DOCS_CATALOG = "
         + json.dumps(catalog, ensure_ascii=False, indent=4)
         + ";\n"
     )
-    OUTPUT.write_text(output)
-    print(f"wrote {len(catalog)} descriptions to {OUTPUT.relative_to(ROOT)}")
+def main() -> int:
+    check = "--check" in sys.argv[1:]
+    unknown = [arg for arg in sys.argv[1:] if arg != "--check"]
+    if unknown:
+        print(f"unknown argument: {unknown[0]}", file=sys.stderr)
+        return 2
+    expected = render()
+    if check:
+        try:
+            current = OUTPUT.read_text()
+        except OSError:
+            current = None
+        if current != expected:
+            print(f"STALE {OUTPUT.relative_to(ROOT)} — run python3 scripts/generate_api_docs_catalog.py")
+            return 1
+        print(f"fresh {OUTPUT.relative_to(ROOT)}")
+        return 0
+    OUTPUT.write_text(expected)
+    print(f"wrote {OUTPUT.relative_to(ROOT)}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

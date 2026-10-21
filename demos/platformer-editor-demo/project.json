@@ -1,0 +1,38 @@
+{
+  "schema_version": 2,
+  "project": {"name": "platformer-editor-demo", "version": "0.1.0"},
+  "runtime": {"entry": "main.js", "window": {"title": "platformer-editor-demo", "width": 1280, "height": 720}},
+  "editor": {
+    "graph": {
+      "format": 1,
+      "status": "partial",
+      "sources": [
+        {"path": "game.js", "hash": "7b10189f530643d9"},
+        {"path": "main.js", "hash": "64b946799bb55af7"}
+      ],
+      "diagnostics": [
+        {"code": "R2D301", "file": "game.js", "line": 21, "message": ".appendTo(…) с нестатической целью — пространственная связь не построена"}
+      ],
+      "areas": [
+        {"key": "project:main", "type": "project", "label": "Проект", "origin": "code"},
+        {"key": "world:spring_path", "type": "world", "label": "World", "runtime_root": "$.world", "scene": "scene:spring_path", "origin": "code"}
+      ],
+      "entities": [
+        {"key": "script:game.js", "area": "project:main", "type": "script", "origin": "code", "path": "game.js", "source": {"file": "game.js", "line": 1}},
+        {"key": "scene:spring_path", "area": "project:main", "type": "scene", "origin": "code", "name": "spring_path", "source": {"file": "game.js", "line": 5}},
+        {"key": "object:spring_path:tilemap:1", "area": "world:spring_path", "type": "object", "origin": "code", "tag": "tilemap", "source": {"file": "game.js", "line": 9}},
+        {"key": "object:hero", "area": "world:spring_path", "type": "object", "origin": "code", "tag": "player", "public_id": "hero", "source": {"file": "game.js", "line": 11}},
+        {"key": "object:goal", "area": "world:spring_path", "type": "object", "origin": "code", "tag": "text", "public_id": "goal", "source": {"file": "game.js", "line": 15}},
+        {"key": "object:instructions", "area": "world:spring_path", "type": "object", "origin": "code", "tag": "ui.label", "public_id": "instructions", "source": {"file": "game.js", "line": 18}},
+        {"key": "script:main.js", "area": "project:main", "type": "script", "origin": "code", "path": "main.js", "entry": true, "source": {"file": "main.js", "line": 1}}
+      ],
+      "edges": [
+        {"key": "edge:scene_registration:script:game.js>scene:spring_path", "type": "scene_registration", "from": "script:game.js", "to": "scene:spring_path", "origin": "code", "evidence": {"api": "$.scene.add", "file": "game.js", "line": 5}},
+        {"key": "edge:spatial_parent:world:spring_path>object:spring_path:tilemap:1", "type": "spatial_parent", "from": "world:spring_path", "to": "object:spring_path:tilemap:1", "origin": "code", "evidence": {"api": "appendTo", "file": "game.js", "line": 9}},
+        {"key": "edge:spatial_parent:world:spring_path>object:hero", "type": "spatial_parent", "from": "world:spring_path", "to": "object:hero", "origin": "code", "evidence": {"api": "appendTo", "file": "game.js", "line": 14}},
+        {"key": "edge:spatial_parent:world:spring_path>object:goal", "type": "spatial_parent", "from": "world:spring_path", "to": "object:goal", "origin": "code", "evidence": {"api": "appendTo", "file": "game.js", "line": 16}}
+      ],
+      "views": {}
+    }
+  }
+}

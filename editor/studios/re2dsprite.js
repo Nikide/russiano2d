@@ -15,7 +15,7 @@
 import { createHistory } from '../lib/shared/history.js';
 import { studioDoc, esc, diag, mousePx, inside, uiScale, screenCamera } from '../lib/studio_kit.js';
 
-export const meta = { id: 're2dsprite', title: 'Re2DSprite', icon: 'accessibility_new', match: (p) => /\.character\.json$/i.test(p) };
+export const meta = { id: 're2dsprite', title: 'Персонаж Re2D', icon: 'accessibility_new', match: (p) => /\.character\.json$/i.test(p) };
 
 const PROJECTION = [['rs-f-raster', 'raster'], ['rs-f-detail', 'detail'], ['rs-f-body', 'bodyScale'], ['rs-f-portrait', 'portraitScale']];
 const CUSTOM = '(своё)';
@@ -141,7 +141,7 @@ export function create(host) {
     }
     function pose() {
         if (s.node) { try { s.node.re2dPose(s.yaw, s.pitch); } catch (e) { s.runtimeError = e.message || String(e); } }
-        doc.text('rs-pose', 'yaw ' + Math.round(s.yaw) + '° · pitch ' + Math.round(s.pitch) + '°');
+        doc.text('rs-pose', 'Поворот ' + Math.round(s.yaw) + '° · наклон ' + Math.round(s.pitch) + '°');
     }
 
     // --- действия превью (не правят файл) -----------------------------------------
@@ -265,7 +265,7 @@ export function create(host) {
         if (!dirty()) return true;
         if (s.needsBuild) build();
         if (!s.node) {
-            s.diags = [diag('R2D_RE2DSPRITE_RUNTIME', 'error', 'Save заблокирован: рантайм отклонил описание — ' + s.runtimeError, { asset: s.path })];
+            s.diags = [diag('R2D_RE2DSPRITE_RUNTIME', 'error', 'Сохранение отменено: рантайм отклонил описание — ' + s.runtimeError, { asset: s.path })];
             changed();
             return false;
         }
@@ -302,9 +302,9 @@ export function create(host) {
     function renderAnim() {
         const names = Object.keys(s.clips);
         doc.html('rs-clips', names.length ? names.map((n) => '<div class="st-row' + (n === s.motion ? ' sel' : '') + '" data-key="' + esc(n) + '">' + esc(n) +
-            '<span class="st-sub">' + s.clips[n].duration.toFixed(2) + ' c' + (s.clips[n].loop ? ' · loop' : '') + '</span></div>').join('') : '<span class="st-empty">В описании нет клипов.</span>');
+            '<span class="st-sub">' + s.clips[n].duration.toFixed(2) + ' с' + (s.clips[n].loop ? ' · повтор' : '') + '</span></div>').join('') : '<span class="st-empty">В описании нет клипов.</span>');
         doc.html('rs-layers', names.map((n) => btn(n, n, s.layers.has(n))).join(''));
-        doc.text('rs-playpause', s.playing ? 'Pause' : 'Play');
+        doc.text('rs-playpause', s.playing ? 'Пауза' : 'Пуск');
     }
     function renderLeft() {
         const j = s.json || {};
@@ -337,7 +337,7 @@ export function create(host) {
         }
         const info = s.node ? $.re2dSprite.info(s.node) : null;
         const fact = (l, v) => '<div class="rs-fact"><label>' + esc(l) + '</label><span>' + esc(v) + '</span></div>';
-        doc.html('rs-source', fact('Описание', s.path.split('/').pop()) + fact('Atlas', j.atlas || '—') +
+        doc.html('rs-source', fact('Описание', s.path.split('/').pop()) + fact('Атлас', j.atlas || '—') +
             fact('Анимации', typeof j.animations === 'string' ? j.animations : j.animations ? 'встроены' : '—') +
             fact('Версия PNG', info ? String(info.version) : '—') + fact('Кадр', info ? info.width + '×' + info.height : '—') +
             fact('Кости / части', (rig.bones || []).length + ' / ' + (rig.parts || []).length));
@@ -443,7 +443,7 @@ export function create(host) {
             return { asset: s.path, dirty: dirty(), style: s.style, motion: s.motion, playing: s.playing, layers: [...s.layers], yaw: s.yaw, pitch: s.pitch,
                 equipped: [...s.items.keys()], hiddenParts: [...s.hidden], clips: Object.keys(s.clips), emotion: s.emotion, node: !!s.node, error: s.runtimeError };
         },
-        commands: () => [{ label: 'Re2DSprite: перечитать с диска', run: reload }, { label: 'Re2DSprite: сделать текущий клип умолчанием', run: makeDefault }],
+        commands: () => [{ label: 'Персонаж Re2D: перечитать с диска', run: reload }, { label: 'Персонаж Re2D: сделать текущий клип умолчанием', run: makeDefault }],
         ops: { play, pause, seek, layer, emotion, variant, equip, togglePart, setStyle, applyFields, applyEquipment, makeDefault, reload,
             setPose(yaw, pitch) { s.yaw = yaw; if (pitch !== undefined) s.pitch = pitch; pose(); }, select(key) { s.eq = key; renderAll(); } },
         close() { s.closed = true; s.active = false; dropNode(); doc.unload(); },

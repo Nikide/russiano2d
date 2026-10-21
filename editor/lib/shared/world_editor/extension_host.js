@@ -22,7 +22,7 @@
 
 export const BASE_ENTITY_CLASSES = [
     { id: 'base.point', class: 'point', label: 'Точка', fields: ['kind', 'x', 'y', 'h', 'target', 'tags'] },
-    { id: 'base.brush', class: 'brush', label: 'Brush-сущность', fields: ['kind', 'brush', 'target', 'tags'] },
+    { id: 'base.brush', class: 'brush', label: 'Сущность-кисть', fields: ['kind', 'brush', 'target', 'tags'] },
     { id: 'base.volume', class: 'volume', label: 'Объём', fields: ['kind', 'brush', 'target', 'tags'] },
     { id: 'base.marker', class: 'marker', label: 'Маркер', fields: ['kind', 'x', 'y', 'h', 'tags'] },
 ];

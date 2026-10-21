@@ -335,20 +335,20 @@ export function inspectorSchema(kind, map, selection) {
     if (kind === 'brush') {
         const brush = find(map, 'brushes', firstId) || {};
         return [
-            { key: 'id', label: 'id', type: 'text', value: brush.id || '' },
+            { key: 'id', label: 'Идентификатор', type: 'text', value: brush.id || '' },
             { key: 'tool', label: 'Инструмент', type: 'select', options: BRUSH_TOOLS, value: brush.tool || 'solid' },
-            { key: 'rect', label: 'rect (x,y,w,h)', type: 'text', value: rectText(brush.rect) },
-            { key: 'polygon', label: 'polygon JSON', type: 'text', value: brush.polygon ? JSON.stringify(brush.polygon) : '' },
+            { key: 'rect', label: 'Прямоугольник (x,y,w,h)', type: 'text', value: rectText(brush.rect) },
+            { key: 'polygon', label: 'Многоугольник JSON', type: 'text', value: brush.polygon ? JSON.stringify(brush.polygon) : '' },
             { key: 'bottom', label: 'Низ', type: 'number', value: brush.bottom },
             { key: 'top', label: 'Верх', type: 'number', value: brush.top },
             { key: 'sideColor', label: 'Цвет стен', type: 'text', value: brush.sideColor || '' },
             { key: 'floorColor', label: 'Цвет пола', type: 'text', value: brush.floorColor || '' },
             { key: 'ceilingColor', label: 'Цвет потолка', type: 'text', value: brush.ceilingColor || '' },
-            { key: 'visgroup', label: 'VisGroup', type: 'text', value: brush.visgroup || '' },
+            { key: 'visgroup', label: 'Группа видимости', type: 'text', value: brush.visgroup || '' },
             { key: 'tags', label: 'Теги пола', type: 'tags', value: tagsToText(brush.tags) },
             { key: 'ceilingTags', label: 'Теги потолка', type: 'tags', value: tagsToText(brush.ceilingTags) },
-            { key: 'holes', label: 'holes JSON', type: 'text', value: brush.holes ? JSON.stringify(brush.holes) : '' },
-            { key: 'subtract', label: 'subtract (true/false)', type: 'text', value: boolText(!!brush.subtract) },
+            { key: 'holes', label: 'Отверстия JSON', type: 'text', value: brush.holes ? JSON.stringify(brush.holes) : '' },
+            { key: 'subtract', label: 'Вычитание (true/false)', type: 'text', value: boolText(!!brush.subtract) },
         ];
     }
     if (kind === 'face') {
@@ -366,35 +366,35 @@ export function inspectorSchema(kind, map, selection) {
     if (kind === 'entity') {
         const entity = find(map, 'entities', firstId) || {};
         return [
-            { key: 'id', label: 'id', type: 'text', value: entity.id || '' },
-            { key: 'kind', label: 'Класс/kind', type: 'text', value: entity.kind || '' },
+            { key: 'id', label: 'Идентификатор', type: 'text', value: entity.id || '' },
+            { key: 'kind', label: 'Класс объекта', type: 'text', value: entity.kind || '' },
             { key: 'x', label: 'X', type: 'number', value: entity.x },
             { key: 'y', label: 'Y', type: 'number', value: entity.y },
             { key: 'h', label: 'Высота', type: 'number', value: entity.h },
-            { key: 'brush', label: 'Brush', type: 'text', value: entity.brush || '' },
-            { key: 'target', label: 'Target', type: 'text', value: entity.target || '' },
+            { key: 'brush', label: 'Кисть', type: 'text', value: entity.brush || '' },
+            { key: 'target', label: 'Цель', type: 'text', value: entity.target || '' },
             { key: 'tags', label: 'Теги', type: 'tags', value: tagsToText(entity.tags) },
         ];
     }
     if (kind === 'path') {
         const path = find(map, 'paths', firstId) || {};
         return [
-            { key: 'id', label: 'id', type: 'text', value: path.id || '' },
+            { key: 'id', label: 'Идентификатор', type: 'text', value: path.id || '' },
             { key: 'name', label: 'Имя', type: 'text', value: path.name || '' },
             { key: 'type', label: 'Тип', type: 'text', value: path.type || '' },
-            { key: 'loop', label: 'loop (true/false)', type: 'text', value: boolText(!!path.loop) },
-            { key: 'oneWay', label: 'oneWay (true/false)', type: 'text', value: boolText(!!path.oneWay) },
+            { key: 'loop', label: 'Замкнутый путь (true/false)', type: 'text', value: boolText(!!path.loop) },
+            { key: 'oneWay', label: 'Односторонний путь (true/false)', type: 'text', value: boolText(!!path.oneWay) },
             { key: 'nodes', label: 'Узлы JSON', type: 'text', value: JSON.stringify(pathNodes(path)) },
-            { key: 'metadata', label: 'metadata JSON', type: 'text', value: path.metadata ? JSON.stringify(path.metadata) : '' },
+            { key: 'metadata', label: 'Дополнительные данные JSON', type: 'text', value: path.metadata ? JSON.stringify(path.metadata) : '' },
         ];
     }
     if (kind === 'visgroup') {
         const group = find(map, 'visgroups', firstId) || {};
         return [
-            { key: 'id', label: 'id', type: 'text', value: group.id || '' },
+            { key: 'id', label: 'Идентификатор', type: 'text', value: group.id || '' },
             { key: 'name', label: 'Имя', type: 'text', value: group.name || '' },
             { key: 'visible', label: 'Видима (true/false)', type: 'text', value: boolText(group.visible !== false) },
-            { key: 'locked', label: 'Заблокирована (true/false)', type: 'text', value: boolText(!!group.locked) },
+            { key: 'locked', label: 'Закреплена (true/false)', type: 'text', value: boolText(!!group.locked) },
         ];
     }
     return [{ key: 'json', label: 'JSON', type: 'json', value: JSON.stringify(map, null, 2) }];

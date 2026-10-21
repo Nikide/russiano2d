@@ -119,7 +119,10 @@ export function createDialogView(options) {
     }
 
     function apply(markup, prepared, name) {
-        const id = backend.loadMarkup('dialog:' + name, markup);
+        // RmlUi resolves project resources relative to document URLs. The
+        // dialog:// scheme is registered by the UI resource loader; the old
+        // dialog:<name> form was rejected as a malformed URL by native RmlUi.
+        const id = backend.loadMarkup('dialog://' + name, markup);
         if (typeof id !== 'number' || !(id >= 0)) {
             errors = [{ code: 'DIALOG_RML_LOAD', message: 'RmlUi rejected the dialog document' }];
             return false;

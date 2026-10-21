@@ -32,7 +32,6 @@ def check(condition, message):
 def main():
     with Agent(game=GAME, seed=5, fixed_dt=1.0 / 60.0) as a:
         a.eval("""
-            $.net.bindEngine();
             $.net.predict((state, input) => ({ x: (state.x || 0) + (input.dx || 0) }));
         """)
         pred = a.eval("typeof $.net.prediction().visual")

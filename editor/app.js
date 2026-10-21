@@ -469,7 +469,7 @@ export function createEditor($) {
         doc.cls('app', 'hidden', false);
         doc.html('tb-project', esc(s.project.title) + ' ' + icon('expand_more'));
         doc.text('st-project', esc(s.project.title));
-        $.window.title(s.project.title + ' — Russiano2D Editor');
+        $.window.title(s.project.title + ' — Редактор Russiano2D');
         await refreshTree();
         const extResult = await tool(['extension', 'list', '--project', abs]);
         s.extensionDiags = extResult.json && Array.isArray(extResult.json.diagnostics)
@@ -495,6 +495,52 @@ export function createEditor($) {
         if (res.json && res.json.truncated) log('Дерево проекта обрезано backend\'ом (truncated).');
         renderTree();
         checkIndex();
+    }
+
+    // Создать стартовый tilemap в активном проекте прямо из Editor, затем
+    // открыть его в Tilemap Studio. Размер можно сразу поменять в студии.
+    function createTilemap() {
+        if (!s.project) { setStatus('сначала откройте проект', 'err'); return false; }
+        let path = 'level.tilemap.json', suffix = 2;
+        while ($.fs.exists(full(path))) path = 'level-' + suffix++ + '.tilemap.json';
+        const data = {
+            version: 1, tile: 16, src: '', cols: 16, solid: [1],
+            layers: [{ name: 'ground', depth: 0, data: Array.from({ length: 22 }, () => Array(40).fill(0)) }],
+        };
+        if ($.fs.writeJSON(full(path), data) === false) {
+            setStatus('не удалось создать ' + path, 'err'); return false;
+        }
+        refreshTree();
+        openFile(path);
+        setStatus('создана карта: ' + path, 'ok');
+        return path;
+    }
+
+    function createScript() {
+        if (!s.project) { setStatus('сначала откройте проект', 'err'); return false; }
+        let path = 'game.js', suffix = 2;
+        while ($.fs.exists(full(path))) path = 'game-' + suffix++ + '.js';
+        if ($.fs.write(full(path), '// Код игры. Точка входа находится в main.js.\n') === false) {
+            setStatus('не удалось создать ' + path, 'err'); return false;
+        }
+        refreshTree();
+        openFile(path);
+        setStatus('создан скрипт: ' + path, 'ok');
+        return path;
+    }
+
+    function createNarrativeScene() {
+        if (!s.project) { setStatus('сначала откройте проект', 'err'); return false; }
+        let path = 'story/main.scene', suffix = 2;
+        while ($.fs.exists(full(path))) path = 'story/main-' + suffix++ + '.scene';
+        const source = '# Новая сцена\n:start\n~ Начало истории.\nend\n';
+        if ($.fs.write(full(path), source) === false) {
+            setStatus('не удалось создать ' + path, 'err'); return false;
+        }
+        refreshTree();
+        openFile(path, 0, 0, 'narrative');
+        setStatus('создана сцена: ' + path, 'ok');
+        return path;
     }
 
     function buildTree() {
@@ -822,7 +868,7 @@ export function createEditor($) {
             ? 'Файл <span class="close-path">' + esc(tab.path) + '</span> изменился на диске после открытия. Выберите, какую версию оставить.'
             : 'Файл <span class="close-path">' + esc(tab.path) + '</span> удалён или недоступен на диске. Загрузить его версию нельзя.');
         doc.cls('file-conflict-reload', 'hidden', !exists);
-        doc.text('file-conflict-overwrite', exists ? 'Записать версию Editor' : 'Создать файл из версии Editor');
+        doc.text('file-conflict-overwrite', exists ? 'Записать версию редактора' : 'Создать файл из версии редактора');
     }
 
     function cancelFileConflict() {
@@ -938,7 +984,7 @@ export function createEditor($) {
                 s.fileConflict = { tabId: tab.id, diskText: typeof diskText === 'string' ? diskText : null };
                 renderAll();
                 doc.focus('file-conflict-overwrite');
-                setStatus('файл изменён вне Editor: выберите версию для ' + tab.path, 'err');
+                setStatus('Файл изменён вне редактора: выберите версию для ' + tab.path, 'err');
                 return false;
             }
         }
@@ -965,8 +1011,8 @@ export function createEditor($) {
         }
         if(failed.length) {
             const paths=failed.map((t)=>t.path);
-            appendOutput('editor','Save All: не сохранены документы: '+paths.join(', '));
-            setStatus('Save All: сохранено '+saved+' · ошибок '+failed.length+': '+paths.join(', '),'err');
+            appendOutput('editor','Не удалось сохранить все документы: '+paths.join(', '));
+            setStatus('Сохранено: '+saved+' · ошибок: '+failed.length+': '+paths.join(', '),'err');
             const firstStudio=failed.find((t)=>t.kind==='studio');
             if(firstStudio&&s.active!==firstStudio.id)activate(firstStudio.id,false);
             return false;
@@ -1058,12 +1104,31 @@ export function createEditor($) {
             return null;
         }
         if (!(await saveAll())) {
-            appendOutput('editor', 'Agent session отменена: не удалось сохранить все документы.');
-            setStatus('тесты остановлены: не все файлы сохранены', 'err');
+            appendOutput('editor', 'Сеанс агента отменён: не удалось сохранить все документы.');
+            setStatus('Запуск агента отменён: не все файлы сохранены', 'err');
             return null;
         }
-        setStatus('agent session: ' + session + '…', '');
-        const res = await tool(['agent', full(session)]);
+        setStatus('Запускается сеанс агента: ' + session + '…', '');
+        let res;
+        try {
+            res = await tool(['agent', full(session)]);
+        } catch (error) {
+            const message = error && error.message ? String(error.message) : String(error || 'неизвестная ошибка запуска');
+            const diagnostic = normalizeDiag({
+                code: error && error.code ? String(error.code) : 'EDITOR_AGENT_START',
+                severity: 'error',
+                message,
+            });
+            diagnostic.file = session;
+            s.agentReport = { session, report: null, error: message };
+            s.agentDiags = [diagnostic];
+            appendOutput('agent', 'Сеанс агента не запущен: ' + message);
+            s.bottom = 'problems';
+            s.bottomCollapsed = false;
+            renderAll();
+            setStatus('Сеанс агента не запущен (см. вкладки «Проблемы» и «Вывод»)', 'err');
+            return null;
+        }
         const report = res.json && typeof res.json === 'object' ? res.json : null;
         s.agentReport = { session, report };
         s.agentDiags = report && Array.isArray(report.diagnostics)
@@ -1074,13 +1139,13 @@ export function createEditor($) {
             }) : [];
         if (report && typeof report.ok === 'boolean') {
             const failed = Math.max(0, Number(report.failed) || 0);
-            appendOutput('editor', 'Agent session ' + (report.ok ? 'завершена' : 'завершена с отказами') +
+            appendOutput('editor', 'Сеанс агента ' + (report.ok ? 'завершён' : 'завершён с отказами') +
                 ': ответов ' + (Number(report.completed) || 0) + ', неуспешных запросов ' + failed + '.');
-            setStatus(report.ok ? 'agent session пройдена: ' + session :
-                'agent session: неуспешных запросов ' + failed + ' (подробности в Output)', report.ok ? 'ok' : 'err');
+            setStatus(report.ok ? 'Сеанс агента завершён: ' + session :
+                'Сеанс агента: неуспешных запросов ' + failed + ' (подробности во вкладке «Вывод»)', report.ok ? 'ok' : 'err');
         } else {
-            appendOutput('editor', 'Agent session не вернула структурированный отчёт; причина не определена.');
-            setStatus('нет структурированного отчёта agent session (см. Output)', 'err');
+            appendOutput('editor', 'Сеанс агента не вернул структурированный отчёт; причина не определена.');
+            setStatus('Нет структурированного отчёта сеанса агента (см. вкладку «Вывод»)', 'err');
         }
         s.bottom = report && report.diagnostics && report.diagnostics.length ? 'problems' : 'output';
         s.bottomCollapsed = false;
@@ -1131,7 +1196,7 @@ export function createEditor($) {
         // Run uses the same saved project state as Build. Wait for native studio
         // writes as well as code buffers before starting the runtime.
         if (!(await saveAll())) {
-            appendOutput('run', 'Run отменён: не удалось сохранить все документы.');
+            appendOutput('run', 'Запуск отменён: не удалось сохранить все документы.');
             setStatus('запуск остановлен: не все файлы сохранены', 'err');
             return null;
         }
@@ -1197,7 +1262,7 @@ export function createEditor($) {
         if (!(await saveAll())) { setStatus('сборка остановлена: не все файлы сохранены', 'err'); return; }
         const name = (s.project.title || 'game').replace(/[^\wЀ-ӿ.-]+/g, '_');
         const out = (outDir || s.project.abs + '/dist') + '/' + name;
-        setStatus('сборка: validate → build…', '');
+        setStatus('Проверка проекта и сборка…', '');
         const v = await tool(['validate', s.project.abs]);
         s.projectDiags = v.json ? (v.json.diagnostics || []).map(normalizeDiag) : [];
         if (v.json && v.json.errors) {
@@ -1208,7 +1273,7 @@ export function createEditor($) {
         appendOutput('build', res.ok ? 'Пакет создан: ' + out : 'Сборка завершилась ошибкой: ' + (res.error || 'см. диагностику выше'));
         s.bottom = 'output'; s.bottomCollapsed = false;
         renderBottom();
-        setStatus(res.ok ? 'собрано: ' + out : 'сборка не удалась (см. Output)', res.ok ? 'ok' : 'err');
+        setStatus(res.ok ? 'Собрано: ' + out : 'Сборка не удалась (см. вкладку «Вывод»)', res.ok ? 'ok' : 'err');
     }
 
     // --- палитра ----------------------------------------------------------------
@@ -1233,22 +1298,25 @@ export function createEditor($) {
         { id: 'run', label: 'Запуск: запустить игру', keys: 'F5', run: () => run() },
         { id: 'stop', label: 'Запуск: остановить', keys: 'Shift+F5', run: () => stop() },
         { id: 'validate', label: 'Проект: проверить (r2d validate)', keys: '', run: () => validateProject() },
-        { id: 'agent-session', label: 'Тесты: выполнить активную .agent.json сессию', keys: '', run: () => runAgentSession() },
+        { id: 'new-tilemap', label: 'Ресурс: создать тайловую карту', keys: '', run: () => createTilemap() },
+        { id: 'new-script', label: 'Файл: создать JS-файл игры', keys: '', run: () => createScript() },
+        { id: 'new-narrative', label: 'Ресурс: создать сцену визуальной новеллы', keys: '', run: () => createNarrativeScene() },
+        { id: 'agent-session', label: 'Агент: выполнить активный сценарий .agent.json', keys: '', run: () => runAgentSession() },
         { id: 'migrate-project', label: 'Проект: перейти на schema_version 2', keys: '', run: () => migrateProject() },
         { id: 'reindex', label: 'Проект: перестроить связи проекта (граф)', keys: '', run: () => reindex() },
         { id: 'snippets', label: 'Вид: Кирпичики (сниппеты)', keys: '', run: () => showSnippets() },
         { id: 'snippets-generate', label: 'Кирпичики: сгенерировать generated/snippets', keys: '', run: () => snippets.generate(false) },
         { id: 'graph', label: 'Вид: граф проекта (нижняя панель)', keys: '', run: () => { s.bottom = 'graph'; s.bottomCollapsed = false; renderAll(); } },
-        { id: 'build', label: 'Проект: собрать игру (validate → build)', keys: 'Cmd/Ctrl+Shift+B', run: () => buildPackage() },
+        { id: 'build', label: 'Проект: собрать игру (проверка и сборка)', keys: 'Cmd/Ctrl+Shift+B', run: () => buildPackage() },
         { id: 'refresh', label: 'Проект: обновить дерево файлов', keys: '', run: () => refreshTree() },
-        { id: 'projects', label: 'Проект: открыть другой (Project Manager)', keys: '', run: () => { closeAllTabs(true); s.project = null; showPM(); } },
+        { id: 'projects', label: 'Проект: открыть другой проект', keys: '', run: () => { closeAllTabs(true); s.project = null; showPM(); } },
         { id: 'open-folder', label: 'Проект: открыть папку…', keys: '', run: () => openProjectDialog() },
         { id: 'open-file', label: 'Файл: открыть с диска…', keys: '', run: () => openFileDialog() },
         { id: 'build-to', label: 'Проект: собрать в папку…', keys: '', run: () => buildToDialog() },
         { id: 'sidebar', label: 'Вид: боковая панель', keys: 'Cmd/Ctrl+B', run: () => { s.sidebarHidden = !s.sidebarHidden; renderLayout(); } },
         { id: 'panel', label: 'Вид: нижняя панель', keys: 'Cmd/Ctrl+J', run: () => { s.bottomCollapsed = !s.bottomCollapsed; renderLayout(); } },
-        { id: 'problems', label: 'Вид: Problems', keys: '', run: () => { s.bottom = 'problems'; s.bottomCollapsed = false; renderAll(); } },
-        { id: 'output', label: 'Вид: Output', keys: '', run: () => { s.bottom = 'output'; s.bottomCollapsed = false; renderAll(); } },
+        { id: 'problems', label: 'Вид: проблемы', keys: '', run: () => { s.bottom = 'problems'; s.bottomCollapsed = false; renderAll(); } },
+        { id: 'output', label: 'Вид: вывод', keys: '', run: () => { s.bottom = 'output'; s.bottomCollapsed = false; renderAll(); } },
     ];
 
     // «Открыть как…» для файла активной вкладки: текст и все студии его типа.
@@ -1430,7 +1498,7 @@ export function createEditor($) {
             return;
         }
         if (!t) {
-            doc.html('welcome', '<h1>' + esc(s.project ? s.project.title : 'Russiano2D Editor') + '</h1>' +
+            doc.html('welcome', '<h1>' + esc(s.project ? s.project.title : 'Редактор Russiano2D') + '</h1>' +
                 'Откройте файл в дереве проекта слева.' +
                 '<span class="keys"><span class="kbd">Cmd/Ctrl+P</span> перейти к файлу &#160; <span class="kbd">Cmd/Ctrl+Shift+P</span> команды &#160; <span class="kbd">F5</span> запуск</span>');
             return;
@@ -1445,13 +1513,13 @@ export function createEditor($) {
         } else {
             doc.html('pane', '<span class="info-line">' + esc(t.path) + '</span><span class="info-line">Тип: ' + esc(entry.type || '?') +
                 ' · ' + (entry.size || 0) + ' байт</span><span class="info-line">Текстовый редактор для этого типа не открывается. ' +
-                (entry.tool ? 'Специализированная студия «' + esc(entry.tool) + '» в Editor ещё не встроена.' : 'Редактора для этого типа нет.') + '</span>');
+                (entry.tool ? 'Специализированный редактор «' + esc(entry.tool) + '» ещё не встроен.' : 'Редактора для этого типа нет.') + '</span>');
         }
     }
 
     function inspectorField(label, value, action) {
         return '<span class="insp-label">' + esc(label) + '</span>' +
-            (action ? '<div class="insp-row"><span class="insp-value">' + esc(value) + '</span><span class="btn" data-key="' + esc(action) + '" style="margin-left: 0px;">Open</span></div>'
+            (action ? '<div class="insp-row"><span class="insp-value">' + esc(value) + '</span><span class="btn" data-key="' + esc(action) + '" style="margin-left: 0px;">Открыть</span></div>'
                 : '<span class="insp-value">' + esc(value) + '</span>');
     }
 
@@ -1475,7 +1543,7 @@ export function createEditor($) {
     function renderInspector() {
         if (!s.project) return;
         const t = activeTab();
-        let html = '<span class="insp-path">' + esc(t ? 'PROJECT / ' + t.path : 'PROJECT') + '</span><div class="insp-sec">';
+        let html = '<span class="insp-path">' + esc(t ? 'ПРОЕКТ / ' + t.path : 'ПРОЕКТ') + '</span><div class="insp-sec">';
         if (!t) {
             const p = s.project;
             html += inspectorField('Название', p.title) + inspectorField('Версия', p.version || '—') +
@@ -1553,17 +1621,17 @@ export function createEditor($) {
                 : '<span class="empty">Проблем нет. Проверка: сохранение .js (r2d lint) и команда «Проект: проверить».</span>');
             s.problemList = problems;
         } else if (s.bottom === 'output') {
-            const filters = [['all', 'Все'], ['run', 'Run'], ['build', 'Build'], ['editor', 'Editor']];
+            const filters = [['all', 'Все'], ['run', 'Запуск'], ['build', 'Сборка'], ['editor', 'Редактор']];
             const buttons = filters.map(([id, label]) => '<button id="output-filter-' + id + '" class="out-filter' + (s.outputFilter === id ? ' on' : '') + '" data-key="output-filter:' + id + '">' + label + '</button>').join('');
             const visible = s.outputEntries.filter((entry) => s.outputFilter === 'all' || entry.source === s.outputFilter);
-            const sourceLabel = (source) => source === 'run' ? 'Run' : source === 'build' ? 'Build' : 'Editor';
+            const sourceLabel = (source) => source === 'run' ? 'Запуск' : source === 'build' ? 'Сборка' : source === 'agent' ? 'Агент' : 'Редактор';
             const rows = visible.map((entry) => '<div class="out-row"><span class="out-time">' + esc(entry.time.slice(11, 19)) +
                 '</span><span class="out-source">' + sourceLabel(entry.source) + '</span><span class="out-text">' + esc(entry.text) + '</span></div>').join('');
             doc.html('bottom-body', '<div class="out-toolbar">' + buttons + '</div>' +
                 (rows ? '<div class="out-log">' + rows + '</div>' : '<span class="empty">' +
                     (s.outputEntries.length ? 'Нет записей для выбранного фильтра.' : 'Вывод игры и команд r2d появится после запуска или проверки.') + '</span>'));
         } else if (s.bottom === 'console') {
-            doc.html('bottom-body', s.consoleLog ? '<div class="log">' + esc(s.consoleLog) + '</div>' : '<span class="empty">Журнал Editor пуст.</span>');
+            doc.html('bottom-body', s.consoleLog ? '<div class="log">' + esc(s.consoleLog) + '</div>' : '<span class="empty">Журнал редактора пуст.</span>');
         }
         void errors;
     }
@@ -1626,8 +1694,8 @@ export function createEditor($) {
         doc.text('tb-back', icon('arrow_back'));
         doc.text('tb-fwd', icon('arrow_forward'));
         doc.html('tb-search', icon('search') + ' &#160;Поиск по проекту');
-        doc.html('tb-run', icon('play_arrow') + ' Run');
-        doc.html('tb-stop', icon('stop') + ' Stop');
+        doc.html('tb-run', icon('play_arrow') + ' Запустить');
+        doc.html('tb-stop', icon('stop') + ' Остановить');
         doc.text('rail-project', icon('description'));
         doc.text('rail-search', icon('search'));
         doc.text('rail-snippets', icon('extension'));
@@ -1835,7 +1903,7 @@ export function createEditor($) {
     function update(dt) {
         if (!s.project) return;
         if (s.fullPreview) {
-            $.gfx.text('Esc — вернуться в Editor', 16, 12, { size: 14, color: '#ffffffb0' });
+            $.gfx.text('Esc — вернуться в редактор', 16, 12, { size: 14, color: '#ffffffb0' });
             const api = s.fullPreview.api;
             if (!api || $.input.rawPressed('escape') || (api.previewRunning && !api.previewRunning())) leaveFullPreview();
             return;
@@ -1927,7 +1995,7 @@ export function createEditor($) {
     return {
         state: s, showGraph, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
         searchProject, openSearchResult, showProjectSearch, runAgentSession, snippets, showSnippets,
-        manifest, migrateProject, reindex, checkIndex, graphInfo, refreshProjectJson, graph: graphPanel, showPM, createProject, openProjectDialog, pickNewProjectDir, openFileDialog,
+        manifest, migrateProject, reindex, checkIndex, graphInfo, refreshProjectJson, graph: graphPanel, showPM, createProject, createTilemap, createScript, createNarrativeScene, openProjectDialog, pickNewProjectDir, openFileDialog,
         openPalette, closePalette, activeTab, closeTab, code, studios, extensions: extensionHost,
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
     };

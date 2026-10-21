@@ -1,0 +1,21 @@
+{
+  "schema_version": 2,
+  "project": {
+    "name": "Russiano2D — authoritative multiplayer",
+    "version": "0.1.0"
+  },
+  "runtime": {
+    "entry": "main.js",
+    "window": {
+      "title": "Russiano2D — authoritative multiplayer",
+      "width": 1280,
+      "height": 720
+    },
+    "multiplayer": {
+      "topology": "authoritative",
+      "port": 7777,
+      "max_peers": 8,
+      "sync_rate": 20
+    }
+  }
+}

@@ -323,34 +323,6 @@ package("freetype")
     end)
 package_end()
 
-package("sdl3_net-r2d")
-    set_homepage("https://github.com/libsdl-org/SDL_net")
-    set_description("SDL3_net pinned to the project commit")
-    add_urls("https://github.com/libsdl-org/SDL_net/archive/30dd38a36b487b60847a8bb9832e94b124802e2f.tar.gz")
-    add_versions("30dd38a", "a5bf9af94fb89d7339af71f018c2dea93ea0d00089eed63beec1bfe18f0d2674")
-    add_deps("libsdl3", "cmake")
-    on_install(function (package)
-        local configs = {
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DBUILD_SHARED_LIBS=OFF",
-            "-DSDLNET_INSTALL=ON",
-            "-DSDLNET_SAMPLES=OFF",
-            "-DSDLNET_WERROR=OFF",
-        }
-        import("package.tools.cmake").install(package, configs, {packagedeps = {"libsdl3"}, cmake_generator = "Ninja"})
-        local inc = path.join(package:installdir(), "include")
-        os.mkdir(inc)
-        os.cp("include/*", inc)
-    end)
-    on_load(function (package)
-        package:add("includedirs", "include")
-        package:add("links", "SDL3_net")
-        if package:is_plat("mingw", "windows") then
-            package:add("syslinks", "ws2_32", "iphlpapi")
-        end
-    end)
-package_end()
-
 package("tinyexr-r2d")
     set_homepage("https://github.com/syoyo/tinyexr")
     set_description("TinyEXR 1.0.13 (header-only, pinned in this recipe)")
@@ -369,7 +341,6 @@ package_end()
 
 add_requires("libsdl3 3.4.16", {system = false})
 add_requires("libsdl3_image", {system = false})
-add_requires("sdl3_net-r2d 30dd38a", {system = false})
 add_requires("libsdl3_mixer 3.2.4", {system = false})
 if is_plat("macosx") then
     add_requires("libcurl", {system = false})
@@ -410,7 +381,7 @@ target("r2d")
     end
     add_files("third_party/rmlui_backends/RmlUi_Platform_SDL.cpp",
               "third_party/rmlui_backends/RmlUi_Renderer_SDL_GPU.cpp")
-    add_includedirs("src", "sdk/native", "third_party/fastnoise_lite",
+    add_includedirs("src", "sdk/native", "third_party/enet", "third_party/fastnoise_lite",
                     "third_party/zlib",
                     "third_party/visibility",
                     "third_party/rmlui_backends",
@@ -428,7 +399,7 @@ target("r2d")
                 "RMLUI_STATIC_LIB",
                 "R2D_HAVE_SDK=1",
                 "R2D_SDK_VERSION=\"" .. version .. "\"")
-    add_packages("libsdl3", "libsdl3_image", "libsdl3_mixer", "sdl3_net-r2d", "quickjs-ng", "box2d", "rmlui",
+    add_packages("libsdl3", "libsdl3_image", "libsdl3_mixer", "quickjs-ng", "box2d", "rmlui",
                  "freetype", "zstd", "stb", "tinyexr-r2d")
     if is_plat("macosx") then
         add_packages("libcurl", "glslang", "spirv-cross")
@@ -436,7 +407,7 @@ target("r2d")
         add_links("glslang-default-resource-limits")
     end
     if is_plat("mingw", "windows") then
-        add_syslinks("ws2_32", "iphlpapi", "bcrypt")
+        add_syslinks("ws2_32", "iphlpapi", "bcrypt", "winmm")
     end
     before_build(function (target)
         os.execv("tools/xmake_generate.sh", {"build-xmake/generated"})
@@ -475,4 +446,14 @@ task("js_test")
             raise("js_test: упало %d из %d наборов", #failed, #files)
         end
         print("js_test: %d набор(ов) прошли", #files)
+    end)
+
+-- Полная двусторонняя генерация API справки и проверка свежести всех файлов.
+task("api_docs")
+    set_menu {
+        usage = "xmake api_docs",
+        description = "regenerate $ API schema, typings, reference and Editor catalog",
+    }
+    on_run(function ()
+        os.execv("python3", {"scripts/api_docs_pipeline.py", "generate"})
     end)

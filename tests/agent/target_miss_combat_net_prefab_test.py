@@ -94,24 +94,16 @@ def run_combat(a):
 
 def run_net(a):
     print("--- $.net ---")
-    msgs = logs(a, "$.net.replicate('#%s'); $.net.replicate('#%s');" % (MISS, MISS))
-    check(len(msgs) == 1, "replicate: 2 вызова → 1 сообщение (было 2): %s" % (len(msgs),))
-    check(any("net.replicate" in m for m in msgs), "в сообщении назван метод: %s" % (msgs,))
-    check(a.eval("$.net.replicate('#%s')" % MISS) == 0, "replicate: возврат 0 сохранён")
-
-    for method, expr, want in [
-        ("unreplicate", "$.net.unreplicate('#%s')" % MISS, "0"),
-        ("ownerOf", "$.net.ownerOf('#%s')" % MISS, "0"),
-        ("idOf", "$.net.idOf('#%s')" % MISS, "0"),
-        ("owns", "$.net.owns(1, '#%s')" % MISS, "false"),
-    ]:
-        msgs = logs(a, expr)
-        got = a.eval("String(%s)" % expr)
-        check(len(msgs) == 1, "%s: промах слышен один раз: %s" % (method, msgs))
-        check(got == want, "%s: возврат %s сохранён (получено %s)" % (method, want, got))
-
-    check(logs(a, "$.net.idOf('#hero')") == [], "рабочий селектор молчит")
-    check(a.eval("$.net.idOf('#hero')") != 0, "idOf('#hero') отвечает как раньше")
+    check(a.eval("$.net.replicate('#%s')" % MISS) == 0,
+          "replicate пропускает пустую выборку")
+    a.eval("$('#hero').net({ id: 'agent:hero', owner: 'local' })")
+    ids = a.eval("JSON.stringify($.net.entities())")
+    check("agent:hero" in ids, "обычный $-узел зарегистрирован через .net(options)")
+    check(a.eval("$.net.replicate('#hero', { id: 'agent:hero', owner: 'local' })") == 1,
+          "$.net.replicate возвращает число выбранных сущностей")
+    a.eval("$.net.unreplicate('#hero')")
+    check("agent:hero" not in a.eval("JSON.stringify($.net.entities())"),
+          "unreplicate снимает обычный $-узел с синхронизации")
 
 
 def run_prefab(a):
@@ -159,16 +151,10 @@ def run_doc_examples(a):
         got = a.eval(code)
         check(got == want, "%s → %s" % (label, got))
 
-    # net.md:15 — серверная форма: поднимаем хост и объявляем репликацию.
-    hosted = a.eval("$.net.bindEngine(); $.net.host(47881, { maxPlayers: 2 })")
-    a.step(1)
-    if hosted:
-        replicated = a.eval("$.net.replicate('#hero', { owner: 1 })")
-        check(isinstance(replicated, int) and replicated > 0,
-              "net.md:15 replicate('#hero', { owner: p }) → %s" % (replicated,))
-    else:
-        check(False, "net.md:15 не проверить: хост не поднялся (%s)" % (hosted,))
-    a.eval("$.net.leave()")
+    # net.md: ordinary entity integration example, with no transport internals.
+    a.eval("$('#hero').net({ id: 'docs:hero', owner: 'host', fields: ['x', 'y', 'hp'] })")
+    check("docs:hero" in a.eval("JSON.stringify($.net.entities())"),
+          "net.md .net(options) example registers a stable entity id")
 
 
 def main():

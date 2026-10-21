@@ -72,7 +72,7 @@ def main():
               "narrative panel shows the open definition")
 
         # --- real voice + prefetch -------------------------------------------
-        voice = "demos/russi_vn/voice/tl3.mp3"
+        voice = "tests/fixtures/lifecycle/assets/hit.wav"
         check(a.eval("$.fs.exists(%s)" % json.dumps(voice)) is True, "voice fixture exists")
         a.eval("$.dialog.close()")
         a.eval("$.dialog.define('bashnya_voice',{start:'a',nodes:{a:{speaker:'w',voice:%s,"

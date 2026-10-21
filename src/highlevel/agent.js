@@ -96,7 +96,7 @@ function nodeBrief(node, want) {
     // через `.map(nodeBrief)`, где вторым аргументом приходит ИНДЕКС. Поэтому
     // набор распознаём по типу: всё, что не Set, считаем «полей не просили».
     // Без этой проверки снимок падал с «TypeError: not a function» на втором
-    // UI-узле (индекс 1 → want.has) — регресс, поймал highlevel_timeline_test.
+    // UI-узле (индекс 1 → want.has) — проверяет agent_entity_state_test.
     const fields = want instanceof Set ? want : null;
     const brief = {
         uid: node.uid,

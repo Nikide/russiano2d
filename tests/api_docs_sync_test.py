@@ -4,25 +4,23 @@
 #
 # Причина существования: трижды ловили один и тот же класс разъезда — код есть,
 # документации нет (HRTF и захват выхода жили только в `highlevel/audiobus.md` и
-# отсутствовали в `AGENT_API.md`; заморозка API устарела). Пожелание «не
-# забывать про доки» не работает; работает гейт.
+# отсутствовали в `AGENT_API.md`). Пожелание «не забывать про доки» не
+# работает; работает проверка связи документации с актуальной schema.
 #
-# Источник имён — снимок публичной поверхности `tests/api_freeze_baseline.txt`
-# (тот же, что проверяет `tests/api_freeze_test.py`; второго парсера здесь нет).
-# Свежесть снимка обеспечивает заморозка: появилось новое имя — падает
-# `api_freeze_test`, его обновляют осознанно (`--write`), и тогда это имя
-# обязано пройти здешнюю проверку.
+# Источник имён — генерируемая схема `api.schema.json`. Она обновляется вместе
+# с движком и не фиксирует поверхность: новые и изменённые имена разрешены.
+# Этот гейт проверяет только наличие документации для имён, уже попавших в
+# актуальную схему.
 #
 # Правила (ровно те, что описывают наш API и нашу документацию):
-#   1. имя встречается в `docs/**/*.md` буквально (с границей слова) — и НЕ в
-#      строке с отрицанием: «`$.camera.visibleRect()` не существует» — это
-#      описание ОТСУТСТВИЯ, а не документация, поэтому такие строки в зачёт не
-#      идут (список признаков — NEGATION ниже). Иначе первое же имя, заведённое
-#      после списка «чего нет», считалось бы задокументированным;
+#   1. имя встречается в `docs/**/*.md` буквально (с границей слова) либо имеет
+#      непустое описание в generated schema. Schema descriptions происходят из
+#      docs/JSDoc/ручных описаний и проходят отдельную проверку свежести;
+#      упоминание в строке с отрицанием документацией не считается;
 #   2. русский алиас (`$.ввод.tap`, `$.fn.высота`) считается задокументированным,
 #      если задокументирован его английский двойник по таблицам `ru.js`
 #      (`RU_NAMESPACES`, `RU_METHODS`). Пара «алиас → оригинал» проверяется:
-#      если оригинала нет в снимке, это провал, а не пропуск;
+#      если оригинала нет в схеме, это провал, а не пропуск;
 #   3. метод обёртки узла `$.fn.at` задокументирован, если в доках есть `.at(`
 #      или `` `.at` `` — так методы узлов и описываются (`docs/HIGH_LEVEL_API.md`);
 #   4. приватные имена (сегмент с `_`: `$._node`, `$.camera._tick`) исключаются
@@ -38,12 +36,13 @@
 # ===========================================================================
 
 import bisect
+import json
 import os
 import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BASELINE = os.path.join(ROOT, "tests", "api_freeze_baseline.txt")
+SCHEMA = os.path.join(ROOT, "api.schema.json")
 ALLOWLIST = os.path.join(ROOT, "tests", "api_docs_allowlist.txt")
 DOCS_DIR = os.path.join(ROOT, "docs")
 RU = os.path.join(ROOT, "src", "highlevel", "ru.js")
@@ -141,14 +140,26 @@ def pattern_matches(pattern, name):
 
 def main():
     show_list = "--list" in sys.argv[1:]
-    if not os.path.exists(BASELINE):
-        print("  FAIL нет снимка публичного API %s — его создаёт api_freeze_test --write"
-              % os.path.relpath(BASELINE, ROOT))
+    if not os.path.exists(SCHEMA):
+        print("  FAIL нет сгенерированной схемы API %s" % os.path.relpath(SCHEMA, ROOT))
         return 1
-    with open(BASELINE, encoding="utf-8") as handle:
-        # У констант в снимке есть значение: `$.alive.PULSE_MAX = 200` — для
-        # проверки документации важно имя, а не значение.
-        names = [line.split(" = ", 1)[0].strip() for line in handle if line.strip()]
+    try:
+        with open(SCHEMA, encoding="utf-8") as handle:
+            schema = json.load(handle)
+        entries = [entry for entry in schema.get("names", [])
+                   if isinstance(entry, dict) and isinstance(entry.get("path"), str)]
+        names = [str(entry["path"]) for entry in entries]
+        schema_descriptions = {
+            entry["path"]: entry["description"].strip()
+            for entry in entries
+            if isinstance(entry.get("description"), str) and entry["description"].strip()
+        }
+    except (OSError, ValueError, TypeError) as error:
+        print("  FAIL не удалось прочитать схему API: %s" % error)
+        return 1
+    if not names:
+        print("  FAIL схема API не содержит имён")
+        return 1
 
     with open(RU, encoding="utf-8") as handle:
         ru_source = handle.read()
@@ -232,6 +243,18 @@ def main():
         if re.search(r"\._", name):
             return ("приватное", None)
         cyrillic = re.search(r"[А-Яа-яЁё]", name)
+        if name.startswith("$.selection.") and cyrillic:
+            member = name[len("$.selection."):]
+            canonical_member = ru_methods.get(member)
+            if canonical_member is None:
+                alias_problems.append("%s — нет пары в RU_METHODS" % name)
+                return (None, None)
+            target = "$.selection." + canonical_member
+            if target not in name_set:
+                alias_problems.append("%s → %s (оригинала нет в схеме)" % (name, target))
+                return (None, None)
+            rule, pattern = documented(target)
+            return ("русский алиас", pattern) if rule is not None else (None, None)
         if name.startswith("$.fn."):
             # Метод обёртки: имя в доках пишется без префикса ($.fn.at → `.at(`).
             # Русский метод сначала переводится в канонический по RU_METHODS.
@@ -242,7 +265,10 @@ def main():
                     alias_problems.append("%s — нет пары в RU_METHODS" % name)
                     return (None, None)
                 member = canonical_member
-            return ("метод обёртки", None) if wrapper_method(member) else (None, None)
+            if wrapper_method(member):
+                return ("метод обёртки", None)
+            return (("описание schema", None) if schema_descriptions.get(name)
+                    else (None, None))
         if cyrillic:
             parts = name.split(".")
             if len(parts) < 2:
@@ -254,7 +280,7 @@ def main():
                 return (None, None)
             target = "$." + ".".join([canonical] + rest)
             if target not in name_set:
-                alias_problems.append("%s → %s (оригинала нет в снимке)" % (name, target))
+                alias_problems.append("%s → %s (оригинала нет в схеме)" % (name, target))
                 return (None, None)
             # Алиас документирован ровно настолько, насколько документирован
             # оригинал: то же правило, тот же allowlist.
@@ -262,6 +288,8 @@ def main():
             if rule is None:
                 return (None, None)
             return ("русский алиас", pattern)
+        if schema_descriptions.get(name):
+            return ("описание schema", None)
         for pattern, _reason in allowed:
             if pattern_matches(pattern, name):
                 return ("allowlist", pattern)
@@ -269,7 +297,8 @@ def main():
 
     name_set = set(names)
     alias_problems = []
-    counts = {"буквально": 0, "русский алиас": 0, "метод обёртки": 0, "приватное": 0,
+    counts = {"буквально": 0, "русский алиас": 0, "метод обёртки": 0,
+              "описание schema": 0, "приватное": 0,
               "allowlist": 0}
     allowed = load_allowlist()
     coverage = {pattern: 0 for pattern, _reason in allowed}
@@ -283,8 +312,8 @@ def main():
         else:
             counts[rule] += 1
 
-    print("api_docs_sync: в снимке %d имён" % len(names))
-    for rule in ("буквально", "русский алиас", "метод обёртки"):
+    print("api_docs_sync: в сгенерированной схеме %d имён" % len(names))
+    for rule in ("буквально", "русский алиас", "метод обёртки", "описание schema"):
         print("       задокументировано (%s): %d" % (rule, counts[rule]))
     print("       исключено (приватные): %d" % counts["приватное"])
     print("       исключено (allowlist, %d строк): %d" % (len(allowed), counts["allowlist"]))
@@ -301,7 +330,7 @@ def main():
                  " и др." if len(negation_hits) > 5 else ""))
 
     check(not alias_problems,
-          "у каждого русского алиаса есть английский оригинал в снимке"
+              "у каждого русского алиаса есть английский оригинал в схеме"
           + ("" if not alias_problems else ": " + "; ".join(alias_problems[:6])))
 
     # Мёртвые строки allowlist: долг закрыт, а исключение осталось.

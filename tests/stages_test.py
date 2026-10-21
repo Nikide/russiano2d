@@ -58,12 +58,14 @@ STAGES = [
         "tests/agent/highlevel_presentation_test.py", "tests/agent/screenfx_test.py",
     ], 5),
     ("G", "Audio routing/stems, timeline integration, UI/localization", [
-        "tests/agent/highlevel_audiobus_test.py", "tests/agent/highlevel_timeline_test.py",
+        "tests/agent/highlevel_audiobus_test.py", "tests/js/timeline_test.mjs",
+        "tests/agent/rusya_love_vn_test.py",
         "tests/agent/highlevel_i18n_test.py",
     ], 5),
     ("H", "SDK panels, examples, installed packaging, release acceptance", [
         "tests/profile_2d_test.py", "tests/acceptance_test.py", "tests/checklist_test.py",
-        "demos/foundations/README.md",
+        "demos/foundations/README.md", "tests/agent/platformer_editor_demo_test.py",
+        "tests/agent/rusya_love_vn_test.py",
     ], 6),
 ]
 

@@ -27,7 +27,7 @@
 # high-level `$` adapter-у, чтобы получить texture/UV обычного Sprite.
 engine.spriteInfo  # internal: private Sprite texture/UV bridge for high-level $
 # `docs/internal/NATIVE.md`: таблица «Что ещё есть в engine» (profileEnabled,
-# isAwake, setGravityScale, netMode) и подраздел «Контакты, ошибки физики и
+# isAwake, setGravityScale) и подраздел «Контакты, ошибки физики и
 # снаппинг вершин» (bodyGeneration, contactStay, setContactStay, physicsErrors,
 # clearPhysicsErrors, setSnap). Причина `internal` проверена: из игрового кода
 # не вызываются — в `src/highlevel/*.js` вхождений `engine.X` нет, кроме

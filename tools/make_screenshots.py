@@ -6,14 +6,15 @@
 кадр каждой оставшейся сцены через агентский режим — без рук и без открытия окна.
 
     python3 tools/make_screenshots.py                 # все сцены демо-проекта
-    python3 tools/make_screenshots.py --only russi_vn # одну
+    python3 tools/make_screenshots.py --only shooter_witch # одну
     python3 tools/make_screenshots.py --out docs/screenshots
 
 Кадры кладутся в `docs/screenshots/<сцена>.png`; имена совпадают с именами сцен,
 поэтому ссылки в README не расходятся с файлами. Меню снимается как `launcher`.
 
-Новелле нужен не первый кадр, а живая реплика с выборами: инструмент доводит её
-до первой развилки — иначе на скриншоте был бы пустой пролог.
+Инструмент снимает только модули игры `demos/`. Самостоятельные проекты,
+созданные через Editor, включая новую VN, имеют отдельные walkthrough-кадры в
+`docs/editor/images/`.
 """
 
 from __future__ import annotations
@@ -32,7 +33,6 @@ SHOTS = {
     "launcher": 90,
     "platformer": 420,
     "shooter_witch": 900,
-    "russi_vn": 600,
 }
 
 # Сцена → что подержать до снимка. Платформеру нужно дойти до земли и пройти
@@ -40,18 +40,6 @@ SHOTS = {
 HOLD = {
     "platformer": ["D"],
 }
-
-
-def advance_to_choice(agent, limit=400):
-    """Довести новеллу до вариантов ответа: на первом кадре она ещё в прологе."""
-    for _ in range(limit):
-        if agent.eval("typeof $.timeline !== 'undefined' && $.timeline.choices().length"):
-            agent.step(20)
-            return True
-        agent.step(8)
-        if agent.eval("$.timeline.state().waiting") == "say":
-            agent.eval("$.dialog.next()")
-    return False
 
 
 def main(argv):
@@ -64,6 +52,9 @@ def main(argv):
     args = parser.parse_args(argv)
 
     wanted = [s.strip() for s in args.only.split(",") if s.strip()] or list(SHOTS)
+    unknown = [scene for scene in wanted if scene not in SHOTS]
+    if unknown:
+        parser.error("неизвестные сцены проекта demos: " + ", ".join(unknown))
     out_dir = os.path.join(ROOT, args.out)
     os.makedirs(out_dir, exist_ok=True)
 
@@ -73,19 +64,16 @@ def main(argv):
         try:
             with Agent(game="demos", scene=scene, seed=11,
                        extra_args=["--width", str(args.width), "--height", str(args.height)]) as agent:
-                if scene == "russi_vn":
-                    advance_to_choice(agent)
-                else:
-                    keys = HOLD.get(scene, [])
-                    if keys:
-                        agent.keys(keys)
-                    left = steps
-                    while left > 0:
-                        portion = min(150, left)
-                        agent.step(portion)
-                        left -= portion
-                    if keys:
-                        agent.keys([])
+                keys = HOLD.get(scene, [])
+                if keys:
+                    agent.keys(keys)
+                left = steps
+                while left > 0:
+                    portion = min(150, left)
+                    agent.step(portion)
+                    left -= portion
+                if keys:
+                    agent.keys([])
                 agent.screenshot(path)
             size = os.path.getsize(path) // 1024
             print(f"→ {args.out}/{scene}.png ({size} КБ, {args.width}×{args.height})")
