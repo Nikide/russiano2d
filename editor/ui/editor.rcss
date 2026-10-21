@@ -572,4 +572,4 @@ scrollbarcorner { background-color: transparent; }
 .sn-st.delete { color: #e2b33c; }
 
 /* Превью исходника сниппетов до применения native generate. */
-.sn-diff { display: block; max-height: 220px; overflow: auto; white-space: pre; font-family: monospace; font-size: 11px; background-color: #10141c; padding: 6px; margin: 4px 8px; }
+.sn-diff { display: block; max-height: 220px; overflow: auto; white-space: pre; font-family: Roboto Mono; font-size: 11px; color: #c3c9d4; background-color: #10141c; padding: 6px; margin: 4px 8px; }

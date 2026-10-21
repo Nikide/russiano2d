@@ -146,3 +146,13 @@ r2d snippet restore <проект> --from <снимок.json>   # отмена/�
 
 ![Русский поиск в настоящем Editor](snippets/images/acceptance-search.png)
 ![Каталог после прокрутки и resize](snippets/images/acceptance-catalog-scroll.png)
+
+Кадры приёмки Inspector, исходника до/после, authoring и внешнего конфликта:
+
+![Inspector полей](snippets/images/acceptance-inspector.png)
+![Preview до применения](snippets/images/acceptance-preview.png)
+![Пакет проекта и его manifest](snippets/images/acceptance-authoring.png)
+![Внешний конфликт generated](snippets/images/acceptance-conflict.png)
+
+Проверенные критерии и оговорённое внешнее исключение —
+[приёмка §19](SNIPPET_ACCEPTANCE.md).

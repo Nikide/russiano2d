@@ -31,6 +31,17 @@ def check(value, message):
         raise AssertionError(message)
 
 
+def shot(a, name):
+    if '--shots' in sys.argv:
+        if name in ('preview', 'conflict'):
+            side = a.eval("$.ui.doc('ui/editor.rml').rect('side-body')")
+            a.mouse_move(x=side['x'] + side['w']/2, y=side['y'] + side['h']/2)
+            a.wheel(-10); a.step(5)
+        a.screenshot(str(ROOT / 'docs/snippets/images' / ('acceptance-' + name + '.png')))
+        if name in ('preview', 'conflict'):
+            a.wheel(10); a.step(5)
+
+
 def disk(root):
     return json.loads((root / 'project.json').read_text())
 
@@ -68,12 +79,16 @@ def test():
             run(a, E + ".snippets.changed('sn-f-speed')")
             check(disk(root)['editor']['snippets']['instances'][0]['values'].get('speed') == 260, 'speed=260 записан из формы')
             check(a.eval(E + ".state.project.json.editor.snippets.instances[0].values.speed") == 260, 'Editor перечитал project.json')
+            shot(a, 'inspector')
             run(a, E + ".snippets.click('preview')")
             preview = a.eval(E + ".snippets.state.gen.files.find(f => f.path === 'generated/snippets/index.js')")
             check(preview and '"speed": 260' in preview.get('text', ''), 'preview показывает новый JS до записи')
             check(not (root / 'generated/snippets/index.js').exists(), 'preview не пишет файлы')
             run(a, E + ".snippets.click('diff:generated/snippets/index.js')")
             check('До' in a.eval("$.ui.doc('ui/editor.rml').content('side-body')"), 'панель показывает исходник до/после')
+            a.step(5)
+            check(a.eval("$.ui.doc('ui/editor.rml').layoutRect('sn-diff-after').h") > 50, 'preview исходника имеет читаемую высоту')
+            shot(a, 'preview')
             run(a, E + ".snippets.click('generate')")
             check((root / 'generated/snippets/index.js').exists(), 'generated/snippets/index.js создан')
             check('"speed": 260' in (root / 'generated/snippets/index.js').read_text(), 'значение попало в generated JS')
@@ -117,6 +132,7 @@ def test():
             check(manifest['kind'] == 'kit' and manifest['dependencies'] == [{'id': 'game.spin'}], 'набор создан через панель с составом')
             check(a.eval(E + '.activeTab().path') == 'snippets/game.coin-kit/snippet.json', 'для набора открыт manifest')
             check(a.eval(E + ".snippets.state.catalog.some(p => p.id === 'game.coin-kit' && p.valid)"), 'новый kit проверен backend')
+            shot(a, 'authoring')
             # Update preview and migration apply are also available in the panel.
             path = root / 'snippets/game.spin/snippet.json'
             custom = json.loads(path.read_text())
@@ -157,6 +173,7 @@ def test():
             output.write_text(output.read_text() + '\n// external-user-edit\n')
             run(a, E + ".snippets.click('preview')")
             check(any(f['status'] == 'conflict' for f in a.eval(E + '.snippets.state.gen.files')), 'внешняя правка показана как conflict')
+            shot(a, 'conflict')
             run(a, E + ".snippets.click('generate')")
             check('// external-user-edit' in output.read_text(), 'конфликт не перезаписан молча')
             run(a, E + ".snippets.click('overwrite')")

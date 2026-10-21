@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_client import Agent
 from snippets_mechanics_test import r2d
 from net_loopback_test import free_port, pump
+from editor_hammer_test import settle, run
 
 
 def main():
@@ -20,8 +21,18 @@ def main():
         (root / 'main.js').write_text('$.ready(() => {});')
         (root / 'project.json').write_text(json.dumps({'schema_version': 2, 'project': {'name': 'Ready', 'version': '1.0.0'}, 'runtime': {'entry': 'main.js'}}))
         assert r2d('project-index', tmp, '--write')['ok']
-        assert r2d('snippet', 'add', tmp, 'net.ready-check', '--owner', 'project')['ok']
-        assert r2d('snippet', 'generate', tmp, '--write')['ok']
+        # Build the same authoritative co-op composition through the real Editor.
+        with Agent(game='editor', scene=tmp, seed=3) as editor:
+            E = '$.editorApp'
+            settle(editor, E + '.state.project!==null && ' + E + '.state.busy===0')
+            editor.eval(E + '.showSnippets();1')
+            settle(editor, E + '.snippets.state.loaded')
+            run(editor, E + ".snippets.createEntity('hero','hero',{body:'none'})")
+            for package in ['health.base', 'kit.project-coop-adventure', 'net.ready-check']:
+                run(editor, E + '.snippets.click(' + json.dumps('add:' + package) + ')')
+            run(editor, E + ".snippets.click('generate')")
+            assert editor.eval(E + '.snippets.state.gen.ok')
+        assert r2d('validate', tmp)['ok']
         port = free_port()
         with Agent(game=tmp, seed=1) as host, Agent(game=tmp, seed=2) as client:
             for a in (host, client):
@@ -36,6 +47,15 @@ def main():
                 if host.eval('$.net.playerCount()') == 2:
                     break
             assert host.eval('$.net.playerCount()') == 2, 'client connects'
+            client.eval("$('#hero').damage(9);1")
+            assert client.eval("$('#hero').hp()") == 100, 'client cannot author health damage'
+            host.eval("$('#hero').damage(11);1")
+            for _ in range(100):
+                pump(host, client)
+                if client.eval("$('#hero').hp()") == 89:
+                    break
+            assert client.eval("$('#hero').hp()") == 89, 'authoritative health replicates to client'
+            assert host.eval("$('player').length") >= 1, 'co-op spawns peer player'
             host.eval("$.emit('ready:toggle');1")
             assert host.eval('starts') == 0, 'unready client blocks start'
             client.eval("$.emit('ready:toggle');1")

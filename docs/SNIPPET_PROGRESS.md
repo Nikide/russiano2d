@@ -9,12 +9,12 @@
 |---|---|
 | §20.1 baseline (schema 2, `editor.graph`, API schema) | ✅ было до работы |
 | §20.2 матрица 500 ID и API gaps | ✅ `58e89db` ([SNIPPET_MATRIX.md](SNIPPET_MATRIX.md); пробелы — предварительно по пространствам $, уточняются при реализации) |
-| §20.3 контракты: manifest, поля, слоты, ID, `editor.snippets`, ownership, коды SNIP | ✅ `a3200d5` (миграция данных пакетов — 🟡 только `snippet update`) |
-| §20.4 C/$ API | 🟡 `$.updateFor` (`eb84756`), `.damage(…, type)`/`.damageFilter`/`damaged` (`0ecf60a1`), `.flip()` чтение (`038690a1`), фикс `$.camera.isOnScreen` (`451d6721`); пробелы закрываются по мере реализации пакетов |
-| §20.5 native r2d: scan/validate/catalog/diff/transaction/migration/recovery | 🟡 `a3200d5`, `5dd6ff3`, `841a104` (entity/new/own/rollback; миграции значений между версиями пакета — ⬜) |
-| §20.6 Editor: каталог, Inspector, Save/Run | 🟡 `e4b9566`, `5dd6ff3`, `841a104`, `abb4bcbc` (фильтр категорий, многошаговая отмена/повтор) |
+| §20.3 контракты: manifest, поля, слоты, ID, `editor.snippets`, ownership, коды SNIP | ✅ `a3200d5` (миграция данных пакетов — ✅ `snippet update`, native tests и Editor dry-run/apply) |
+| §20.4 C/$ API | ✅ `$.updateFor` (`eb84756`), `.damage(…, type)`/`.damageFilter`/`damaged` (`0ecf60a1`), `.flip()` чтение (`038690a1`), фикс `$.camera.isOnScreen` (`451d6721`); подтверждённые пробелы закрыты; 500 requires разрешены по schema |
+| §20.5 native r2d: scan/validate/catalog/diff/transaction/migration/recovery | ✅ native scan/validate/catalog/generate/update/rollback/restore; миграции проверены |
+| §20.6 Editor: каталог, Inspector, Save/Run | ✅ каталог/Inspector/authoring/preview/update/ownership/undo/redo; реальный RmlUi dogfood |
 | §20.7 500 пакетов | ✅ 500 из 500; §12 нормализован (`e959d519`): 19 дублей → недостающие механики (`78788f54`); пробелов «вне каталога» нет |
-| §20.8–11 dogfood, полный прогон, доки со скриншотами, DoD | ⬜ |
+| §20.8–11 dogfood, полный прогон, доки со скриншотами, DoD | ✅ snippet suites; ⚠ известный внешний api_docs_test, подробная приёмка — [SNIPPET_ACCEPTANCE.md](SNIPPET_ACCEPTANCE.md) |
 
 ## Сделано (коммиты)
 
@@ -64,11 +64,11 @@
 
 ### C/$ API и архитектура
 - [x] API gap matrix на 500 пакетов (предварительная; уточняется по мере реализации)
-- [ ] прочие подтверждённые API-изменения
-- [x] удаление узла снимает подписки `$.updateFor` и привязки generated (смена сцены — покрыта через удаление узлов; отдельный тест ⬜)
+- [x] прочие подтверждённые API-изменения; незакрытых requires/schema gaps нет
+- [x] удаление узла снимает подписки `$.updateFor` и привязки generated (отдельный тест смены сцены и respawn — ✅ snippets_sections_test.py)
 - [x] пакеты не обращаются к `engine.*` (SNIP101)
 - [x] без ECS/второго графа/event bus
-- [ ] multiplayer-пакеты на `$.net`
+- [x] multiplayer-пакеты на `$.net`; Editor co-op project → два peers, authority/health replication, readiness/disconnect
 - [x] performance pass с замером (`26ca907f`; в C не нужно)
 
 ### Надёжность и проекты
@@ -77,7 +77,7 @@
 - [x] rollback project.json (`snippet rollback`), recovery ручной версии generated (`*.r2d-user`)
 - [x] детерминизм; конфликт ручной правки не перезаписывается молча
 - [x] одни коды SNIP в CLI/Editor/агенте
-- [ ] dogfood UX (focus, resize; undo/redo в панели — ✅ `abb4bcbc`)
+- [x] dogfood UX: реальный focus/text/Tab/resize/scroll, undo/redo, conflict/recovery, reopen — ✅
 - [x] жанровые проекты целиком через Editor (`65304d95`)
 - [x] Build: generated и только использованные пакеты в поставке
 - [x] документация со скриншотами `docs/snippets/images/`
@@ -87,18 +87,25 @@
 - `tests/js/api_docs_test.mjs` падает: незакоммиченный `scripts/generate_api_docs_catalog.py` кладёт в каталог `engine.*`.
 - В коммиты `eb84756`/`a3200d5` попали уже лежавшие незакоммиченными правки `api.schema.json`, `russiano2d.d.ts`, `sdk_validate.c` (runtime.multiplayer) и `sdk_project_graph.c`.
 
-## Следующие шаги
+## Итог и повторение
 
-1. Кэш цели по селектору в остальных 81 пакете (как в `ai.chase`).
-2. Функциональные тесты остальных разделов (сейчас: все 500 — runtime-смоук; функционально — оружие, зоны, подбор, урон, 19 механик, 7 жанров).
-3. Финальная приёмка по §19 (dogfood UX: focus/resize).
+Полный список **29 пунктов §19** со статусом и доказательством —
+[SNIPPET_ACCEPTANCE.md](SNIPPET_ACCEPTANCE.md): 28 подтверждены, один содержит
+известное внешнее исключение (`api_docs_test.mjs`). Новых отложенных функций
+сниппетов не оставлено. Чужие незакоммиченные изменения сохранены.
 
-## С чего продолжать
+```sh
+xmake build -y -j 8 r2d
+export R2D_BINARY="$PWD/build/macosx/arm64/release/r2d"
+xmake test snippets_tests/catalog
+xmake test snippets_regression_tests/contracts
+python3 scripts/snippet_matrix.py --check
+python3 scripts/api_docs_pipeline.py check
+```
 
-- Ветка `snippets-system`, всё закоммичено. Сборка: `xmake build -y -j 8 r2d`; бинарник `build-xmake/macos-arm64/macosx/arm64/release/r2d` (тесты берут его через `R2D_BINARY`).
-- Проверка каталога: `r2d snippet catalog --strict` (500/500), `python3 tests/agent/snippets_catalog_test.py` (~3 мин, все 500 в runtime).
-- Генераторы пакетов были одноразовыми скриптами вне репо: правьте пакеты прямо в `snippets/<id>/`, затем `python3 scripts/snippet_matrix.py`.
-- Остаток для §19: (1) кэш цели по селектору в 81 пакете — образец `snippets/ai.chase/src/behavior.js`; (2) функциональные тесты по разделам (образцы: `tests/agent/snippets_mechanics_test.py`, `snippets_combat_test.py`); (3) dogfood UX панели (focus/resize) и финальная сверка чек-листа выше.
+Обе xmake test targets получают фактический путь текущего r2d сами. Путь Python
+выше относится к локальной конфигурации этой приёмки. Main не переключался,
+push не выполнялся. Ниже сохранена история шагов с результатами проверок.
 
 ## Приёмка 2026-10-21 — продолжение
 
@@ -204,3 +211,30 @@
 changelog в README. Это делает исправления явными для pinned проектов через
 `snippet update`/Editor dry-run; схемы полей совместимы, миграция значений не
 требуется. Матрица версий обновлена. Неизменённые пакеты не переверсионированы.
+
+## Итоговая фиксация приёмки
+
+- Полный повторный каталог через xmake после функциональных исправлений:
+  **PASS, 500/500, 99.089 с**. После patch version bump отдельно повторены
+  strict catalog и актуальность matrix — PASS.
+- Общий snippet regression через xmake, включая семь жанров с lint/validate/
+  Build: **PASS, 61.167 с**. После усиления кооперативного fixture отдельно
+  подтверждён PASS проекта `kit.project-coop-adventure`, собранного через
+  настоящий Editor: два peers, spawn, запрет клиентского урона, hp от хоста
+  реплицируется клиенту, readiness/start и cleanup disconnect.
+- Genre fixtures повторены с `--shots`: **PASS**, все семь проектов. Снимки
+  текущего Editor/runtime обновлены; никаких макетов.
+- Полный QuickJS regression: **130/131 PASS**; единственный failure — известный
+  `tests/js/api_docs_test.mjs`. Canonical `api_docs_pipeline.py check` — PASS.
+- Требуемые doc_claims/doc_coverage/api_docs_sync — PASS, 4111 имён покрыто.
+- Полная приёмка по каждому пункту — [SNIPPET_ACCEPTANCE.md](SNIPPET_ACCEPTANCE.md).
+  **28 ✅ / 1 ⚠**, исключение относится к общему внешнему regression; поэтому
+  весь §19 безусловно зелёным не объявлен. Исходное ТЗ не переписано под результат.
+- Работа выполнена в `snippets-system`; main не переключался; чужие исходники не редактировались и не
+  включались в коммиты; push не выполнялся. Новых отложенных функций сниппетов не оставлено.
+
+- Финальная визуальная проверка preview нашла незагруженный CSS font-family
+  `monospace`: исходник занимал пустую строку. Заменён на штатный Roboto Mono;
+  добавлен regression на высоту видимого исходника. Финальный Editor run:
+  **50 checks PASS**, четыре дополнительных реальных screenshot (Inspector,
+  preview с читаемым кодом, authoring, conflict). QuickJS parser test PASS.

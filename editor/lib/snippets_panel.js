@@ -356,7 +356,7 @@ export function createSnippetsPanel($, doc, host) {
             const diff = (st.gen.files || []).find((f) => f.path === st.diff);
             if (diff) {
                 html += '<span class="sn-h">' + esc(diff.path) + '</span><button class="st-btn" data-key="sn:file:' + esc(diff.path) + '">Открыть исходник</button>';
-                if (diff.text !== undefined) html += '<span class="sn-hint">До</span><pre class="sn-diff">' + esc(diff.before || '') + '</pre><span class="sn-hint">После</span><pre class="sn-diff">' + esc(diff.text) + '</pre>';
+                if (diff.text !== undefined) html += '<span class="sn-hint">До</span><pre id="sn-diff-before" class="sn-diff">' + esc(diff.before || '') + '</pre><span class="sn-hint">После</span><pre id="sn-diff-after" class="sn-diff">' + esc(diff.text) + '</pre>';
                 else html += '<span class="sn-hint">Нажмите «Просмотр изменений», чтобы увидеть исходник до применения.</span>';
             }
             if (st.gen.entry_link && !st.gen.entry_link.present)
