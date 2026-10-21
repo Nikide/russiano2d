@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.adventure-inventory",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: приключение — предметы"
+  },
+  "description": {
+    "ru": "Ключи и предметы игрока; двери и верстаки — пакеты своих объектов."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    },
+    {
+      "id": "ui.inventory-screen"
+    },
+    {
+      "id": "equipment.slots"
+    },
+    {
+      "id": "item.consumable"
+    },
+    {
+      "id": "item.quest-bound"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

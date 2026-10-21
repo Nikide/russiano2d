@@ -44,11 +44,7 @@
       "api": "$.selection.get"
     }
   ],
-  "dependencies": [
-    {
-      "id": "inventory.grid"
-    }
-  ],
+  "dependencies": [],
   "fields": [
     {
       "id": "player",

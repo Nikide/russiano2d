@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.room-leave",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Выход из комнаты"
+  },
+  "description": {
+    "ru": "Выход из комнаты/сессии по событию, очистка сетевых сущностей и возврат в меню."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.entities"
+    },
+    {
+      "api": "$.net.leave"
+    },
+    {
+      "api": "$.net.room.leave"
+    },
+    {
+      "api": "$.net.unreplicate"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.scene.load"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "menuScene",
+      "label": "Сцена меню",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "комната",
+    "выход"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

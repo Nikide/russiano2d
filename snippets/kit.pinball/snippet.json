@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.pinball",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: пинбол"
+  },
+  "description": {
+    "ru": "Очки, цели и сброс стола. Вне каталога: Флипперы и шар отдельными пакетами в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "interact.pressure-plate"
+    },
+    {
+      "id": "net.scoreboard"
+    },
+    {
+      "id": "puzzle.reset"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

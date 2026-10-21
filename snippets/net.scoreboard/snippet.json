@@ -1,0 +1,71 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.scoreboard",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Таблица счёта"
+  },
+  "description": {
+    "ru": "Подтверждённый счёт: хост считает по событиям score { id, points } и рассылает."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [],
+  "tags": [
+    "счёт",
+    "матч"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

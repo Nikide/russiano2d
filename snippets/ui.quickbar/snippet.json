@@ -44,11 +44,7 @@
       "api": "$.updateFor"
     }
   ],
-  "dependencies": [
-    {
-      "id": "inventory.quickbar"
-    }
-  ],
+  "dependencies": [],
   "fields": [
     {
       "id": "who",

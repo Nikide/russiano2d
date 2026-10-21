@@ -6,5 +6,3 @@
 
 - `who` (entity) — Чей
 - `position` (vec2) — Позиция (x, y)
-
-Состав / зависимости: `inventory.quickbar`

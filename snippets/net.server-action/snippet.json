@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.server-action",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Действие на хосте"
+  },
+  "description": {
+    "ru": "Именованное действие с проверкой на хосте ($.net.handle); клиент вызывает $.net.rpc."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.handle"
+    },
+    {
+      "api": "$.net.rpc"
+    },
+    {
+      "api": "$.net.send"
+    },
+    {
+      "api": "$.net.unhandle"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Действие",
+      "type": "string",
+      "default": "door:open"
+    },
+    {
+      "id": "maxDistance",
+      "label": "Макс. дистанция до объекта",
+      "type": "number",
+      "default": 80,
+      "min": 0,
+      "max": 100000,
+      "unit": "пикс."
+    },
+    {
+      "id": "target",
+      "label": "Объект (селектор)",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "RPC",
+    "проверка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

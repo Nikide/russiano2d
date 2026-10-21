@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.episodic-story",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: эпизоды"
+  },
+  "description": {
+    "ru": "Главы, сохранённые ветки и перенос прогресса."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "story.chapter"
+    },
+    {
+      "id": "story.choice-history"
+    },
+    {
+      "id": "save.story-state"
+    },
+    {
+      "id": "save.slot"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

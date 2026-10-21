@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.project-top-down-action",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Проект: top-down экшен"
+  },
+  "description": {
+    "ru": "Законченная игра с заданиями и оружием."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.top-down-shooter"
+    },
+    {
+      "id": "kit.shooter-loadout"
+    },
+    {
+      "id": "quest.definition"
+    },
+    {
+      "id": "ui.quest-tracker"
+    },
+    {
+      "id": "ui.pause-menu"
+    },
+    {
+      "id": "save.slot"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

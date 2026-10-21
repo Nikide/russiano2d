@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.gravity-platformer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: гравитация"
+  },
+  "description": {
+    "ru": "Гравитационные зоны и смена направления."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.platformer"
+    },
+    {
+      "id": "world.gravity-zone"
+    },
+    {
+      "id": "camera.follow"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

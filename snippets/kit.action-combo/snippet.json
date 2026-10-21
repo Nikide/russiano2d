@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.action-combo",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: экшен-комбо"
+  },
+  "description": {
+    "ru": "Цепочки атак, отмены и счёт серии."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "weapon.melee"
+    },
+    {
+      "id": "animation.attack"
+    },
+    {
+      "id": "animation.cancel-rules"
+    },
+    {
+      "id": "feedback.combo-popup"
+    },
+    {
+      "id": "feedback.hit-stop"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

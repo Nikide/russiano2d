@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.metroidvania-map",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: метроидвания — карта"
+  },
+  "description": {
+    "ru": "Исследованные комнаты и отметки на карте. Вне каталога: Карта исследованных комнат как экран — ui.minimap-markers показывает камеру, а не накопленную карту."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "world.streamed-room"
+    },
+    {
+      "id": "world.secret-area"
+    },
+    {
+      "id": "ui.minimap-markers"
+    },
+    {
+      "id": "camera.room-lock"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

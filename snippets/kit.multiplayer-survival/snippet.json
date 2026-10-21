@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.multiplayer-survival",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: сетевое выживание"
+  },
+  "description": {
+    "ru": "Сессия, общий мир и события сервера."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.authoritative-coop"
+    },
+    {
+      "id": "net.shared-object"
+    },
+    {
+      "id": "net.coop-revive"
+    },
+    {
+      "id": "net.damage-command"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

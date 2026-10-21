@@ -1,0 +1,87 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.damage-command",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сетевой урон"
+  },
+  "description": {
+    "ru": "Запрос урона проверяется хостом: владелец атакующего и дистанция."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.handle"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.rpc"
+    },
+    {
+      "api": "$.net.send"
+    },
+    {
+      "api": "$.net.unhandle"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "maxRange",
+      "label": "Макс. дистанция",
+      "type": "number",
+      "default": 600,
+      "min": 0,
+      "max": 100000,
+      "unit": "пикс."
+    },
+    {
+      "id": "maxDamage",
+      "label": "Макс. урон за запрос",
+      "type": "number",
+      "default": 100,
+      "min": 0,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "урон",
+    "авторитет"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

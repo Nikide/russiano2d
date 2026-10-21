@@ -53,11 +53,7 @@
       "api": "$.updateFor"
     }
   ],
-  "dependencies": [
-    {
-      "id": "equipment.slots"
-    }
-  ],
+  "dependencies": [],
   "fields": [
     {
       "id": "who",

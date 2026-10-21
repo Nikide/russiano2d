@@ -95,6 +95,13 @@ def main():
             iid = "snippet:%s:%s" % (owner.split(":")[-1], p["id"])
             sres = r2d("snippet", "set", game, iid, *pairs)
             check(sres["ok"], "%s: значения example проходят схему %s" % (p["id"], [d["message"] for d in sres["diagnostics"]]))
+    # Пакеты «и узел, и проект» — ещё и на project: так проверяется якорь #__snippets.
+    for p in pkgs:
+        if "project" in p["targets"] and p["targets"] != ["project"]:
+            res = r2d("snippet", "add", game, p["id"], "--owner", "project")
+            check(res["ok"] or all(d["code"] in ("SNIP144", "SNIP062") for d in res["diagnostics"]),
+                  "%s: на project — %s" % (p["id"], [d["message"] for d in res["diagnostics"]][:2]))
+
     # Обязательные ресурсы и у экземпляров-зависимостей (добавлены автоматически).
     fields = {p["id"]: p.get("fields", []) for p in pkgs}
     for inst in json.load(open(os.path.join(game, "project.json")))["editor"]["snippets"]["instances"]:

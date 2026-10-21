@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.business-sim",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: бизнес"
+  },
+  "description": {
+    "ru": "Доход, расходы, цены и улучшения."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "economy.wallet"
+    },
+    {
+      "id": "economy.price"
+    },
+    {
+      "id": "economy.income-expense"
+    },
+    {
+      "id": "crafting.upgrade"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

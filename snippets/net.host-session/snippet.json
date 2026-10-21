@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.host-session",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Авторитетный хост"
+  },
+  "description": {
+    "ru": "Создаёт авторитетную сессию сразу или по событию; события подключения игроков."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net"
+    },
+    {
+      "api": "$.net.host"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "port",
+      "label": "Порт",
+      "type": "int",
+      "default": 7777,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "id": "maxPeers",
+      "label": "Игроков",
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 256
+    },
+    {
+      "id": "autostart",
+      "label": "Сразу",
+      "type": "bool",
+      "default": false
+    }
+  ],
+  "tags": [
+    "сеть",
+    "хост"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.interpolation-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Профиль интерполяции"
+  },
+  "description": {
+    "ru": "Буфер интерполяции и частота снимков для удалённых сущностей."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.net.interpolationDelay"
+    },
+    {
+      "api": "$.net.syncRate"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "delay",
+      "label": "Буфер",
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 1000,
+      "unit": "мс"
+    },
+    {
+      "id": "syncRate",
+      "label": "Снимков в секунду",
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 120
+    }
+  ],
+  "tags": [
+    "интерполяция"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

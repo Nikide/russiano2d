@@ -1,0 +1,95 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.vote-map",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Голосование за карту"
+  },
+  "description": {
+    "ru": "Голосование за следующую карту; ничья — первая из лидеров по порядку списка."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.reduce"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.handle"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.net.rpc"
+    },
+    {
+      "api": "$.net.unhandle"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "maps",
+      "label": "Карты",
+      "type": "list",
+      "default": [
+        "arena",
+        "docks",
+        "forest"
+      ]
+    },
+    {
+      "id": "time",
+      "label": "Время голосования",
+      "type": "int",
+      "default": 15000,
+      "min": 1000,
+      "max": 600000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "голосование",
+    "карта"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.replicate-transform",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Синхронизация положения"
+  },
+  "description": {
+    "ru": "Положение и угол сущности реплицируются (владелец — хост)."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "net-sync",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.net"
+    },
+    {
+      "api": "$.net.unreplicate"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "owner",
+      "label": "Владелец",
+      "type": "enum",
+      "default": "host",
+      "options": [
+        "host",
+        "local",
+        "client",
+        "remote"
+      ]
+    },
+    {
+      "id": "interpolation",
+      "label": "Интерполяция",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "репликация"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

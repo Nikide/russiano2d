@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.survival-combat",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: выживание"
+  },
+  "description": {
+    "ru": "Здоровье, потребности, инструменты и враждебные NPC."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "health.base"
+    },
+    {
+      "id": "npc.daily-needs"
+    },
+    {
+      "id": "item.consumable"
+    },
+    {
+      "id": "item.durability"
+    },
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

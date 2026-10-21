@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.racing-time-trial",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: гонка на время"
+  },
+  "description": {
+    "ru": "Контрольные точки, время и рекорд. Вне каталога: Подсчёт кругов и ghost-рекорд отдельными пакетами в §12 нет (ghost — kit.replay-ghost)."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.vehicle-seat"
+    },
+    {
+      "id": "world.checkpoint-chain"
+    },
+    {
+      "id": "world.level-exit"
+    },
+    {
+      "id": "ui.result-screen"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

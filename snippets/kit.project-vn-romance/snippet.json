@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.project-vn-romance",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Проект: романтическая VN"
+  },
+  "description": {
+    "ru": "Законченная VN с маршрутами и концовками."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.visual-novel"
+    },
+    {
+      "id": "kit.romance-routes"
+    },
+    {
+      "id": "save.story-state"
+    },
+    {
+      "id": "ui.settings-menu"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

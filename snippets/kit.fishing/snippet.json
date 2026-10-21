@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.fishing",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: рыбалка"
+  },
+  "description": {
+    "ru": "Тайминг поклёвки и добыча. Вне каталога: Заброс и поплавок отдельным пакетом в §12 нет; поклёвка — puzzle.timing."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "puzzle.timing"
+    },
+    {
+      "id": "economy.loot-table"
+    },
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

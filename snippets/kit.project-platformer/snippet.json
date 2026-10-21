@@ -1,0 +1,51 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.project-platformer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Проект: платформер"
+  },
+  "description": {
+    "ru": "Законченный платформер: меню паузы, уровни, сохранение."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.platformer-core"
+    },
+    {
+      "id": "kit.platformer-checkpoint"
+    },
+    {
+      "id": "kit.platformer-collectathon"
+    },
+    {
+      "id": "ui.pause-menu"
+    },
+    {
+      "id": "ui.settings-menu"
+    },
+    {
+      "id": "save.slot"
+    },
+    {
+      "id": "ui.result-screen"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

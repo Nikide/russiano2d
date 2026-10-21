@@ -1,0 +1,36 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.replay-ghost",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: призрак заезда"
+  },
+  "description": {
+    "ru": "Локальная запись прохождения и ghost. Вне каталога: Запись и воспроизведение ghost отдельным пакетом в §12 нет ($.replay есть в API)."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "world.checkpoint-chain"
+    },
+    {
+      "id": "save.slot"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

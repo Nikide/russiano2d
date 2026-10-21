@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.rhythm",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: ритм"
+  },
+  "description": {
+    "ru": "Тайминг и оценка точности. Вне каталога: Нотные дорожки отдельным пакетом в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "puzzle.timing"
+    },
+    {
+      "id": "feedback.combo-popup"
+    },
+    {
+      "id": "audio.music-transition"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

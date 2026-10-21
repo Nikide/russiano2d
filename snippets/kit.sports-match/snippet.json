@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.sports-match",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: спортивный матч"
+  },
+  "description": {
+    "ru": "Команды, счёт, таймер и исход. Вне каталога: Мяч и голы отдельными пакетами в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "net.team-assignment"
+    },
+    {
+      "id": "net.scoreboard"
+    },
+    {
+      "id": "net.round-state"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

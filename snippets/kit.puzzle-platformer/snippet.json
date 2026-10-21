@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.puzzle-platformer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: головоломки-платформер"
+  },
+  "description": {
+    "ru": "Движение, ящики, кнопки и сброс."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.platformer-core"
+    },
+    {
+      "id": "interact.movable-crate"
+    },
+    {
+      "id": "interact.pressure-plate"
+    },
+    {
+      "id": "interact.switch"
+    },
+    {
+      "id": "puzzle.reset"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

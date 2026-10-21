@@ -1,0 +1,68 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.room-join",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Вход в комнату"
+  },
+  "description": {
+    "ru": "Вход в комнату по коду: событие room:join-code { address, code }."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.room.join"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "port",
+      "label": "Порт",
+      "type": "int",
+      "default": 7777,
+      "min": 1,
+      "max": 65535
+    }
+  ],
+  "tags": [
+    "комната",
+    "код"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

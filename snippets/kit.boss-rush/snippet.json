@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.boss-rush",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: босс-раш"
+  },
+  "description": {
+    "ru": "Последовательность боссов и итог забега."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "ai.boss-phases"
+    },
+    {
+      "id": "ai.boss-telegraph"
+    },
+    {
+      "id": "quest.sequence"
+    },
+    {
+      "id": "ui.result-screen"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

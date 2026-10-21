@@ -6,5 +6,3 @@
 
 - `who` (entity) — Чей
 - `key` (string) — Открыть
-
-Состав / зависимости: `equipment.slots`

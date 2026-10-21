@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.team-assignment",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Команды"
+  },
+  "description": {
+    "ru": "Хост раздаёт игрокам команды по очереди и роли; клиенты получают назначение."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.team"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "teams",
+      "label": "Команды",
+      "type": "list",
+      "default": [
+        "red",
+        "blue"
+      ]
+    },
+    {
+      "id": "roles",
+      "label": "Роли по кругу",
+      "type": "list",
+      "default": []
+    }
+  ],
+  "tags": [
+    "команды",
+    "PvP"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

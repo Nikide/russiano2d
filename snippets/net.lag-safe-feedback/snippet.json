@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.lag-safe-feedback",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Отклик без ожидания"
+  },
+  "description": {
+    "ru": "Локальный отклик (вспышка, звук) сразу при действии; истину решает хост, при отказе — откат вида."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.flash"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "events",
+      "label": "Действия",
+      "type": "list",
+      "default": [
+        "net:fire",
+        "net:damage"
+      ]
+    },
+    {
+      "id": "color",
+      "label": "Цвет отклика",
+      "type": "color",
+      "default": "#ffffff"
+    },
+    {
+      "id": "deniedEvent",
+      "label": "Событие отказа хоста",
+      "type": "string",
+      "default": "damage:denied"
+    }
+  ],
+  "tags": [
+    "отклик",
+    "лаг"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

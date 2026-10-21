@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.invite-code",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Код приглашения"
+  },
+  "description": {
+    "ru": "Код комнаты из 6 символов без похожих букв; ввод кода — вход."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.random.int"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.set"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "net.room-create"
+    }
+  ],
+  "fields": [
+    {
+      "id": "length",
+      "label": "Длина",
+      "type": "int",
+      "default": 6,
+      "min": 4,
+      "max": 12
+    }
+  ],
+  "tags": [
+    "код",
+    "приглашение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

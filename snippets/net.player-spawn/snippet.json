@@ -1,0 +1,103 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.player-spawn",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сетевой игрок"
+  },
+  "description": {
+    "ru": "Хост создаёт узел игрока для каждого подключения с устойчивым id и регистрирует его в репликации."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.net"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.unreplicate"
+    },
+    {
+      "api": "$.prefab.has"
+    },
+    {
+      "api": "$.prefab.instantiate"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "prefab",
+      "label": "Prefab игрока",
+      "type": "string",
+      "default": "",
+      "hint": "Пусто — простой прямоугольник"
+    },
+    {
+      "id": "spawn",
+      "label": "Точка появления",
+      "type": "vec2",
+      "default": [
+        200,
+        200
+      ]
+    }
+  ],
+  "tags": [
+    "спавн",
+    "игрок"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

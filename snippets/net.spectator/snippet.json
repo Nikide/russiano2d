@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.spectator",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Наблюдатель"
+  },
+  "description": {
+    "ru": "Наблюдение без своей сущности: камера переключается между игроками клавишами."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.follow"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "players",
+      "label": "Игроки",
+      "type": "string",
+      "default": ".player"
+    },
+    {
+      "id": "next",
+      "label": "Следующий",
+      "type": "string",
+      "default": "e"
+    },
+    {
+      "id": "prev",
+      "label": "Предыдущий",
+      "type": "string",
+      "default": "q"
+    }
+  ],
+  "tags": [
+    "наблюдатель",
+    "камера"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

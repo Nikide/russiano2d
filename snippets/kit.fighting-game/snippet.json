@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.fighting-game",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: файтинг"
+  },
+  "description": {
+    "ru": "Два бойца, раунд, таймер и победа."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "net.coop-local"
+    },
+    {
+      "id": "weapon.melee"
+    },
+    {
+      "id": "health.base"
+    },
+    {
+      "id": "ui.health-bar"
+    },
+    {
+      "id": "net.round-state"
+    },
+    {
+      "id": "animation.hit-pause"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

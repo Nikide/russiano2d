@@ -1,0 +1,96 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.client-session",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Клиент"
+  },
+  "description": {
+    "ru": "Подключение к хосту по событию net:join; отказ и таймаут — понятные события."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net"
+    },
+    {
+      "api": "$.net.join"
+    },
+    {
+      "api": "$.net.leave"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "address",
+      "label": "Адрес",
+      "type": "string",
+      "default": "127.0.0.1"
+    },
+    {
+      "id": "port",
+      "label": "Порт",
+      "type": "int",
+      "default": 7777,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "id": "timeout",
+      "label": "Таймаут",
+      "type": "int",
+      "default": 5000,
+      "min": 500,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "сеть",
+    "клиент"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.cover-shooter",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: укрытия"
+  },
+  "description": {
+    "ru": "Укрытия, дальний бой и подавление."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "ai.cover"
+    },
+    {
+      "id": "ai.line-of-sight"
+    },
+    {
+      "id": "weapon.base"
+    },
+    {
+      "id": "weapon.hitscan"
+    },
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.achievement-set",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: достижения"
+  },
+  "description": {
+    "ru": "Условия достижений и уведомления."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "progression.challenge"
+    },
+    {
+      "id": "progression.unlock"
+    },
+    {
+      "id": "feedback.quest-toast"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

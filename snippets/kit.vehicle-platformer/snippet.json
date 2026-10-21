@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.vehicle-platformer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: транспорт"
+  },
+  "description": {
+    "ru": "Транспортное средство: посадка, управление и выход игрока (набор — на машину)."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.vehicle-seat"
+    },
+    {
+      "id": "camera.follow"
+    },
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

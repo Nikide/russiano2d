@@ -1,0 +1,51 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.authoritative-coop",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: авторитетный кооп"
+  },
+  "description": {
+    "ru": "Хост, авторитет, сущности и синхронизация."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "net.session-bootstrap"
+    },
+    {
+      "id": "net.host-session"
+    },
+    {
+      "id": "net.client-session"
+    },
+    {
+      "id": "net.player-spawn"
+    },
+    {
+      "id": "net.input-command"
+    },
+    {
+      "id": "net.replicate-health"
+    },
+    {
+      "id": "net.interpolation-profile"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

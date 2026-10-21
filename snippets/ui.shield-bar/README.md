@@ -9,5 +9,3 @@
 - `width` (int) — Ширина
 - `color` (color) — Цвет
 - `capacity` (number) — Ёмкость
-
-Состав / зависимости: `health.shield`

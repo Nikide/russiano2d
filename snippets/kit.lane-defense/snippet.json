@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.lane-defense",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: оборона линий"
+  },
+  "description": {
+    "ru": "Позиции обороны, волны и контроль прохода."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "ai.wave-director"
+    },
+    {
+      "id": "movement.follow-path"
+    },
+    {
+      "id": "weapon.base"
+    },
+    {
+      "id": "weapon.hitscan"
+    },
+    {
+      "id": "economy.wallet"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

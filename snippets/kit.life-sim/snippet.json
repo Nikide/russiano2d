@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.life-sim",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: симулятор жизни"
+  },
+  "description": {
+    "ru": "Расписание NPC, отношения и календарь."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "npc.home-routine"
+    },
+    {
+      "id": "npc.relationship"
+    },
+    {
+      "id": "npc.personality"
+    },
+    {
+      "id": "world.day-night"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

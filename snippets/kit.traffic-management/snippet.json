@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.traffic-management",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: трафик"
+  },
+  "description": {
+    "ru": "Транспортные агенты и сигналы. Вне каталога: Светофор как отдельный пакет в §12 нет; сигналы — puzzle.state-machine."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.follow-path"
+    },
+    {
+      "id": "puzzle.state-machine"
+    },
+    {
+      "id": "world.spawn-points"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

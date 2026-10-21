@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.crafting-survival",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: ремесло и выживание"
+  },
+  "description": {
+    "ru": "Сбор ресурсов, рецепты и долговечность."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "interact.pickup"
+    },
+    {
+      "id": "crafting.recipe"
+    },
+    {
+      "id": "crafting.station"
+    },
+    {
+      "id": "item.durability"
+    },
+    {
+      "id": "crafting.repair"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

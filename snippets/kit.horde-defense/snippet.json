@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.horde-defense",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: оборона от орды"
+  },
+  "description": {
+    "ru": "Постройки защиты, боеприпасы и финальная волна."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "ai.wave-director"
+    },
+    {
+      "id": "weapon.ammo"
+    },
+    {
+      "id": "interact.breakable"
+    },
+    {
+      "id": "mission.wave-objective"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

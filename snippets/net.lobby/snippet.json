@@ -1,0 +1,68 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.lobby",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Лобби"
+  },
+  "description": {
+    "ru": "Список игроков и готовность: хост рассылает lobby:list, клиенты — lobby:hello."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.send"
+    },
+    {
+      "api": "$.store.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Моё имя",
+      "type": "string",
+      "default": "Игрок"
+    }
+  ],
+  "tags": [
+    "лобби"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

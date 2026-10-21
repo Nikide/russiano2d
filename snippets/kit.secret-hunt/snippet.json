@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.secret-hunt",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: охота за тайниками"
+  },
+  "description": {
+    "ru": "Секретные зоны, подсказки и завершение коллекции."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "world.secret-area"
+    },
+    {
+      "id": "progression.challenge"
+    },
+    {
+      "id": "feedback.quest-toast"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

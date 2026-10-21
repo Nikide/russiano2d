@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.horror",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: хоррор"
+  },
+  "description": {
+    "ru": "Свет, звук, преследование и безопасные зоны."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "world.light-zone"
+    },
+    {
+      "id": "audio.ambience"
+    },
+    {
+      "id": "ai.chase"
+    },
+    {
+      "id": "ai.line-of-sight"
+    },
+    {
+      "id": "render.vignette"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

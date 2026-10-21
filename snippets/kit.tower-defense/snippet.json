@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.tower-defense",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: защита башнями"
+  },
+  "description": {
+    "ru": "Маршрут врага, волны и ресурсы раунда. Вне каталога: Установка башен на клетки отдельным пакетом в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.follow-path"
+    },
+    {
+      "id": "ai.wave-director"
+    },
+    {
+      "id": "economy.wallet"
+    },
+    {
+      "id": "weapon.base"
+    },
+    {
+      "id": "weapon.projectile"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

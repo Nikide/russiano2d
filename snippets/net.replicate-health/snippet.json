@@ -1,0 +1,59 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.replicate-health",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Синхронизация здоровья"
+  },
+  "description": {
+    "ru": "Здоровье считает хост; клиенты только отображают."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "net-sync",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.damageFilter"
+    },
+    {
+      "api": "$.fn.net"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.net.unreplicate"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "здоровье",
+    "авторитет"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

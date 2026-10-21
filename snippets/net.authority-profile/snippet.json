@@ -1,0 +1,66 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.authority-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Авторитетные поля"
+  },
+  "description": {
+    "ru": "Какие поля сущности считает хост, а какие клиент: два набора репликации."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.net"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.unreplicate"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "hostFields",
+      "label": "Считает хост",
+      "type": "list",
+      "default": [
+        "hp"
+      ]
+    },
+    {
+      "id": "clientFields",
+      "label": "Считает владелец-клиент",
+      "type": "list",
+      "default": [
+        "x",
+        "y",
+        "angle"
+      ]
+    }
+  ],
+  "tags": [
+    "авторитет",
+    "репликация"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

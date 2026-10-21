@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.matchmaking-filter",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Фильтр комнат"
+  },
+  "description": {
+    "ru": "Фильтр комнат по режиму, карте и заполненности (данные от хостов room:info)."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "mode",
+      "label": "Режим",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "map",
+      "label": "Карта",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "hideFull",
+      "label": "Скрыть полные",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "поиск",
+    "комнаты"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

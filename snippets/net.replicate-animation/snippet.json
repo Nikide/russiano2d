@@ -1,0 +1,71 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.replicate-animation",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Синхронизация анимации"
+  },
+  "description": {
+    "ru": "Визуальное состояние анимации (data animKey и отражение) удалённого игрока."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.flip"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "rate",
+      "label": "Раз в секунду",
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 60
+    }
+  ],
+  "tags": [
+    "анимация",
+    "репликация"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

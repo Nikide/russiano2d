@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.shooter-loadout",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: снаряжение стрелка"
+  },
+  "description": {
+    "ru": "Выбор оружия, магазины и стартовый набор."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "weapon.base"
+    },
+    {
+      "id": "weapon.weapon-switch"
+    },
+    {
+      "id": "weapon.ammo"
+    },
+    {
+      "id": "weapon.reload"
+    },
+    {
+      "id": "equipment.loadout"
+    },
+    {
+      "id": "ui.weapon-panel"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

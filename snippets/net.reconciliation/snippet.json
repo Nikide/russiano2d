@@ -1,0 +1,57 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.reconciliation",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Подтверждение состояния"
+  },
+  "description": {
+    "ru": "Хост подтверждает состояние ввода (ack); клиент принимает и корректирует."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.net.acknowledge"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.send"
+    }
+  ],
+  "dependencies": [],
+  "fields": [],
+  "tags": [
+    "подтверждение",
+    "лаг"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

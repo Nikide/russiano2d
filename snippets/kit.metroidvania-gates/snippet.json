@@ -1,0 +1,51 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.metroidvania-gates",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: метроидвания — ворота"
+  },
+  "description": {
+    "ru": "Способности игрока открывают закрытые проходы."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.platformer"
+    },
+    {
+      "id": "movement.double-jump"
+    },
+    {
+      "id": "movement.dash"
+    },
+    {
+      "id": "movement.wall-jump"
+    },
+    {
+      "id": "progression.unlock"
+    },
+    {
+      "id": "interact.door"
+    },
+    {
+      "id": "interact.lock"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

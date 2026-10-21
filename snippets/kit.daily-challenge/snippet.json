@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.daily-challenge",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: ежедневное испытание"
+  },
+  "description": {
+    "ru": "Цель дня, награда и прогресс."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "progression.challenge"
+    },
+    {
+      "id": "economy.reward"
+    },
+    {
+      "id": "save.profile"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

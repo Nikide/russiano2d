@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.room-create",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Создание комнаты"
+  },
+  "description": {
+    "ru": "Хост создаёт комнату с правилами и лимитом игроков по событию room:create."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.disconnect"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.room.create"
+    },
+    {
+      "api": "$.net.room.peers"
+    },
+    {
+      "api": "$.net.send"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Комната",
+      "type": "string",
+      "default": "arena"
+    },
+    {
+      "id": "limit",
+      "label": "Лимит игроков",
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 256
+    },
+    {
+      "id": "rules",
+      "label": "Правила (ключ=значение)",
+      "type": "list",
+      "default": [
+        "mode=coop"
+      ]
+    }
+  ],
+  "tags": [
+    "комната",
+    "лобби"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

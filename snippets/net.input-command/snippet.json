@@ -1,0 +1,90 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.input-command",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сетевой ввод"
+  },
+  "description": {
+    "ru": "Клиент отправляет действия ввода хосту ($.net.input); хост применяет к узлу владельца."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.net.input"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "actions",
+      "label": "Действия",
+      "type": "list",
+      "default": [
+        "left",
+        "right",
+        "up",
+        "down",
+        "jump",
+        "fire"
+      ]
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 200,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    }
+  ],
+  "tags": [
+    "ввод",
+    "авторитет"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

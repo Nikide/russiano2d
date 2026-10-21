@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.project-jrpg",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Проект: JRPG"
+  },
+  "description": {
+    "ru": "Исследование, группа, бой и прогрессия."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.jrpg-party"
+    },
+    {
+      "id": "kit.jrpg-turn-battle"
+    },
+    {
+      "id": "kit.dungeon-crawl"
+    },
+    {
+      "id": "save.slot"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

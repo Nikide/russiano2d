@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.stealth",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: стелс"
+  },
+  "description": {
+    "ru": "Зрение, тревога, укрытия и сброс поиска."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "ai.line-of-sight"
+    },
+    {
+      "id": "ai.hearing"
+    },
+    {
+      "id": "ai.investigate"
+    },
+    {
+      "id": "ai.search"
+    },
+    {
+      "id": "movement.crouch"
+    },
+    {
+      "id": "movement.prone"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

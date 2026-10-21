@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.adventure-interaction",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: приключение — действия"
+  },
+  "description": {
+    "ru": "Осмотр объектов, контекстные действия и подсказки."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "interact.press-action"
+    },
+    {
+      "id": "interact.context-prompt"
+    },
+    {
+      "id": "interactable.base"
+    },
+    {
+      "id": "ui.interaction-prompt"
+    },
+    {
+      "id": "feedback.error-prompt"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

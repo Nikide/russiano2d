@@ -6,5 +6,3 @@
 
 - `leader` (entity) — Лидер
 - `position` (vec2) — Позиция (x, y)
-
-Состав / зависимости: `npc.party-member`

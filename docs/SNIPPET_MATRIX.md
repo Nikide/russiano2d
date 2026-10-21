@@ -3,7 +3,7 @@
 Сгенерировано `python3 scripts/snippet_matrix.py` из §12 [ТЗ](SNIPPET_SYSTEM_PROJECT.md),
 каталога `snippets/` и `api.schema.json`. Руками не править.
 
-Реализовано: **383 из 500**. Строк с пробелом API: **0**.
+Реализовано: **500 из 500**. Строк с пробелом (API или механика вне §12): **19**.
 
 Колонка API: для реализованного пакета — фактические `requires`; для
 запланированного — опорные пространства `$` по префиксу ID (предварительно,
@@ -485,152 +485,152 @@
 | 379 | `localization.string-table` | ✅ | `$.emit`, `$.fn.add`, `$.fn.emit`, `$.fs.readJSON`, `$.i18n.add`, `$.i18n.lang`, `$.selection.get`, `$.store`, `$.store.get` | — |
 | 380 | `localization.number-time` | ✅ | `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.i18n.number`, `$.off`, `$.on` | — |
 
-## T. Сессии и многопользовательский проект — 0/20
+## T. Сессии и многопользовательский проект — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 381 | `net.session-bootstrap` | ⬜ | `$.net` | — |
-| 382 | `net.host-session` | ⬜ | `$.net` | — |
-| 383 | `net.client-session` | ⬜ | `$.net` | — |
-| 384 | `net.room-create` | ⬜ | `$.net` | — |
-| 385 | `net.room-join` | ⬜ | `$.net` | — |
-| 386 | `net.room-leave` | ⬜ | `$.net` | — |
-| 387 | `net.lobby` | ⬜ | `$.net` | — |
-| 388 | `net.ready-check` | ⬜ | `$.net` | — |
-| 389 | `net.player-identity` | ⬜ | `$.net` | — |
-| 390 | `net.player-spawn` | ⬜ | `$.net` | — |
-| 391 | `net.player-owner` | ⬜ | `$.net` | — |
-| 392 | `net.authority-profile` | ⬜ | `$.net` | — |
-| 393 | `net.host-migration` | ⬜ | `$.net` | — |
-| 394 | `net.disconnect-screen` | ⬜ | `$.net` | — |
-| 395 | `net.reconnect` | ⬜ | `$.net` | — |
-| 396 | `net.invite-code` | ⬜ | `$.net` | — |
-| 397 | `net.matchmaking-filter` | ⬜ | `$.net` | — |
-| 398 | `net.session-settings` | ⬜ | `$.net` | — |
-| 399 | `net.coop-local` | ⬜ | `$.net` | — |
-| 400 | `net.network-debug-hud` | ⬜ | `$.net` | — |
+| 381 | `net.session-bootstrap` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net`, `$.net.host`, `$.net.join`, `$.net.online`, `$.net.syncRate`, `$.net.topology`, `$.off`, `$.on` | — |
+| 382 | `net.host-session` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net`, `$.net.host`, `$.net.off`, `$.net.on`, `$.net.online`, `$.off`, `$.on` | — |
+| 383 | `net.client-session` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net`, `$.net.join`, `$.net.leave`, `$.net.off`, `$.net.on`, `$.net.online`, `$.off`, `$.on`, `$.updateFor` | — |
+| 384 | `net.room-create` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.net.disconnect`, `$.net.off`, `$.net.on`, `$.net.room.create`, `$.net.room.peers`, `$.net.send`, `$.off`, `$.on` | — |
+| 385 | `net.room-join` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net.off`, `$.net.on`, `$.net.room.join`, `$.off`, `$.on` | — |
+| 386 | `net.room-leave` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net.entities`, `$.net.leave`, `$.net.room.leave`, `$.net.unreplicate`, `$.off`, `$.on`, `$.scene.load` | — |
+| 387 | `net.lobby` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.send`, `$.store.set` | — |
+| 388 | `net.ready-check` | ✅ | `$.emit`, `$.fn.add`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.playerCount`, `$.net.send`, `$.off`, `$.on` | — |
+| 389 | `net.player-identity` | ✅ | `$.fn.attr`, `$.fn.color`, `$.fn.data`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.off`, `$.net.on`, `$.save.profile`, `$.selection.get` | — |
+| 390 | `net.player-spawn` | ✅ | `$.emit`, `$.fn.appendTo`, `$.fn.at`, `$.fn.emit`, `$.fn.has`, `$.fn.net`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.fn.size`, `$.net.broadcast`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.unreplicate`, `$.prefab.has`, `$.prefab.instantiate`, `$.world` | — |
+| 391 | `net.player-owner` | ✅ | `$.fn.attr`, `$.fn.net`, `$.net.unreplicate` | — |
+| 392 | `net.authority-profile` | ✅ | `$.fn.attr`, `$.fn.data`, `$.fn.net`, `$.net.isAuthority`, `$.net.unreplicate` | — |
+| 393 | `net.host-migration` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.net`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.online`, `$.net.peers`, `$.updateFor` | — |
+| 394 | `net.disconnect-screen` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.hide`, `$.fn.off`, `$.fn.on`, `$.fn.show`, `$.fn.text`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.scene.load`, `$.ui.markup` | — |
+| 395 | `net.reconnect` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net`, `$.net.join`, `$.net.off`, `$.net.on`, `$.net.online`, `$.off`, `$.on`, `$.updateFor` | — |
+| 396 | `net.invite-code` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.random.int`, `$.store`, `$.store.set` | — |
+| 397 | `net.matchmaking-filter` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.off`, `$.fn.on`, `$.net.off`, `$.net.on`, `$.store`, `$.store.set` | — |
+| 398 | `net.session-settings` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.send`, `$.store`, `$.store.set` | — |
+| 399 | `net.coop-local` | ✅ | `$.emit`, `$.fn.appendTo`, `$.fn.at`, `$.fn.body`, `$.fn.controls`, `$.fn.emit`, `$.fn.health`, `$.fn.remove`, `$.fn.size`, `$.input.pressed`, `$.updateFor`, `$.world` | — |
+| 400 | `net.network-debug-hud` | ✅ | `$.fn.hide`, `$.fn.map`, `$.fn.show`, `$.fn.text`, `$.input.pressed`, `$.net.describe`, `$.net.peers`, `$.ui.markup`, `$.updateFor` | — |
 
-## U. Синхронизация и сетевой gameplay — 0/20
+## U. Синхронизация и сетевой gameplay — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 401 | `net.replicate-transform` | ⬜ | `$.net` | — |
-| 402 | `net.replicate-health` | ⬜ | `$.net` | — |
-| 403 | `net.replicate-animation` | ⬜ | `$.net` | — |
-| 404 | `net.replicate-inventory` | ⬜ | `$.net` | — |
-| 405 | `net.input-command` | ⬜ | `$.net` | — |
-| 406 | `net.server-action` | ⬜ | `$.net` | — |
-| 407 | `net.damage-command` | ⬜ | `$.net` | — |
-| 408 | `net.projectile-authority` | ⬜ | `$.net` | — |
-| 409 | `net.interpolation-profile` | ⬜ | `$.net` | — |
-| 410 | `net.prediction-profile` | ⬜ | `$.net` | — |
-| 411 | `net.reconciliation` | ⬜ | `$.net` | — |
-| 412 | `net.rpc-action` | ⬜ | `$.net` | — |
-| 413 | `net.team-assignment` | ⬜ | `$.net` | — |
-| 414 | `net.scoreboard` | ⬜ | `$.net` | — |
-| 415 | `net.round-state` | ⬜ | `$.net` | — |
-| 416 | `net.vote-map` | ⬜ | `$.net` | — |
-| 417 | `net.spectator` | ⬜ | `$.net` | — |
-| 418 | `net.shared-object` | ⬜ | `$.net` | — |
-| 419 | `net.coop-revive` | ⬜ | `$.net` | — |
-| 420 | `net.lag-safe-feedback` | ⬜ | `$.net` | — |
+| 401 | `net.replicate-transform` | ✅ | `$.fn.attr`, `$.fn.net`, `$.net.unreplicate` | — |
+| 402 | `net.replicate-health` | ✅ | `$.fn.attr`, `$.fn.damageFilter`, `$.fn.net`, `$.net.isAuthority`, `$.net.online`, `$.net.unreplicate` | — |
+| 403 | `net.replicate-animation` | ✅ | `$.fn.attr`, `$.fn.data`, `$.fn.flip`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.off`, `$.net.on`, `$.net.online`, `$.updateFor` | — |
+| 404 | `net.replicate-inventory` | ✅ | `$.fn.add`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.items.has`, `$.net.broadcast`, `$.net.isAuthority`, `$.net.off`, `$.net.on` | — |
+| 405 | `net.input-command` | ✅ | `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.velocity`, `$.input.down`, `$.net.input`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.online`, `$.updateFor` | — |
+| 406 | `net.server-action` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.handle`, `$.net.rpc`, `$.net.send`, `$.net.unhandle`, `$.off`, `$.on` | — |
+| 407 | `net.damage-command` | ✅ | `$.fn.damage`, `$.fn.distanceTo`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.net.handle`, `$.net.isAuthority`, `$.net.rpc`, `$.net.send`, `$.net.unhandle`, `$.off`, `$.on` | — |
+| 408 | `net.projectile-authority` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.find`, `$.fn.flip`, `$.fn.hp`, `$.fn.net`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.net.handle`, `$.net.isAuthority`, `$.net.online`, `$.net.rpc`, `$.net.unhandle`, `$.net.unreplicate`, `$.selection.get`, `$.updateFor`, `$.world`, `$.world.query` | — |
+| 409 | `net.interpolation-profile` | ✅ | `$.net.interpolationDelay`, `$.net.syncRate` | — |
+| 410 | `net.prediction-profile` | ✅ | `$.fn.at`, `$.net.isAuthority`, `$.net.online`, `$.net.predict`, `$.net.prediction`, `$.updateFor` | — |
+| 411 | `net.reconciliation` | ✅ | `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.net.acknowledge`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.send` | — |
+| 412 | `net.rpc-action` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.handle`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.rpc`, `$.net.send`, `$.net.unhandle`, `$.off`, `$.on` | — |
+| 413 | `net.team-assignment` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.team`, `$.net.broadcast`, `$.net.isAuthority`, `$.net.off`, `$.net.on` | — |
+| 414 | `net.scoreboard` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.online`, `$.off`, `$.on`, `$.store`, `$.store.set` | — |
+| 415 | `net.round-state` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.online`, `$.store.set`, `$.updateFor` | — |
+| 416 | `net.vote-map` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.reduce`, `$.net.broadcast`, `$.net.handle`, `$.net.isAuthority`, `$.net.online`, `$.net.rpc`, `$.net.unhandle`, `$.off`, `$.on`, `$.updateFor` | — |
+| 417 | `net.spectator` | ✅ | `$.camera.follow`, `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.input.pressed`, `$.updateFor` | — |
+| 418 | `net.shared-object` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.net.broadcast`, `$.net.handle`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.online`, `$.net.rpc`, `$.net.unhandle`, `$.updateFor` | — |
+| 419 | `net.coop-revive` | ✅ | `$.emit`, `$.fn.alive`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.handle`, `$.net.isAuthority`, `$.net.online`, `$.net.rpc`, `$.net.unhandle`, `$.off`, `$.on` | — |
+| 420 | `net.lag-safe-feedback` | ✅ | `$.fn.flash`, `$.fn.off`, `$.fn.on`, `$.net.off`, `$.net.on` | — |
 
-## V. Пакеты платформера, приключения и исследования — 2/20
+## V. Пакеты платформера, приключения и исследования — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 421 | `kit.platformer-core` | ✅ | состав kit | — |
 | 422 | `kit.platformer-combat` | ✅ | состав kit | — |
-| 423 | `kit.platformer-collectathon` | ⬜ | состав kit | — |
-| 424 | `kit.platformer-checkpoint` | ⬜ | состав kit | — |
-| 425 | `kit.metroidvania-gates` | ⬜ | состав kit | — |
-| 426 | `kit.metroidvania-map` | ⬜ | состав kit | — |
-| 427 | `kit.adventure-interaction` | ⬜ | состав kit | — |
-| 428 | `kit.adventure-inventory` | ⬜ | состав kit | — |
-| 429 | `kit.puzzle-platformer` | ⬜ | состав kit | — |
-| 430 | `kit.precision-platformer` | ⬜ | состав kit | — |
-| 431 | `kit.parkour` | ⬜ | состав kit | — |
-| 432 | `kit.underwater` | ⬜ | состав kit | — |
-| 433 | `kit.gravity-platformer` | ⬜ | состав kit | — |
-| 434 | `kit.vehicle-platformer` | ⬜ | состав kit | — |
-| 435 | `kit.boss-platformer` | ⬜ | состав kit | — |
-| 436 | `kit.platformer-coop` | ⬜ | состав kit | — |
-| 437 | `kit.exploration-journal` | ⬜ | состав kit | — |
-| 438 | `kit.secret-hunt` | ⬜ | состав kit | — |
-| 439 | `kit.level-challenge` | ⬜ | состав kit | — |
-| 440 | `kit.stage-select` | ⬜ | состав kit | — |
+| 423 | `kit.platformer-collectathon` | ✅ | состав kit | — |
+| 424 | `kit.platformer-checkpoint` | ✅ | состав kit | — |
+| 425 | `kit.metroidvania-gates` | ✅ | состав kit | — |
+| 426 | `kit.metroidvania-map` | ✅ | состав kit | вне каталога: Карта исследованных комнат как экран — ui.minimap-markers показывает камеру, а не накопленную карту. |
+| 427 | `kit.adventure-interaction` | ✅ | состав kit | — |
+| 428 | `kit.adventure-inventory` | ✅ | состав kit | — |
+| 429 | `kit.puzzle-platformer` | ✅ | состав kit | — |
+| 430 | `kit.precision-platformer` | ✅ | состав kit | — |
+| 431 | `kit.parkour` | ✅ | состав kit | — |
+| 432 | `kit.underwater` | ✅ | состав kit | вне каталога: Кислород как отдельный ресурс не описан в §12 (можно через ui.stamina-bar и data). |
+| 433 | `kit.gravity-platformer` | ✅ | состав kit | — |
+| 434 | `kit.vehicle-platformer` | ✅ | состав kit | — |
+| 435 | `kit.boss-platformer` | ✅ | состав kit | — |
+| 436 | `kit.platformer-coop` | ✅ | состав kit | — |
+| 437 | `kit.exploration-journal` | ✅ | состав kit | — |
+| 438 | `kit.secret-hunt` | ✅ | состав kit | — |
+| 439 | `kit.level-challenge` | ✅ | состав kit | — |
+| 440 | `kit.stage-select` | ✅ | состав kit | вне каталога: Экран выбора уровня как RmlUi-меню в §12 отдельным пакетом не описан. |
 
-## W. Пакеты shooter, action и roguelike — 1/20
+## W. Пакеты shooter, action и roguelike — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 441 | `kit.top-down-shooter` | ✅ | состав kit | — |
-| 442 | `kit.twin-stick-arena` | ⬜ | состав kit | — |
-| 443 | `kit.bullet-heaven` | ⬜ | состав kit | — |
-| 444 | `kit.arena-survival` | ⬜ | состав kit | — |
-| 445 | `kit.stealth` | ⬜ | состав kit | — |
-| 446 | `kit.infiltration` | ⬜ | состав kit | — |
-| 447 | `kit.cover-shooter` | ⬜ | состав kit | — |
-| 448 | `kit.shooter-loadout` | ⬜ | состав kit | — |
-| 449 | `kit.boss-rush` | ⬜ | состав kit | — |
-| 450 | `kit.roguelike-run` | ⬜ | состав kit | — |
-| 451 | `kit.roguelite-meta` | ⬜ | состав kit | — |
-| 452 | `kit.deckbuilder-battle` | ⬜ | состав kit | — |
-| 453 | `kit.action-combo` | ⬜ | состав kit | — |
-| 454 | `kit.fighting-game` | ⬜ | состав kit | — |
-| 455 | `kit.beat-em-up` | ⬜ | состав kit | — |
-| 456 | `kit.tower-defense` | ⬜ | состав kit | — |
-| 457 | `kit.lane-defense` | ⬜ | состав kit | — |
-| 458 | `kit.bomb-arena` | ⬜ | состав kit | — |
-| 459 | `kit.survival-combat` | ⬜ | состав kit | — |
-| 460 | `kit.horde-defense` | ⬜ | состав kit | — |
+| 442 | `kit.twin-stick-arena` | ✅ | состав kit | — |
+| 443 | `kit.bullet-heaven` | ✅ | состав kit | — |
+| 444 | `kit.arena-survival` | ✅ | состав kit | — |
+| 445 | `kit.stealth` | ✅ | состав kit | — |
+| 446 | `kit.infiltration` | ✅ | состав kit | — |
+| 447 | `kit.cover-shooter` | ✅ | состав kit | — |
+| 448 | `kit.shooter-loadout` | ✅ | состав kit | — |
+| 449 | `kit.boss-rush` | ✅ | состав kit | — |
+| 450 | `kit.roguelike-run` | ✅ | состав kit | вне каталога: Генерация маршрута забега отдельным пакетом в §12 нет. |
+| 451 | `kit.roguelite-meta` | ✅ | состав kit | — |
+| 452 | `kit.deckbuilder-battle` | ✅ | состав kit | вне каталога: Рука, колода и цена карт отдельными пакетами в §12 нет — механика карт остаётся за игрой. |
+| 453 | `kit.action-combo` | ✅ | состав kit | — |
+| 454 | `kit.fighting-game` | ✅ | состав kit | — |
+| 455 | `kit.beat-em-up` | ✅ | состав kit | — |
+| 456 | `kit.tower-defense` | ✅ | состав kit | вне каталога: Установка башен на клетки отдельным пакетом в §12 нет. |
+| 457 | `kit.lane-defense` | ✅ | состав kit | — |
+| 458 | `kit.bomb-arena` | ✅ | состав kit | — |
+| 459 | `kit.survival-combat` | ✅ | состав kit | — |
+| 460 | `kit.horde-defense` | ✅ | состав kit | — |
 
-## X. Пакеты RPG, тактики, симуляции и спорта — 0/20
-
-| № | ID | Статус | API | Пробел |
-|---|---|---|---|---|
-| 461 | `kit.jrpg-party` | ⬜ | состав kit | — |
-| 462 | `kit.jrpg-turn-battle` | ⬜ | состав kit | — |
-| 463 | `kit.tactical-grid` | ⬜ | состав kit | — |
-| 464 | `kit.tactical-squad` | ⬜ | состав kit | — |
-| 465 | `kit.crpg-dialogue` | ⬜ | состав kit | — |
-| 466 | `kit.dungeon-crawl` | ⬜ | состав kit | — |
-| 467 | `kit.life-sim` | ⬜ | состав kit | — |
-| 468 | `kit.farming` | ⬜ | состав kit | — |
-| 469 | `kit.fishing` | ⬜ | состав kit | — |
-| 470 | `kit.crafting-survival` | ⬜ | состав kit | — |
-| 471 | `kit.colony-management` | ⬜ | состав kit | — |
-| 472 | `kit.business-sim` | ⬜ | состав kit | — |
-| 473 | `kit.traffic-management` | ⬜ | состав kit | — |
-| 474 | `kit.racing-time-trial` | ⬜ | состав kit | — |
-| 475 | `kit.racing-combat` | ⬜ | состав kit | — |
-| 476 | `kit.sports-match` | ⬜ | состав kit | — |
-| 477 | `kit.platform-sports` | ⬜ | состав kit | — |
-| 478 | `kit.rhythm` | ⬜ | состав kit | — |
-| 479 | `kit.music-arcade` | ⬜ | состав kit | — |
-| 480 | `kit.pinball` | ⬜ | состав kit | — |
-
-## Y. Narrative, обучение, полный проект и QA — 0/20
+## X. Пакеты RPG, тактики, симуляции и спорта — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 481 | `kit.visual-novel` | ⬜ | состав kit | — |
-| 482 | `kit.romance-routes` | ⬜ | состав kit | — |
-| 483 | `kit.mystery-investigation` | ⬜ | состав kit | — |
-| 484 | `kit.episodic-story` | ⬜ | состав kit | — |
-| 485 | `kit.horror` | ⬜ | состав kit | — |
-| 486 | `kit.escape-room` | ⬜ | состав kit | — |
-| 487 | `kit.tutorial` | ⬜ | состав kit | — |
-| 488 | `kit.daily-challenge` | ⬜ | состав kit | — |
-| 489 | `kit.achievement-set` | ⬜ | состав kit | — |
-| 490 | `kit.replay-ghost` | ⬜ | состав kit | — |
-| 491 | `kit.local-coop` | ⬜ | состав kit | — |
-| 492 | `kit.authoritative-coop` | ⬜ | состав kit | — |
-| 493 | `kit.arena-multiplayer` | ⬜ | состав kit | — |
-| 494 | `kit.multiplayer-survival` | ⬜ | состав kit | — |
-| 495 | `kit.project-platformer` | ⬜ | состав kit | — |
-| 496 | `kit.project-top-down-action` | ⬜ | состав kit | — |
-| 497 | `kit.project-vn-romance` | ⬜ | состав kit | — |
-| 498 | `kit.project-jrpg` | ⬜ | состав kit | — |
-| 499 | `kit.project-coop-adventure` | ⬜ | состав kit | — |
-| 500 | `kit.project-witch` | ⬜ | состав kit | — |
+| 461 | `kit.jrpg-party` | ✅ | состав kit | — |
+| 462 | `kit.jrpg-turn-battle` | ✅ | состав kit | вне каталога: Очередь ходов (initiative) отдельным пакетом в §12 нет. |
+| 463 | `kit.tactical-grid` | ✅ | состав kit | вне каталога: Поиск пути и подсветка клеток хода отдельным пакетом в §12 нет. |
+| 464 | `kit.tactical-squad` | ✅ | состав kit | — |
+| 465 | `kit.crpg-dialogue` | ✅ | состав kit | — |
+| 466 | `kit.dungeon-crawl` | ✅ | состав kit | — |
+| 467 | `kit.life-sim` | ✅ | состав kit | — |
+| 468 | `kit.farming` | ✅ | состав kit | вне каталога: Посев, рост и полив растений отдельными пакетами в §12 нет. |
+| 469 | `kit.fishing` | ✅ | состав kit | вне каталога: Заброс и поплавок отдельным пакетом в §12 нет; поклёвка — puzzle.timing. |
+| 470 | `kit.crafting-survival` | ✅ | состав kit | — |
+| 471 | `kit.colony-management` | ✅ | состав kit | вне каталога: Распределение задач жителям отдельным пакетом в §12 нет. |
+| 472 | `kit.business-sim` | ✅ | состав kit | — |
+| 473 | `kit.traffic-management` | ✅ | состав kit | вне каталога: Светофор как отдельный пакет в §12 нет; сигналы — puzzle.state-machine. |
+| 474 | `kit.racing-time-trial` | ✅ | состав kit | вне каталога: Подсчёт кругов и ghost-рекорд отдельными пакетами в §12 нет (ghost — kit.replay-ghost). |
+| 475 | `kit.racing-combat` | ✅ | состав kit | вне каталога: Позиции гонщиков отдельным пакетом в §12 нет. |
+| 476 | `kit.sports-match` | ✅ | состав kit | вне каталога: Мяч и голы отдельными пакетами в §12 нет. |
+| 477 | `kit.platform-sports` | ✅ | состав kit | вне каталога: Мяч отдельным пакетом в §12 нет. |
+| 478 | `kit.rhythm` | ✅ | состав kit | вне каталога: Нотные дорожки отдельным пакетом в §12 нет. |
+| 479 | `kit.music-arcade` | ✅ | состав kit | — |
+| 480 | `kit.pinball` | ✅ | состав kit | вне каталога: Флипперы и шар отдельными пакетами в §12 нет. |
+
+## Y. Narrative, обучение, полный проект и QA — 20/20
+
+| № | ID | Статус | API | Пробел |
+|---|---|---|---|---|
+| 481 | `kit.visual-novel` | ✅ | состав kit | — |
+| 482 | `kit.romance-routes` | ✅ | состав kit | — |
+| 483 | `kit.mystery-investigation` | ✅ | состав kit | — |
+| 484 | `kit.episodic-story` | ✅ | состав kit | — |
+| 485 | `kit.horror` | ✅ | состав kit | — |
+| 486 | `kit.escape-room` | ✅ | состав kit | — |
+| 487 | `kit.tutorial` | ✅ | состав kit | — |
+| 488 | `kit.daily-challenge` | ✅ | состав kit | — |
+| 489 | `kit.achievement-set` | ✅ | состав kit | — |
+| 490 | `kit.replay-ghost` | ✅ | состав kit | вне каталога: Запись и воспроизведение ghost отдельным пакетом в §12 нет ($.replay есть в API). |
+| 491 | `kit.local-coop` | ✅ | состав kit | — |
+| 492 | `kit.authoritative-coop` | ✅ | состав kit | — |
+| 493 | `kit.arena-multiplayer` | ✅ | состав kit | — |
+| 494 | `kit.multiplayer-survival` | ✅ | состав kit | — |
+| 495 | `kit.project-platformer` | ✅ | состав kit | — |
+| 496 | `kit.project-top-down-action` | ✅ | состав kit | — |
+| 497 | `kit.project-vn-romance` | ✅ | состав kit | — |
+| 498 | `kit.project-jrpg` | ✅ | состав kit | — |
+| 499 | `kit.project-coop-adventure` | ✅ | состав kit | — |
+| 500 | `kit.project-witch` | ✅ | состав kit | — |

@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.network-debug-hud",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сетевая отладка"
+  },
+  "description": {
+    "ru": "RTT, трафик и состояние соединения на экране ($.net.describe/stats)."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.net.describe"
+    },
+    {
+      "api": "$.net.peers"
+    },
+    {
+      "api": "$.ui.markup"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Показать",
+      "type": "string",
+      "default": "f8"
+    }
+  ],
+  "tags": [
+    "отладка",
+    "сеть"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.precision-platformer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: точный платформер"
+  },
+  "description": {
+    "ru": "Coyote time, буфер прыжка и быстрый перезапуск."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.platformer"
+    },
+    {
+      "id": "movement.coyote-jump"
+    },
+    {
+      "id": "movement.jump-buffer"
+    },
+    {
+      "id": "health.base"
+    },
+    {
+      "id": "health.respawn"
+    },
+    {
+      "id": "interact.checkpoint"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

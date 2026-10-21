@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.crpg-dialogue",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: CRPG-диалог"
+  },
+  "description": {
+    "ru": "Проверки навыков, флаги и последствия."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "dialogue.tree"
+    },
+    {
+      "id": "dialogue.condition"
+    },
+    {
+      "id": "dialogue.action"
+    },
+    {
+      "id": "story.flag"
+    },
+    {
+      "id": "stats.base"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

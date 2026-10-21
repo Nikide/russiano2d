@@ -1,0 +1,86 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.host-migration",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Смена хоста"
+  },
+  "description": {
+    "ru": "Если хост ушёл — по договорённости (наименьший id peer) новый хост поднимается заново; клиенты переподключаются."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.net.peers"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "port",
+      "label": "Порт",
+      "type": "int",
+      "default": 7777,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "id": "delay",
+      "label": "Пауза перед сменой",
+      "type": "int",
+      "default": 1500,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "хост",
+    "устойчивость"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.platformer-collectathon",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: сборщик"
+  },
+  "description": {
+    "ru": "Сбор предметов, счётчик и выход с уровня."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.platformer-core"
+    },
+    {
+      "id": "interact.pickup"
+    },
+    {
+      "id": "item.currency"
+    },
+    {
+      "id": "ui.quest-tracker"
+    },
+    {
+      "id": "world.level-exit"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

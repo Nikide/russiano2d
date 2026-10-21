@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.session-settings",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Правила сессии"
+  },
+  "description": {
+    "ru": "Правила матча на хосте рассылаются всем; клиенты применяют их ($.store session)."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.send"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "rules",
+      "label": "Правила (ключ=значение)",
+      "type": "list",
+      "default": [
+        "friendlyFire=false",
+        "timeLimit=600"
+      ]
+    }
+  ],
+  "tags": [
+    "правила",
+    "матч"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -20,11 +20,7 @@
       "api": "$.camera.lookahead"
     }
   ],
-  "dependencies": [
-    {
-      "id": "camera.follow"
-    }
-  ],
+  "dependencies": [],
   "fields": [
     {
       "id": "distance",

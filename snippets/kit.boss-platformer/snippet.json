@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.boss-platformer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: босс"
+  },
+  "description": {
+    "ru": "Телеграф атак, фазы и проверка победы."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "health.base"
+    },
+    {
+      "id": "ai.boss-phases"
+    },
+    {
+      "id": "ai.boss-telegraph"
+    },
+    {
+      "id": "ui.health-bar"
+    },
+    {
+      "id": "quest.objective-defeat"
+    },
+    {
+      "id": "camera.trauma"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

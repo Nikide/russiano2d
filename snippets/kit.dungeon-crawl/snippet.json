@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.dungeon-crawl",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: подземелье"
+  },
+  "description": {
+    "ru": "Комнаты, встречи, добыча и переходы."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "world.streamed-room"
+    },
+    {
+      "id": "camera.room-lock"
+    },
+    {
+      "id": "ai.spawner"
+    },
+    {
+      "id": "economy.chest-loot"
+    },
+    {
+      "id": "world.scene-exit"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

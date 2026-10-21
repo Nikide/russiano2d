@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.bomb-arena",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: бомбы"
+  },
+  "description": {
+    "ru": "Бомбы, разрушаемые клетки и безопасная зона."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "weapon.mine"
+    },
+    {
+      "id": "world.breakable-tiles"
+    },
+    {
+      "id": "world.tilemap-layer"
+    },
+    {
+      "id": "interact.hazard"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

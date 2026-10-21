@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.farming",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: ферма"
+  },
+  "description": {
+    "ru": "Время суток, урожай-предметы и продажа. Вне каталога: Посев, рост и полив растений отдельными пакетами в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "world.day-night"
+    },
+    {
+      "id": "inventory.grid"
+    },
+    {
+      "id": "economy.shop"
+    },
+    {
+      "id": "crafting.queue"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

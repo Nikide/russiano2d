@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.stage-select",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: выбор уровня"
+  },
+  "description": {
+    "ru": "Выбор открытых уровней и их результатов. Вне каталога: Экран выбора уровня как RmlUi-меню в §12 отдельным пакетом не описан."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "progression.unlock"
+    },
+    {
+      "id": "world.level-exit"
+    },
+    {
+      "id": "ui.result-screen"
+    },
+    {
+      "id": "save.slot"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

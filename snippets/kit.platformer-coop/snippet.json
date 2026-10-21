@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.platformer-coop",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: кооп-платформер"
+  },
+  "description": {
+    "ru": "Два игрока и локальные цели уровня."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.platformer-core"
+    },
+    {
+      "id": "net.coop-local"
+    },
+    {
+      "id": "camera.split-screen"
+    },
+    {
+      "id": "world.level-exit"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

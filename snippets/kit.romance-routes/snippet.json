@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.romance-routes",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: романтические маршруты"
+  },
+  "description": {
+    "ru": "Отношения, маршрут и условия финала."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "story.counter"
+    },
+    {
+      "id": "story.relationship-route"
+    },
+    {
+      "id": "story.ending"
+    },
+    {
+      "id": "story.choice-history"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

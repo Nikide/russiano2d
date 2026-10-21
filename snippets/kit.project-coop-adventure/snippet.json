@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.project-coop-adventure",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Проект: кооп-приключение"
+  },
+  "description": {
+    "ru": "Законченный авторитетный кооперативный проект."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.authoritative-coop"
+    },
+    {
+      "id": "kit.adventure-interaction"
+    },
+    {
+      "id": "quest.definition"
+    },
+    {
+      "id": "net.disconnect-screen"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

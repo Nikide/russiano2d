@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.beat-em-up",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: beat 'em up"
+  },
+  "description": {
+    "ru": "Движение по глубине, враги и волновой выход."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.top-down"
+    },
+    {
+      "id": "weapon.melee"
+    },
+    {
+      "id": "health.base"
+    },
+    {
+      "id": "ai.wave-director"
+    },
+    {
+      "id": "world.level-exit"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

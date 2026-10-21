@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.colony-management",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: колония"
+  },
+  "description": {
+    "ru": "Жители, задачи, ресурсы и события. Вне каталога: Распределение задач жителям отдельным пакетом в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "npc.daily-needs"
+    },
+    {
+      "id": "npc.personality"
+    },
+    {
+      "id": "npc.relationship"
+    },
+    {
+      "id": "economy.wallet"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

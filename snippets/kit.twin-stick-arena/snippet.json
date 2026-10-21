@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.twin-stick-arena",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: twin-stick арена"
+  },
+  "description": {
+    "ru": "Twin-stick ввод, волны и выживание."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.twin-stick"
+    },
+    {
+      "id": "weapon.base"
+    },
+    {
+      "id": "weapon.projectile"
+    },
+    {
+      "id": "ai.wave-director"
+    },
+    {
+      "id": "ui.health-bar"
+    },
+    {
+      "id": "health.base"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

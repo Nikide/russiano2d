@@ -1,0 +1,94 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.round-state",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Состояние раунда"
+  },
+  "description": {
+    "ru": "Ожидание → игра → конец раунда: хост ведёт таймер и рассылает состояние."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "warmup",
+      "label": "Ожидание",
+      "type": "int",
+      "default": 5000,
+      "min": 0,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "length",
+      "label": "Раунд",
+      "type": "int",
+      "default": 180000,
+      "min": 1000,
+      "max": 86400000,
+      "unit": "мс"
+    },
+    {
+      "id": "after",
+      "label": "После раунда",
+      "type": "int",
+      "default": 8000,
+      "min": 0,
+      "max": 600000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "раунд",
+    "матч"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

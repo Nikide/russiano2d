@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.mystery-investigation",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: расследование"
+  },
+  "description": {
+    "ru": "Улики, связи и раскрытие дела."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "puzzle.hidden-object"
+    },
+    {
+      "id": "quest.objective-collect"
+    },
+    {
+      "id": "puzzle.riddle"
+    },
+    {
+      "id": "story.flag"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.coop-revive",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сетевое поднятие союзника"
+  },
+  "description": {
+    "ru": "Поднятие павшего союзника по сети: хост проверяет, что помогающий рядом и жив."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hp"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.handle"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.net.rpc"
+    },
+    {
+      "api": "$.net.unhandle"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 1000,
+      "unit": "пикс."
+    },
+    {
+      "id": "hp",
+      "label": "Здоровье после",
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "кооператив",
+    "поднятие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

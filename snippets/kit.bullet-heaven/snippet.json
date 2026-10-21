@@ -1,0 +1,51 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.bullet-heaven",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: bullet heaven"
+  },
+  "description": {
+    "ru": "Массовые враги, автоатаки и рост уровня."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.top-down"
+    },
+    {
+      "id": "weapon.base"
+    },
+    {
+      "id": "weapon.auto"
+    },
+    {
+      "id": "weapon.projectile"
+    },
+    {
+      "id": "ai.spawner"
+    },
+    {
+      "id": "progression.xp"
+    },
+    {
+      "id": "progression.level"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

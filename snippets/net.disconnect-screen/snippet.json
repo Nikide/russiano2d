@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.disconnect-screen",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Экран разрыва"
+  },
+  "description": {
+    "ru": "При разрыве — причина и действия «переподключиться» / «в меню» (RmlUi)."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.scene.load"
+    },
+    {
+      "api": "$.ui.markup"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "menuScene",
+      "label": "Сцена меню",
+      "type": "string",
+      "default": "menu"
+    }
+  ],
+  "tags": [
+    "сеть",
+    "разрыв"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

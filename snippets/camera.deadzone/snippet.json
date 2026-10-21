@@ -20,11 +20,7 @@
       "api": "$.camera.deadzone"
     }
   ],
-  "dependencies": [
-    {
-      "id": "camera.follow"
-    }
-  ],
+  "dependencies": [],
   "fields": [
     {
       "id": "size",

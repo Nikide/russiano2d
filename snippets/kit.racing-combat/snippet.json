@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.racing-combat",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: боевые гонки"
+  },
+  "description": {
+    "ru": "Транспорт, оружие и финиш. Вне каталога: Позиции гонщиков отдельным пакетом в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.vehicle-seat"
+    },
+    {
+      "id": "weapon.rocket"
+    },
+    {
+      "id": "world.level-exit"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

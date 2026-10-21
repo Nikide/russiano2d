@@ -6179,9 +6179,7 @@
     "$.camera.deadzone"
    ],
    "gaps": [],
-   "dependencies": [
-    "camera.follow"
-   ]
+   "dependencies": []
   },
   {
    "n": 283,
@@ -6195,9 +6193,7 @@
     "$.camera.lookahead"
    ],
    "gaps": [],
-   "dependencies": [
-    "camera.follow"
-   ]
+   "dependencies": []
   },
   {
    "n": 284,
@@ -7461,9 +7457,7 @@
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": [
-    "health.shield"
-   ]
+   "dependencies": []
   },
   {
    "n": 344,
@@ -7484,9 +7478,7 @@
     "$.weapons.of"
    ],
    "gaps": [],
-   "dependencies": [
-    "weapon.base"
-   ]
+   "dependencies": []
   },
   {
    "n": 345,
@@ -7508,9 +7500,7 @@
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": [
-    "inventory.quickbar"
-   ]
+   "dependencies": []
   },
   {
    "n": 346,
@@ -7537,9 +7527,7 @@
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": [
-    "inventory.grid"
-   ]
+   "dependencies": []
   },
   {
    "n": 347,
@@ -7564,9 +7552,7 @@
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": [
-    "equipment.slots"
-   ]
+   "dependencies": []
   },
   {
    "n": 348,
@@ -7588,9 +7574,7 @@
     "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": [
-    "npc.party-member"
-   ]
+   "dependencies": []
   },
   {
    "n": 349,
@@ -7969,9 +7953,7 @@
     "$.selection.get"
    ],
    "gaps": [],
-   "dependencies": [
-    "inventory.grid"
-   ]
+   "dependencies": []
   },
   {
    "n": 365,
@@ -8344,9 +8326,20 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net",
+    "$.net.host",
+    "$.net.join",
+    "$.net.online",
+    "$.net.syncRate",
+    "$.net.topology",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8358,9 +8351,19 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net",
+    "$.net.host",
+    "$.net.off",
+    "$.net.on",
+    "$.net.online",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8372,9 +8375,21 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net",
+    "$.net.join",
+    "$.net.leave",
+    "$.net.off",
+    "$.net.on",
+    "$.net.online",
+    "$.off",
+    "$.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8386,9 +8401,22 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.disconnect",
+    "$.net.off",
+    "$.net.on",
+    "$.net.room.create",
+    "$.net.room.peers",
+    "$.net.send",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8400,9 +8428,17 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.off",
+    "$.net.on",
+    "$.net.room.join",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8414,9 +8450,19 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.entities",
+    "$.net.leave",
+    "$.net.room.leave",
+    "$.net.unreplicate",
+    "$.off",
+    "$.on",
+    "$.scene.load"
    ],
    "gaps": [],
    "dependencies": []
@@ -8428,9 +8474,18 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.broadcast",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.send",
+    "$.store.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -8442,12 +8497,26 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.add",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.broadcast",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.playerCount",
+    "$.net.send",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "net.lobby"
+   ]
   },
   {
    "n": 389,
@@ -8456,9 +8525,18 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.attr",
+    "$.fn.color",
+    "$.fn.data",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.broadcast",
+    "$.net.off",
+    "$.net.on",
+    "$.save.profile",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -8470,9 +8548,26 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.net",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.net.broadcast",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.unreplicate",
+    "$.prefab.has",
+    "$.prefab.instantiate",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -8484,9 +8579,11 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.attr",
+    "$.fn.net",
+    "$.net.unreplicate"
    ],
    "gaps": [],
    "dependencies": []
@@ -8498,9 +8595,13 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.net",
+    "$.net.isAuthority",
+    "$.net.unreplicate"
    ],
    "gaps": [],
    "dependencies": []
@@ -8512,9 +8613,20 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.online",
+    "$.net.peers",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8526,9 +8638,20 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.hide",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.show",
+    "$.fn.text",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.scene.load",
+    "$.ui.markup"
    ],
    "gaps": [],
    "dependencies": []
@@ -8540,9 +8663,20 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net",
+    "$.net.join",
+    "$.net.off",
+    "$.net.on",
+    "$.net.online",
+    "$.off",
+    "$.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8554,12 +8688,22 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.random.int",
+    "$.store",
+    "$.store.set"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "net.room-create"
+   ]
   },
   {
    "n": 397,
@@ -8568,9 +8712,17 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.off",
+    "$.net.on",
+    "$.store",
+    "$.store.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -8582,9 +8734,20 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.send",
+    "$.store",
+    "$.store.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -8596,9 +8759,20 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.body",
+    "$.fn.controls",
+    "$.fn.emit",
+    "$.fn.health",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.input.pressed",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -8610,9 +8784,17 @@
    "section": "T",
    "section_title": "Сессии и многопользовательский проект",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.hide",
+    "$.fn.map",
+    "$.fn.show",
+    "$.fn.text",
+    "$.input.pressed",
+    "$.net.describe",
+    "$.net.peers",
+    "$.ui.markup",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8624,9 +8806,11 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.attr",
+    "$.fn.net",
+    "$.net.unreplicate"
    ],
    "gaps": [],
    "dependencies": []
@@ -8638,12 +8822,19 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.attr",
+    "$.fn.damageFilter",
+    "$.fn.net",
+    "$.net.isAuthority",
+    "$.net.online",
+    "$.net.unreplicate"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base"
+   ]
   },
   {
    "n": 403,
@@ -8652,9 +8843,18 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.flip",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.broadcast",
+    "$.net.off",
+    "$.net.on",
+    "$.net.online",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8666,12 +8866,26 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.add",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.items.has",
+    "$.net.broadcast",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid"
+   ]
   },
   {
    "n": 405,
@@ -8680,9 +8894,19 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.velocity",
+    "$.input.down",
+    "$.net.input",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.online",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8694,9 +8918,21 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.broadcast",
+    "$.net.handle",
+    "$.net.rpc",
+    "$.net.send",
+    "$.net.unhandle",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8708,9 +8944,20 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.damage",
+    "$.fn.distanceTo",
+    "$.fn.min",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.handle",
+    "$.net.isAuthority",
+    "$.net.rpc",
+    "$.net.send",
+    "$.net.unhandle",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8722,9 +8969,30 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.damage",
+    "$.fn.find",
+    "$.fn.flip",
+    "$.fn.hp",
+    "$.fn.net",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.net.handle",
+    "$.net.isAuthority",
+    "$.net.online",
+    "$.net.rpc",
+    "$.net.unhandle",
+    "$.net.unreplicate",
+    "$.selection.get",
+    "$.updateFor",
+    "$.world",
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -8736,9 +9004,10 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.net.interpolationDelay",
+    "$.net.syncRate"
    ],
    "gaps": [],
    "dependencies": []
@@ -8750,9 +9019,14 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.at",
+    "$.net.isAuthority",
+    "$.net.online",
+    "$.net.predict",
+    "$.net.prediction",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8764,9 +9038,16 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.net.acknowledge",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.send"
    ],
    "gaps": [],
    "dependencies": []
@@ -8778,9 +9059,24 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.broadcast",
+    "$.net.handle",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.rpc",
+    "$.net.send",
+    "$.net.unhandle",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8792,9 +9088,19 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.team",
+    "$.net.broadcast",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8806,9 +9112,21 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.broadcast",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.online",
+    "$.off",
+    "$.on",
+    "$.store",
+    "$.store.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -8820,9 +9138,19 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.broadcast",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.online",
+    "$.store.set",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8834,9 +9162,22 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.reduce",
+    "$.net.broadcast",
+    "$.net.handle",
+    "$.net.isAuthority",
+    "$.net.online",
+    "$.net.rpc",
+    "$.net.unhandle",
+    "$.off",
+    "$.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8848,9 +9189,14 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.camera.follow",
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8862,9 +9208,25 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.input.pressed",
+    "$.net.broadcast",
+    "$.net.handle",
+    "$.net.isAuthority",
+    "$.net.off",
+    "$.net.on",
+    "$.net.online",
+    "$.net.rpc",
+    "$.net.unhandle",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -8876,9 +9238,23 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.emit",
+    "$.fn.alive",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.hp",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.broadcast",
+    "$.net.handle",
+    "$.net.isAuthority",
+    "$.net.online",
+    "$.net.rpc",
+    "$.net.unhandle",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8890,9 +9266,13 @@
    "section": "U",
    "section_title": "Синхронизация и сетевой gameplay",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.net"
+    "$.fn.flash",
+    "$.fn.off",
+    "$.fn.on",
+    "$.net.off",
+    "$.net.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -8937,10 +9317,16 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.platformer-core",
+    "interact.pickup",
+    "item.currency",
+    "ui.quest-tracker",
+    "world.level-exit"
+   ]
   },
   {
    "n": 424,
@@ -8949,10 +9335,17 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base",
+    "health.death",
+    "health.respawn",
+    "interact.checkpoint",
+    "world.checkpoint-chain",
+    "save.checkpoint"
+   ]
   },
   {
    "n": 425,
@@ -8961,10 +9354,18 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.platformer",
+    "movement.double-jump",
+    "movement.dash",
+    "movement.wall-jump",
+    "progression.unlock",
+    "interact.door",
+    "interact.lock"
+   ]
   },
   {
    "n": 426,
@@ -8973,10 +9374,17 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Карта исследованных комнат как экран — ui.minimap-markers показывает камеру, а не накопленную карту."
+   ],
+   "dependencies": [
+    "world.streamed-room",
+    "world.secret-area",
+    "ui.minimap-markers",
+    "camera.room-lock"
+   ]
   },
   {
    "n": 427,
@@ -8985,10 +9393,16 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "interact.press-action",
+    "interact.context-prompt",
+    "interactable.base",
+    "ui.interaction-prompt",
+    "feedback.error-prompt"
+   ]
   },
   {
    "n": 428,
@@ -8997,10 +9411,16 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "inventory.grid",
+    "ui.inventory-screen",
+    "equipment.slots",
+    "item.consumable",
+    "item.quest-bound"
+   ]
   },
   {
    "n": 429,
@@ -9009,10 +9429,16 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.platformer-core",
+    "interact.movable-crate",
+    "interact.pressure-plate",
+    "interact.switch",
+    "puzzle.reset"
+   ]
   },
   {
    "n": 430,
@@ -9021,10 +9447,17 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.platformer",
+    "movement.coyote-jump",
+    "movement.jump-buffer",
+    "health.base",
+    "health.respawn",
+    "interact.checkpoint"
+   ]
   },
   {
    "n": 431,
@@ -9033,10 +9466,17 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.platformer",
+    "movement.dash",
+    "movement.wall-slide",
+    "movement.wall-jump",
+    "world.moving-hazard",
+    "progression.challenge"
+   ]
   },
   {
    "n": 432,
@@ -9045,10 +9485,17 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Кислород как отдельный ресурс не описан в §12 (можно через ui.stamina-bar и data)."
+   ],
+   "dependencies": [
+    "movement.swim",
+    "health.base",
+    "interact.pickup",
+    "world.moving-hazard"
+   ]
   },
   {
    "n": 433,
@@ -9057,10 +9504,14 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.platformer",
+    "world.gravity-zone",
+    "camera.follow"
+   ]
   },
   {
    "n": 434,
@@ -9069,10 +9520,14 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.vehicle-seat",
+    "camera.follow",
+    "health.base"
+   ]
   },
   {
    "n": 435,
@@ -9081,10 +9536,17 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base",
+    "ai.boss-phases",
+    "ai.boss-telegraph",
+    "ui.health-bar",
+    "quest.objective-defeat",
+    "camera.trauma"
+   ]
   },
   {
    "n": 436,
@@ -9093,10 +9555,15 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.platformer-core",
+    "net.coop-local",
+    "camera.split-screen",
+    "world.level-exit"
+   ]
   },
   {
    "n": 437,
@@ -9105,10 +9572,15 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "world.secret-area",
+    "quest.journal",
+    "ui.quest-journal",
+    "feedback.quest-toast"
+   ]
   },
   {
    "n": 438,
@@ -9117,10 +9589,14 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "world.secret-area",
+    "progression.challenge",
+    "feedback.quest-toast"
+   ]
   },
   {
    "n": 439,
@@ -9129,10 +9605,15 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "quest.timer",
+    "progression.challenge",
+    "world.level-exit",
+    "ui.result-screen"
+   ]
   },
   {
    "n": 440,
@@ -9141,10 +9622,17 @@
    "section": "V",
    "section_title": "Пакеты платформера, приключения и исследования",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Экран выбора уровня как RmlUi-меню в §12 отдельным пакетом не описан."
+   ],
+   "dependencies": [
+    "progression.unlock",
+    "world.level-exit",
+    "ui.result-screen",
+    "save.slot"
+   ]
   },
   {
    "n": 441,
@@ -9171,10 +9659,17 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.twin-stick",
+    "weapon.base",
+    "weapon.projectile",
+    "ai.wave-director",
+    "ui.health-bar",
+    "health.base"
+   ]
   },
   {
    "n": 443,
@@ -9183,10 +9678,18 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.top-down",
+    "weapon.base",
+    "weapon.auto",
+    "weapon.projectile",
+    "ai.spawner",
+    "progression.xp",
+    "progression.level"
+   ]
   },
   {
    "n": 444,
@@ -9195,10 +9698,17 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.top-down",
+    "health.base",
+    "ai.wave-director",
+    "mission.wave-objective",
+    "quest.objective-survive",
+    "ui.health-bar"
+   ]
   },
   {
    "n": 445,
@@ -9207,10 +9717,17 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ai.line-of-sight",
+    "ai.hearing",
+    "ai.investigate",
+    "ai.search",
+    "movement.crouch",
+    "movement.prone"
+   ]
   },
   {
    "n": 446,
@@ -9219,10 +9736,16 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.stealth",
+    "trigger.base",
+    "interact.lock",
+    "mission.extraction",
+    "quest.objective-visit"
+   ]
   },
   {
    "n": 447,
@@ -9231,10 +9754,16 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ai.cover",
+    "ai.line-of-sight",
+    "weapon.base",
+    "weapon.hitscan",
+    "health.base"
+   ]
   },
   {
    "n": 448,
@@ -9243,10 +9772,17 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.base",
+    "weapon.weapon-switch",
+    "weapon.ammo",
+    "weapon.reload",
+    "equipment.loadout",
+    "ui.weapon-panel"
+   ]
   },
   {
    "n": 449,
@@ -9255,10 +9791,15 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ai.boss-phases",
+    "ai.boss-telegraph",
+    "quest.sequence",
+    "ui.result-screen"
+   ]
   },
   {
    "n": 450,
@@ -9267,10 +9808,18 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Генерация маршрута забега отдельным пакетом в §12 нет."
+   ],
+   "dependencies": [
+    "economy.loot-table",
+    "economy.weighted-drop",
+    "economy.chest-loot",
+    "world.streamed-room",
+    "save.slot"
+   ]
   },
   {
    "n": 451,
@@ -9279,10 +9828,14 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "progression.unlock",
+    "progression.mastery",
+    "save.profile"
+   ]
   },
   {
    "n": 452,
@@ -9291,10 +9844,17 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Рука, колода и цена карт отдельными пакетами в §12 нет — механика карт остаётся за игрой."
+   ],
+   "dependencies": [
+    "ability.base",
+    "ability.resource-cost",
+    "ability.targeting",
+    "stats.base"
+   ]
   },
   {
    "n": 453,
@@ -9303,10 +9863,16 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.melee",
+    "animation.attack",
+    "animation.cancel-rules",
+    "feedback.combo-popup",
+    "feedback.hit-stop"
+   ]
   },
   {
    "n": 454,
@@ -9315,10 +9881,17 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "net.coop-local",
+    "weapon.melee",
+    "health.base",
+    "ui.health-bar",
+    "net.round-state",
+    "animation.hit-pause"
+   ]
   },
   {
    "n": 455,
@@ -9327,10 +9900,16 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "movement.top-down",
+    "weapon.melee",
+    "health.base",
+    "ai.wave-director",
+    "world.level-exit"
+   ]
   },
   {
    "n": 456,
@@ -9339,10 +9918,18 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Установка башен на клетки отдельным пакетом в §12 нет."
+   ],
+   "dependencies": [
+    "movement.follow-path",
+    "ai.wave-director",
+    "economy.wallet",
+    "weapon.base",
+    "weapon.projectile"
+   ]
   },
   {
    "n": 457,
@@ -9351,10 +9938,16 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ai.wave-director",
+    "movement.follow-path",
+    "weapon.base",
+    "weapon.hitscan",
+    "economy.wallet"
+   ]
   },
   {
    "n": 458,
@@ -9363,10 +9956,15 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "weapon.mine",
+    "world.breakable-tiles",
+    "world.tilemap-layer",
+    "interact.hazard"
+   ]
   },
   {
    "n": 459,
@@ -9375,10 +9973,16 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "health.base",
+    "npc.daily-needs",
+    "item.consumable",
+    "item.durability",
+    "inventory.grid"
+   ]
   },
   {
    "n": 460,
@@ -9387,10 +9991,15 @@
    "section": "W",
    "section_title": "Пакеты shooter, action и roguelike",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "ai.wave-director",
+    "weapon.ammo",
+    "interact.breakable",
+    "mission.wave-objective"
+   ]
   },
   {
    "n": 461,
@@ -9399,10 +10008,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "npc.party-member",
+    "npc.party-formation",
+    "stats.base",
+    "stats.derived",
+    "ui.party-panel"
+   ]
   },
   {
    "n": 462,
@@ -9411,10 +10026,19 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Очередь ходов (initiative) отдельным пакетом в §12 нет."
+   ],
+   "dependencies": [
+    "ability.base",
+    "ability.targeting",
+    "ability.area-effect",
+    "stats.base",
+    "progression.xp",
+    "economy.reward"
+   ]
   },
   {
    "n": 463,
@@ -9423,10 +10047,17 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Поиск пути и подсветка клеток хода отдельным пакетом в §12 нет."
+   ],
+   "dependencies": [
+    "world.tilemap-layer",
+    "ability.resource-cost",
+    "ability.targeting",
+    "puzzle.state-machine"
+   ]
   },
   {
    "n": 464,
@@ -9435,10 +10066,15 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "npc.squad-leader",
+    "npc.squad-order",
+    "ai.line-of-sight",
+    "net.team-assignment"
+   ]
   },
   {
    "n": 465,
@@ -9447,10 +10083,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "dialogue.tree",
+    "dialogue.condition",
+    "dialogue.action",
+    "story.flag",
+    "stats.base"
+   ]
   },
   {
    "n": 466,
@@ -9459,10 +10101,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "world.streamed-room",
+    "camera.room-lock",
+    "ai.spawner",
+    "economy.chest-loot",
+    "world.scene-exit"
+   ]
   },
   {
    "n": 467,
@@ -9471,10 +10119,15 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "npc.home-routine",
+    "npc.relationship",
+    "npc.personality",
+    "world.day-night"
+   ]
   },
   {
    "n": 468,
@@ -9483,10 +10136,17 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Посев, рост и полив растений отдельными пакетами в §12 нет."
+   ],
+   "dependencies": [
+    "world.day-night",
+    "inventory.grid",
+    "economy.shop",
+    "crafting.queue"
+   ]
   },
   {
    "n": 469,
@@ -9495,10 +10155,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Заброс и поплавок отдельным пакетом в §12 нет; поклёвка — puzzle.timing."
+   ],
+   "dependencies": [
+    "puzzle.timing",
+    "economy.loot-table",
+    "inventory.grid"
+   ]
   },
   {
    "n": 470,
@@ -9507,10 +10173,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "interact.pickup",
+    "crafting.recipe",
+    "crafting.station",
+    "item.durability",
+    "crafting.repair"
+   ]
   },
   {
    "n": 471,
@@ -9519,10 +10191,17 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Распределение задач жителям отдельным пакетом в §12 нет."
+   ],
+   "dependencies": [
+    "npc.daily-needs",
+    "npc.personality",
+    "npc.relationship",
+    "economy.wallet"
+   ]
   },
   {
    "n": 472,
@@ -9531,10 +10210,15 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "economy.wallet",
+    "economy.price",
+    "economy.income-expense",
+    "crafting.upgrade"
+   ]
   },
   {
    "n": 473,
@@ -9543,10 +10227,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Светофор как отдельный пакет в §12 нет; сигналы — puzzle.state-machine."
+   ],
+   "dependencies": [
+    "movement.follow-path",
+    "puzzle.state-machine",
+    "world.spawn-points"
+   ]
   },
   {
    "n": 474,
@@ -9555,10 +10245,17 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Подсчёт кругов и ghost-рекорд отдельными пакетами в §12 нет (ghost — kit.replay-ghost)."
+   ],
+   "dependencies": [
+    "movement.vehicle-seat",
+    "world.checkpoint-chain",
+    "world.level-exit",
+    "ui.result-screen"
+   ]
   },
   {
    "n": 475,
@@ -9567,10 +10264,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Позиции гонщиков отдельным пакетом в §12 нет."
+   ],
+   "dependencies": [
+    "movement.vehicle-seat",
+    "weapon.rocket",
+    "world.level-exit"
+   ]
   },
   {
    "n": 476,
@@ -9579,10 +10282,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Мяч и голы отдельными пакетами в §12 нет."
+   ],
+   "dependencies": [
+    "net.team-assignment",
+    "net.scoreboard",
+    "net.round-state"
+   ]
   },
   {
    "n": 477,
@@ -9591,10 +10300,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Мяч отдельным пакетом в §12 нет."
+   ],
+   "dependencies": [
+    "movement.platformer",
+    "net.round-state",
+    "net.scoreboard"
+   ]
   },
   {
    "n": 478,
@@ -9603,10 +10318,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Нотные дорожки отдельным пакетом в §12 нет."
+   ],
+   "dependencies": [
+    "puzzle.timing",
+    "feedback.combo-popup",
+    "audio.music-transition"
+   ]
   },
   {
    "n": 479,
@@ -9615,10 +10336,15 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "puzzle.timing",
+    "feedback.combo-popup",
+    "feedback.screen-pulse",
+    "audio.one-shot"
+   ]
   },
   {
    "n": 480,
@@ -9627,10 +10353,16 @@
    "section": "X",
    "section_title": "Пакеты RPG, тактики, симуляции и спорта",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Флипперы и шар отдельными пакетами в §12 нет."
+   ],
+   "dependencies": [
+    "interact.pressure-plate",
+    "net.scoreboard",
+    "puzzle.reset"
+   ]
   },
   {
    "n": 481,
@@ -9639,10 +10371,19 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "dialogue.tree",
+    "dialogue.choice",
+    "dialogue.typewriter",
+    "dialogue.auto-advance",
+    "story.vn-background",
+    "story.vn-character",
+    "story.ending",
+    "ui.choice-list"
+   ]
   },
   {
    "n": 482,
@@ -9651,10 +10392,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "story.counter",
+    "story.relationship-route",
+    "story.ending",
+    "story.choice-history"
+   ]
   },
   {
    "n": 483,
@@ -9663,10 +10409,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "puzzle.hidden-object",
+    "quest.objective-collect",
+    "puzzle.riddle",
+    "story.flag"
+   ]
   },
   {
    "n": 484,
@@ -9675,10 +10426,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "story.chapter",
+    "story.choice-history",
+    "save.story-state",
+    "save.slot"
+   ]
   },
   {
    "n": 485,
@@ -9687,10 +10443,16 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "world.light-zone",
+    "audio.ambience",
+    "ai.chase",
+    "ai.line-of-sight",
+    "render.vignette"
+   ]
   },
   {
    "n": 486,
@@ -9699,10 +10461,16 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "puzzle.keypad",
+    "puzzle.sequence-lock",
+    "puzzle.hidden-object",
+    "interact.door",
+    "world.level-exit"
+   ]
   },
   {
    "n": 487,
@@ -9711,10 +10479,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "trigger.base",
+    "ui.interaction-prompt",
+    "quest.sequence",
+    "feedback.quest-toast"
+   ]
   },
   {
    "n": 488,
@@ -9723,10 +10496,14 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "progression.challenge",
+    "economy.reward",
+    "save.profile"
+   ]
   },
   {
    "n": 489,
@@ -9735,10 +10512,14 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "progression.challenge",
+    "progression.unlock",
+    "feedback.quest-toast"
+   ]
   },
   {
    "n": 490,
@@ -9747,10 +10528,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
-   "gaps": [],
-   "dependencies": []
+   "gaps": [
+    "вне каталога: Запись и воспроизведение ghost отдельным пакетом в §12 нет ($.replay есть в API)."
+   ],
+   "dependencies": [
+    "world.checkpoint-chain",
+    "save.slot"
+   ]
   },
   {
    "n": 491,
@@ -9759,10 +10545,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "net.coop-local",
+    "camera.split-screen",
+    "health.revive",
+    "ui.health-bar"
+   ]
   },
   {
    "n": 492,
@@ -9771,10 +10562,18 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "net.session-bootstrap",
+    "net.host-session",
+    "net.client-session",
+    "net.player-spawn",
+    "net.input-command",
+    "net.replicate-health",
+    "net.interpolation-profile"
+   ]
   },
   {
    "n": 493,
@@ -9783,10 +10582,18 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "net.room-create",
+    "net.room-join",
+    "net.lobby",
+    "net.ready-check",
+    "net.round-state",
+    "net.scoreboard",
+    "net.vote-map"
+   ]
   },
   {
    "n": 494,
@@ -9795,10 +10602,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.authoritative-coop",
+    "net.shared-object",
+    "net.coop-revive",
+    "net.damage-command"
+   ]
   },
   {
    "n": 495,
@@ -9807,10 +10619,18 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.platformer-core",
+    "kit.platformer-checkpoint",
+    "kit.platformer-collectathon",
+    "ui.pause-menu",
+    "ui.settings-menu",
+    "save.slot",
+    "ui.result-screen"
+   ]
   },
   {
    "n": 496,
@@ -9819,10 +10639,17 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.top-down-shooter",
+    "kit.shooter-loadout",
+    "quest.definition",
+    "ui.quest-tracker",
+    "ui.pause-menu",
+    "save.slot"
+   ]
   },
   {
    "n": 497,
@@ -9831,10 +10658,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.visual-novel",
+    "kit.romance-routes",
+    "save.story-state",
+    "ui.settings-menu"
+   ]
   },
   {
    "n": 498,
@@ -9843,10 +10675,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.jrpg-party",
+    "kit.jrpg-turn-battle",
+    "kit.dungeon-crawl",
+    "save.slot"
+   ]
   },
   {
    "n": 499,
@@ -9855,10 +10692,15 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.authoritative-coop",
+    "kit.adventure-interaction",
+    "quest.definition",
+    "net.disconnect-screen"
+   ]
   },
   {
    "n": 500,
@@ -9867,10 +10709,19 @@
    "section": "Y",
    "section_title": "Narrative, обучение, полный проект и QA",
    "kind": "kit",
-   "status": "planned",
+   "status": "implemented",
    "api": [],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "kit.platformer-core",
+    "kit.platformer-combat",
+    "weapon.base",
+    "weapon.projectile",
+    "dialogue.tree",
+    "progression.xp",
+    "progression.level",
+    "save.slot"
+   ]
   }
  ]
 }

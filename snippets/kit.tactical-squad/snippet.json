@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.tactical-squad",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: отряд"
+  },
+  "description": {
+    "ru": "Отряд, роли, приказы и укрытия."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "npc.squad-leader"
+    },
+    {
+      "id": "npc.squad-order"
+    },
+    {
+      "id": "ai.line-of-sight"
+    },
+    {
+      "id": "net.team-assignment"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

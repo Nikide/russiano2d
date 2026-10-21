@@ -1,0 +1,54 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.visual-novel",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: визуальная новелла"
+  },
+  "description": {
+    "ru": "Сцены, персонажи, выборы и концовки."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "dialogue.tree"
+    },
+    {
+      "id": "dialogue.choice"
+    },
+    {
+      "id": "dialogue.typewriter"
+    },
+    {
+      "id": "dialogue.auto-advance"
+    },
+    {
+      "id": "story.vn-background"
+    },
+    {
+      "id": "story.vn-character"
+    },
+    {
+      "id": "story.ending"
+    },
+    {
+      "id": "ui.choice-list"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

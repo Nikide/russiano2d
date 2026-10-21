@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.replicate-inventory",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сетевой инвентарь"
+  },
+  "description": {
+    "ru": "Изменения инвентаря подтверждает хост: клиент просит inv:request, хост применяет и рассылает снимок."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.items.has"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "inventory.grid"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "инвентарь",
+    "авторитет"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.infiltration",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: проникновение"
+  },
+  "description": {
+    "ru": "Сигнализации, ключевые зоны и цель миссии."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.stealth"
+    },
+    {
+      "id": "trigger.base"
+    },
+    {
+      "id": "interact.lock"
+    },
+    {
+      "id": "mission.extraction"
+    },
+    {
+      "id": "quest.objective-visit"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

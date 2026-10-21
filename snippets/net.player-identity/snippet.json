@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.player-identity",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Имя и цвет игрока"
+  },
+  "description": {
+    "ru": "Ник, профиль и цвет игрока: применяется к своей сетевой сущности и рассылается."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.save.profile"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Ник",
+      "type": "string",
+      "default": "Игрок"
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#40a0ff"
+    }
+  ],
+  "tags": [
+    "ник",
+    "профиль"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

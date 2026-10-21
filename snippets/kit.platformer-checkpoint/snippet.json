@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.platformer-checkpoint",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: контрольные точки"
+  },
+  "description": {
+    "ru": "Контрольные точки, смерть и безопасный возврат."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "health.base"
+    },
+    {
+      "id": "health.death"
+    },
+    {
+      "id": "health.respawn"
+    },
+    {
+      "id": "interact.checkpoint"
+    },
+    {
+      "id": "world.checkpoint-chain"
+    },
+    {
+      "id": "save.checkpoint"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

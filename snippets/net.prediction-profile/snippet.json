@@ -1,0 +1,70 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.prediction-profile",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Предсказание ввода"
+  },
+  "description": {
+    "ru": "Локальное предсказание движения ($.net.predict) с откатом при подтверждении."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.net.predict"
+    },
+    {
+      "api": "$.net.prediction"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 200,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "smoothing",
+      "label": "Сглаживание коррекции",
+      "type": "number",
+      "default": 0.2,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "предсказание",
+    "лаг"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

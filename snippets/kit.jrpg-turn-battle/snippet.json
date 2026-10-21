@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.jrpg-turn-battle",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: пошаговый бой"
+  },
+  "description": {
+    "ru": "Действия, цели и итоги боя. Вне каталога: Очередь ходов (initiative) отдельным пакетом в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "ability.base"
+    },
+    {
+      "id": "ability.targeting"
+    },
+    {
+      "id": "ability.area-effect"
+    },
+    {
+      "id": "stats.base"
+    },
+    {
+      "id": "progression.xp"
+    },
+    {
+      "id": "economy.reward"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

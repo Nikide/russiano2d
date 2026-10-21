@@ -1,0 +1,100 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.reconnect",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Переподключение"
+  },
+  "description": {
+    "ru": "Повторные попытки подключения с паузой и лимитом."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net"
+    },
+    {
+      "api": "$.net.join"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "address",
+      "label": "Адрес",
+      "type": "string",
+      "default": "127.0.0.1"
+    },
+    {
+      "id": "port",
+      "label": "Порт",
+      "type": "int",
+      "default": 7777,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "id": "tries",
+      "label": "Попыток",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 50
+    },
+    {
+      "id": "gap",
+      "label": "Пауза",
+      "type": "int",
+      "default": 2000,
+      "min": 100,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "сеть",
+    "переподключение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

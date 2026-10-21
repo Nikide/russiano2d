@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.arena-survival",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: выживание на арене"
+  },
+  "description": {
+    "ru": "Арена, таймер и усложняющиеся волны."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.top-down"
+    },
+    {
+      "id": "health.base"
+    },
+    {
+      "id": "ai.wave-director"
+    },
+    {
+      "id": "mission.wave-objective"
+    },
+    {
+      "id": "quest.objective-survive"
+    },
+    {
+      "id": "ui.health-bar"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

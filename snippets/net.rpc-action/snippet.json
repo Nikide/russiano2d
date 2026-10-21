@@ -1,0 +1,95 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.rpc-action",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Именованное действие"
+  },
+  "description": {
+    "ru": "RPC с проверкой данных: допустимые поля и типы «поле=тип»."
+  },
+  "kind": "behavior",
+  "category": "Сеть: синхронизация",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.handle"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.rpc"
+    },
+    {
+      "api": "$.net.send"
+    },
+    {
+      "api": "$.net.unhandle"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Действие",
+      "type": "string",
+      "default": "emote"
+    },
+    {
+      "id": "schema",
+      "label": "Поля (поле=number|string|bool)",
+      "type": "list",
+      "default": [
+        "icon=string"
+      ]
+    }
+  ],
+  "tags": [
+    "RPC"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

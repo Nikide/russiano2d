@@ -41,11 +41,7 @@
       "api": "$.weapons.of"
     }
   ],
-  "dependencies": [
-    {
-      "id": "weapon.base"
-    }
-  ],
+  "dependencies": [],
   "fields": [
     {
       "id": "who",

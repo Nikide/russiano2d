@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.tactical-grid",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: тактика на клетках"
+  },
+  "description": {
+    "ru": "Клетки, очки действия и доступные действия. Вне каталога: Поиск пути и подсветка клеток хода отдельным пакетом в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "world.tilemap-layer"
+    },
+    {
+      "id": "ability.resource-cost"
+    },
+    {
+      "id": "ability.targeting"
+    },
+    {
+      "id": "puzzle.state-machine"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

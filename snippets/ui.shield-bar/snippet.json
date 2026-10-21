@@ -44,11 +44,7 @@
       "api": "$.updateFor"
     }
   ],
-  "dependencies": [
-    {
-      "id": "health.shield"
-    }
-  ],
+  "dependencies": [],
   "fields": [
     {
       "id": "who",

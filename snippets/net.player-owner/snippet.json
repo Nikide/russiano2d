@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.player-owner",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Владелец сущности"
+  },
+  "description": {
+    "ru": "Связывает обычную сущность с сетевым владельцем: id и роль (host/local/client/remote)."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.net"
+    },
+    {
+      "api": "$.net.unreplicate"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "netId",
+      "label": "Сетевой id",
+      "type": "string",
+      "default": "",
+      "hint": "Пусто — id узла"
+    },
+    {
+      "id": "owner",
+      "label": "Владелец",
+      "type": "enum",
+      "default": "host",
+      "options": [
+        "host",
+        "local",
+        "client",
+        "remote"
+      ]
+    },
+    {
+      "id": "fields",
+      "label": "Поля",
+      "type": "list",
+      "default": [
+        "x",
+        "y",
+        "angle",
+        "hp"
+      ]
+    }
+  ],
+  "tags": [
+    "владение",
+    "репликация"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

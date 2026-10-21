@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.jrpg-party",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: JRPG-группа"
+  },
+  "description": {
+    "ru": "Группа, характеристики и меню команд."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "npc.party-member"
+    },
+    {
+      "id": "npc.party-formation"
+    },
+    {
+      "id": "stats.base"
+    },
+    {
+      "id": "stats.derived"
+    },
+    {
+      "id": "ui.party-panel"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

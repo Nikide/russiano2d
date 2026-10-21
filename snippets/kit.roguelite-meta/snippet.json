@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.roguelite-meta",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: мета-прогресс"
+  },
+  "description": {
+    "ru": "Постоянные открытия между забегами."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "progression.unlock"
+    },
+    {
+      "id": "progression.mastery"
+    },
+    {
+      "id": "save.profile"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

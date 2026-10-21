@@ -1,0 +1,39 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.platform-sports",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: платформенный спорт"
+  },
+  "description": {
+    "ru": "Игроки, отскоки и раунд. Вне каталога: Мяч отдельным пакетом в §12 нет."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.platformer"
+    },
+    {
+      "id": "net.round-state"
+    },
+    {
+      "id": "net.scoreboard"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

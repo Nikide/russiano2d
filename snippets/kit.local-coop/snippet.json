@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.local-coop",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: локальный кооп"
+  },
+  "description": {
+    "ru": "Общая или разделённая камера, игроки, поднятие и общий HUD."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "net.coop-local"
+    },
+    {
+      "id": "camera.split-screen"
+    },
+    {
+      "id": "health.revive"
+    },
+    {
+      "id": "ui.health-bar"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

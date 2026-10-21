@@ -1,0 +1,105 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.session-bootstrap",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Запуск сетевой сессии"
+  },
+  "description": {
+    "ru": "Запуск по событиям: net:host — сервер, net:join { address } — клиент; топология и частота из настроек."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net"
+    },
+    {
+      "api": "$.net.host"
+    },
+    {
+      "api": "$.net.join"
+    },
+    {
+      "api": "$.net.online"
+    },
+    {
+      "api": "$.net.syncRate"
+    },
+    {
+      "api": "$.net.topology"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "port",
+      "label": "Порт",
+      "type": "int",
+      "default": 7777,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "id": "topology",
+      "label": "Топология",
+      "type": "enum",
+      "default": "authoritative",
+      "options": [
+        "authoritative",
+        "mesh",
+        "relay",
+        "custom"
+      ]
+    },
+    {
+      "id": "maxPeers",
+      "label": "Игроков",
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 256
+    },
+    {
+      "id": "syncRate",
+      "label": "Снимков в секунду",
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 120
+    }
+  ],
+  "tags": [
+    "сеть",
+    "старт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

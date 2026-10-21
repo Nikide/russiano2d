@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.level-challenge",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: испытание уровня"
+  },
+  "description": {
+    "ru": "Временные цели и локальный результат."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "quest.timer"
+    },
+    {
+      "id": "progression.challenge"
+    },
+    {
+      "id": "world.level-exit"
+    },
+    {
+      "id": "ui.result-screen"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

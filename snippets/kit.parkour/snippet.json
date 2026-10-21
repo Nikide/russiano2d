@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.parkour",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: паркур"
+  },
+  "description": {
+    "ru": "Рывок, прыжки от стен, препятствия и таймер."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "movement.platformer"
+    },
+    {
+      "id": "movement.dash"
+    },
+    {
+      "id": "movement.wall-slide"
+    },
+    {
+      "id": "movement.wall-jump"
+    },
+    {
+      "id": "world.moving-hazard"
+    },
+    {
+      "id": "progression.challenge"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

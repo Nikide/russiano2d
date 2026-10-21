@@ -5,5 +5,3 @@
 Поля:
 
 - `player` (entity) — Игрок
-
-Состав / зависимости: `inventory.grid`

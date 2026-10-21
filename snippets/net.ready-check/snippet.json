@@ -1,0 +1,90 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "net.ready-check",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Проверка готовности"
+  },
+  "description": {
+    "ru": "Старт матча, только когда все в лобби готовы; иначе старт заблокирован."
+  },
+  "kind": "behavior",
+  "category": "Сеть: сессии",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.net.broadcast"
+    },
+    {
+      "api": "$.net.isAuthority"
+    },
+    {
+      "api": "$.net.off"
+    },
+    {
+      "api": "$.net.on"
+    },
+    {
+      "api": "$.net.playerCount"
+    },
+    {
+      "api": "$.net.send"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "net.lobby"
+    }
+  ],
+  "fields": [
+    {
+      "id": "minPlayers",
+      "label": "Минимум игроков",
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 256
+    },
+    {
+      "id": "startEvent",
+      "label": "Событие старта",
+      "type": "string",
+      "default": "match:start"
+    }
+  ],
+  "tags": [
+    "готовность",
+    "матч"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.music-arcade",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: музыкальная аркада"
+  },
+  "description": {
+    "ru": "Ритм, эффекты и серия попаданий."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "puzzle.timing"
+    },
+    {
+      "id": "feedback.combo-popup"
+    },
+    {
+      "id": "feedback.screen-pulse"
+    },
+    {
+      "id": "audio.one-shot"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

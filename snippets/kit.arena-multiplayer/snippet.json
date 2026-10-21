@@ -1,0 +1,51 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.arena-multiplayer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: сетевая арена"
+  },
+  "description": {
+    "ru": "Комнаты, матч, раунды и счёт."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "net.room-create"
+    },
+    {
+      "id": "net.room-join"
+    },
+    {
+      "id": "net.lobby"
+    },
+    {
+      "id": "net.ready-check"
+    },
+    {
+      "id": "net.round-state"
+    },
+    {
+      "id": "net.scoreboard"
+    },
+    {
+      "id": "net.vote-map"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

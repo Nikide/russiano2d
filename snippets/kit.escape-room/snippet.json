@@ -1,0 +1,45 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.escape-room",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Набор: эскейп-рум"
+  },
+  "description": {
+    "ru": "Цепочка головоломок, предметы и выход."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "puzzle.keypad"
+    },
+    {
+      "id": "puzzle.sequence-lock"
+    },
+    {
+      "id": "puzzle.hidden-object"
+    },
+    {
+      "id": "interact.door"
+    },
+    {
+      "id": "world.level-exit"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

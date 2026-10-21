@@ -1,0 +1,54 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "kit.project-witch",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Проект: Witch"
+  },
+  "description": {
+    "ru": "Персонаж, боевые поведения, диалоги и прогрессия."
+  },
+  "kind": "kit",
+  "category": "Наборы",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [],
+  "dependencies": [
+    {
+      "id": "kit.platformer-core"
+    },
+    {
+      "id": "kit.platformer-combat"
+    },
+    {
+      "id": "weapon.base"
+    },
+    {
+      "id": "weapon.projectile"
+    },
+    {
+      "id": "dialogue.tree"
+    },
+    {
+      "id": "progression.xp"
+    },
+    {
+      "id": "progression.level"
+    },
+    {
+      "id": "save.slot"
+    }
+  ],
+  "fields": [],
+  "tags": [
+    "набор"
+  ],
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}
