@@ -10182,7 +10182,7 @@ export const API_DOCS_CATALOG = {
     },
     "$.net": {
         "kind": "object",
-        "description": "$.net — высокоуровневое мультиплеерное API поверх встроенного ENet. ENet обрабатывает peer-соединения, доставку, фрагментацию и RTT. Игровой код работает с топологиями, сообщениями, комнатами и обычными $-сущностями; сокетных методов в игровом API нет."
+        "description": "Практическое руководство с Editor-сценарием, живым демо и схемами: MULTIPLAYER.md."
     },
     "$.noise.simplex2": {
         "kind": "function",
@@ -29154,6 +29154,46 @@ export const API_DOCS_CATALOG = {
     "$.re2dEnabled": {
         "kind": "boolean",
         "description": "Собрана ли в этом бинарнике подсистема Re2D World."
+    },
+    "$.selection.damageFilter": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Фильтр входящего урона выбранных узлов (броня, щит, сопротивления); возвращает disposer."
+    },
+    "$.fn.damageFilter": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Фильтр входящего урона узла: fn({ amount, raw, type, source }) → число; возвращает disposer."
+    },
+    "$.updateFor": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Покадровая подписка, принадлежащая узлу; снимается при удалении узла, возвращает disposer."
     },
     "$.мир.lineOfSight": {
         "kind": "function",

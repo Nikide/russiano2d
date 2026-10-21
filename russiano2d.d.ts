@@ -68,6 +68,7 @@ declare interface R2DNode {
     controls(arg0: any): any;
     count(): any;
     damage(arg0: any, arg1: any): any;
+    damageFilter(arg0: any): any;
     data(arg0: any, arg1: any): any;
     delay(arg0: any): any;
     depth(arg0: any): any;
@@ -1083,6 +1084,7 @@ interface R2D_fn {
     controls(arg0: any): any;
     count(): any;
     damage(arg0: any, arg1: any): any;
+    damageFilter(arg0: any): any;
     data(arg0: any, arg1: any): any;
     delay(arg0: any): any;
     depth(arg0: any): any;

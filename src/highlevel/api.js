@@ -2044,12 +2044,44 @@ function installNodeMethods($) {
 
     def('maxHp', function (value) { return this.eachNode((_, el) => { (el).max_hp = value; }); });
 
-    def('damage', function (amount, source) {
+    // Урон: фильтры узла (броня, сопротивления, щит — .damageFilter) видят
+    // { amount, raw, type, source } и возвращают новое amount; затем событие
+    // 'damaged' с итогом. Без фильтров поведение прежнее.
+    def('damage', function (amount, source, type) {
         return this.eachNode((_, el) => {
             const node = el;
             if (node.iframes > 0 || node.cur_hp <= 0) return;
-            node.cur_hp = Math.max(0, node.cur_hp - amount);
+            let value = amount;
+            const filters = node._damage_filters;
+            const info = { amount: value, raw: amount, type: type || 'normal', source: source === undefined ? null : source };
+            if (filters && filters.length) {
+                for (const f of filters.slice()) {
+                    try {
+                        const r = f(info);
+                        if (typeof r === 'number' && Number.isFinite(r)) info.amount = r;
+                    } catch (e) { reportError('damageFilter', e); }
+                }
+                value = Math.max(0, info.amount);
+                info.amount = value;
+            }
+            node.cur_hp = Math.max(0, node.cur_hp - value);
+            node.emit('damaged', info);
         });
+    });
+
+    // Фильтр входящего урона узла: fn(info) → новое число (или ничего — без изменений).
+    // Возвращает disposer: сниппеты брони/щита снимают свой фильтр.
+    def('damageFilter', function (fn) {
+        if (typeof fn !== 'function') throw new TypeError('.damageFilter: нужна функция');
+        const nodes = [];
+        this.eachNode((_, el) => { (el._damage_filters || (el._damage_filters = [])).push(fn); nodes.push(el); });
+        return () => {
+            for (const el of nodes) {
+                const list = el._damage_filters;
+                const i = list ? list.indexOf(fn) : -1;
+                if (i >= 0) list.splice(i, 1);
+            }
+        };
     });
 
     def('heal', function (amount) {

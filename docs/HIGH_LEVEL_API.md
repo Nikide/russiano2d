@@ -593,13 +593,16 @@ $('<player>', { id: 'hero' }).at(100, 300)
 .hp() / .hp(50)     // прочитать / задать
 .maxHp(120)
 .damage(10) .heal(5) .kill() .respawn(x, y)
+.damage(10, source, 'fire')   // источник и тип урона (по умолчанию 'normal')
+.damageFilter(info => info.amount - 2)   // броня/щит: fn({ amount, raw, type, source }) → число; возвращает disposer
 .alive()            // → bool
 .team(2)            // своя команда
 .invulnerable(500)  // неуязвимость на 500 мс
 ```
 
 При изменении здоровья мир сам рассылает события `hit`, `heal`, `death`,
-`respawn`, `show`/`hide`.
+`respawn`, `show`/`hide`. Сам вызов `.damage()` сразу шлёт `damaged` с
+`{ amount, raw, type, source }` — итог после фильтров `.damageFilter`.
 
 ## 10. События
 
