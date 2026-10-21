@@ -66,6 +66,10 @@ def build():
             row["api"] = sorted({(r if isinstance(r, str) else r.get("api")) for r in m.get("requires", [])})
             row["dependencies"] = [(d if isinstance(d, str) else d.get("id")) for d in m.get("dependencies", [])]
             row["gaps"] = [a for a in row["api"] if a not in names]
+            desc = m.get("description", {})
+            desc = desc.get("ru", "") if isinstance(desc, dict) else str(desc)
+            if "Вне каталога:" in desc:
+                row["gaps"].append("вне каталога: " + desc.split("Вне каталога:", 1)[1].strip())
         else:
             row["api"] = PREFIX_API.get(prefix, [])
             row["gaps"] = [a for a in row["api"] if a not in namespaces]
@@ -81,7 +85,7 @@ def render(rows):
     out = ["# Матрица пакетов сниппетов", "",
            "Сгенерировано `python3 scripts/snippet_matrix.py` из §12 [ТЗ](SNIPPET_SYSTEM_PROJECT.md),",
            "каталога `snippets/` и `api.schema.json`. Руками не править.", "",
-           "Реализовано: **%d из %d**. Строк с пробелом API: **%d**." % (done, len(rows), len(gaps)), "",
+           "Реализовано: **%d из %d**. Строк с пробелом (API или механика вне §12): **%d**." % (done, len(rows), len(gaps)), "",
            "Колонка API: для реализованного пакета — фактические `requires`; для",
            "запланированного — опорные пространства `$` по префиксу ID (предварительно,",
            "уточняется при реализации пакета).", ""]
