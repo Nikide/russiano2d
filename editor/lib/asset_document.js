@@ -1,19 +1,19 @@
 // Документ ассета Editor: одна модель/история и native-проверка на вкладку.
-import { createHistory } from '../../sdk/lib/history.js';
-import { canonicalJson } from '../../sdk/lib/kit.js';
+import { createHistory } from '../lib/shared/history.js';
+import { canonicalJson } from '../lib/shared/kit.js';
 import { diag } from './studio_kit.js';
 let counter=0;
 export function createAssetDocument(host,kind) {
     const $=host.$,id=++counter;
     let history=null,closed=false,sequence=0;
-    const s={path:'',data:null,source:'',busy:false,diagnostics:[],validated:null};
+    const s={path:'',data:null,source:'',busy:false,diagnostics:[],validated:null,conflict:null};
     const fail=(code,message)=>{s.diagnostics=[diag(code,'error',message,{asset:s.path})];host.changed();return false;};
     function open(path) {
         const source=$.fs.readText(path);
         if(source==null)throw new Error('Не удалось прочитать '+path);
         const data=JSON.parse(source);
         if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('Корень ассета должен быть объектом');
-        s.path=path;s.source=source;s.data=data;history=createHistory(data);live();
+        s.path=path;s.source=source;s.data=data;s.conflict=null;history=createHistory(data);live();
     }
     function live(){s.diagnostics=kind.validate(s.data).map(d=>Object.assign({},d,{asset:s.path}));}
     function edit(label,fn) {
@@ -36,19 +36,49 @@ export function createAssetDocument(host,kind) {
         finally {$.fs.remove(draft);}
     }
     async function validate(){if(closed||s.busy)return false;s.busy=true;try{return await check();}finally{s.busy=false;}}
-    async function save() {
+    async function save(options) {
+        options=options||{};
         if(closed||s.busy)return false;
         if(!history.dirty())return true;
         s.busy=true;
         try {
             if(!await check()||closed)return false;
-            if($.fs.readText(s.path)!==s.source)return fail('EDITOR_WRITE_CONFLICT','Файл изменён извне: переоткройте '+s.path);
+            const disk=$.fs.readText(s.path);
+            if(options.overwrite) {
+                if(disk!==options.expectedDisk) {
+                    s.conflict={disk:typeof disk==='string'?disk:null};
+                    return fail('EDITOR_WRITE_CONFLICT','Файл снова изменён извне: проверьте новую версию '+s.path);
+                }
+            } else if(disk!==s.source) {
+                s.conflict={disk:typeof disk==='string'?disk:null};
+                return fail('EDITOR_WRITE_CONFLICT','Файл изменён извне: выберите версию для '+s.path);
+            }
             const text=canonicalJson(s.data);
             if($.fs.write(s.path,text)===false)return fail('SDK_WRITE_FAILED','Не удалось сохранить '+s.path);
-            s.source=text;history.markSaved();host.changed();return true;
+            s.source=text;s.conflict=null;history.markSaved();host.changed();return true;
         } finally {s.busy=false;}
     }
-    return {state:s,open,edit,undo:()=>step(false),redo:()=>step(true),save,validate,
+    function resolveConflict(choice) {
+        if(closed||s.busy||!s.conflict)return false;
+        const conflict=s.conflict;
+        if(choice==='cancel'){s.conflict=null;live();host.changed();return true;}
+        if(choice==='reload') {
+            const current=$.fs.readText(s.path);
+            if(current!==conflict.disk) {
+                s.conflict={disk:typeof current==='string'?current:null};
+                return fail('EDITOR_WRITE_CONFLICT','Файл снова изменён извне: проверьте новую версию '+s.path);
+            }
+            if(typeof conflict.disk!=='string')return fail('EDITOR_FILE_MISSING','Файл удалён извне; перезапись подтвердит его создание заново: '+s.path);
+            let data;
+            try { data=JSON.parse(conflict.disk); }
+            catch(e) { return fail('EDITOR_ASSET_JSON',e.message||String(e)); }
+            if(!data||typeof data!=='object'||Array.isArray(data))return fail('EDITOR_ASSET_JSON','Корень ассета должен быть объектом');
+            s.source=conflict.disk;s.data=data;s.conflict=null;history=createHistory(data);live();host.changed();return true;
+        }
+        if(choice==='overwrite')return save({overwrite:true,expectedDisk:conflict.disk});
+        return false;
+    }
+    return {state:s,open,edit,undo:()=>step(false),redo:()=>step(true),save,validate,resolveConflict,
         dirty:()=>!!history&&history.dirty(),close(){closed=true;},fail,
         diagnostics:()=>s.diagnostics,snapshot:()=>({path:s.path,dirty:!!history&&history.dirty(),busy:s.busy,validationStale:s.validated!==JSON.stringify(s.data)})};
 }

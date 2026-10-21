@@ -1,7 +1,7 @@
 <rml>
 <head>
 <!-- Hammer Studio: one document per tab, common Editor lifecycle. -->
-<link type="text/rcss" href="../../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../../sdk/ui/studio.rcss"/><link type="text/rcss" href="../../../sdk/ui/world_editor.rcss"/><link type="text/rcss" href="../hammer.rcss"/>
+<link type="text/rcss" href="legacy-theme.rcss"/><link type="text/rcss" href="legacy-studio.rcss"/><link type="text/rcss" href="legacy-world-editor.rcss"/><link type="text/rcss" href="../hammer.rcss"/>
 <link type="text/rcss" href="kit.rcss"/><title>Hammer</title>
 </head>
 <body>
@@ -49,6 +49,7 @@
       <button id="we-tool-entity" class="hm-tool" title="Размещать объекты"><span class="we-icon" id="we-icon-tool-entity"></span>Entity</button>
       <button id="we-tool-path" class="hm-tool" title="Редактировать пути"><span class="we-icon" id="we-icon-tool-path"></span>Path</button>
       <div id="we-ext-toolbar" class="we-ext hm-ext"></div>
+      <div id="we-ext-overlays" class="we-ext hm-ext"></div>
 
       <div class="hm-h">Brush</div>
       <div class="hm-field"><label>Низ</label><input id="we-bottom" class="field" type="text" value="0"/></div>
@@ -93,6 +94,8 @@
       <div class="hm-insp">
         <div id="we-selection" class="kv hm-title"></div>
         <div id="we-inspector" class="we-inspector"></div>
+        <div id="we-ext-inspectors" class="we-ext"></div>
+        <div id="we-ext-context-actions" class="we-ext"></div>
         <button id="we-apply" class="hm-btn hm-primary hm-wide">Применить</button>
         <button id="we-toggle-elements" class="we-section-toggle">Re2D World +</button>
         <div id="we-element-settings" class="we-extra">

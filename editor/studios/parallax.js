@@ -9,7 +9,7 @@
 // (смещение = (камера − камера при создании) × (1 − parallax)).
 // ===========================================================================
 
-import * as K from '../../sdk/lib/kinds/layers.js';
+import * as K from '../lib/shared/kinds/layers.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc, numberOf, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 

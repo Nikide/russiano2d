@@ -13,8 +13,8 @@
 // стили, и каждый файл проверяется `r2d validate`.
 // ===========================================================================
 
-import * as M from '../../sdk/lib/rml_model.js';
-import { createHistory } from '../../sdk/lib/history.js';
+import * as M from '../lib/shared/rml_model.js';
+import { createHistory } from '../lib/shared/history.js';
 import { studioDoc, esc, diag, mousePx, inside } from '../lib/studio_kit.js';
 
 export const meta = { id: 'rmlui', title: 'RmlUi', icon: 'web', match: (p) => /\.(rml|rcss)$/i.test(p) };
@@ -70,7 +70,7 @@ export function create(host) {
     const s = {
         path: '', virtual: false, model: { rml: '', sheets: {} }, sheets: [], activeSheet: 0, parsed: M.parse(''), sel: -1,
         history: null, disk: {}, preview: null, bodyId: '', drafts: new Set(), live: [], native: [], status: '',
-        needsPreview: false, placed: '', active: false, closed: false, busy: false,
+        needsPreview: false, placed: '', active: false, closed: false, busy: false, conflict: null,
     };
 
     const dirty = () => !!s.history && s.history.dirty();
@@ -99,7 +99,7 @@ export function create(host) {
             const text = $.fs.readText(p);
             const missing = text === null || text === undefined;
             if (s.model.sheets[p] === undefined) s.model.sheets[p] = missing ? '' : text;
-            if (!missing && s.disk[p] === undefined) s.disk[p] = text;
+            if (s.disk[p] === undefined) s.disk[p] = missing ? null : text;
             s.sheets.push({ path: p, href: l.href, missing });
         }
     }
@@ -148,14 +148,17 @@ export function create(host) {
     }
     function place() {
         if (!s.preview || !s.bodyId) return;
-        const r = doc.layoutRect('rm-view');
+        // Preview is a separate top-level RmlUi document. Positioning only its
+        // body leaves the document viewport full-screen, so absolute children
+        // escape the editor panel. Place the whole document into the panel:
+        // this also clips its content at the viewport edges.
+        const r = doc.rect('rm-view');
         if (!r || r.w <= 0) return;
         const key = [r.x, r.y, r.w, r.h].join(',');
         if (key === s.placed) return;
         s.placed = key;
-        const st = (k, v) => s.preview.style(s.bodyId, k, v);
-        st('position', 'absolute'); st('left', Math.round(r.x + 1) + 'px'); st('top', Math.round(r.y + 1) + 'px');
-        st('width', Math.max(0, Math.round(r.w - 2)) + 'px'); st('height', Math.max(0, Math.round(r.h - 2)) + 'px'); st('overflow', 'hidden');
+        s.preview.place({ x: Math.round(r.x + 1), y: Math.round(r.y + 1),
+            w: Math.max(0, Math.round(r.w - 2)), h: Math.max(0, Math.round(r.h - 2)) });
     }
 
     // --- операции (их же вызывают агенты) ----------------------------------------------------------
@@ -271,33 +274,120 @@ export function create(host) {
             return res.ok;
         } finally { s.busy = false; }
     }
-    async function save() {
-        if (!s.history || s.closed) return false;
+    async function save(options) {
+        options = options || {};
+        if (!s.history || s.closed || s.busy) return false;
         if (!dirty()) return true;
         const errs = s.live.filter((d) => d.severity === 'error');
         if (errs.length) { s.native = errs; status('Save заблокирован: ' + errs[0].message, true); changed(); return false; }
+        const expected = options.overwrite ? (options.expected || {}) : {};
+        const expectedDisk = (f) => Object.prototype.hasOwnProperty.call(expected, f) ? expected[f] : s.disk[f];
+        const detectConflicts = () => {
+            const found = {};
+            for (const f of files()) {
+                const disk = $.fs.readText(f);
+                if (disk !== expectedDisk(f)) found[f] = typeof disk === 'string' ? disk : null;
+            }
+            return found;
+        };
+        let conflicts = detectConflicts();
+        if (Object.keys(conflicts).length) {
+            s.conflict = conflicts;
+            s.native = Object.keys(conflicts).map((f) => diag('EDITOR_WRITE_CONFLICT', 'error', 'Файл изменён извне: выберите версию для ' + f, { asset: f }));
+            changed(); return false;
+        }
+        // Проверяем все связанные файлы на drafts до записи какого-либо оригинала.
+        if (!await validate() || s.closed) return false;
+        // Внешний редактор мог изменить файл, пока шла native-валидация.
+        conflicts = detectConflicts();
+        if (Object.keys(conflicts).length) {
+            s.conflict = conflicts;
+            s.native = Object.keys(conflicts).map((f) => diag('EDITOR_WRITE_CONFLICT', 'error', 'Файл изменён извне: выберите версию для ' + f, { asset: f }));
+            changed(); return false;
+        }
         for (const f of files()) {
             const disk = $.fs.readText(f);
-            const was = s.disk[f];
-            if (was !== undefined && disk !== was) { s.native = [diag('EDITOR_WRITE_CONFLICT', 'error', 'Файл изменён извне: переоткройте ' + f, { asset: f })]; changed(); return false; }
+            if (disk !== expectedDisk(f)) {
+                s.conflict = { [f]: typeof disk === 'string' ? disk : null };
+                s.native = [diag('EDITOR_WRITE_CONFLICT', 'error', 'Файл снова изменён извне: проверьте новую версию ' + f, { asset: f })]; changed(); return false;
+            }
         }
         const texts = new Map(files().map((f) => [f, f === s.path ? s.model.rml : s.model.sheets[f]]));
+        const before = new Map(files().map((f) => [f, $.fs.readText(f)]));
+        const written = [];
         for (const [f, text] of texts) {
-            if (s.disk[f] === text) continue;
-            if ($.fs.write(f, text) === false) { s.native = [diag('SDK_WRITE_FAILED', 'error', 'Не удалось записать ' + f, { asset: f })]; changed(); return false; }
-            s.disk[f] = text;
+            if (before.get(f) === text) continue;
+            if ($.fs.readText(f) !== expectedDisk(f)) {
+                s.conflict = { [f]: typeof $.fs.readText(f) === 'string' ? $.fs.readText(f) : null };
+                s.native = [diag('EDITOR_WRITE_CONFLICT', 'error', 'Файл снова изменён извне: проверьте новую версию ' + f, { asset: f })];
+                break;
+            }
+            if ($.fs.write(f, text) === false) {
+                s.native = [diag('SDK_WRITE_FAILED', 'error', 'Не удалось записать ' + f, { asset: f })];
+                break;
+            }
+            written.push(f);
         }
+        if (written.length !== [...texts].filter(([f, text]) => before.get(f) !== text).length) {
+            let rollbackFailed = '';
+            for (const f of written.reverse()) {
+                const old = before.get(f);
+                const restored = old === null || old === undefined ? $.fs.remove(f) !== false : $.fs.write(f, old) !== false;
+                if (!restored) rollbackFailed = f;
+            }
+            if (rollbackFailed) s.native = [diag('EDITOR_WRITE_ROLLBACK', 'error', 'Сохранение прервано; не удалось восстановить ' + rollbackFailed, { asset: rollbackFailed })];
+            changed(); return false;
+        }
+        for (const [f, text] of texts) s.disk[f] = text;
         for (const sh of s.sheets) sh.missing = false;
         s.history.markSaved();
-        s.busy = true;
-        let res;
-        try { res = await validateFiles(files(), (a) => a); } finally { s.busy = false; }
-        if (s.closed) return false;
-        s.native = res.diagnostics;
+        s.conflict = null;
+        s.native = [];
         reparse();
-        status(res.ok ? 'сохранено' : 'сохранено, validate нашёл ошибки', !res.ok);
+        status('сохранено');
         changed();
-        return res.ok;
+        return true;
+    }
+
+    function renderConflict() {
+        const c = s.conflict;
+        if (!c) { doc.cls('rm-conflict', 'st-hidden', true); doc.html('rm-conflict', ''); return; }
+        const paths = Object.keys(c), missing = paths.includes(s.path) && c[s.path] === null;
+        doc.cls('rm-conflict', 'st-hidden', false);
+        doc.html('rm-conflict', '<div class="rm-conflict-shade"></div><div class="rm-conflict-card"><span class="rm-conflict-title">Документ или стиль изменён вне Editor</span><span class="rm-conflict-message">Перезагрузка заменит все несохранённые правки документа и связанных стилей. Перезапись сохранит текущую версию поверх перечисленных файлов.</span><span class="rm-conflict-path">'+paths.map(esc).join('<br/>')+(paths.some((f)=>c[f]===null)?'<br/>Файл удалён':'')+'</span><div class="rm-conflict-actions">'+
+            (missing?'':'<button id="rm-conflict-reload" class="st-btn" data-key="reload">Перезагрузить</button>')+
+            '<button id="rm-conflict-overwrite" class="st-btn primary" data-key="overwrite">Перезаписать</button><button id="rm-conflict-cancel" class="st-btn" data-key="cancel">Отмена</button></div></div>');
+    }
+    function resolveConflict(choice) {
+        if (!s.conflict || s.busy || s.closed) return false;
+        if (choice === 'cancel') {
+            s.conflict = null;
+            s.native = s.native.filter((d) => d.code !== 'EDITOR_WRITE_CONFLICT');
+            changed(); return true;
+        }
+        const conflict = s.conflict;
+        if (choice === 'reload') {
+            for (const [f, expected] of Object.entries(conflict)) {
+                const current = $.fs.readText(f);
+                if (current !== expected) {
+                    s.conflict[f] = typeof current === 'string' ? current : null;
+                    s.native = [diag('EDITOR_WRITE_CONFLICT', 'error', 'Файл снова изменён извне: проверьте новую версию ' + f, { asset: f })];
+                    changed(); return false;
+                }
+            }
+            const activePath = s.sheets[s.activeSheet] && s.sheets[s.activeSheet].path;
+            const rml = s.virtual ? s.model.rml : $.fs.readText(s.path);
+            if (typeof rml !== 'string') return false;
+            s.model = { rml, sheets: {} };
+            s.parsed = M.parse(rml); s.sheets = []; s.disk = {};
+            if (!s.virtual) s.disk[s.path] = rml;
+            syncSheets(); s.activeSheet = Math.max(0, s.sheets.findIndex((sh) => sh.path === activePath));
+            s.history = createHistory(s.model); s.conflict = null; s.native = [];
+            s.sel = s.parsed.nodes.findIndex((n) => n.tag === 'body'); s.needsPreview = true; reparse(); changed();
+            status('загружена внешняя версия'); return true;
+        }
+        if (choice === 'overwrite') return save({ overwrite: true, expected: conflict });
+        return false;
     }
 
     // --- отрисовка ----------------------------------------------------------------------------------
@@ -349,6 +439,7 @@ export function create(host) {
         if (s.closed) return;
         renderTop(); renderTree(); renderProps(); renderSheets(); renderDiag();
         doc.setValue('rm-src', s.model.rml);
+        renderConflict();
     }
 
     const guard = (fn) => (...a) => { try { return fn(...a); } catch (e) { status(e.message || String(e), true); return false; } };
@@ -367,6 +458,7 @@ export function create(host) {
     doc.on('rm-rcss-apply', 'click', () => ops.setSheet(s.activeSheet, doc.value('rm-rcss') || ''));
     doc.on('rm-refresh', 'click', () => rebuildPreview());
     doc.on('rm-validate', 'click', () => { validate(); });
+    doc.on('rm-conflict', 'click', (_id, _ev, key) => { if (key === 'reload' || key === 'overwrite' || key === 'cancel') resolveConflict(key); });
 
     function update() {
         if (s.closed || !s.active) return;
@@ -403,6 +495,7 @@ export function create(host) {
             }
             s.path = rmlPath;
             s.model = { rml, sheets: {} };
+            s.conflict = null;
             if (!s.virtual) s.disk[rmlPath] = rml;
             s.parsed = M.parse(rml);
             syncSheets();
@@ -433,7 +526,7 @@ export function create(host) {
                 sheets: s.sheets.map((x) => x.path), activeSheet: s.activeSheet, preview: !!s.preview, bodyId: s.bodyId, status: s.status, problems: diagnostics().length };
         },
         commands: () => [{ label: 'RmlUi: обновить превью', run: rebuildPreview }, { label: 'RmlUi: проверить (r2d validate)', run: validate }],
-        ops,
+        ops: Object.assign({}, ops, { resolveConflict }),
         close() { s.closed = true; s.active = false; disposeDrafts(); doc.unload(); },
     };
 }

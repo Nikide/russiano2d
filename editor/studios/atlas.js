@@ -12,8 +12,8 @@
 // пивоты — элементы RmlUi поверх прозрачного холста.
 // ===========================================================================
 
-import * as M from '../../sdk/lib/atlas_model.js';
-import { createHistory } from '../../sdk/lib/history.js';
+import * as M from '../lib/shared/atlas_model.js';
+import { createHistory } from '../lib/shared/history.js';
 import { esc, studioDoc, uiScale, mousePx, inside, screenCamera, diag, keys, numberOf, row } from '../lib/studio_kit.js';
 
 export const meta = {
@@ -49,12 +49,14 @@ export function create(host) {
     const s = {
         path: '', imageAbs: '', tex: null, model: null, history: null,
         create: null,                  // PNG без атласа: { imageAbs }
+        busy: false, closed: false,
         mode: 'sprite', tool: 'select', grid: true,
         sel: -1, tag: -1,
         view: { cx: 0, cy: 0, px: 0, py: 0, zoom: 1 }, needFit: true,
         press: null, pan: null,
         node: null, anim: null, sheetName: null, speed: 2, playing: true,
-        diags: [], status: '', error: '',
+        diags: [], status: '', error: '', conflict: null,
+        draftId: ++sheetCounter,
     };
 
     // --- файл -----------------------------------------------------------------
@@ -68,6 +70,7 @@ export function create(host) {
 
     async function open(abs) {
         s.error = '';
+        s.conflict = null;
         if (/\.(png|jpe?g|webp)$/i.test(abs)) {
             const sibling = abs.replace(/\.[^./]+$/, '.atlas.json');
             if ($.fs.exists(sibling)) return open(sibling);
@@ -85,6 +88,7 @@ export function create(host) {
         const json = $.fs.readJSON(abs, null);
         if (!json) throw new Error('не удалось прочитать ' + abs + ' (нет файла или некорректный JSON)');
         s.path = abs;
+        s.source = $.fs.readText(abs);
         s.create = null;
         s.model = M.parseAtlasDoc(json);
         s.history = createHistory(s.model);
@@ -98,6 +102,7 @@ export function create(host) {
     }
 
     function edit(label, fn) {
+        if (s.busy || s.closed) return undefined;
         try {
             const r = s.history.run(label, fn);
             s.error = '';
@@ -119,60 +124,119 @@ export function create(host) {
         host.changed();
     }
 
-    async function save() {
-        if (!s.model || s.create) return false;
+    async function save(options) {
+        options = options || {};
+        if (!s.model || s.create || s.busy || s.closed) return false;
         // Нетронутый файл не переписываем: канонический вывод мог бы изменить
         // форматирование чужого файла без единой правки автора.
         if (!s.history.dirty()) { note('изменений нет'); return true; }
-        const text = M.serializeAtlas(s.model);
-        if ($.fs.write(s.path, text) === false) { s.diags = [diag('SDK_WRITE_FAILED', 'error', 'не удалось записать ' + s.path, { asset: s.path })]; host.changed(); return false; }
-        s.history.markSaved();
-        note('сохранено');
-        await validate(false);
-        host.changed();
-        return true;
+        s.busy = true;
+        try {
+            const disk = $.fs.readText(s.path);
+            const expected = options.overwrite ? options.expectedDisk : s.source;
+            if (disk !== expected) return setConflict(disk, 'Файл изменён извне: выберите версию для ' + s.path);
+            if (!await validate(true, true) || s.closed) return false;
+            const current = $.fs.readText(s.path);
+            if (current !== expected) return setConflict(current, 'Файл снова изменён извне: проверьте новую версию ' + s.path);
+            const text = M.serializeAtlas(s.model);
+            if ($.fs.write(s.path, text) === false) { s.diags = [diag('SDK_WRITE_FAILED', 'error', 'не удалось записать ' + s.path, { asset: s.path })]; host.changed(); return false; }
+            s.source = text;
+            s.conflict = null;
+            s.history.markSaved();
+            note('сохранено');
+            host.changed();
+            return true;
+        } finally { s.busy = false; }
+    }
+
+    function setConflict(disk, message) {
+        s.conflict = { disk: typeof disk === 'string' ? disk : null };
+        s.diags = [diag('EDITOR_WRITE_CONFLICT', 'error', message, { asset: s.path })];
+        renderAll(); host.changed(); return false;
+    }
+
+    function resolveConflict(choice) {
+        if (!s.conflict || s.closed || s.busy) return false;
+        if (choice === 'cancel') { s.conflict = null; s.diags = s.diags.filter((d) => d.code !== 'EDITOR_WRITE_CONFLICT'); renderAll(); host.changed(); return true; }
+        const conflict = s.conflict;
+        if (choice === 'reload') {
+            const current = $.fs.readText(s.path);
+            if (current !== conflict.disk) return setConflict(current, 'Файл снова изменён извне: проверьте новую версию ' + s.path);
+            if (typeof conflict.disk !== 'string') { s.error = 'Файл удалён извне; перезапись подтвердит его создание заново'; renderTop(); return false; }
+            let model;
+            try { model = M.parseAtlasDoc(JSON.parse(conflict.disk)); } catch (e) { s.error = 'Внешний файл нельзя открыть как Atlas: ' + (e.message || String(e)); renderTop(); return false; }
+            s.source = conflict.disk; s.model = model; s.conflict = null;
+            measure(); s.history = createHistory(s.model); s.history.markSaved();
+            s.sel = s.model.frames.length ? 0 : -1; s.tag = s.model.tags.length ? 0 : -1; s.needFit = true;
+            if (s.mode === 'animation') restartPreview();
+            s.diags = []; s.error = ''; renderAll(); host.changed(); return true;
+        }
+        if (choice === 'overwrite') {
+            if ($.fs.readText(s.path) !== conflict.disk) return setConflict($.fs.readText(s.path), 'Файл снова изменён извне: проверьте новую версию ' + s.path);
+            return save({ overwrite: true, expectedDisk: conflict.disk });
+        }
+        return false;
     }
 
     // Проверка: сохранённый файл — им самим; несохранённое состояние — черновиком рядом.
-    async function validate(draft) {
+    async function validate(draft, fromSave) {
+        if (s.closed || (s.busy && !fromSave)) return false;
+        const ownsLock = !fromSave;
+        if (ownsLock) s.busy = true;
         let target = s.path;
-        if (draft && s.history.dirty()) {
-            target = dirOf(s.path) + '/.r2d-draft.atlas.json';
-            if ($.fs.write(target, M.serializeAtlas(s.model)) === false) return;
-        }
-        const r = await host.backend(['validate', target]);
-        if (target !== s.path) $.fs.remove(target);
-        s.diags = ((r.json && r.json.diagnostics) || []).map((d) => Object.assign({}, d, { asset: d.asset === target ? s.path : d.asset }));
-        note(s.diags.length ? 'проверка: сообщений ' + s.diags.length : 'проверка: ошибок нет');
-        host.changed();
-        renderRight();
+        try {
+            if (draft && s.history.dirty()) {
+                target = dirOf(s.path) + '/.r2d-draft-' + s.draftId + '.atlas.json';
+                if ($.fs.write(target, M.serializeAtlas(s.model)) === false) return false;
+            }
+            const r = await host.backend(['validate', target]);
+            if (s.closed) return false;
+            s.diags = ((r.json && r.json.diagnostics) || []).map((d) => Object.assign({}, d, { asset: d.asset === target ? s.path : d.asset }));
+            note(s.diags.length ? 'проверка: сообщений ' + s.diags.length : 'проверка: ошибок нет');
+            host.changed();
+            renderRight();
+            return !!(r.json && r.json.ok);
+        } catch (e) {
+            if (!s.closed) { s.diags = [diag('EDITOR_ATLAS_VALIDATE', 'error', e.message || String(e), { asset: s.path })]; host.changed(); renderRight(); }
+            return false;
+        } finally { if (target !== s.path) $.fs.remove(target); if (ownsLock) s.busy = false; }
     }
 
     // Нарезка сеткой — нативная atlas-grid во временный файл, затем одна правка
     // (undo вернёт прежние кадры). Для PNG без атласа — создаёт файл атласа.
     async function slice() {
+        if (s.busy || s.closed) return false;
+        s.busy = true;
+        let cleanup = '';
+        try {
         const p = s.create ? 'at-c-' : 'at-g-';
         const cols = numberOf(doc, p + 'cols'), rows = numberOf(doc, p + 'rows');
         const cw = s.create ? null : numberOf(doc, 'at-g-cw'), ch = s.create ? null : numberOf(doc, 'at-g-ch');
         const dur = numberOf(doc, 'at-g-dur') || 100;
         const prefix = String(doc.value('at-g-prefix') || '').trim() || (s.imageAbs.split('/').pop().replace(/\.[^.]+$/, ''));
-        const out = s.create ? s.path : dirOf(s.path) + '/.r2d-draft-grid.atlas.json';
+        const out = s.create ? s.path : dirOf(s.path) + '/.r2d-draft-grid-' + s.draftId + '.atlas.json';
+        cleanup = out;
         const args = ['atlas-grid', s.imageAbs, '--out', out, '--prefix', prefix, '--duration', String(dur)];
         if (cw && ch) args.push('--cell', cw + 'x' + ch);
         else if (cols && rows) args.push('--cols', String(cols), '--rows', String(rows));
         else { s.error = 'нарезка: задайте колонки и строки либо размер ячейки'; renderTop(); return; }
         const r = await host.backend(args);
+        if (s.closed) return false;
         if (!r.json || !r.json.ok) {
             s.error = 'нарезка: ' + (((r.json && r.json.diagnostics) || []).map((d) => d.message).join('; ') || 'backend не ответил');
             renderTop();
             return;
         }
-        if (s.create) { await open(s.path); host.changed(); return; }
+        if (s.create) { await open(s.path); cleanup = ''; host.changed(); return true; }
         const grid = M.parseAtlasDoc($.fs.readJSON(out, null));
+        cleanup = '';
         $.fs.remove(out);
+        s.busy = false;
         edit('нарезка сеткой: ' + grid.frames.length + ' кадров', (d) => { d.frames = grid.frames; d.tags = []; d.slices = []; });
         s.sel = s.model.frames.length ? 0 : -1;
         s.needFit = true;
+        return true;
+        } finally { if (cleanup) $.fs.remove(cleanup); s.busy = false; }
     }
 
     // --- вид --------------------------------------------------------------------
@@ -516,11 +580,18 @@ export function create(host) {
         doc.text('at-anim-info', play ? 'кадр ' + (cur + 1) + '/' + order.length + ' · ' + play.interval + ' мс/кадр (по первому кадру, как в игре) · ' + (play.loop ? 'loop' : 'once') + (t.direction === 'pingpong' ? ' · pingpong в $.atlas идёт как forward' : '') : '');
     }
 
-    function renderAll() { if (!s.model) return; renderTop(); renderLeft(); renderRight(); renderStrip(); renderOverlay(); }
+    function renderConflict() {
+        if (!s.conflict) { doc.cls('at-conflict', 'st-hidden', true); doc.html('at-conflict', ''); return; }
+        doc.cls('at-conflict', 'st-hidden', false);
+        const missing = s.conflict.disk === null;
+        doc.html('at-conflict', '<div class="at-conflict-shade"></div><div class="at-conflict-card"><span class="st-title">Атлас изменён вне Editor</span><span class="st-note">Перезагрузка заменит несохранённые правки. Перезапись сохранит текущую версию поверх файла.</span><span class="at-conflict-path">' + esc(s.path) + (missing ? '<br/>Файл удалён' : '') + '</span><div class="st-btns">' + (missing ? '' : '<button class="st-btn" data-key="reload">Перезагрузить</button>') + '<button class="st-btn primary" data-key="overwrite">Перезаписать</button><button class="st-btn" data-key="cancel">Отмена</button></div></div>');
+    }
+    function renderAll() { if (!s.model) return; renderTop(); renderLeft(); renderRight(); renderStrip(); renderOverlay(); renderConflict(); }
 
     // --- события ---------------------------------------------------------------------
 
     doc.on('at-validate', 'click', () => validate(true));
+    doc.on('at-conflict', 'click', (_id, _ev, choice) => { if (choice === 'reload' || choice === 'overwrite' || choice === 'cancel') resolveConflict(choice); });
     doc.on('at-mode-sprite', 'click', () => setMode('sprite'));
     doc.on('at-mode-anim', 'click', () => setMode('animation'));
     doc.on('at-tool-select', 'click', () => setTool('select'));
@@ -574,8 +645,8 @@ export function create(host) {
             if (s.anim) s.anim.visible(on);
         },
         save,
-        undo() { const l = s.history && s.history.undo(); if (l) { afterEdit('отменено: ' + l); } return !!l; },
-        redo() { const l = s.history && s.history.redo(); if (l) { afterEdit('повторено: ' + l); } return !!l; },
+        undo() { if (s.busy || s.closed) return false; const l = s.history && s.history.undo(); if (l) { afterEdit('отменено: ' + l); } return !!l; },
+        redo() { if (s.busy || s.closed) return false; const l = s.history && s.history.redo(); if (l) { afterEdit('повторено: ' + l); } return !!l; },
         dirty() { return !!(s.history && !s.create && s.history.dirty()); },
         diagnostics() {
             const out = s.diags.slice();
@@ -596,7 +667,7 @@ export function create(host) {
             ];
         },
         // Операции для агента и тестов — те же, что у кнопок.
-        ops: { select, selectTag, setMode, setTool, applyFrame, applyTag, newTag, slice, validate, fit, edit, model: () => s.model, M },
-        close() { stopPreview(); if (s.node) s.node.remove(); s.node = null; doc.unload(); },
+        ops: { select, selectTag, setMode, setTool, applyFrame, applyTag, newTag, slice, validate, fit, edit, resolveConflict, model: () => s.model, M },
+        close() { s.closed = true; stopPreview(); if (s.node) s.node.remove(); s.node = null; doc.unload(); },
     };
 }

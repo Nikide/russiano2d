@@ -10,6 +10,7 @@
 
 const MERGE_MS = 800;   // ввод с паузой меньше — один шаг undo
 const TAB = '    ';
+const isWordCharacter = (ch) => !!ch && /[\w$Ѐ-ӿ]/.test(ch);
 
 export function splitLines(text) {
     return String(text).replace(/\r\n?/g, '\n').split('\n');
@@ -71,6 +72,20 @@ export function createCodeModel(text, opts) {
         return comparePos(m.anchor, m.caret) < 0
             ? { from: clonePos(m.anchor), to: clonePos(m.caret) }
             : { from: clonePos(m.caret), to: clonePos(m.anchor) };
+    }
+
+    function selectedLineRange() {
+        const sel = selection();
+        const first = sel ? sel.from.line : m.caret.line;
+        const last = sel && sel.to.col === 0 && sel.to.line > first ? sel.to.line - 1
+            : sel ? sel.to.line : m.caret.line;
+        return { first, last };
+    }
+
+    function restorePositions(caret, anchor, lineDelta) {
+        m.caret = clamp({ line: caret.line + lineDelta, col: caret.col });
+        m.anchor = anchor ? clamp({ line: anchor.line + lineDelta, col: anchor.col }) : null;
+        m.goalCol = null;
     }
 
     // Правка с записью в историю. kind склеивает ввод подряд ('type'/'delete').
@@ -142,10 +157,9 @@ export function createCodeModel(text, opts) {
         // Слово под позицией (двойной щелчок).
         selectWord(pos) {
             const p = clamp(pos), s = m.lines[p.line];
-            const isWord = (ch) => /[\w$Ѐ-ӿ]/.test(ch);
             let a = p.col, b = p.col;
-            while (a > 0 && isWord(s[a - 1])) a--;
-            while (b < s.length && isWord(s[b])) b++;
+            while (a > 0 && isWordCharacter(s[a - 1])) a--;
+            while (b < s.length && isWordCharacter(s[b])) b++;
             m.anchor = { line: p.line, col: a };
             m.caret = { line: p.line, col: b };
         },
@@ -162,7 +176,72 @@ export function createCodeModel(text, opts) {
             const indent = (line.match(/^\s*/) || [''])[0];
             const before = line.slice(0, m.caret.col).trimEnd();
             const extra = /[{([]$/.test(before) ? TAB : '';
+            if (!selection() && extra && line.slice(m.caret.col).startsWith('}')) {
+                const from = clonePos(m.caret);
+                const inserted = '\n' + indent + extra + '\n' + indent;
+                const changed = edit(from, from, inserted, 'edit');
+                m.caret = { line: from.line + 1, col: indent.length + extra.length };
+                m.anchor = null;
+                return changed;
+            }
             return api.insert('\n' + indent + extra);
+        },
+
+        wrapSelection(open, close) {
+            const sel = selection();
+            if (!sel || !open || !close) return false;
+            const from = clonePos(sel.from), text = textRange(sel.from, sel.to);
+            const changed = edit(sel.from, sel.to, open + text + close, 'edit');
+            if (!changed) return false;
+            m.anchor = endOf(from, open);
+            m.caret = endOf(from, open + text);
+            m.goalCol = null;
+            return true;
+        },
+
+        deleteLine() {
+            if (selection()) return edit(selection().from, selection().to, '', 'edit');
+            const line = m.caret.line, last = m.lines.length - 1;
+            if (last === 0) return edit({ line: 0, col: 0 }, { line: 0, col: m.lines[0].length }, '', 'edit');
+            if (line < last) return edit({ line, col: 0 }, { line: line + 1, col: 0 }, '', 'edit');
+            const prev = line - 1;
+            return edit({ line: prev, col: m.lines[prev].length }, { line, col: m.lines[line].length }, '', 'edit');
+        },
+
+        duplicateLines(direction) {
+            const { first, last } = selectedLineRange();
+            const caret = clonePos(m.caret), anchor = m.anchor ? clonePos(m.anchor) : null;
+            const block = m.lines.slice(first, last + 1);
+            const shift = direction < 0 ? block.length : 0;
+            if (direction < 0) {
+                edit({ line: first, col: 0 }, { line: first, col: 0 }, block.join('\n') + '\n', 'edit');
+            } else {
+                const end = { line: last, col: m.lines[last].length };
+                edit(end, end, '\n' + block.join('\n'), 'edit');
+            }
+            restorePositions(caret, anchor, shift);
+            return true;
+        },
+
+        moveLines(direction) {
+            const { first, last } = selectedLineRange();
+            const lineCount = m.lines.length;
+            if ((direction < 0 && first === 0) || (direction > 0 && last >= lineCount - 1)) return false;
+            const caret = clonePos(m.caret), anchor = m.anchor ? clonePos(m.anchor) : null;
+            if (direction < 0) {
+                const before = m.lines[first - 1];
+                const selected = m.lines.slice(first, last + 1);
+                edit({ line: first - 1, col: 0 }, { line: last, col: m.lines[last].length },
+                    selected.join('\n') + '\n' + before, 'edit');
+                restorePositions(caret, anchor, -1);
+            } else {
+                const after = m.lines[last + 1];
+                const selected = m.lines.slice(first, last + 1);
+                edit({ line: first, col: 0 }, { line: last + 1, col: after.length },
+                    after + '\n' + selected.join('\n'), 'edit');
+                restorePositions(caret, anchor, 1);
+            }
+            return true;
         },
 
         tab(shift) {
@@ -189,8 +268,12 @@ export function createCodeModel(text, opts) {
             const c = m.caret;
             if (c.col === 0 && c.line === 0) return false;
             if (c.col === 0) return edit({ line: c.line - 1, col: m.lines[c.line - 1].length }, c, '', 'delete');
+            const line = m.lines[c.line];
+            const paired = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'", '`': '`' };
+            if (paired[line[c.col - 1]] === line[c.col])
+                return edit({ line: c.line, col: c.col - 1 }, { line: c.line, col: c.col + 1 }, '', 'delete');
             // Отступ из пробелов стирается до предыдущей позиции табуляции.
-            const head = m.lines[c.line].slice(0, c.col);
+            const head = line.slice(0, c.col);
             const back = /^ +$/.test(head) ? ((head.length - 1) % TAB.length) + 1 : 1;
             return edit({ line: c.line, col: c.col - back }, c, '', 'delete');
         },
@@ -250,16 +333,16 @@ export function createCodeModel(text, opts) {
                 if (c.col === 0) { api.move('left', extend); return; }
                 let i = c.col;
                 while (i > 0 && /\s/.test(s[i - 1])) i--;
-                const word = i > 0 && /[\w$]/.test(s[i - 1]);
-                while (i > 0 && !/\s/.test(s[i - 1]) && /[\w$]/.test(s[i - 1]) === word) i--;
+                const word = i > 0 && isWordCharacter(s[i - 1]);
+                while (i > 0 && !/\s/.test(s[i - 1]) && isWordCharacter(s[i - 1]) === word) i--;
                 m.caret = { line: c.line, col: i }; m.goalCol = null; return;
             }
             case 'wordRight': {
                 if (c.col === s.length) { api.move('right', extend); return; }
                 let i = c.col;
                 while (i < s.length && /\s/.test(s[i])) i++;
-                const word = i < s.length && /[\w$]/.test(s[i]);
-                while (i < s.length && !/\s/.test(s[i]) && /[\w$]/.test(s[i]) === word) i++;
+                const word = i < s.length && isWordCharacter(s[i]);
+                while (i < s.length && !/\s/.test(s[i]) && isWordCharacter(s[i]) === word) i++;
                 m.caret = { line: c.line, col: i }; m.goalCol = null; return;
             }
             default: return;

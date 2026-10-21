@@ -1,7 +1,7 @@
 // VN Studio: one source document per Editor tab, shared story/dialog runtime.
-import { escapeHtml } from '../../sdk/lib/model.js';
-import * as M from '../../sdk/lib/vn_model.js';
-import { createHistory } from '../../sdk/lib/history.js';
+import { escapeHtml } from '../lib/shared/model.js';
+import * as M from '../lib/shared/vn_model.js';
+import { createHistory } from '../lib/shared/history.js';
 import { studioDoc, mousePx, keys as studioKeys, diag, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
 export const meta = {

@@ -9,7 +9,7 @@
 // зум к курсору, СКМ — панорама. Одна протяжка — одна команда Undo.
 // ===========================================================================
 
-import * as K from '../../sdk/lib/kinds/collision.js';
+import * as K from '../lib/shared/kinds/collision.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc } from '../lib/studio_kit.js';
 

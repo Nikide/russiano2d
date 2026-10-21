@@ -19,3 +19,7 @@
 .at-thumb.on { border-color: #3b82f6; background-color: #1f3a5f; }
 .at-thumb img { display: block; margin: 0px auto; }
 .at-thumb-n { display: block; font-size: 10px; color: #8b93a3; }
+.at-conflict { display: flex; position: absolute; z-index: 80; left: 0px; top: 0px; width: 100%; height: 100%; align-items: center; justify-content: center; }
+.at-conflict-shade { display: block; position: absolute; left: 0px; top: 0px; width: 100%; height: 100%; background-color: rgba(4, 6, 10, 180); }
+.at-conflict-card { display: block; position: relative; width: 520px; max-width: 90%; padding: 20px; background-color: #20242b; border-width: 1px; border-color: #4a5260; border-radius: 8px; }
+.at-conflict-path { display: block; margin-top: 8px; color: #9dc9ff; font-family: Roboto Mono; white-space: normal; }

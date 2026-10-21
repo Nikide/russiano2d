@@ -2,11 +2,11 @@
 import { studioDoc,esc,row,diag,uiScale,mousePx,inside,screenCamera,pickProjectFile } from './studio_kit.js';
 import { createAssetDocument } from './asset_document.js';
 export const button=(id,label,on)=>'<button class="st-btn'+(on?' on':'')+'" data-key="'+esc(id)+'">'+esc(label)+'</button>';
-// Поля формы: {key,label,number?,int?,bool?,json?,options?,optional?,default?,pair?:'range'|'vec',hint?,file?:{filters}}.
+// Поля формы: {key,label,number?,int?,min?,max?,bool?,json?,options?,optional?,default?,pair?:'range'|'vec',group?,hint?,file?:{filters}}.
 // file — путь к файлу проекта: рядом кнопка «…» открывает окно ОС.
 // pair — два поля: 'range' — число или [от, до]; 'vec' — [x, y].
 export function form(fields,prefix='f') {
-    return fields.map(f=>'<div class="st-field"><label>'+esc(f.label||f.key)+'</label>'+
+    return fields.map(f=>f.group?'<div class="st-field-group"><span class="st-h">'+esc(f.label||f.key)+'</span>'+form(f.group,prefix+'-'+f.key)+'</div>':'<div class="st-field"><label>'+esc(f.label||f.key)+'</label>'+
         (f.pair?'<input id="'+prefix+'-'+esc(f.key)+'-0" class="st-in" type="text"/><input id="'+prefix+'-'+esc(f.key)+'-1" class="st-in" type="text"/>':
         f.options?'<select id="'+prefix+'-'+esc(f.key)+'" class="st-in">'+(f.optional?['']:[]).concat(f.options).map(v=>'<option value="'+esc(v)+'">'+esc(v===''?'—':v)+'</option>').join('')+'</select>':
         f.json?'<textarea id="'+prefix+'-'+esc(f.key)+'" class="st-area"></textarea>':'<input id="'+prefix+'-'+esc(f.key)+'" class="st-in" type="text"/>')+
@@ -40,6 +40,7 @@ export function createWorkspace(host,def) {
         render,browse,
         fieldValues(fields,target,prefix='f'){
             for(const f of fields){
+                if(f.group){this.fieldValues(f.group,target[f.key]&&typeof target[f.key]==='object'?target[f.key]:{},prefix+'-'+f.key);continue;}
                 // Отсутствующее optional-поле показывается пустым и остаётся отсутствующим при Apply.
                 const v=target[f.key]!==undefined?target[f.key]:f.optional?undefined:f.default;
                 if(f.pair){const two=pairOf(f,v);doc.setValue(prefix+'-'+f.key+'-0',two[0]);doc.setValue(prefix+'-'+f.key+'-1',two[1]);continue;}
@@ -48,11 +49,12 @@ export function createWorkspace(host,def) {
         },
         read(fields,prefix='f'){
             const patch={};for(const f of fields){
+                if(f.group){patch[f.key]=this.read(f.group,prefix+'-'+f.key);continue;}
                 if(f.pair){patch[f.key]=readPair(f,String(doc.value(prefix+'-'+f.key+'-0')||'').trim(),String(doc.value(prefix+'-'+f.key+'-1')||'').trim());continue;}
                 const raw=String(doc.value(prefix+'-'+f.key)||'').trim();
                 if(f.optional&&raw===''){patch[f.key]=undefined;continue;}
                 if(f.json)patch[f.key]=JSON.parse(raw);
-                else if(f.number){if(!raw||!Number.isFinite(Number(raw)))throw new Error((f.label||f.key)+': нужно число');if(f.int&&!Number.isInteger(Number(raw)))throw new Error((f.label||f.key)+': нужно целое');patch[f.key]=Number(raw);}
+                else if(f.number){if(!raw||!Number.isFinite(Number(raw)))throw new Error((f.label||f.key)+': нужно число');const n=Number(raw);if(f.int&&!Number.isInteger(n))throw new Error((f.label||f.key)+': нужно целое');if(f.min!==undefined&&n<f.min||f.max!==undefined&&n>f.max)throw new Error((f.label||f.key)+': диапазон '+(f.min===undefined?'−∞':f.min)+'..'+(f.max===undefined?'∞':f.max));patch[f.key]=n;}
                 else if(f.bool){if(!['true','false'].includes(raw))throw new Error(f.key+': true/false');patch[f.key]=raw==='true';}
                 else patch[f.key]=raw;
             }return patch;
@@ -77,9 +79,20 @@ export function createWorkspace(host,def) {
         doc.text('aw-state',file.dirty()?'не сохранено':'сохранено');renderDiagnostics();
         if(def.content)doc.html('aw-content',def.content(w));
         if(def.selected)def.selected(w);
+        renderConflict();
         host.changed();
     }
     async function validate(){const ok=await file.validate();renderDiagnostics();return ok;}
+    function renderConflict(){
+        const c=file.state.conflict;
+        if(!c){doc.cls('aw-conflict','st-hidden',true);doc.html('aw-conflict','');return;}
+        const missing=typeof c.disk!=='string';
+        doc.cls('aw-conflict','st-hidden',false);
+        doc.html('aw-conflict','<div class="aw-conflict-shade"></div><div class="aw-conflict-card"><span class="aw-conflict-title">Файл изменён вне Editor</span><span class="aw-conflict-message">На диске есть другая версия. Перезагрузка заменит несохранённые правки. Перезапись сохранит текущий документ Editor поверх версии на диске.</span><span class="aw-conflict-path">'+esc(file.state.path)+(missing?' · файл удалён':'')+'</span><div class="aw-conflict-actions">'+
+            (missing?'':'<button id="aw-conflict-reload" class="st-btn" data-key="reload">Перезагрузить</button>')+
+            '<button id="aw-conflict-overwrite" class="st-btn primary" data-key="overwrite">Перезаписать</button><button id="aw-conflict-cancel" class="st-btn" data-key="cancel">Отмена</button></div></div>');
+    }
+    async function resolveConflict(choice){const ok=await file.resolveConflict(choice);if(ok&&choice==='reload')needsPreview=true;render();return ok;}
     async function save(){const ok=await file.save();render();return ok;}
     function undo(){const ok=file.undo();if(ok){needsPreview=true;render();}return ok;}
     function redo(){const ok=file.redo();if(ok){needsPreview=true;render();}return ok;}
@@ -103,9 +116,10 @@ export function createWorkspace(host,def) {
     doc.on('aw-document-apply','click',applyDocument);
     for(const id of ['aw-inspector','aw-document'])doc.on(id,'click',(_id,_ev,key)=>{if(key&&key.startsWith('browse:'))browse(key);});
     doc.on('aw-validate','click',validate);
+    doc.on('aw-conflict','click',(_id,_ev,key)=>{if(key==='reload'||key==='overwrite'||key==='cancel')resolveConflict(key);});
     doc.on('aw-source-toggle','click',()=>{sourceMode=!sourceMode;doc.cls('aw-source-panel','st-hidden',!sourceMode);if(sourceMode)doc.setValue('aw-source',JSON.stringify(w.data,null,2));});
     doc.on('aw-source-apply','click',()=>{try{const data=JSON.parse(doc.value('aw-source'));if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('Нужен объект');w.edit('JSON',model=>{for(const k of Object.keys(model))delete model[k];Object.assign(model,data);});}catch(e){w.fail('EDITOR_ASSET_JSON',e.message);}});
-    const api={doc,state:w,ops:{edit:w.edit,select:w.select,action,validate,browse,...(def.ops?def.ops(w):{})},
+    const api={doc,state:w,ops:{edit:w.edit,select:w.select,action,validate,browse,resolveConflict,...(def.ops?def.ops(w):{})},
         async open(path){file.open(path);if(def.init)def.init(w);render();},
         onActive(on){active=!!on;if(!on){if(def.deactivate)def.deactivate(w);disposePreview();needsPreview=true;}else screenCamera($);},
         update(dt){if(closed||!active||!w.data)return;screenCamera($);

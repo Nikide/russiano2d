@@ -1,0 +1,69 @@
+/* World Editor: сетка 2x2 + панели. Стили продолжают theme.rcss/studio.rcss. */
+.we-root { width: 100%; height: 100%; }
+.we-spacer { display: block; flex: 1 1 0; }
+.we-sep { display: inline-block; width: 10px; }
+.we-label { color: #97a2b8; font-size: 12px; margin-right: 4px; }
+.we-icon { display: inline-block; width: 16px; height: 16px; margin-right: 5px; font-family: "Material Icons"; font-size: 16px; line-height: 16px; vertical-align: middle; text-align: center; color: #94b9e9; }
+.we-tool-row .we-icon { width: 14px; height: 14px; margin-right: 3px; font-size: 14px; line-height: 14px; }
+.we-num { flex: 0 0 56px; width: 56px; min-width: 40px; }
+.we-kind { flex: 0 0 96px; width: 96px; }
+.we-menu { border-top-width: 1px; border-color: #232b3d; padding: 6px 14px; }
+.we-map-hint { display: none; flex-direction: row; align-items: center; padding: 5px 14px; color: #f7c979; background-color: #342813; border-bottom-width: 1px; border-color: #6a5128; font-size: 12px; }
+.we-map-hint span { flex: 1 1 0; }
+.we-map-hint .btn { margin-left: 12px; }
+.we-toolbar { border-top-width: 1px; border-color: #232b3d; padding: 6px 14px; }
+.we-toolbar .btn { margin-bottom: 2px; }
+.we-extra { display: none; }
+.we-extra.open { display: block; }
+.we-section-toggle { display: block; width: 100%; text-align: left; margin: 6px 0px 3px; padding: 7px 9px; color: #c9d7eb; background-color: #121d2b; border-width: 1px; border-color: #283a52; }
+.we-section-toggle:hover { background-color: #19283a; border-color: #42658c; }
+.we-main { flex: 1 1 0; min-height: 0px; }
+.we-left { flex: 0 0 250px; min-width: 250px; }
+.we-right { flex: 0 0 320px; min-width: 320px; }
+.we-center { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0px; min-height: 0px; }
+.we-viewgrid { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0px; padding: 3px; }
+.we-vrow { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0px; }
+.we-pane { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0px; min-height: 0px; margin: 3px; border-width: 1px; border-color: #24344d; background-color: #0e1622; }
+.we-pane-bar { padding: 2px 8px; background-color: #0b111b; border-bottom-width: 1px; border-color: #24344d; }
+.we-pane-title { color: #c8d4e8; font-size: 12px; margin-right: 8px; }
+.we-pane-bar .btn { padding: 2px 8px; font-size: 11px; margin-right: 4px; }
+.we-pane-bar .sub { font-size: 11px; margin-right: 8px; }
+.we-vp { position: relative; flex: 1 1 0; min-height: 0px; overflow: hidden; background-color: #0a1018; }
+.we-vp3d { background-color: transparent; }
+.we-overlay { position: absolute; left: 0px; top: 0px; right: 0px; bottom: 0px; overflow: hidden; }
+.we-grid-line { position: absolute; background-color: #172437; }
+.we-shape { position: absolute; border-width: 1px; border-color: #5f7fa8; background-color: rgba(80, 128, 170, 40); color: #dbe7f6; font-size: 10px; padding: 0px; overflow: hidden; }
+.we-world { position: absolute; border-width: 1px; border-color: #3a4f6e; background-color: transparent; }
+.we-brush { color: #dbe7f6; }
+.we-brush.we-sel { border-color: #ffb03a; background-color: rgba(255, 176, 58, 50); }
+.we-tool-hint, .we-tool-skip { border-color: #b08cff; }
+.we-tool-trigger, .we-tool-areaportal { border-color: #4ad991; }
+.we-tool-occluder { border-color: #ff5a3c; }
+.we-entity { background-color: #ffcf6a; border-color: #ffb03a; border-radius: 3px; }
+.we-entity.we-sel { border-color: #ff5a3c; background-color: #ff8a68; }
+.we-path-node { background-color: #83dba4; border-color: #4ad991; border-radius: 4px; color: #08120c; font-size: 9px; }
+.we-path-node.we-sel { border-color: #ffb03a; background-color: #ffd27f; }
+.we-path-seg { border-width: 0px; background-color: #4ad991; }
+.we-drag-rect { position: absolute; border-width: 1px; border-color: #4ad991; background-color: rgba(74, 217, 145, 35); }
+.we-inspector { display: block; margin: 4px 0px; }
+.we-ext { display: block; margin: 2px 0px; }
+.we-ext .btn { margin: 2px 4px 2px 0px; }
+.we-build { max-height: 150px; min-height: 60px; }
+.we-right .field { margin-bottom: 2px; }
+.we-right h4 { margin-top: 10px; }
+.we-path { flex: 0 0 280px; width: 280px; }
+
+/* Тулбар: две компактные строки вместо блочных полей на всю ширину. */
+.we-toolbar { padding: 4px 12px; }
+.we-tool-row { display: flex; flex-direction: row; align-items: center; margin: 2px 0px; }
+.we-tool-row > .btn { flex: 0 0 auto; margin: 0px 4px 0px 0px; }
+.we-tool-row > label.we-label { width: auto; flex: 0 0 auto; margin: 0px 4px 0px 8px; }
+.we-tool-row > input.field { display: inline-block; flex: 0 0 auto; width: 60px; min-width: 40px; margin: 0px; }
+.we-tool-row > input.we-kind { width: 96px; }
+.we-ext { display: flex; flex-direction: row; flex: 0 0 auto; margin: 0px; }
+
+/* 3D-панель прозрачна: сквозь неё виден настоящий runtime sprite. */
+#we-pane-3d { background-color: transparent; }
+#we-pane-3d .we-vp3d { background-color: transparent; }
+
+.we-tool-row > select.field { display: inline-block; flex: 0 0 auto; width: 130px; min-width: 110px; margin: 0px; }

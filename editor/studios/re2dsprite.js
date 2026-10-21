@@ -12,7 +12,7 @@
 // Save блокируется с диагностикой.
 // ===========================================================================
 
-import { createHistory } from '../../sdk/lib/history.js';
+import { createHistory } from '../lib/shared/history.js';
 import { studioDoc, esc, diag, mousePx, inside, uiScale, screenCamera } from '../lib/studio_kit.js';
 
 export const meta = { id: 're2dsprite', title: 'Re2DSprite', icon: 'accessibility_new', match: (p) => /\.character\.json$/i.test(p) };

@@ -1,7 +1,7 @@
 <rml>
 <head>
 <!-- Narrative Studio: separate RmlUi document for each Editor tab. -->
-<link type="text/rcss" href="../../../sdk/ui/theme.rcss"/><link type="text/rcss" href="../../../sdk/ui/studio.rcss"/><link type="text/rcss" href="../hammer.rcss"/><link type="text/rcss" href="../vn_maker.rcss"/>
+<link type="text/rcss" href="legacy-theme.rcss"/><link type="text/rcss" href="legacy-studio.rcss"/><link type="text/rcss" href="../hammer.rcss"/><link type="text/rcss" href="../vn_maker.rcss"/>
 <link type="text/rcss" href="kit.rcss"/><title>Narrative</title>
 </head>
 <body>

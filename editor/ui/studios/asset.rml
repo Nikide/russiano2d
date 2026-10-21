@@ -6,4 +6,5 @@
   <div class="st-center"><div id="aw-canvas" class="st-canvas"><div id="aw-content" class="st-overlay"></div></div><div id="aw-bottom" class="aw-bottom"></div><div id="aw-source-panel" class="st-hidden aw-source"><textarea id="aw-source" class="st-area"></textarea><button id="aw-source-apply" class="st-btn primary">Применить JSON</button></div><div id="aw-hud" class="st-hud"></div></div>
   <div class="st-right"><div class="st-scroll"><span id="aw-inspector-title" class="st-title"></span><div id="aw-inspector"></div><button id="aw-apply" class="st-btn primary wide">Применить свойства</button><span id="aw-document-title" class="st-h">Документ</span><div id="aw-document"></div><button id="aw-document-apply" class="st-btn wide">Применить настройки</button><div id="aw-diagnostics" class="aw-diagnostics"></div></div></div>
  </div>
+ <div id="aw-conflict" class="st-hidden"></div>
 </div></body></rml>

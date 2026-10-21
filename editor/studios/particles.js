@@ -8,7 +8,7 @@
 // color/alpha/size, сверху — транспорт (перезапуск, залп, эмиссия, повтор).
 // ===========================================================================
 
-import * as K from '../../sdk/lib/kinds/particles.js';
+import * as K from '../lib/shared/kinds/particles.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc, mousePx, inside, FILTERS } from '../lib/studio_kit.js';
 

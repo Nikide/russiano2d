@@ -8,7 +8,7 @@
 // клавиша). Бинды Editor/игры сохраняются при входе и возвращаются на выходе.
 // ===========================================================================
 
-import * as K from '../../sdk/lib/kinds/input.js';
+import * as K from '../lib/shared/kinds/input.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc } from '../lib/studio_kit.js';
 

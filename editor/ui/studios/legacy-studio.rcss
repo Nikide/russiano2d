@@ -1,0 +1,81 @@
+/* ---------------------------------------------------------------------------
+   Общие стили студий. Тема — theme.rcss (палитра сайта), подключается ссылкой в .rml: RmlUi не знает @import.
+
+   Важно: у body НЕТ фона. Область просмотра прозрачна — сквозь неё видна сцена
+   движка, в которой настоящий рантайм рисует спрайты, частицы и мир. Все
+   остальные панели непрозрачны.
+   --------------------------------------------------------------------------- */
+
+body {
+    font-family: Open Sans;
+    font-size: 14px;
+    color: #e9edf6;
+    width: 100%;
+    height: 100%;
+}
+
+.studio { display: flex; flex-direction: column; width: 100%; height: 100%; }
+
+.bar {
+    display: block;
+    padding: 8px 14px;
+    background-color: #0f131c;
+    border-color: #232b3d;
+    border-width: 0px;
+}
+.bar.top { border-bottom-width: 1px; padding: 10px 16px; }
+.bar.bottom { border-top-width: 1px; }
+.bar > * { margin-right: 8px; }
+.title { color: #e9edf6; font-size: 17px; margin-right: 16px; }
+
+.body-row { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0px; }
+
+.side {
+    display: block;
+    flex: 0 0 260px;
+    width: 260px;
+    padding: 10px 12px;
+    overflow-y: auto;
+    background-color: #0f131c;
+}
+.side.left { border-right-width: 1px; border-color: #232b3d; }
+.side.right { border-left-width: 1px; border-color: #232b3d; flex: 0 0 310px; width: 310px; }
+
+.center { display: block; flex: 1 1 0; min-width: 0px; position: relative; }
+
+/* Окно просмотра: прозрачное, сквозь него видна сцена. */
+.viewport { position: absolute; left: 0px; top: 0px; right: 0px; bottom: 0px; overflow: hidden; }
+.overlay { position: absolute; left: 0px; top: 0px; right: 0px; bottom: 0px; overflow: hidden; }
+
+.fr { position: absolute; border-width: 1px; border-color: rgba(255, 176, 58, 170); }
+.fr.sel { border-color: #ff5a3c; background-color: rgba(255, 90, 60, 45); }
+.fr.hot { border-color: #4ad991; }
+.fr-label {
+    position: absolute;
+    left: 1px; top: 1px;
+    font-size: 11px;
+    color: #ffe2b0;
+    background-color: rgba(11, 14, 20, 210);
+    padding: 0px 3px;
+}
+.pivot {
+    position: absolute;
+    width: 9px; height: 9px;
+    border-width: 2px;
+    border-color: #ff5a8a;
+    border-radius: 6px;
+    background-color: rgba(255, 90, 138, 90);
+}
+.drag { position: absolute; border-width: 1px; border-color: #4ad991; background-color: rgba(74, 217, 145, 50); }
+.hud-text {
+    position: absolute; left: 10px; bottom: 8px;
+    padding: 3px 10px; color: #d7deee; font-size: 12px;
+    background-color: rgba(11, 14, 20, 225); border-radius: 8px;
+}
+
+.strip-cell { display: inline-block; margin: 2px; padding: 4px 9px; background-color: #141926; border-radius: 8px; color: #b4bdd0; cursor: pointer; }
+.strip-cell:hover { background-color: #1c2335; }
+.strip-cell.cur { background-color: #2a1a1c; color: #ffb03a; }
+
+.bar.tools { border-top-width: 1px; padding: 6px 14px; }
+.bar.tools .btn { padding: 5px 12px; margin-bottom: 0px; }

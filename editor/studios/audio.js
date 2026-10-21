@@ -8,7 +8,7 @@
 // Шины превью — под префиксом вкладки, чтобы не трогать шины Editor и игры.
 // ===========================================================================
 
-import * as K from '../../sdk/lib/kinds/audio.js';
+import * as K from '../lib/shared/kinds/audio.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 
@@ -19,6 +19,15 @@ const NAME_RE = /^[A-Za-z0-9_\-]{1,48}$/;
 const MIXER_H = 230;   // высота микшера над картой зон, логические точки
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const clone = (v) => JSON.parse(JSON.stringify(v));
+const FX_FIELDS = {
+    lowpass: [{ key: 'freq', label: 'Срез, Гц', min: 0.1, default: 1200 }],
+    highpass: [{ key: 'freq', label: 'Срез, Гц', min: 0.1, default: 200 }],
+    echo: [{ key: 'delay', label: 'Задержка, мс', min: 0.1, default: 250 }, { key: 'feedback', label: 'Повтор 0..0.9', min: 0, max: 0.9, default: 0.35 }],
+    tremolo: [{ key: 'rate', label: 'Частота, Гц', min: 0.01, max: 40, default: 5 }, { key: 'depth', label: 'Глубина 0..1', min: 0, max: 1, default: 0.5 }],
+    bitcrush: [{ key: 'bits', label: 'Битность 1..16', int: true, min: 1, max: 16, default: 6 }, { key: 'downsample', label: 'Шаг 1..64', int: true, min: 1, max: 64, default: 1 }],
+    ringmod: [{ key: 'freq', label: 'Частота, Гц', min: 0.5, max: 8000, default: 220 }, { key: 'mix', label: 'Смешивание 0..1', min: 0, max: 1, default: 1 }],
+    reverb: [{ key: 'send', label: 'Посыл 0..1', min: 0, max: 1, default: 0.35 }, { key: 'room', label: 'Размер 0..1', min: 0, max: 1, default: 0.5 }, { key: 'damp', label: 'Демпфирование 0..1', min: 0, max: 1, default: 0.4 }, { key: 'width', label: 'Ширина 0..1', min: 0, max: 1, default: 0.8 }],
+};
 
 export function create(host) {
     const $ = host.$;
@@ -86,15 +95,18 @@ export function create(host) {
     function fieldsOf(w) {
         const e = sel(w);
         if (!e) return [];
-        if (e.type === 'bus') return [
-            { key: '__name', label: 'Имя' },
-            { key: 'volume', label: 'volume 0..1', number: true, optional: true },
-            { key: 'parent', label: 'parent', options: ['master'].concat(Object.keys(buses(w)).filter((n) => n !== e.id)), optional: true },
-            { key: 'muted', label: 'muted', bool: true, options: ['true', 'false'], optional: true },
-            { key: 'solo', label: 'solo', bool: true, options: ['true', 'false'], optional: true },
-            { key: 'effect', label: 'effect', options: K.EFFECTS, optional: true },
-            { key: 'effectParams', label: 'параметры', json: true, optional: true },
-        ];
+        if (e.type === 'bus') {
+            const bus = buses(w)[e.id], fx = FX_FIELDS[bus && bus.effect];
+            return [
+                { key: '__name', label: 'Имя' },
+                { key: 'volume', label: 'volume 0..1', number: true, optional: true },
+                { key: 'parent', label: 'parent', options: ['master'].concat(Object.keys(buses(w)).filter((n) => n !== e.id)), optional: true },
+                { key: 'muted', label: 'muted', bool: true, options: ['true', 'false'], optional: true },
+                { key: 'solo', label: 'solo', bool: true, options: ['true', 'false'], optional: true },
+                { key: 'effect', label: 'effect', options: K.EFFECTS, optional: true },
+                ...(fx ? [{ key: 'effectParams', label: 'Параметры ' + bus.effect, group: fx.map((field) => Object.assign({ number: true }, field)) }] : []),
+            ];
+        }
         if (e.type === 'snd') return [
             { key: '__name', label: 'Имя' },
             { key: 'path', label: 'файл', file: { filters: FILTERS.audio } },
@@ -279,8 +291,16 @@ export function create(host) {
             const to = String(patch.__name || '').trim();
             delete patch.__name;
             if (e.type === 'bus') {
+                const effectParams = patch.effectParams;
+                delete patch.effectParams;
                 if (patch.parent === 'master') delete patch.parent;
                 w.patch(m.buses[e.id], patch);
+                if (effectParams) {
+                    const params = Object.assign({}, m.buses[e.id].effectParams || {});
+                    for (const [k, v] of Object.entries(effectParams)) { if (v === undefined) delete params[k]; else params[k] = v; }
+                    if (Object.keys(params).length) m.buses[e.id].effectParams = params;
+                    else delete m.buses[e.id].effectParams;
+                }
                 if (to && to !== e.id) {
                     if (!NAME_RE.test(to) || to === 'master') throw new Error('Имя шины: латиница, цифры, «_», «-», не «master»');
                     if (m.buses[to]) throw new Error('Шина «' + to + '» уже есть');

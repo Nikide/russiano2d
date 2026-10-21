@@ -1,4 +1,12 @@
 .st-bar { flex-wrap: wrap; }
+.aw-conflict { display: flex; position: absolute; z-index: 80; left: 0px; top: 0px; width: 100%; height: 100%; align-items: center; justify-content: center; }
+.aw-conflict-shade { display: block; position: absolute; left: 0px; top: 0px; width: 100%; height: 100%; background-color: rgba(4, 6, 10, 180); }
+.aw-conflict-card { display: block; position: relative; width: 520px; max-width: 90%; padding: 20px; background-color: #20242b; border-width: 1px; border-color: #4a5260; border-radius: 8px; }
+.aw-conflict-title { display: block; color: #f0f2f6; font-size: 17px; }
+.aw-conflict-message { display: block; margin-top: 10px; color: #b8bec9; white-space: normal; }
+.aw-conflict-path { display: block; margin-top: 8px; color: #9dc9ff; font-family: Roboto Mono; white-space: normal; }
+.aw-conflict-actions { display: flex; flex-direction: row; flex-wrap: wrap; margin-top: 18px; }
+.aw-conflict-actions .st-btn { margin: 0px 6px 4px 0px; }
 .st-bar .st-title { margin: 0px 8px 0px 0px; }
 .st-left { width: 205px; flex-basis: 205px; }
 .st-right { width: 280px; flex-basis: 280px; }

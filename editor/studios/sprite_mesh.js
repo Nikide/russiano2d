@@ -1,6 +1,6 @@
 // SpriteMesh authoring: per-tab controller; geometry and cache use native r2d.
-import { escapeHtml } from '../../sdk/lib/model.js';
-import { createHistory } from '../../sdk/lib/history.js';
+import { escapeHtml } from '../lib/shared/model.js';
+import { createHistory } from '../lib/shared/history.js';
 import { studioDoc, uiScale, mousePx, inside, numberOf, screenCamera, diag } from '../lib/studio_kit.js';
 
 export const meta = {

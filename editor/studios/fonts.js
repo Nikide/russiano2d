@@ -9,7 +9,7 @@
 // а наследование «default → base → стиль» повторяет K.resolve.
 // ===========================================================================
 
-import * as K from '../../sdk/lib/kinds/fonts.js';
+import * as K from '../lib/shared/kinds/fonts.js';
 import { createWorkspace, button } from '../lib/asset_workspace.js';
 import { esc, FILTERS, pickProjectFile } from '../lib/studio_kit.js';
 

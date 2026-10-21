@@ -1,12 +1,12 @@
 // Hammer Studio: per-tab controller. Geometry/session/commands stay shared with native SDK tooling.
-import { createSession } from '../../sdk/lib/world_editor/session.js';
-import { createSelection } from '../../sdk/lib/world_editor/selection.js';
-import { createViewports } from '../../sdk/lib/world_editor/viewport.js';
-import { createCommands } from '../../sdk/lib/world_editor/commands.js';
-import { createWorldExtensionHost } from '../../sdk/lib/world_editor/extension_host.js';
-import * as M from '../../sdk/lib/world_editor/model.js';
-import { escapeHtml as esc, summarize } from '../../sdk/lib/model.js';
-import * as views from '../../sdk/lib/views.js';
+import { createSession } from '../lib/shared/world_editor/session.js';
+import { createSelection } from '../lib/shared/world_editor/selection.js';
+import { createViewports } from '../lib/shared/world_editor/viewport.js';
+import { createCommands } from '../lib/shared/world_editor/commands.js';
+import { createWorldExtensionHost } from '../lib/shared/world_editor/extension_host.js';
+import * as M from '../lib/shared/world_editor/model.js';
+import { escapeHtml as esc, summarize } from '../lib/shared/model.js';
+import * as views from '../lib/shared/views.js';
 
 import { studioDoc, uiScale, mousePx, screenCamera, keys } from '../lib/studio_kit.js';
 
@@ -57,6 +57,7 @@ export function create(host) {
         clipKeep: 'both',
         face: 'side',
         entityClass: 'base.point',
+        extensionOverlays: new Map(),
         lookLast: null,
         previewView: { x: 0, y: 0, eye: 200, yaw: 0, pitch: -15, fov: 70 },
     };
@@ -215,6 +216,13 @@ export function create(host) {
                 esc(kind + ':' + item.id) + '">' + esc(item.label || item.id) + '</button>';
         }
         doc.html('we-ext-toolbar', ext.worldTools().map((item) => button('tool', item)).join(''));
+        const overlays = ext.overlays().map((item) => {
+            if (!s.extensionOverlays.has(item.id)) s.extensionOverlays.set(item.id, item.visible !== false);
+            const enabled = s.extensionOverlays.get(item.id);
+            return '<button id="we-ext-overlay-' + esc(item.id) + '" class="btn small' + (enabled ? ' on' : '') +
+                '" data-key="overlay:' + esc(item.id) + '">' + esc(item.label || item.title || item.id) + '</button>';
+        }).join('');
+        doc.html('we-ext-overlays', overlays);
         const menus = ext.menus().concat(ext.toolbar());
         doc.html('we-ext-menu', menus.map((item) => button('menu', item)).join(''));
         const panels = ext.panels().map((item) => {
@@ -226,10 +234,34 @@ export function create(host) {
                 esc(item.label || item.id) + '</button></div>';
         }).join('');
         doc.html('we-ext-panels', panels);
+
+        const inspectors = ext.inspectors().map((item) => {
+            const fields = Array.isArray(item.fields) ? item.fields.map((field) => {
+                const key = String(typeof field === 'string' ? field : field && (field.id || field.key) || '');
+                if (!key) return '';
+                const label = typeof field === 'object' && field ? field.label || key : key;
+                const value = typeof field === 'object' && field && field.value !== undefined ? field.value : '';
+                return '<div class="hm-field"><label>' + esc(label) + '</label><input id="we-ext-inspector-field-' + esc(item.id) + '-' + esc(key) +
+                    '" class="field" type="text" value="' + esc(value) + '"/></div>';
+            }).join('') : '';
+            const action = item.run || item.op || item.command
+                ? '<button id="we-ext-inspector-' + esc(item.id) + '" class="btn small" data-key="inspector:' + esc(item.id) + '">' +
+                    esc(item.actionLabel || item.label || item.title || item.id) + '</button>' : '';
+            return '<div class="we-ext"><div class="hint">' + esc(item.label || item.title || item.section || item.id) +
+                '</div>' + fields + action + '</div>';
+        }).join('');
+        doc.html('we-ext-inspectors', inspectors);
+
+        const selected = selection.snapshot();
+        const actions = selected.kind !== 'none' && selected.ids.length
+            ? ext.contextActions().map((item) => '<button id="we-ext-context-action-' + esc(item.id) + '" class="btn small" data-key="contextAction:' + esc(item.id) + '">' +
+                esc(item.label || item.title || item.id) + '</button>').join('') : '';
+        doc.html('we-ext-context-actions', actions ? '<div class="hint">Действия расширений · ' + esc(selected.kind) + '</div>' + actions : '');
     }
 
     function renderViewports() {
         const map = session.state.map;
+        const extensionOverlays = ext.overlays().filter((item) => s.extensionOverlays.get(item.id) !== false);
         for (const view of viewports.views) {
             if (view.plane === '3d') continue;
             const rect = geom('we-vp-' + view.id);
@@ -237,6 +269,7 @@ export function create(host) {
             const drag = s.drag && s.drag.kind === 'box' ? s.drag.rect : null;
             doc.html('we-overlay-' + view.id, viewports.buildOverlay(view, {
                 map: map, selection: selection.snapshot(), tool: s.tool, dragRect: drag,
+                extensionOverlays: extensionOverlays,
             }));
         }
         // Первый кадр: панели уже получили размер — подгоняем масштаб/панораму.
@@ -751,9 +784,42 @@ export function create(host) {
     function dispatchExtension(key) {
         const parts = String(key).split(':');
         const kind = parts[0], id = parts.slice(1).join(':');
+        if (kind === 'overlay') {
+            const item = ext.overlays().find((v) => v.id === id);
+            if (!item) return;
+            s.extensionOverlays.set(id, s.extensionOverlays.get(id) === false);
+            render();
+            return;
+        }
+        function runContribution(item, args) {
+            if (!item || typeof item.run !== 'function') return false;
+            const selected = selection.snapshot();
+            const input = Object.assign({}, args || {}, {
+                selection: { kind: selected.kind, ids: selected.ids.slice() },
+                apply: (op, values) => session.apply(op, values || {}),
+            });
+            Promise.resolve().then(() => item.run(input)).then((result) => {
+                if (result && result.ok === false) {
+                    note('error', 'SDK_EXTENSION_RUN_FAILED', result.message || ('Расширение отклонило действие «' + item.id + '»'),
+                        { asset: item.extension || '', details: { id: item.id, kind } });
+                    setStatus('extension отклонён: ' + id, true);
+                } else {
+                    setStatus('extension: ' + id, false);
+                }
+                render();
+            }).catch((error) => {
+                const message = error && error.message ? error.message : String(error);
+                note('error', 'SDK_EXTENSION_RUN_FAILED', 'Действие расширения «' + item.id + '» завершилось ошибкой: ' + message,
+                    { asset: item.extension || '', details: { id: item.id, kind } });
+                setStatus('extension не выполнено: ' + id, true);
+                render();
+            });
+            return true;
+        }
         if (kind === 'tool') {
             const item = ext.worldTools().find((v) => v.id === id);
             if (!item) return;
+            if (runContribution(item, item.args || {})) return;
             if (item.op) {
                 session.apply(item.op, item.args || {}).then((r) => {
                     setStatus(r.ok ? 'extension: ' + id : 'extension отклонён', !r.ok);
@@ -767,17 +833,24 @@ export function create(host) {
             }
             return;
         }
-        if (kind === 'menu' || kind === 'panel') {
-            const lists = kind === 'menu' ? ext.menus().concat(ext.toolbar()) : ext.panels();
+        if (kind === 'menu' || kind === 'panel' || kind === 'inspector' || kind === 'contextAction') {
+            const lists = kind === 'menu' ? ext.menus().concat(ext.toolbar())
+                : kind === 'panel' ? ext.panels()
+                : kind === 'inspector' ? ext.inspectors() : ext.contextActions();
             const item = lists.find((v) => v.id === id);
             if (!item) return;
+            if (kind === 'contextAction' && (selection.snapshot().kind === 'none' || !selection.snapshot().ids.length)) return;
             const args = Object.assign({}, item.args || {});
-            if (kind === 'panel' && Array.isArray(item.fields)) {
+            if ((kind === 'panel' || kind === 'inspector') && Array.isArray(item.fields)) {
                 for (const field of item.fields) {
-                    const value = doc.value('we-ext-field-' + id + '-' + field);
-                    if (value !== null && value !== undefined) args[field] = value;
+                    const name = String(typeof field === 'string' ? field : field && (field.id || field.key) || '');
+                    if (!name) continue;
+                    const prefix = kind === 'inspector' ? 'we-ext-inspector-field-' : 'we-ext-field-';
+                    const value = doc.value(prefix + id + '-' + name);
+                    if (value !== null && value !== undefined) args[name] = value;
                 }
             }
+            if (runContribution(item, args)) return;
             if (item.op) session.apply(item.op, args).then((r) => { setStatus(r.ok ? 'extension: ' + id : 'extension отклонён', !r.ok); render(); });
             else if (item.command) commands.runExtensionCommand(item.command, args).then(() => render());
             else { note('info', 'SDK_EXTENSION_TOOL', 'Contribution «' + id + '» без op/command'); render(); }
@@ -834,7 +907,7 @@ export function create(host) {
         doc.on('we-delete', 'click', () => commands.deleteSelection().then((r) => { setStatus(r.ok ? 'удалено' : 'удаление отклонено', !r.ok); render(); }));
         doc.on('we-validate', 'click', () => commands.validate().then((r) => { setStatus(r.ok ? 'проверка: ошибок нет' : 'проверка: есть ошибки', !r.ok); render(); }));
         doc.on('we-compile', 'click', () => compile(true).then((r) => { setStatus(r.ok ? 'компиляция: preview готов' : 'компиляция: ошибки', !r.ok); render(); }));
-        doc.on('we-run', 'click', () => { const run = host.run(); setStatus(run ? 'игра запущена' : 'игра не запущена', !run); render(); });
+        doc.on('we-run', 'click', () => { Promise.resolve(host.run()).then((run) => { setStatus(run ? 'игра запущена' : 'игра не запущена', !run); render(); }); });
         doc.on('we-build-run', 'click', buildAndRun);
         doc.on('we-grid-dec', 'click', () => { commands.stepGrid(-1); render(); });
         doc.on('we-grid-inc', 'click', () => { commands.stepGrid(1); render(); });
@@ -912,8 +985,11 @@ export function create(host) {
             commands.setPathFields(null, { loop: true }).then((r) => { setStatus(r.ok ? 'path loop' : 'loop отклонён', !r.ok); render(); });
         });
         doc.on('we-ext-toolbar', 'click', (id, ev, key) => { if (key) dispatchExtension(key); });
+        doc.on('we-ext-overlays', 'click', (id, ev, key) => { if (key) dispatchExtension(key); });
         doc.on('we-ext-menu', 'click', (id, ev, key) => { if (key) dispatchExtension(key); });
         doc.on('we-ext-panels', 'click', (id, ev, key) => { if (key) dispatchExtension(key); });
+        doc.on('we-ext-inspectors', 'click', (id, ev, key) => { if (key) dispatchExtension(key); });
+        doc.on('we-ext-context-actions', 'click', (id, ev, key) => { if (key) dispatchExtension(key); });
         doc.on('we-inspector', 'change', () => { /* значения читаются в Apply */ });
     }
 
