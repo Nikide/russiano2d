@@ -45,6 +45,9 @@
       "api": "$.fn.some"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

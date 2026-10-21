@@ -39,6 +39,9 @@
       "api": "$.input.down"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

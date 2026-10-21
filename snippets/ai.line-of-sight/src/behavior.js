@@ -1,8 +1,11 @@
 // Зрение: дистанция × заметность цели (data visibility), сектор от взгляда (flip), $.world.lineOfSight.
 export default function lineOfSight(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let sees = false;
     return $.updateFor(node, (dt, self) => {
-        const tg = $(config.target);
+        const tg = sel(config.target);
         let now = false;
         if (tg.length) {
             const p = self.pos(), q = tg.pos(), dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy);

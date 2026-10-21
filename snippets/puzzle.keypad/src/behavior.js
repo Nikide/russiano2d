@@ -1,8 +1,11 @@
 // Панель: набранное — data('entered'); Enter — проверка.
 export default function keypad(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let entered = '', left = config.attempts, done = false;
     return $.updateFor(node, (dt, self) => {
-        const who = $(config.actor);
+        const who = sel(config.actor);
         if (done || !who.length || self.distanceTo(who) > config.radius) return;
         for (let d = 0; d <= 9; d++) if ($.input.pressed(String(d)) && entered.length < config.code.length) entered += d;
         if ($.input.pressed('backspace')) entered = entered.slice(0, -1);

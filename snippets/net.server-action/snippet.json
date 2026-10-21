@@ -53,6 +53,9 @@
     },
     {
       "api": "$.on"
+    },
+    {
+      "api": "$.selection.get"
     }
   ],
   "dependencies": [],

@@ -1,8 +1,11 @@
 // Дальний бой: коридор дистанции [min, max], выстрел снарядом в цель.
 export default function rangedAttack(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let cd = config.cooldown;
     return $.updateFor(node, (dt, self) => {
-        const tg = $(config.target);
+        const tg = sel(config.target);
         if (!tg.length || !tg.alive()) return;
         const p = self.pos(), q = tg.pos(), dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1;
         if (d > config.max) self.moveTowards(tg, config.speed);

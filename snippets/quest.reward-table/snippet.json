@@ -38,6 +38,9 @@
       "api": "$.quest.progress"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

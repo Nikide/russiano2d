@@ -23,7 +23,7 @@
 | 007 | `physics.ball` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.attr`, `$.fn.body`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.velocity`, `$.off`, `$.on`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
 | 008 | `pinball.flipper` | ✅ | `$.fn.angle`, `$.fn.emit`, `$.fn.overlaps`, `$.fn.velocity`, `$.input.down`, `$.selection.each`, `$.updateFor` | — |
 | 009 | `trigger.base` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.triggers` | — |
-| 010 | `interactable.base` | ✅ | `$.emit`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.updateFor` | — |
+| 010 | `interactable.base` | ✅ | `$.emit`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.selection.get`, `$.updateFor` | — |
 | 011 | `actor.faction` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.removeClass` | — |
 | 012 | `actor.identity` | ✅ | `$.fn.data` | — |
 | 013 | `actor.spawn-profile` | ✅ | `$.fn.angle`, `$.fn.at`, `$.fn.size` | — |
@@ -58,7 +58,7 @@
 | 037 | `movement.prone` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.height`, `$.fn.size`, `$.fn.velocity`, `$.fn.width`, `$.input.pressed`, `$.updateFor` | — |
 | 038 | `movement.knockback` | ✅ | `$.fn.closest`, `$.fn.externalVelocity`, `$.fn.first`, `$.fn.hp`, `$.fn.pos`, `$.updateFor` | — |
 | 039 | `movement.platform-ride` | ✅ | `$.fn.at`, `$.fn.height`, `$.fn.onFloor`, `$.fn.pos`, `$.fn.width`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
-| 040 | `movement.vehicle-seat` | ✅ | `$.fn.active`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.height`, `$.fn.hide`, `$.fn.pos`, `$.fn.show`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.updateFor` | — |
+| 040 | `movement.vehicle-seat` | ✅ | `$.fn.active`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.height`, `$.fn.hide`, `$.fn.pos`, `$.fn.show`, `$.fn.velocity`, `$.input.pressed`, `$.input.vec`, `$.selection.get`, `$.updateFor` | — |
 
 ## C. Оружие и атаки — 20/20
 
@@ -107,28 +107,28 @@
 | 076 | `health.buff-debuff` | ✅ | `$.fn.data`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.updateFor` | — |
 | 077 | `health.death` | ✅ | `$.emit`, `$.fn.alive`, `$.fn.alpha`, `$.fn.controls`, `$.fn.emit`, `$.fn.fadeOut`, `$.fn.flash`, `$.fn.remove`, `$.fn.velocity`, `$.updateFor` | — |
 | 078 | `health.respawn` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.emit`, `$.fn.respawn`, `$.updateFor` | — |
-| 079 | `health.revive` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.fn.min`, `$.input.down`, `$.updateFor` | — |
+| 079 | `health.revive` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.fn.min`, `$.input.down`, `$.selection.get`, `$.updateFor` | — |
 | 080 | `health.damage-number` | ✅ | `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.height`, `$.fn.max`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.updateFor`, `$.world` | — |
 
 ## E. Поведение врагов — 20/20
 
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
-| 081 | `ai.idle` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.flip`, `$.updateFor` | — |
+| 081 | `ai.idle` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.flip`, `$.selection.get`, `$.updateFor` | — |
 | 082 | `ai.waypoint-patrol` | ✅ | `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.moveTowards`, `$.fn.onWall`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
-| 083 | `ai.chase` | ✅ | `$.fn.distanceTo`, `$.fn.moveTowards`, `$.updateFor` | — |
-| 084 | `ai.melee-attack` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.updateFor` | — |
-| 085 | `ai.ranged-attack` | ✅ | `$.fn.alive`, `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.velocity`, `$.updateFor`, `$.world` | — |
-| 086 | `ai.flee` | ✅ | `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
-| 087 | `ai.guard-post` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
-| 088 | `ai.follow-target` | ✅ | `$.fn.distanceTo`, `$.fn.moveTowards`, `$.updateFor` | — |
-| 089 | `ai.line-of-sight` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.flip`, `$.fn.pos`, `$.updateFor`, `$.world.lineOfSight` | — |
+| 083 | `ai.chase` | ✅ | `$.fn.distanceTo`, `$.fn.moveTowards`, `$.selection.get`, `$.updateFor` | — |
+| 084 | `ai.melee-attack` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.selection.get`, `$.updateFor` | — |
+| 085 | `ai.ranged-attack` | ✅ | `$.fn.alive`, `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.fn.velocity`, `$.selection.get`, `$.updateFor`, `$.world` | — |
+| 086 | `ai.flee` | ✅ | `$.fn.pos`, `$.fn.velocity`, `$.selection.get`, `$.updateFor` | — |
+| 087 | `ai.guard-post` | ✅ | `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.selection.get`, `$.updateFor` | — |
+| 088 | `ai.follow-target` | ✅ | `$.fn.distanceTo`, `$.fn.moveTowards`, `$.selection.get`, `$.updateFor` | — |
+| 089 | `ai.line-of-sight` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.flip`, `$.fn.pos`, `$.selection.get`, `$.updateFor`, `$.world.lineOfSight` | — |
 | 090 | `ai.hearing` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.off`, `$.on` | — |
 | 091 | `ai.investigate` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
 | 092 | `ai.search` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.updateFor` | — |
-| 093 | `ai.cover` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.height`, `$.fn.max`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.fn.width`, `$.selection.each`, `$.updateFor` | — |
-| 094 | `ai.flank` | ✅ | `$.fn.emit`, `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.updateFor` | — |
-| 095 | `ai.formation` | ✅ | `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 093 | `ai.cover` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.height`, `$.fn.max`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.fn.width`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
+| 094 | `ai.flank` | ✅ | `$.fn.emit`, `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.selection.get`, `$.updateFor` | — |
+| 095 | `ai.formation` | ✅ | `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.selection.get`, `$.updateFor` | — |
 | 096 | `ai.boss-phases` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.hp`, `$.fn.map`, `$.fn.removeClass`, `$.updateFor` | — |
 | 097 | `ai.boss-telegraph` | ✅ | `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.damage`, `$.fn.emit`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.selection.get`, `$.updateFor`, `$.world`, `$.world.query` | — |
 | 098 | `ai.spawner` | ✅ | `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.off`, `$.on`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor`, `$.world` | — |
@@ -145,15 +145,15 @@
 | 104 | `npc.personality` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.max`, `$.fn.min` | — |
 | 105 | `npc.relationship` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.removeClass` | — |
 | 106 | `npc.reputation` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
-| 107 | `npc.companion-follow` | ✅ | `$.camera.isOnScreen`, `$.fn.at`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 107 | `npc.companion-follow` | ✅ | `$.camera.isOnScreen`, `$.fn.at`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.selection.get`, `$.updateFor` | — |
 | 108 | `npc.companion-command` | ✅ | `$.fn.alive`, `$.fn.damage`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.velocity`, `$.input.pressed`, `$.selection.each`, `$.updateFor` | — |
-| 109 | `npc.companion-revive` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.fn.moveTowards`, `$.updateFor` | — |
-| 110 | `npc.party-member` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.slice` | — |
-| 111 | `npc.party-formation` | ✅ | `$.fn.attr`, `$.fn.data`, `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.slice`, `$.fn.velocity`, `$.updateFor` | — |
+| 109 | `npc.companion-revive` | ✅ | `$.fn.alive`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hp`, `$.fn.moveTowards`, `$.selection.get`, `$.updateFor` | — |
+| 110 | `npc.party-member` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.slice`, `$.selection.get` | — |
+| 111 | `npc.party-formation` | ✅ | `$.fn.attr`, `$.fn.data`, `$.fn.flip`, `$.fn.moveTowards`, `$.fn.pos`, `$.fn.slice`, `$.fn.velocity`, `$.selection.get`, `$.updateFor` | — |
 | 112 | `npc.squad-leader` | ✅ | `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.pos`, `$.selection.each`, `$.updateFor` | — |
-| 113 | `npc.squad-order` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.velocity`, `$.updateFor` | — |
+| 113 | `npc.squad-order` | ✅ | `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.velocity`, `$.selection.get`, `$.updateFor` | — |
 | 114 | `npc.civilian-panic` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.hasClass`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.removeClass`, `$.fn.velocity`, `$.off`, `$.on`, `$.selection.each`, `$.updateFor` | — |
-| 115 | `npc.civilian-rescue` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.overlaps`, `$.fn.remove`, `$.fn.some`, `$.updateFor` | — |
+| 115 | `npc.civilian-rescue` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.moveTowards`, `$.fn.overlaps`, `$.fn.remove`, `$.fn.some`, `$.selection.get`, `$.updateFor` | — |
 | 116 | `npc.vendor` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.updateFor` | — |
 | 117 | `npc.quest-giver` | ✅ | `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.quest.accept`, `$.quest.status`, `$.quest.turnIn`, `$.updateFor` | — |
 | 118 | `npc.dialogue-anchor` | ✅ | `$.dialog.has`, `$.dialog.isOpen`, `$.dialog.play`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.has`, `$.input.pressed`, `$.updateFor` | — |
@@ -165,22 +165,22 @@
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 121 | `interact.press-action` | ✅ | `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.selection.each`, `$.updateFor` | — |
-| 122 | `interact.hold-action` | ✅ | `$.emit`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.min`, `$.input.down`, `$.updateFor` | — |
+| 122 | `interact.hold-action` | ✅ | `$.emit`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.min`, `$.input.down`, `$.selection.get`, `$.updateFor` | — |
 | 123 | `interact.context-prompt` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.height`, `$.fn.hide`, `$.fn.pos`, `$.fn.remove`, `$.fn.show`, `$.fn.text`, `$.selection.each`, `$.updateFor`, `$.world` | — |
-| 124 | `interact.pickup` | ✅ | `$.audio.play`, `$.fn.overlaps`, `$.fn.remove`, `$.fn.trigger`, `$.updateFor` | — |
+| 124 | `interact.pickup` | ✅ | `$.audio.play`, `$.fn.overlaps`, `$.fn.remove`, `$.fn.trigger`, `$.selection.get`, `$.updateFor` | — |
 | 125 | `interact.door` | ✅ | `$.fn.addClass`, `$.fn.alpha`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.sensor`, `$.input.pressed`, `$.updateFor` | — |
-| 126 | `interact.lock` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.updateFor` | — |
+| 126 | `interact.lock` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.selection.get`, `$.updateFor` | — |
 | 127 | `interact.switch` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.updateFor` | — |
-| 128 | `interact.pressure-plate` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.overlaps`, `$.selection.each`, `$.updateFor` | — |
+| 128 | `interact.pressure-plate` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.overlaps`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
 | 129 | `interact.lever` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.attr`, `$.fn.color`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.flip`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.updateFor` | — |
 | 130 | `interact.chest` | ✅ | `$.emit`, `$.fn.add`, `$.fn.addClass`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.items.has`, `$.updateFor` | — |
 | 131 | `interact.breakable` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.flash`, `$.fn.health`, `$.fn.hp`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove` | — |
-| 132 | `interact.pushable` | ✅ | `$.fn.at`, `$.fn.emit`, `$.fn.height`, `$.fn.pos`, `$.fn.velocity`, `$.fn.width`, `$.updateFor`, `$.world.castShape` | — |
-| 133 | `interact.movable-crate` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.flip`, `$.fn.gravity`, `$.fn.height`, `$.fn.pos`, `$.fn.velocity`, `$.input.pressed`, `$.updateFor` | — |
+| 132 | `interact.pushable` | ✅ | `$.fn.at`, `$.fn.emit`, `$.fn.height`, `$.fn.pos`, `$.fn.velocity`, `$.fn.width`, `$.selection.get`, `$.updateFor`, `$.world.castShape` | — |
+| 133 | `interact.movable-crate` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.flip`, `$.fn.gravity`, `$.fn.height`, `$.fn.pos`, `$.fn.velocity`, `$.input.pressed`, `$.selection.get`, `$.updateFor` | — |
 | 134 | `interact.moving-platform` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.pos`, `$.updateFor` | — |
-| 135 | `interact.elevator` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.emit`, `$.fn.filter`, `$.fn.height`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.input.pressed`, `$.updateFor` | — |
-| 136 | `interact.teleporter` | ✅ | `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.velocity`, `$.time.now`, `$.updateFor` | — |
-| 137 | `interact.portal` | ✅ | `$.fn.emit`, `$.fn.overlaps`, `$.scene.load`, `$.store`, `$.store.set`, `$.updateFor` | — |
+| 135 | `interact.elevator` | ✅ | `$.fn.addClass`, `$.fn.at`, `$.fn.emit`, `$.fn.filter`, `$.fn.height`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.input.pressed`, `$.selection.get`, `$.updateFor` | — |
+| 136 | `interact.teleporter` | ✅ | `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.velocity`, `$.selection.get`, `$.time.now`, `$.updateFor` | — |
+| 137 | `interact.portal` | ✅ | `$.fn.emit`, `$.fn.overlaps`, `$.scene.load`, `$.selection.get`, `$.store`, `$.store.set`, `$.updateFor` | — |
 | 138 | `interact.checkpoint` | ✅ | `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.hp`, `$.fn.overlaps`, `$.fn.pos`, `$.selection.get`, `$.store.set`, `$.updateFor` | — |
 | 139 | `interact.save-point` | ✅ | `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.input.pressed`, `$.save.slot`, `$.updateFor` | — |
 | 140 | `interact.hazard` | ✅ | `$.fn.damage`, `$.fn.overlaps`, `$.selection.each`, `$.updateFor` | — |
@@ -265,13 +265,13 @@
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 201 | `quest.definition` | ✅ | `$.fn.filter`, `$.fn.map`, `$.fn.slice`, `$.quest.accept`, `$.quest.define`, `$.quest.status` | — |
-| 202 | `quest.start-condition` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.quest.accept`, `$.quest.status`, `$.story.flags`, `$.updateFor` | — |
-| 203 | `quest.objective-visit` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.overlaps`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.updateFor` | — |
+| 202 | `quest.start-condition` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.quest.accept`, `$.quest.status`, `$.selection.get`, `$.story.flags`, `$.updateFor` | — |
+| 203 | `quest.objective-visit` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.overlaps`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.selection.get`, `$.updateFor` | — |
 | 204 | `quest.objective-collect` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status` | — |
 | 205 | `quest.objective-defeat` | ✅ | `$.emit`, `$.fn.add`, `$.fn.emit`, `$.fn.has`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
 | 206 | `quest.objective-interact` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.updateFor` | — |
 | 207 | `quest.objective-deliver` | ✅ | `$.emit`, `$.fn.count`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.remove`, `$.input.pressed`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.updateFor` | — |
-| 208 | `quest.objective-survive` | ✅ | `$.emit`, `$.fn.alive`, `$.fn.emit`, `$.fn.max`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.updateFor` | — |
+| 208 | `quest.objective-survive` | ✅ | `$.emit`, `$.fn.alive`, `$.fn.emit`, `$.fn.max`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.selection.get`, `$.updateFor` | — |
 | 209 | `quest.objective-escort` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status` | — |
 | 210 | `quest.objective-branch` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.story.flags`, `$.story.set` | — |
 | 211 | `quest.sequence` | ✅ | `$.emit`, `$.fn.emit`, `$.quest.accept`, `$.quest.status`, `$.quest.turnIn`, `$.updateFor` | — |
@@ -279,11 +279,11 @@
 | 213 | `quest.optional-objective` | ✅ | `$.emit`, `$.fn.emit`, `$.quest.def`, `$.quest.progress`, `$.quest.status`, `$.updateFor` | — |
 | 214 | `quest.timer` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.max`, `$.quest.cancel`, `$.quest.status`, `$.updateFor` | — |
 | 215 | `quest.failure-condition` | ✅ | `$.emit`, `$.fn.alive`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.quest.cancel`, `$.quest.status`, `$.selection.get`, `$.story.flags`, `$.updateFor` | — |
-| 216 | `quest.reward-table` | ✅ | `$.fn.add`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.quest.def`, `$.quest.progress`, `$.updateFor` | — |
+| 216 | `quest.reward-table` | ✅ | `$.fn.add`, `$.fn.emit`, `$.fn.filter`, `$.fn.has`, `$.fn.map`, `$.quest.def`, `$.quest.progress`, `$.selection.get`, `$.updateFor` | — |
 | 217 | `quest.world-marker` | ✅ | `$.camera.isOnScreen`, `$.camera.viewport`, `$.fn.angle`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.height`, `$.fn.hide`, `$.fn.max`, `$.fn.min`, `$.fn.pos`, `$.fn.remove`, `$.fn.show`, `$.fn.size`, `$.quest.status`, `$.updateFor`, `$.world` | — |
 | 218 | `quest.journal` | ✅ | `$.emit`, `$.fn.emit`, `$.input.pressed`, `$.quest.definitions`, `$.quest.line`, `$.quest.status`, `$.store.set`, `$.updateFor` | — |
 | 219 | `mission.wave-objective` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest.isReady`, `$.quest.progress`, `$.quest.status`, `$.updateFor` | — |
-| 220 | `mission.extraction` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.fn.overlaps`, `$.quest.status`, `$.updateFor` | — |
+| 220 | `mission.extraction` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.min`, `$.fn.overlaps`, `$.quest.status`, `$.selection.get`, `$.updateFor` | — |
 
 ## L. Диалоги и повествование — 20/20
 
@@ -291,14 +291,14 @@
 |---|---|---|---|---|
 | 221 | `dialogue.tree` | ✅ | `$.dialog.define`, `$.dialog.play`, `$.emit`, `$.fn.emit`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.some`, `$.off`, `$.on` | — |
 | 222 | `dialogue.choice` | ✅ | `$.dialog.definition`, `$.dialog.off`, `$.dialog.on`, `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.some`, `$.off`, `$.on`, `$.story.set` | — |
-| 223 | `dialogue.condition` | ✅ | `$.dialog.flag`, `$.fn.count`, `$.fn.data`, `$.quest`, `$.story.flags`, `$.updateFor` | — |
+| 223 | `dialogue.condition` | ✅ | `$.dialog.flag`, `$.fn.count`, `$.fn.data`, `$.quest`, `$.selection.get`, `$.story.flags`, `$.updateFor` | — |
 | 224 | `dialogue.action` | ✅ | `$.dialog.definition`, `$.dialog.off`, `$.dialog.on`, `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.story.set` | — |
 | 225 | `dialogue.portrait` | ✅ | `$.dialog.off`, `$.dialog.on`, `$.fn.appendTo`, `$.fn.at`, `$.fn.filter`, `$.fn.hide`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.fn.show`, `$.fn.size`, `$.fn.sprite`, `$.world` | — |
 | 226 | `dialogue.typewriter` | ✅ | `$.audio.play`, `$.dialog.isOpen`, `$.dialog.isTyping`, `$.dialog.speed`, `$.dialog.text`, `$.fn.speed`, `$.fn.text`, `$.updateFor` | — |
 | 227 | `dialogue.skip` | ✅ | `$.dialog.choices`, `$.dialog.isOpen`, `$.dialog.next`, `$.input.down`, `$.input.pressed`, `$.updateFor` | — |
 | 228 | `grid.pathfinding` | ✅ | `$.fn.add`, `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.moveTowards`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.slice`, `$.nav.grid`, `$.nav.pathOn`, `$.updateFor` | — |
 | 229 | `dialogue.auto-advance` | ✅ | `$.dialog.choices`, `$.dialog.isOpen`, `$.dialog.next`, `$.dialog.off`, `$.dialog.on`, `$.emit`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.input.pressed`, `$.updateFor` | — |
-| 230 | `dialogue.conversation-lock` | ✅ | `$.dialog.isOpen`, `$.fn.active`, `$.fn.controls`, `$.fn.data`, `$.fn.emit`, `$.fn.velocity`, `$.updateFor` | — |
+| 230 | `dialogue.conversation-lock` | ✅ | `$.dialog.isOpen`, `$.fn.active`, `$.fn.controls`, `$.fn.data`, `$.fn.emit`, `$.fn.velocity`, `$.selection.get`, `$.updateFor` | — |
 | 231 | `story.flag` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.story.set` | — |
 | 232 | `story.counter` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.quest`, `$.story.flags`, `$.story.set` | — |
 | 233 | `story.scene-transition` | ✅ | `$.camera.viewport`, `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.fadeTo`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.fn.size`, `$.off`, `$.on`, `$.scene.load`, `$.story.play`, `$.world` | — |
@@ -316,11 +316,11 @@
 |---|---|---|---|---|
 | 241 | `puzzle.state-machine` | ✅ | `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.find`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.removeClass`, `$.off`, `$.on` | — |
 | 242 | `puzzle.sequence-lock` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
-| 243 | `puzzle.keypad` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.slice`, `$.input.pressed`, `$.updateFor` | — |
+| 243 | `puzzle.keypad` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.slice`, `$.input.pressed`, `$.selection.get`, `$.updateFor` | — |
 | 244 | `puzzle.switch-combination` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.updateFor` | — |
 | 245 | `puzzle.light-mirrors` | ✅ | `$.emit`, `$.fn.angle`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.height`, `$.fn.max`, `$.fn.min`, `$.fn.pos`, `$.fn.width`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
 | 246 | `puzzle.pressure-sequence` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
-| 247 | `puzzle.sokoban` | ✅ | `$.emit`, `$.fn.at`, `$.fn.attr`, `$.fn.emit`, `$.fn.every`, `$.fn.find`, `$.fn.pos`, `$.input.pressed`, `$.updateFor` | — |
+| 247 | `puzzle.sokoban` | ✅ | `$.emit`, `$.fn.at`, `$.fn.attr`, `$.fn.emit`, `$.fn.every`, `$.fn.find`, `$.fn.pos`, `$.input.pressed`, `$.selection.get`, `$.updateFor` | — |
 | 248 | `puzzle.matching` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.every`, `$.fn.find`, `$.fn.hasClass`, `$.fn.height`, `$.fn.map`, `$.fn.pos`, `$.fn.removeClass`, `$.fn.width`, `$.input.mousePressed`, `$.input.mouseWorld`, `$.updateFor` | — |
 | 249 | `puzzle.sliding-tiles` | ✅ | `$.emit`, `$.fn.at`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.every`, `$.fn.find`, `$.fn.has`, `$.fn.map`, `$.input.mousePressed`, `$.input.mouseWorld`, `$.updateFor` | — |
 | 250 | `puzzle.rotating-discs` | ✅ | `$.emit`, `$.fn.angle`, `$.fn.attr`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.every`, `$.fn.find`, `$.fn.height`, `$.fn.map`, `$.fn.max`, `$.fn.width`, `$.input.mousePressed`, `$.input.mouseWorld`, `$.updateFor` | — |
@@ -340,7 +340,7 @@
 | № | ID | Статус | API | Пробел |
 |---|---|---|---|---|
 | 261 | `world.scene-entry` | ✅ | `$.emit`, `$.fn.at`, `$.fn.emit`, `$.fn.pos`, `$.fn.remove`, `$.fn.velocity`, `$.selection.get`, `$.store`, `$.store.get`, `$.store.remove`, `$.updateFor` | — |
-| 262 | `world.scene-exit` | ✅ | `$.fn.emit`, `$.fn.overlaps`, `$.quest`, `$.scene.load`, `$.store.set`, `$.story.flags`, `$.updateFor` | — |
+| 262 | `world.scene-exit` | ✅ | `$.fn.emit`, `$.fn.overlaps`, `$.quest`, `$.scene.load`, `$.selection.get`, `$.store.set`, `$.story.flags`, `$.updateFor` | — |
 | 263 | `world.spawn-points` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.find`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.some`, `$.off`, `$.on`, `$.prefab.has`, `$.prefab.instantiate`, `$.world`, `$.world.query` | — |
 | 264 | `world.checkpoint-chain` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.overlaps`, `$.fn.slice`, `$.save.get`, `$.save.set`, `$.selection.get`, `$.updateFor` | — |
 | 265 | `world.tilemap-layer` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.data`, `$.fn.emit`, `$.fn.layer`, `$.fn.pos`, `$.fn.remove`, `$.fs.readJSON`, `$.selection.get`, `$.tilemap.create`, `$.world` | — |
@@ -348,16 +348,16 @@
 | 267 | `world.breakable-tiles` | ✅ | `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.height`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.setTile`, `$.fn.tileAt`, `$.fn.width`, `$.off`, `$.on`, `$.updateFor` | — |
 | 268 | `world.parallax-layer` | ✅ | `$.fn.layer`, `$.fn.parallax`, `$.fn.sprite`, `$.layers.parallax` | — |
 | 269 | `world.light-zone` | ✅ | `$.fn.color`, `$.fn.intensity`, `$.fn.radius`, `$.updateFor` | — |
-| 270 | `world.audio-zone` | ✅ | `$.audio.music`, `$.audio.musicStop`, `$.audio.removeZone`, `$.audio.zone`, `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.height`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.fn.zone`, `$.updateFor` | — |
+| 270 | `world.audio-zone` | ✅ | `$.audio.music`, `$.audio.musicStop`, `$.audio.removeZone`, `$.audio.zone`, `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.height`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.fn.zone`, `$.selection.get`, `$.updateFor` | — |
 | 271 | `world.weather` | ✅ | `$.camera.viewport`, `$.fn.alpha`, `$.fn.appendTo`, `$.fn.at`, `$.fn.color`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.random.range`, `$.store.set`, `$.updateFor`, `$.world` | — |
 | 272 | `world.day-night` | ✅ | `$.emit`, `$.fn.color`, `$.fn.emit`, `$.fn.map`, `$.fn.slice`, `$.store.set`, `$.time.now`, `$.updateFor`, `$.world.color` | — |
 | 273 | `world.gravity-zone` | ✅ | `$.fn.add`, `$.fn.emit`, `$.fn.gravity`, `$.fn.has`, `$.fn.overlaps`, `$.fn.velocity`, `$.selection.each`, `$.selection.get`, `$.updateFor` | — |
-| 274 | `world.time-scale-zone` | ✅ | `$.fn.overlaps`, `$.fn.scale`, `$.time.scale`, `$.updateFor` | — |
-| 275 | `tower.placement` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.hasClass`, `$.fn.some`, `$.input.mousePressed`, `$.input.mouseWorld`, `$.input.pressed`, `$.prefab.has`, `$.prefab.instantiate`, `$.updateFor`, `$.world`, `$.world.query` | — |
+| 274 | `world.time-scale-zone` | ✅ | `$.fn.overlaps`, `$.fn.scale`, `$.selection.get`, `$.time.scale`, `$.updateFor` | — |
+| 275 | `tower.placement` | ✅ | `$.emit`, `$.fn.addClass`, `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.hasClass`, `$.fn.some`, `$.input.mousePressed`, `$.input.mouseWorld`, `$.input.pressed`, `$.prefab.has`, `$.prefab.instantiate`, `$.selection.get`, `$.updateFor`, `$.world`, `$.world.query` | — |
 | 276 | `world.one-way-platform` | ✅ | `$.fn.addClass`, `$.fn.oneWay`, `$.fn.removeClass` | — |
 | 277 | `world.moving-hazard` | ✅ | `$.fn.angle`, `$.fn.at`, `$.fn.damage`, `$.fn.every`, `$.fn.filter`, `$.fn.map`, `$.fn.overlaps`, `$.fn.pos`, `$.selection.each`, `$.updateFor` | — |
 | 278 | `world.secret-area` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.fadeTo`, `$.fn.overlaps`, `$.save`, `$.save.get`, `$.save.set`, `$.selection.get`, `$.updateFor` | — |
-| 279 | `world.streamed-room` | ✅ | `$.emit`, `$.fn.active`, `$.fn.attr`, `$.fn.emit`, `$.fn.height`, `$.fn.pos`, `$.fn.width`, `$.updateFor` | — |
+| 279 | `world.streamed-room` | ✅ | `$.emit`, `$.fn.active`, `$.fn.attr`, `$.fn.emit`, `$.fn.height`, `$.fn.pos`, `$.fn.width`, `$.selection.get`, `$.updateFor` | — |
 | 280 | `world.level-exit` | ✅ | `$.emit`, `$.fn.emit`, `$.fn.overlaps`, `$.save`, `$.save.get`, `$.save.set`, `$.scene.load`, `$.selection.get`, `$.time.now`, `$.updateFor` | — |
 
 ## O. Камера и экранное представление — 20/20
@@ -367,9 +367,9 @@
 | 281 | `camera.follow` | ✅ | `$.camera.follow` | — |
 | 282 | `traffic.signal` | ✅ | `$.fn.color`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.filter`, `$.fn.velocity`, `$.selection.each`, `$.updateFor` | — |
 | 283 | `run.route-generator` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.random.pick`, `$.random.seed`, `$.save`, `$.save.get`, `$.save.set`, `$.scene.load`, `$.selection.get` | — |
-| 284 | `camera.smoothing` | ✅ | `$.camera.at`, `$.camera.follow`, `$.camera.isOnScreen`, `$.camera.unfollow`, `$.fn.at`, `$.fn.pos`, `$.updateFor` | — |
+| 284 | `camera.smoothing` | ✅ | `$.camera.at`, `$.camera.follow`, `$.camera.isOnScreen`, `$.camera.unfollow`, `$.fn.at`, `$.fn.pos`, `$.selection.get`, `$.updateFor` | — |
 | 285 | `camera.bounds` | ✅ | `$.camera.limits` | — |
-| 286 | `camera.room-lock` | ✅ | `$.camera.follow`, `$.camera.limits`, `$.camera.panTo`, `$.camera.unfollow`, `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.height`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.updateFor` | — |
+| 286 | `camera.room-lock` | ✅ | `$.camera.follow`, `$.camera.limits`, `$.camera.panTo`, `$.camera.unfollow`, `$.emit`, `$.fn.attr`, `$.fn.emit`, `$.fn.height`, `$.fn.overlaps`, `$.fn.pos`, `$.fn.width`, `$.selection.get`, `$.updateFor` | — |
 | 287 | `camera.screen-shake` | ✅ | `$.camera.shake`, `$.fn.hp`, `$.fn.shake`, `$.updateFor` | — |
 | 288 | `camera.trauma` | ✅ | `$.camera.shake`, `$.fn.max`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.shake`, `$.off`, `$.on`, `$.selection.get`, `$.store.get`, `$.updateFor` | — |
 | 289 | `camera.zoom` | ✅ | `$.camera.zoom`, `$.camera.zoomTo` | — |
@@ -424,7 +424,7 @@
 | 328 | `audio.damage` | ✅ | `$.audio.playAt`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.time.now` | — |
 | 329 | `audio.ui` | ✅ | `$.audio.play`, `$.fn.filter`, `$.fn.map`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on` | — |
 | 330 | `audio.dialogue` | ✅ | `$.audio.play`, `$.dialog`, `$.dialog.define`, `$.dialog.play`, `$.fn.off`, `$.fn.on` | — |
-| 331 | `audio.distance-profile` | ✅ | `$.audio.play`, `$.fn.distanceTo`, `$.fn.max`, `$.fn.min`, `$.fn.stop`, `$.fn.volume`, `$.updateFor` | — |
+| 331 | `audio.distance-profile` | ✅ | `$.audio.play`, `$.fn.distanceTo`, `$.fn.max`, `$.fn.min`, `$.fn.stop`, `$.fn.volume`, `$.selection.get`, `$.updateFor` | — |
 | 332 | `audio.ducking` | ✅ | `$.audio.musicVolume`, `$.fn.off`, `$.fn.on`, `$.off`, `$.on`, `$.updateFor` | — |
 | 333 | `fishing.cast` | ✅ | `$.emit`, `$.fn.data`, `$.fn.emit`, `$.fn.filter`, `$.fn.map`, `$.fn.max`, `$.input.pressed`, `$.random.range`, `$.random.weighted`, `$.updateFor` | — |
 | 334 | `farming.crop` | ✅ | `$.emit`, `$.fn.add`, `$.fn.addClass`, `$.fn.data`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.has`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.input.pressed`, `$.items.has`, `$.updateFor` | — |
@@ -519,7 +519,7 @@
 | 403 | `net.replicate-animation` | ✅ | `$.fn.attr`, `$.fn.data`, `$.fn.flip`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.off`, `$.net.on`, `$.net.online`, `$.updateFor` | — |
 | 404 | `net.replicate-inventory` | ✅ | `$.fn.add`, `$.fn.attr`, `$.fn.data`, `$.fn.emit`, `$.fn.has`, `$.fn.off`, `$.fn.on`, `$.fn.remove`, `$.items.has`, `$.net.broadcast`, `$.net.isAuthority`, `$.net.off`, `$.net.on` | — |
 | 405 | `net.input-command` | ✅ | `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.fn.velocity`, `$.input.down`, `$.net.input`, `$.net.isAuthority`, `$.net.off`, `$.net.on`, `$.net.online`, `$.updateFor` | — |
-| 406 | `net.server-action` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.handle`, `$.net.rpc`, `$.net.send`, `$.net.unhandle`, `$.off`, `$.on` | — |
+| 406 | `net.server-action` | ✅ | `$.emit`, `$.fn.attr`, `$.fn.distanceTo`, `$.fn.emit`, `$.fn.off`, `$.fn.on`, `$.net.broadcast`, `$.net.handle`, `$.net.rpc`, `$.net.send`, `$.net.unhandle`, `$.off`, `$.on`, `$.selection.get` | — |
 | 407 | `net.damage-command` | ✅ | `$.fn.damage`, `$.fn.distanceTo`, `$.fn.min`, `$.fn.off`, `$.fn.on`, `$.net.handle`, `$.net.isAuthority`, `$.net.rpc`, `$.net.send`, `$.net.unhandle`, `$.off`, `$.on` | — |
 | 408 | `net.projectile-authority` | ✅ | `$.fn.appendTo`, `$.fn.at`, `$.fn.damage`, `$.fn.find`, `$.fn.flip`, `$.fn.hp`, `$.fn.net`, `$.fn.off`, `$.fn.on`, `$.fn.pos`, `$.fn.remove`, `$.fn.size`, `$.net.handle`, `$.net.isAuthority`, `$.net.online`, `$.net.rpc`, `$.net.unhandle`, `$.net.unreplicate`, `$.selection.get`, `$.updateFor`, `$.world`, `$.world.query` | — |
 | 409 | `net.interpolation-profile` | ✅ | `$.net.interpolationDelay`, `$.net.syncRate` | — |

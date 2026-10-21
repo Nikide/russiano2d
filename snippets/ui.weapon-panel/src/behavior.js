@@ -10,10 +10,13 @@ function hud($, name, body, style) {
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export default function weaponPanel(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const doc = hud($, 'ui-weapon', '<div class="panel" style="left: ' + config.position[0] + 'px; top: ' + config.position[1] + 'px;"><span id="w"></span></div>');
     let last = '';
     const stop = $.updateFor(node, () => {
-        const w = $(config.who), gun = w.length ? $.weapons.of(w) : null;
+        const w = sel(config.who), gun = w.length ? $.weapons.of(w) : null;
         const text = gun ? (gun.id + ' · ' + gun.mode + ' · ' + gun.magazine + '/' + gun.capacity + (w.data('ammoReserve') !== undefined ? ' (' + w.data('ammoReserve') + ')' : '')) : '—';
         if (text !== last) { last = text; doc.text('w', esc(text)); }
     });

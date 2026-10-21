@@ -28,6 +28,9 @@
       "api": "$.fn.flip"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

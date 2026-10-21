@@ -8,9 +8,12 @@ function advance($, quest, index, n) {
 }
 
 export default function objectiveVisit(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let inside = false, done = false;
     return $.updateFor(node, (dt, self) => {
-        const p = $(config.player);
+        const p = sel(config.player);
         const now = p.length && self.overlaps(p);
         if (now && !inside && !(config.once && done)) { if (advance($, config.quest, config.objective, 1)) done = true; }
         inside = !!now;

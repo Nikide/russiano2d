@@ -29,6 +29,9 @@
       "api": "$.quest"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.story.flags"
     },
     {

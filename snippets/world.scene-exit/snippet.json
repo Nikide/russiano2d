@@ -28,6 +28,9 @@
       "api": "$.scene.load"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.store.set"
     },
     {

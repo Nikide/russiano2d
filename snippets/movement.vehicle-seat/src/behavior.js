@@ -1,8 +1,11 @@
 // Транспорт: водитель скрывается и выключается; транспорт едет от ввода; выход — обратно.
 export default function vehicleSeat(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let seated = false;
     return $.updateFor(node, (dt, self) => {
-        const d = $(config.driver);
+        const d = sel(config.driver);
         if (!d.length) return;
         if ($.input.pressed(config.key)) {
             if (!seated && self.distanceTo(d) <= config.radius) { seated = true; d.hide().active(false); self.emit('vehicle:enter', { driver: d }); return; }

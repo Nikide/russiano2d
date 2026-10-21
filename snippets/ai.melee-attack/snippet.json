@@ -36,6 +36,9 @@
       "api": "$.fn.moveTowards"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

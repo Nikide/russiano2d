@@ -1,7 +1,10 @@
 // Фланг: точка перпендикулярно «лицу» цели (flip) на distance.
 export default function flank(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     return $.updateFor(node, (dt, self) => {
-        const tg = $(config.target);
+        const tg = sel(config.target);
         if (!tg.length) return;
         const q = tg.pos(), p = self.pos(), face = tg.flip().x ? -1 : 1;
         let s = config.side === 'left' ? -1 : config.side === 'right' ? 1 : (p.y < q.y ? -1 : 1);

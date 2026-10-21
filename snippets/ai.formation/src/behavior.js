@@ -7,9 +7,12 @@ function offset(shape, slot, spacing) {
 }
 
 export default function formation(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const off = offset(config.shape, config.position, config.spacing);
     return $.updateFor(node, (dt, self) => {
-        const l = $(config.leader);
+        const l = sel(config.leader);
         if (!l.length) return;
         const q = l.pos(), face = l.flip().x ? -1 : 1, p = self.pos();
         const spot = { x: q.x + off.x * face, y: q.y + off.y };

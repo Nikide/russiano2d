@@ -37,6 +37,9 @@
       "api": "$.quest.status"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

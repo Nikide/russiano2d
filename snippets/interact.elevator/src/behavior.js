@@ -1,5 +1,8 @@
 // Лифт: целевой этаж; актор на платформе стрелками выбирает соседний.
 export default function elevator(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const floors = config.floors.map(Number).filter(Number.isFinite);
     let floor = 0, target = 0;
     node.addClass('platform');
@@ -7,7 +10,7 @@ export default function elevator(node, config, $) {
     node.on('elevator:call', call);
     const stop = $.updateFor(node, (dt, self) => {
         if (!floors.length) return;
-        const who = $(config.actor);
+        const who = sel(config.actor);
         const riding = who.length && self.overlaps(who) || who.length && Math.abs(who.pos().x - self.pos().x) < self.width() / 2 && Math.abs(who.pos().y + who.height() / 2 - (self.pos().y - self.height() / 2)) < 6;
         if (riding && floor === target) {
             if ($.input.pressed(config.up) && target < floors.length - 1) target++;

@@ -47,6 +47,9 @@
       "api": "$.quest.status"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.story.flags"
     },
     {

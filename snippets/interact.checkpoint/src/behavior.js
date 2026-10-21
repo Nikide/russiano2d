@@ -1,8 +1,11 @@
 // Контрольная точка: health.respawn читает data('checkpoint').
 export default function checkpoint(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let active = false;
     return $.updateFor(node, (dt, self) => {
-        const who = $(config.actor);
+        const who = sel(config.actor);
         if (!who.length || !self.overlaps(who)) return;
         const p = self.pos(), cp = who.data('checkpoint');
         if (cp && cp.id === self.attr('id')) return;

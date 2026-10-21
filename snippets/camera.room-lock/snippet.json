@@ -49,6 +49,9 @@
       "api": "$.fn.width"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

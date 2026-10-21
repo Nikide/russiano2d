@@ -41,6 +41,9 @@
     },
     {
       "api": "$.fn.slice"
+    },
+    {
+      "api": "$.selection.get"
     }
   ],
   "dependencies": [],

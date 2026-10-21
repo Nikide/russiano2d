@@ -1,10 +1,13 @@
 // Травма 0..1; событие damaged наблюдаемого и глобальное camera:trauma { amount }.
 export default function cameraTrauma(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let trauma = 0;
     const add = (v) => { trauma = Math.min(1, trauma + v); };
     const onHit = (e) => add((e.data.amount || 0) * config.perHit);
     const onTrauma = (e) => add(Number(e.data && e.data.amount) || 0.3);
-    const w = $(config.watch);
+    const w = sel(config.watch);
     if (w.length) w.on('damaged', onHit);
     $.on('camera:trauma', onTrauma);
     const stop = $.updateFor(node, (dt) => {

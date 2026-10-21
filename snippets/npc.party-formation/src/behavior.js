@@ -3,9 +3,12 @@
 function partyOf(leader) { return (leader.data('party') || []).slice(); }
 
 export default function partyFormation(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const id = node.attr('id');
     return $.updateFor(node, (dt, self) => {
-        const l = $(config.leader);
+        const l = sel(config.leader);
         if (!l.length) return;
         const i = partyOf(l).indexOf(id);
         if (i < 0) return;

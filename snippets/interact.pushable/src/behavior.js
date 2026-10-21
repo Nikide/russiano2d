@@ -1,7 +1,10 @@
 // Толкание: актор рядом и движется в сторону объекта → сдвиг, если $.world.castShape свободен.
 export default function pushable(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     return $.updateFor(node, (dt, self) => {
-        const who = $(config.actor);
+        const who = sel(config.actor);
         if (!who.length) return;
         const p = self.pos(), q = who.pos(), v = who.velocity();
         const gapX = Math.abs(p.x - q.x) - (self.width() + who.width()) / 2;

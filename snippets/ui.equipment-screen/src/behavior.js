@@ -12,11 +12,14 @@ const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 function bagOf(w) { const b = w && w.length ? w.data('inv') : null; return b && b.add ? b : null; }
 
 export default function equipmentScreen(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const doc = hud($, 'ui-equipment', '<div class="panel" style="left: 20%; top: 15%; width: 30%;"><div>Экипировка</div><div id="worn"></div><div id="cmp"></div></div>');
     doc.hide();
     let open = false;
     const render = () => {
-        const bag = bagOf($(config.who));
+        const bag = bagOf(sel(config.who));
         if (!bag) return;
         doc.html('worn', bag.wornList().map((x) => '<div>' + esc((x.slot || '') + ': ' + (($.items.get(x.id) || {}).title || x.id)) + '</div>').join('') || '<div>ничего не надето</div>');
         doc.text('cmp', 'Класс брони: ' + bag.armorClass());

@@ -34,6 +34,9 @@
       "api": "$.fn.volume"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

@@ -52,6 +52,9 @@
       "api": "$.fn.zone"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

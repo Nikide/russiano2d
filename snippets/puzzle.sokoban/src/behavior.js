@@ -1,10 +1,13 @@
 // Пошаговый сокобан: шаг игрока на клетку ящика двигает ящик дальше, если там пусто.
 export default function sokoban(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const C = config.cell, snap = (v) => Math.round(v / C) * C;
     const at = (sel, x, y) => $(sel).nodes.find((n) => snap(n.x) === x && snap(n.y) === y);
     let solved = false;
     return $.updateFor(node, () => {
-        const p = $(config.player);
+        const p = sel(config.player);
         if (!p.length) return;
         let dx = 0, dy = 0;
         if ($.input.pressed('d') || $.input.pressed('right')) dx = 1; else if ($.input.pressed('a') || $.input.pressed('left')) dx = -1;

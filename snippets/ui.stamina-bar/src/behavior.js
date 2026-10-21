@@ -10,10 +10,13 @@ function hud($, name, body, style) {
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export default function bar(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const doc = hud($, 'ui.stamina-bar', '<div class="panel" style="left: ' + config.position[0] + 'px; top: ' + config.position[1] + 'px; width: ' + config.width + 'px;"><div class="bar"><div id="fill" class="fill" style="width: 100%; background-color: ' + config.color + ';"></div></div></div>');
     let last = -1;
     const stop = $.updateFor(node, () => {
-        const w = $(config.who);
+        const w = sel(config.who);
         if (!w.length) return;
         const value = Number(w.data('stamina') ?? config.max), max = config.max;
         const k = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;

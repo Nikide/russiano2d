@@ -1,8 +1,11 @@
 // Комната: center — камера в центре узла; clamp — границы узла.
 export default function cameraRoomLock(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let inside = false;
     const stop = $.updateFor(node, (dt, self) => {
-        const p = $(config.player);
+        const p = sel(config.player);
         const now = p.length && self.overlaps(p);
         if (now === inside) return;
         inside = now;

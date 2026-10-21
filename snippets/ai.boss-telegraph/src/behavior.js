@@ -1,11 +1,14 @@
 // Телеграф: зона на позиции цели заранее; по истечении — урон всем внутри.
 export default function bossTelegraph(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let t = config.interval;
     return $.updateFor(node, (dt, self) => {
         t -= dt * 1000;
         if (t > 0) return;
         t = config.interval;
-        const tg = $(config.target);
+        const tg = sel(config.target);
         if (!tg.length) return;
         const q = tg.pos(), r = config.radius;
         const zone = $('<telegraph>').at(q.x, q.y).size(r * 2, r * 2).color(config.color).alpha(0.3).appendTo($.world);

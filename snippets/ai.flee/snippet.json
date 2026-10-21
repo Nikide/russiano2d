@@ -27,6 +27,9 @@
       "api": "$.fn.velocity"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

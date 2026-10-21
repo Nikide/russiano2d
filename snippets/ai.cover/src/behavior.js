@@ -1,7 +1,10 @@
 // Укрытие: точка за ближайшим укрытием на линии «угроза → укрытие».
 export default function cover(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     return $.updateFor(node, (dt, self) => {
-        const th = $(config.threat);
+        const th = sel(config.threat);
         if (!th.length || self.distanceTo(th) > config.danger) return;
         const p = self.pos(), t = th.pos();
         let best = null;

@@ -10,10 +10,13 @@ function hud($, name, body, style) {
 const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export default function partyPanel(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const doc = hud($, 'ui-party', '<div id="p" class="panel" style="left: ' + config.position[0] + 'px; top: ' + config.position[1] + 'px;"></div>');
     let last = '';
     const stop = $.updateFor(node, () => {
-        const ids = $(config.leader).data('party') || [];
+        const ids = sel(config.leader).data('party') || [];
         const html = ids.map((id) => { const m = $('#' + id); const raw = m.length ? m.get(0) : null; const name = (m.data('identity') || {}).name || id;
             return '<div>' + esc(name) + (raw && raw.max_hp > 0 ? ' — ' + m.hp() + '/' + raw.max_hp : '') + '</div>'; }).join('');
         if (html !== last) { last = html; doc.html('p', html); }

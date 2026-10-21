@@ -22,6 +22,9 @@
       "api": "$.fn.scale"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.time.scale"
     },
     {

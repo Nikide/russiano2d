@@ -1,9 +1,12 @@
 // Перенос: взятый ящик без гравитации следует перед актором (по взгляду).
 export default function movableCrate(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let held = false;
     node.addClass('crate');
     return $.updateFor(node, (dt, self) => {
-        const who = $(config.actor);
+        const who = sel(config.actor);
         if (!who.length) return;
         if ($.input.pressed(config.key) && (held || self.distanceTo(who) <= config.radius)) {
             held = !held;

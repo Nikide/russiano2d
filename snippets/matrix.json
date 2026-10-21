@@ -200,6 +200,7 @@
     "$.fn.distanceTo",
     "$.fn.emit",
     "$.input.pressed",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -766,6 +767,7 @@
     "$.fn.velocity",
     "$.input.pressed",
     "$.input.vec",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1666,6 +1668,7 @@
     "$.fn.hp",
     "$.fn.min",
     "$.input.down",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1711,6 +1714,7 @@
     "$.fn.distanceTo",
     "$.fn.emit",
     "$.fn.flip",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1748,6 +1752,7 @@
    "api": [
     "$.fn.distanceTo",
     "$.fn.moveTowards",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1767,6 +1772,7 @@
     "$.fn.distanceTo",
     "$.fn.emit",
     "$.fn.moveTowards",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1792,6 +1798,7 @@
     "$.fn.remove",
     "$.fn.size",
     "$.fn.velocity",
+    "$.selection.get",
     "$.updateFor",
     "$.world"
    ],
@@ -1809,6 +1816,7 @@
    "api": [
     "$.fn.pos",
     "$.fn.velocity",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1827,6 +1835,7 @@
     "$.fn.moveTowards",
     "$.fn.pos",
     "$.fn.velocity",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1843,6 +1852,7 @@
    "api": [
     "$.fn.distanceTo",
     "$.fn.moveTowards",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1861,6 +1871,7 @@
     "$.fn.emit",
     "$.fn.flip",
     "$.fn.pos",
+    "$.selection.get",
     "$.updateFor",
     "$.world.lineOfSight"
    ],
@@ -1948,6 +1959,7 @@
     "$.fn.velocity",
     "$.fn.width",
     "$.selection.each",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1966,6 +1978,7 @@
     "$.fn.flip",
     "$.fn.moveTowards",
     "$.fn.pos",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -1984,6 +1997,7 @@
     "$.fn.moveTowards",
     "$.fn.pos",
     "$.fn.velocity",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2240,6 +2254,7 @@
     "$.fn.moveTowards",
     "$.fn.pos",
     "$.fn.velocity",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2286,6 +2301,7 @@
     "$.fn.emit",
     "$.fn.hp",
     "$.fn.moveTowards",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2308,7 +2324,8 @@
     "$.fn.min",
     "$.fn.off",
     "$.fn.on",
-    "$.fn.slice"
+    "$.fn.slice",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -2329,6 +2346,7 @@
     "$.fn.pos",
     "$.fn.slice",
     "$.fn.velocity",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2373,6 +2391,7 @@
     "$.fn.on",
     "$.fn.pos",
     "$.fn.velocity",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2422,6 +2441,7 @@
     "$.fn.overlaps",
     "$.fn.remove",
     "$.fn.some",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2569,6 +2589,7 @@
     "$.fn.emit",
     "$.fn.min",
     "$.input.down",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2614,6 +2635,7 @@
     "$.fn.overlaps",
     "$.fn.remove",
     "$.fn.trigger",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2660,6 +2682,7 @@
     "$.fn.on",
     "$.off",
     "$.on",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2703,6 +2726,7 @@
     "$.fn.emit",
     "$.fn.overlaps",
     "$.selection.each",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2800,6 +2824,7 @@
     "$.fn.pos",
     "$.fn.velocity",
     "$.fn.width",
+    "$.selection.get",
     "$.updateFor",
     "$.world.castShape"
    ],
@@ -2825,6 +2850,7 @@
     "$.fn.pos",
     "$.fn.velocity",
     "$.input.pressed",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2872,6 +2898,7 @@
     "$.fn.pos",
     "$.fn.width",
     "$.input.pressed",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -2892,6 +2919,7 @@
     "$.fn.overlaps",
     "$.fn.pos",
     "$.fn.velocity",
+    "$.selection.get",
     "$.time.now",
     "$.updateFor"
    ],
@@ -2910,6 +2938,7 @@
     "$.fn.emit",
     "$.fn.overlaps",
     "$.scene.load",
+    "$.selection.get",
     "$.store",
     "$.store.set",
     "$.updateFor"
@@ -4364,6 +4393,7 @@
     "$.quest",
     "$.quest.accept",
     "$.quest.status",
+    "$.selection.get",
     "$.story.flags",
     "$.updateFor"
    ],
@@ -4385,6 +4415,7 @@
     "$.quest.isReady",
     "$.quest.progress",
     "$.quest.status",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -4499,6 +4530,7 @@
     "$.quest.isReady",
     "$.quest.progress",
     "$.quest.status",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -4680,6 +4712,7 @@
     "$.fn.map",
     "$.quest.def",
     "$.quest.progress",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -4775,6 +4808,7 @@
     "$.fn.min",
     "$.fn.overlaps",
     "$.quest.status",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -4844,6 +4878,7 @@
     "$.fn.count",
     "$.fn.data",
     "$.quest",
+    "$.selection.get",
     "$.story.flags",
     "$.updateFor"
    ],
@@ -5005,6 +5040,7 @@
     "$.fn.data",
     "$.fn.emit",
     "$.fn.velocity",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -5320,6 +5356,7 @@
     "$.fn.emit",
     "$.fn.slice",
     "$.input.pressed",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -5410,6 +5447,7 @@
     "$.fn.find",
     "$.fn.pos",
     "$.input.pressed",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -5762,6 +5800,7 @@
     "$.fn.overlaps",
     "$.quest",
     "$.scene.load",
+    "$.selection.get",
     "$.store.set",
     "$.story.flags",
     "$.updateFor"
@@ -5950,6 +5989,7 @@
     "$.fn.pos",
     "$.fn.width",
     "$.fn.zone",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -6035,6 +6075,7 @@
    "api": [
     "$.fn.overlaps",
     "$.fn.scale",
+    "$.selection.get",
     "$.time.scale",
     "$.updateFor"
    ],
@@ -6062,6 +6103,7 @@
     "$.input.pressed",
     "$.prefab.has",
     "$.prefab.instantiate",
+    "$.selection.get",
     "$.updateFor",
     "$.world",
     "$.world.query"
@@ -6147,6 +6189,7 @@
     "$.fn.height",
     "$.fn.pos",
     "$.fn.width",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -6252,6 +6295,7 @@
     "$.camera.unfollow",
     "$.fn.at",
     "$.fn.pos",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -6291,6 +6335,7 @@
     "$.fn.overlaps",
     "$.fn.pos",
     "$.fn.width",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -7239,6 +7284,7 @@
     "$.fn.min",
     "$.fn.stop",
     "$.fn.volume",
+    "$.selection.get",
     "$.updateFor"
    ],
    "gaps": [],
@@ -9014,7 +9060,8 @@
     "$.net.send",
     "$.net.unhandle",
     "$.off",
-    "$.on"
+    "$.on",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []

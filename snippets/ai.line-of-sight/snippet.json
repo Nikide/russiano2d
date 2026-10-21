@@ -28,6 +28,9 @@
       "api": "$.fn.pos"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     },
     {

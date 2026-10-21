@@ -40,6 +40,9 @@
       "api": "$.on"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

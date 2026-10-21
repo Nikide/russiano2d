@@ -12,17 +12,20 @@ const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 function bagOf(w) { const b = w && w.length ? w.data('inv') : null; return b && b.add ? b : null; }
 
 export default function inventoryScreen(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     const doc = hud($, 'ui-inventory', '<div id="inv" class="panel" style="left: 30%; top: 15%; width: 40%; height: 70%;"><div id="title">Инвентарь</div><div id="list"></div></div>', '.row { display: block; padding: 3px; } .row:hover { background-color: #2a3240; }');
     doc.hide();
     let open = false;
     const render = () => {
-        const bag = bagOf($(config.who));
+        const bag = bagOf(sel(config.who));
         const items = bag ? Object.entries(bag.summary()) : [];
         doc.html('list', items.map(([id, n]) => { const d = $.items.get(id) || {}; return '<div class="row" data-key="' + esc(id) + '">' + esc(d.title || id) + ' ×' + n + '</div>'; }).join('') || '<div class="row">пусто</div>');
     };
     doc.on('list', 'click', (id, ev, key) => {
         if (!key) return;
-        const w = $(config.who), d = $.items.get(key) || {};
+        const w = sel(config.who), d = $.items.get(key) || {};
         if (d.wear) w.emit('equip', { item: key });
         else if (d.kind === 'weapon') w.emit('equip-weapon', { item: key });
         else w.data('activeItem', key);

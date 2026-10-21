@@ -54,6 +54,9 @@
       "api": "$.input.vec"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

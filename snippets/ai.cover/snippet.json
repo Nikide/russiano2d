@@ -48,6 +48,9 @@
       "api": "$.selection.each"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

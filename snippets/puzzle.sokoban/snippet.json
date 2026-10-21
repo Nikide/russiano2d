@@ -41,6 +41,9 @@
       "api": "$.input.pressed"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     }
   ],

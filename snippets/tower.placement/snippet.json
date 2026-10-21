@@ -53,6 +53,9 @@
       "api": "$.prefab.instantiate"
     },
     {
+      "api": "$.selection.get"
+    },
+    {
       "api": "$.updateFor"
     },
     {

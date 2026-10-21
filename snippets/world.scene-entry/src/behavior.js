@@ -1,9 +1,12 @@
 // Вход: $.store 'spawn' — id узла-точки; иначе fallback.
 export default function sceneEntry(node, config, $) {
+    // Сущность по селектору: ищется заново, только если прежний узел исчез.
+    const cache = {};
+    const sel = (s) => { const c = cache[s]; if (c && c.length && !c.get(0).removed) return c; return (cache[s] = $(s)); };
     let done = false;
     return $.updateFor(node, () => {
         if (done) return;
-        const p = $(config.player);
+        const p = sel(config.player);
         if (!p.length) return;
         done = true;
         const id = $.store.get('spawn', '');
