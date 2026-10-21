@@ -92,3 +92,10 @@
 1. Кэш цели по селектору в остальных 81 пакете (как в `ai.chase`).
 2. Функциональные тесты остальных разделов (сейчас: все 500 — runtime-смоук; функционально — оружие, зоны, подбор, урон, 19 механик, 7 жанров).
 3. Финальная приёмка по §19 (dogfood UX: focus/resize).
+
+## С чего продолжать
+
+- Ветка `snippets-system`, всё закоммичено. Сборка: `xmake build -y -j 8 r2d`; бинарник `build-xmake/macos-arm64/macosx/arm64/release/r2d` (тесты берут его через `R2D_BINARY`).
+- Проверка каталога: `r2d snippet catalog --strict` (500/500), `python3 tests/agent/snippets_catalog_test.py` (~3 мин, все 500 в runtime).
+- Генераторы пакетов были одноразовыми скриптами вне репо: правьте пакеты прямо в `snippets/<id>/`, затем `python3 scripts/snippet_matrix.py`.
+- Остаток для §19: (1) кэш цели по селектору в 81 пакете — образец `snippets/ai.chase/src/behavior.js`; (2) функциональные тесты по разделам (образцы: `tests/agent/snippets_mechanics_test.py`, `snippets_combat_test.py`); (3) dogfood UX панели (focus/resize) и финальная сверка чек-листа выше.
