@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.logic-gates",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Логические ворота"
+  },
+  "description": {
+    "ru": "Схема AND/OR/NOT/XOR из входов (data on у узлов) — выход шлёт события."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "gates",
+      "label": "Ворота (имя=ОП вход,вход)",
+      "type": "list",
+      "default": [
+        "g1=AND s1,s2",
+        "out=NOT g1"
+      ]
+    },
+    {
+      "id": "output",
+      "label": "Выход",
+      "type": "string",
+      "default": "out"
+    },
+    {
+      "id": "onEvent",
+      "label": "Событие «1»",
+      "type": "string",
+      "default": "gate:on"
+    },
+    {
+      "id": "offEvent",
+      "label": "Событие «0»",
+      "type": "string",
+      "default": "gate:off"
+    }
+  ],
+  "tags": [
+    "логика",
+    "схема"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

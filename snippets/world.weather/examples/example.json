@@ -1,0 +1,7 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "kind": "snow",
+    "density": 40
+  }
+}

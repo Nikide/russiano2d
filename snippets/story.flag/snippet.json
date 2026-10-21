@@ -1,0 +1,69 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.flag",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сюжетный флаг"
+  },
+  "description": {
+    "ru": "Флаг $.story по событию: «событие=флаг=значение»; флаги сохраняются вместе со сценками."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.story.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "rules",
+      "label": "Правила (событие=флаг=значение)",
+      "type": "list",
+      "default": [
+        "door:open=door_opened=true"
+      ]
+    }
+  ],
+  "tags": [
+    "сюжет",
+    "флаг"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

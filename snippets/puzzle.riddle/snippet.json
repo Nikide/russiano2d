@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.riddle",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Загадка"
+  },
+  "description": {
+    "ru": "Вопрос и допустимые ответы (без учёта регистра): событие riddle:answer { text }."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "question",
+      "label": "Вопрос",
+      "type": "string",
+      "default": "Что идёт, не двигаясь?"
+    },
+    {
+      "id": "answers",
+      "label": "Ответы",
+      "type": "list",
+      "default": [
+        "время"
+      ]
+    },
+    {
+      "id": "attempts",
+      "label": "Попыток (0 — без лимита)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 100
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "загадка",
+    "текст"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

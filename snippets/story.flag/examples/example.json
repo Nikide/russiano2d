@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "rules": [
+      "boss:dead=boss_defeated=true"
+    ]
+  }
+}

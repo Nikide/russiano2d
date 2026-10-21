@@ -1,0 +1,76 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.timer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Таймер задания"
+  },
+  "description": {
+    "ru": "Ограничение времени: не успел — задание отменяется и событие провала."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.quest.cancel"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "time",
+      "label": "Время",
+      "type": "int",
+      "default": 120000,
+      "min": 1000,
+      "max": 86400000,
+      "unit": "мс"
+    },
+    {
+      "id": "failEvent",
+      "label": "Событие провала",
+      "type": "string",
+      "default": "quest:failed"
+    }
+  ],
+  "tags": [
+    "квест",
+    "время"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

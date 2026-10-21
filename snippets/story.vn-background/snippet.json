@@ -1,0 +1,100 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.vn-background",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Фон VN"
+  },
+  "description": {
+    "ru": "Смена фона по событию: «событие=картинка», с плавным переходом."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.fadeTo"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.sprite"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "backgrounds",
+      "label": "Фоны (событие=путь)",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "fade",
+      "label": "Переход",
+      "type": "int",
+      "default": 400,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    },
+    {
+      "id": "size",
+      "label": "Размер",
+      "type": "vec2",
+      "default": [
+        1280,
+        720
+      ]
+    }
+  ],
+  "tags": [
+    "VN",
+    "фон"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

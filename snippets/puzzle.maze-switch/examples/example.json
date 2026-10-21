@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "wiring": [
+      "a=b"
+    ]
+  }
+}

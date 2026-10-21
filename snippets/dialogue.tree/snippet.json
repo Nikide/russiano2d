@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "dialogue.tree",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Дерево диалога"
+  },
+  "description": {
+    "ru": "Ветвящийся диалог $.dialog из строк реплик; играется событием dialogue:play или пакетами-якорями."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.define"
+    },
+    {
+      "api": "$.dialog.play"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID диалога",
+      "type": "string",
+      "default": "guard"
+    },
+    {
+      "id": "lines",
+      "label": "Реплики (id | говорящий | текст | куда)",
+      "type": "list",
+      "default": [
+        "start | Стражник | Стой! Кто идёт? | ",
+        "bye | Стражник | Проходи. | "
+      ]
+    },
+    {
+      "id": "choices",
+      "label": "Варианты (реплика | текст | куда | флаг)",
+      "type": "list",
+      "default": [
+        "start | Свои | bye | ",
+        "start | Уйти |  | "
+      ]
+    },
+    {
+      "id": "speed",
+      "label": "Скорость печати",
+      "type": "int",
+      "default": 40,
+      "min": 1,
+      "max": 1000,
+      "unit": "симв./с"
+    }
+  ],
+  "tags": [
+    "диалог",
+    "ветвление"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.maze-switch",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Лабиринт переключателей"
+  },
+  "description": {
+    "ru": "Переключатели открывают и закрывают двери: «переключатель=дверь,дверь»."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.sensor"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "wiring",
+      "label": "Связи (переключатель=двери через запятую)",
+      "type": "list",
+      "default": [
+        "s1=d1,d2",
+        "s2=d2"
+      ]
+    }
+  ],
+  "tags": [
+    "лабиринт",
+    "двери"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

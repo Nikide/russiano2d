@@ -1,0 +1,74 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.journal",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Журнал заданий"
+  },
+  "description": {
+    "ru": "Список активных и завершённых заданий в $.store 'journal' и событии journal."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.quest.definitions"
+    },
+    {
+      "api": "$.quest.line"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Открыть",
+      "type": "string",
+      "default": "j"
+    },
+    {
+      "id": "every",
+      "label": "Обновлять раз в",
+      "type": "int",
+      "default": 500,
+      "min": 50,
+      "max": 60000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "квест",
+    "журнал",
+    "UI"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

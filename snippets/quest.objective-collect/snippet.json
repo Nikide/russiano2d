@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.objective-collect",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цель: собрать"
+  },
+  "description": {
+    "ru": "Подбор предметов нужного типа засчитывает цель (событие pickup)."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest.isReady"
+    },
+    {
+      "api": "$.quest.progress"
+    },
+    {
+      "api": "$.quest.status"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "objective",
+      "label": "Номер цели (с 0)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64
+    },
+    {
+      "id": "item",
+      "label": "ID предмета",
+      "type": "string",
+      "default": "herb"
+    }
+  ],
+  "tags": [
+    "квест",
+    "сбор"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

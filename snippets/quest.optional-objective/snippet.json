@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.optional-objective",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Дополнительная цель"
+  },
+  "description": {
+    "ru": "Необязательная цель с отдельной наградой: выполнена до сдачи — событие награды."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.quest.def"
+    },
+    {
+      "api": "$.quest.progress"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "objective",
+      "label": "Номер цели (с 0)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64
+    },
+    {
+      "id": "rewardEvent",
+      "label": "Событие награды",
+      "type": "string",
+      "default": "bonus:reward"
+    }
+  ],
+  "tags": [
+    "квест",
+    "бонус"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

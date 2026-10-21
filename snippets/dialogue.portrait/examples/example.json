@@ -1,0 +1,9 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "position": [
+      100,
+      500
+    ]
+  }
+}

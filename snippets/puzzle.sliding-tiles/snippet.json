@@ -1,0 +1,107 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.sliding-tiles",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Пятнашки"
+  },
+  "description": {
+    "ru": "Плитки (data n) переставляются кликом в пустую соседнюю клетку; порядок 1…N — решено."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.input.mousePressed"
+    },
+    {
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "tiles",
+      "label": "Плитки",
+      "type": "string",
+      "default": ".tile"
+    },
+    {
+      "id": "cols",
+      "label": "Колонок",
+      "type": "int",
+      "default": 3,
+      "min": 2,
+      "max": 16
+    },
+    {
+      "id": "cell",
+      "label": "Клетка",
+      "type": "int",
+      "default": 64,
+      "min": 8,
+      "max": 512,
+      "unit": "пикс."
+    },
+    {
+      "id": "origin",
+      "label": "Левый верх поля",
+      "type": "vec2",
+      "default": [
+        100,
+        100
+      ]
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "пятнашки"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

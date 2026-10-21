@@ -1,0 +1,98 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.memory",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Повтори последовательность"
+  },
+  "description": {
+    "ru": "Объекты-сигналы подсвечиваются по очереди; игрок повторяет кликами; длина растёт."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.flash"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.input.mousePressed"
+    },
+    {
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.random.int"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "pads",
+      "label": "Сигналы",
+      "type": "string",
+      "default": ".memory-pad"
+    },
+    {
+      "id": "start",
+      "label": "Начальная длина",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 50
+    },
+    {
+      "id": "rounds",
+      "label": "Раундов",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 50
+    },
+    {
+      "id": "blink",
+      "label": "Вспышка",
+      "type": "int",
+      "default": 500,
+      "min": 50,
+      "max": 5000,
+      "unit": "мс"
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "память",
+    "Саймон"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

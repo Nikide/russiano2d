@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "mission.extraction",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Эвакуация"
+  },
+  "description": {
+    "ru": "Точка выхода: игрок внутри заданное время при выполненном условии — миссия завершена."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "hold",
+      "label": "Держаться в зоне",
+      "type": "int",
+      "default": 3000,
+      "min": 0,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "requireQuest",
+      "label": "Требует готовое задание",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "event",
+      "label": "Событие завершения",
+      "type": "string",
+      "default": "mission:extracted"
+    }
+  ],
+  "tags": [
+    "миссия",
+    "выход"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "dialogue.action",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Действие из диалога"
+  },
+  "description": {
+    "ru": "Выбор варианта или реплика диалога ставит флаг и шлёт игровое событие: «текст или id реплики=событие»."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.definition"
+    },
+    {
+      "api": "$.dialog.off"
+    },
+    {
+      "api": "$.dialog.on"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.story.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "dialog",
+      "label": "ID диалога",
+      "type": "string",
+      "default": "guard"
+    },
+    {
+      "id": "actions",
+      "label": "Действия (вариант/реплика=событие)",
+      "type": "list",
+      "default": [
+        "Свои=gate:open"
+      ]
+    },
+    {
+      "id": "setFlag",
+      "label": "Ставить флаг = выбор",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "диалог",
+    "событие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

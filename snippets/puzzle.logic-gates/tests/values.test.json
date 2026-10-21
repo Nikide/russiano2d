@@ -1,0 +1,8 @@
+{
+  "values": {
+    "gates": [
+      "o=OR a,b"
+    ],
+    "output": "o"
+  }
+}

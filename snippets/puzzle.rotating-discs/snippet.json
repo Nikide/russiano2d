@@ -1,0 +1,100 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.rotating-discs",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Вращающиеся диски"
+  },
+  "description": {
+    "ru": "Диски поворачиваются кликом на шаг; решено, когда углы совпали с метками."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.angle"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.input.mousePressed"
+    },
+    {
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "discs",
+      "label": "Диски (data target — угол)",
+      "type": "string",
+      "default": ".disc"
+    },
+    {
+      "id": "step",
+      "label": "Шаг",
+      "type": "int",
+      "default": 90,
+      "min": 1,
+      "max": 180,
+      "unit": "°"
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "диски",
+    "механизм"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

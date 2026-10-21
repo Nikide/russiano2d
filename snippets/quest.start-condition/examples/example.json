@@ -1,0 +1,7 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "quest": "intro",
+    "event": "talked:elder"
+  }
+}

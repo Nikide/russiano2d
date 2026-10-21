@@ -1,0 +1,67 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.sequence",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Этапы по порядку"
+  },
+  "description": {
+    "ru": "Последовательность заданий: сдача одного автоматически берёт следующее."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.quest.accept"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.quest.turnIn"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quests",
+      "label": "Задания по порядку",
+      "type": "list",
+      "default": [
+        "intro",
+        "relay"
+      ]
+    },
+    {
+      "id": "autoTurnIn",
+      "label": "Сдавать готовые сами",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "квест",
+    "цепочка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

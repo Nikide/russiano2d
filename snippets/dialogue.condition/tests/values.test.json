@@ -1,0 +1,7 @@
+{
+  "values": {
+    "source": "data",
+    "key": "gold",
+    "atLeast": 10
+  }
+}

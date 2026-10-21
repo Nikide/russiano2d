@@ -1,0 +1,103 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.matching",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Пары"
+  },
+  "description": {
+    "ru": "Поиск пар: карты (класс card, data symbol) открываются кликом; все пары — решено."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.hasClass"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.input.mousePressed"
+    },
+    {
+      "api": "$.input.mouseWorld"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "cards",
+      "label": "Карты",
+      "type": "string",
+      "default": ".card"
+    },
+    {
+      "id": "showMs",
+      "label": "Показ несовпавших",
+      "type": "int",
+      "default": 700,
+      "min": 100,
+      "max": 10000,
+      "unit": "мс"
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "пары",
+    "память"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

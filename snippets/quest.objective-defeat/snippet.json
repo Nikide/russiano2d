@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.objective-defeat",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цель: победить"
+  },
+  "description": {
+    "ru": "Гибель объектов по селектору засчитывает цель."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.quest.isReady"
+    },
+    {
+      "api": "$.quest.progress"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "objective",
+      "label": "Номер цели (с 0)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64
+    },
+    {
+      "id": "targets",
+      "label": "Кого",
+      "type": "string",
+      "default": ".enemy"
+    }
+  ],
+  "tags": [
+    "квест",
+    "бой"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.wiring",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Провода"
+  },
+  "description": {
+    "ru": "Соединение входов и выходов: событие wire { from, to }; решено при нужной схеме."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "solution",
+      "label": "Решение (вход=выход)",
+      "type": "list",
+      "default": [
+        "a=1",
+        "b=2",
+        "c=3"
+      ]
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "провода",
+    "схема"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

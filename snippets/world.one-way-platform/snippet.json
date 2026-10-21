@@ -1,0 +1,48 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.one-way-platform",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Односторонняя платформа"
+  },
+  "description": {
+    "ru": "Платформа проходима снизу; вниз — через неё по клавише (.oneWay)."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.oneWay"
+    },
+    {
+      "api": "$.fn.removeClass"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "dropKey",
+      "label": "Спрыгнуть",
+      "type": "string",
+      "default": "s"
+    }
+  ],
+  "tags": [
+    "платформа",
+    "платформер"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

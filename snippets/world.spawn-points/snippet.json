@@ -1,0 +1,97 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.spawn-points",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Точки появления"
+  },
+  "description": {
+    "ru": "Группа точек: выдаёт свободную (без узлов в радиусе) по событию spawn:request."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.prefab.has"
+    },
+    {
+      "api": "$.prefab.instantiate"
+    },
+    {
+      "api": "$.world"
+    },
+    {
+      "api": "$.world.query"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "points",
+      "label": "Точки",
+      "type": "string",
+      "default": ".spawn-point"
+    },
+    {
+      "id": "clear",
+      "label": "Свободно в радиусе",
+      "type": "number",
+      "default": 24,
+      "min": 0,
+      "max": 1000,
+      "unit": "пикс."
+    },
+    {
+      "id": "prefab",
+      "label": "Prefab",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "спавн",
+    "точки"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

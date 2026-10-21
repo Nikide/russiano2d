@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.level-exit",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Конец уровня"
+  },
+  "description": {
+    "ru": "Выход с уровня: время, собранное и следующая сцена — результат в $.save."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.save"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.scene.load"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.time.now"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "next",
+      "label": "Следующая сцена",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "level",
+      "label": "Имя уровня",
+      "type": "string",
+      "default": "level1"
+    },
+    {
+      "id": "event",
+      "label": "Событие",
+      "type": "string",
+      "default": "level:complete"
+    }
+  ],
+  "tags": [
+    "уровень",
+    "финиш"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.breakable-tiles",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Разрушаемые тайлы"
+  },
+  "description": {
+    "ru": "Взрыв или удар разрушает клетки карты нужного типа; восстановление через время."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.setTile"
+    },
+    {
+      "api": "$.fn.tileAt"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "world.tilemap-layer"
+    }
+  ],
+  "fields": [
+    {
+      "id": "breakable",
+      "label": "Разрушаемые тайлы (номера)",
+      "type": "list",
+      "default": [
+        "3"
+      ]
+    },
+    {
+      "id": "tile",
+      "label": "Размер тайла",
+      "type": "int",
+      "default": 16,
+      "min": 1,
+      "max": 512,
+      "unit": "пикс."
+    },
+    {
+      "id": "restore",
+      "label": "Восстановление (0 — нет)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 3600000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "tilemap",
+    "разрушение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "gravity": [
+      0,
+      300
+    ]
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "dialogue.condition",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Условие в диалоге"
+  },
+  "description": {
+    "ru": "Флаг диалога из игрового состояния: предмет в инвентаре, значение data, отношение, сюжетный флаг."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.flag"
+    },
+    {
+      "api": "$.fn.count"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "flag",
+      "label": "Флаг диалога",
+      "type": "string",
+      "default": "has_pass"
+    },
+    {
+      "id": "source",
+      "label": "Источник",
+      "type": "enum",
+      "default": "item",
+      "options": [
+        "item",
+        "data",
+        "relationship",
+        "story"
+      ]
+    },
+    {
+      "id": "key",
+      "label": "Предмет / ключ / флаг",
+      "type": "string",
+      "default": "pass"
+    },
+    {
+      "id": "atLeast",
+      "label": "Не меньше",
+      "type": "number",
+      "default": 1,
+      "min": -100000,
+      "max": 100000
+    },
+    {
+      "id": "who",
+      "label": "Чей",
+      "type": "entity",
+      "default": "#hero"
+    }
+  ],
+  "tags": [
+    "диалог",
+    "условие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

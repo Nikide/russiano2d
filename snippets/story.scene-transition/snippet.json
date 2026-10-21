@@ -1,0 +1,107 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.scene-transition",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Переход сюжетной сцены"
+  },
+  "description": {
+    "ru": "По событию — затемнение и $.scene.load следующей сцены (или $.story.play сценария)."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.viewport"
+    },
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.fadeTo"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.scene.load"
+    },
+    {
+      "api": "$.story.play"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "event",
+      "label": "Событие",
+      "type": "string",
+      "default": "chapter:end"
+    },
+    {
+      "id": "scene",
+      "label": "Сцена",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "script",
+      "label": "Или сценарий story",
+      "type": "string",
+      "default": "",
+      "hint": "Путь к .scene"
+    },
+    {
+      "id": "fade",
+      "label": "Затемнение",
+      "type": "int",
+      "default": 400,
+      "min": 0,
+      "max": 10000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "сцена",
+    "переход"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

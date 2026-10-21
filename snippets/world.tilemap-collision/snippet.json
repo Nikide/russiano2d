@@ -1,0 +1,72 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.tilemap-collision",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Столкновения тайлов"
+  },
+  "description": {
+    "ru": "Непроходимые тайлы карты через встроенный механизм tilemap (.collisions, слияние в прямоугольники)."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.collisionMerge"
+    },
+    {
+      "api": "$.fn.collisionResult"
+    },
+    {
+      "api": "$.fn.collisions"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "world.tilemap-layer"
+    }
+  ],
+  "fields": [
+    {
+      "id": "solid",
+      "label": "Непроходимые тайлы (номера)",
+      "type": "list",
+      "default": [
+        "1"
+      ]
+    },
+    {
+      "id": "merge",
+      "label": "Сливать в прямоугольники",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "tilemap",
+    "стены"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

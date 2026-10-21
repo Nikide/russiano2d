@@ -1,0 +1,112 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.world-marker",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Метка цели"
+  },
+  "description": {
+    "ru": "Над объектом — маркер, пока его задание активно; виден и вне экрана (на краю)."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.isOnScreen"
+    },
+    {
+      "api": "$.camera.viewport"
+    },
+    {
+      "api": "$.fn.angle"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#ffd040"
+    },
+    {
+      "id": "size",
+      "label": "Размер",
+      "type": "int",
+      "default": 10,
+      "min": 2,
+      "max": 64
+    },
+    {
+      "id": "edge",
+      "label": "Показывать на краю экрана",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "квест",
+    "маркер",
+    "HUD"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

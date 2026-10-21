@@ -51,6 +51,8 @@ def main():
     game = os.path.join(tmp, "game")
     os.makedirs(os.path.join(game, "art"))
     shutil.copy(os.path.join(ROOT, "assets/atlas.png"), os.path.join(game, "art/hero.png"))
+    os.makedirs(os.path.join(game, "maps"))
+    json.dump({"version": 1, "tile": 16, "cols": 4, "solid": [1], "layers": [{"name": "ground", "depth": 0, "solid": True, "data": [[1, 1, 1, 1], [1, 0, 0, 1], [1, 1, 1, 1]]}]}, open(os.path.join(game, "maps/level.tilemap.json"), "w"))
     lines = ["$.ready(() => {",
              "    $('<ground>', { id: 'floor' }).at(640, 700).size(1280, 20).body('static').appendTo($.world);",
              "    $('<hero>', { id: 'hero' }).at(200, 600).size(16, 24).body('dynamic').health(50).appendTo($.world);"]
@@ -74,7 +76,7 @@ def main():
         values = dict(example.get("values", {}))
         for f in p.get("fields", []):
             if f["type"] == "asset" and f.get("required") and f["id"] not in values:
-                values[f["id"]] = "art/hero.png"
+                values[f["id"]] = "maps/level.tilemap.json" if f.get("assetKind") == "data" else "art/hero.png"
             if f["type"] == "asset" and values.get(f["id"]) and not os.path.exists(os.path.join(game, values[f["id"]])):
                 values[f["id"]] = "art/hero.png" if f.get("assetKind") in ("image", "animation") else None
         pairs = ["%s=%s" % (k, json.dumps(v)) for k, v in values.items() if v is not None]
@@ -82,6 +84,13 @@ def main():
             iid = "snippet:%s:%s" % (owner.split(":")[-1], p["id"])
             sres = r2d("snippet", "set", game, iid, *pairs)
             check(sres["ok"], "%s: значения example проходят схему %s" % (p["id"], [d["message"] for d in sres["diagnostics"]]))
+    # Обязательные ресурсы и у экземпляров-зависимостей (добавлены автоматически).
+    fields = {p["id"]: p.get("fields", []) for p in pkgs}
+    for inst in json.load(open(os.path.join(game, "project.json")))["editor"]["snippets"]["instances"]:
+        miss = ["%s=%s" % (f["id"], json.dumps("maps/level.tilemap.json" if f.get("assetKind") == "data" else "art/hero.png"))
+                for f in fields.get(inst["package"], []) if f["type"] == "asset" and f.get("required") and f["id"] not in inst.get("values", {})]
+        if miss:
+            r2d("snippet", "set", game, inst["id"], *miss)
     gen = r2d("snippet", "generate", game, "--write")
     check(gen["ok"], "generate всего каталога: %s" % [d["message"] for d in gen["diagnostics"]][:3])
     again = r2d("snippet", "generate", game, "--check")

@@ -1,0 +1,74 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.parallel",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Параллельные цели"
+  },
+  "description": {
+    "ru": "Готовность задания, когда все перечисленные цели выполнены в любом порядке; событие parallel:done."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.quest.def"
+    },
+    {
+      "api": "$.quest.progress"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "objectives",
+      "label": "Цели (номера)",
+      "type": "list",
+      "default": [
+        "0",
+        "1",
+        "2"
+      ]
+    }
+  ],
+  "tags": [
+    "квест"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

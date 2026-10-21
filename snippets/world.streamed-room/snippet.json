@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.streamed-room",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Активная комната"
+  },
+  "description": {
+    "ru": "Сущности комнаты активны, только пока игрок в ней или рядом (экономия кадра)."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.active"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "members",
+      "label": "Сущности комнаты",
+      "type": "string",
+      "default": ".room-a"
+    },
+    {
+      "id": "margin",
+      "label": "Запас",
+      "type": "number",
+      "default": 64,
+      "min": 0,
+      "max": 5000,
+      "unit": "пикс."
+    }
+  ],
+  "tags": [
+    "комнаты",
+    "оптимизация"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

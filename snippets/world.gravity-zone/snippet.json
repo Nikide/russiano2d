@@ -1,0 +1,75 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.gravity-zone",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Зона гравитации"
+  },
+  "description": {
+    "ru": "Внутри зоны тела получают свою гравитацию (низкая, обратная, боковая)."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.add"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.gravity"
+    },
+    {
+      "api": "$.fn.has"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "gravity",
+      "label": "Гравитация зоны",
+      "type": "vec2",
+      "default": [
+        0,
+        -600
+      ]
+    },
+    {
+      "id": "affects",
+      "label": "Кого",
+      "type": "string",
+      "default": ".player, .enemy, .crate"
+    }
+  ],
+  "tags": [
+    "гравитация",
+    "физика"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

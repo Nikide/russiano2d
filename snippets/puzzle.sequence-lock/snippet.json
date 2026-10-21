@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.sequence-lock",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Замок-последовательность"
+  },
+  "description": {
+    "ru": "Открывается правильной последовательностью событий (кнопки, ноты, руны)."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "solution",
+      "label": "Решение (события по порядку)",
+      "type": "list",
+      "default": [
+        "rune:a",
+        "rune:c",
+        "rune:b"
+      ]
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "головоломка",
+    "порядок"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

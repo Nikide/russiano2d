@@ -1,0 +1,90 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.counter",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сюжетный счётчик"
+  },
+  "description": {
+    "ru": "Числовой прогресс сюжета: события «событие=+n»; пороги шлют события."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.story.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Счётчик",
+      "type": "string",
+      "default": "trust"
+    },
+    {
+      "id": "changes",
+      "label": "Изменения (событие=число)",
+      "type": "list",
+      "default": [
+        "helped=1",
+        "lied=-2"
+      ]
+    },
+    {
+      "id": "thresholds",
+      "label": "Пороги (значение=событие)",
+      "type": "list",
+      "default": [
+        "5=trust:high"
+      ]
+    }
+  ],
+  "tags": [
+    "сюжет",
+    "счётчик"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

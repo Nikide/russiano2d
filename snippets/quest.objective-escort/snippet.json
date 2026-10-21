@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.objective-escort",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цель: сопроводить"
+  },
+  "description": {
+    "ru": "Цель засчитывается по событию escort:done от npc.escort."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest.isReady"
+    },
+    {
+      "api": "$.quest.progress"
+    },
+    {
+      "api": "$.quest.status"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "objective",
+      "label": "Номер цели (с 0)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64
+    },
+    {
+      "id": "npc",
+      "label": "Сопровождаемый (id, пусто — любой)",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "квест",
+    "эскорт"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "dialogue.conversation-lock",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Блок движения в разговоре"
+  },
+  "description": {
+    "ru": "Пока открыт диалог, игрок не двигается (управление снимается и возвращается)."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.isOpen"
+    },
+    {
+      "api": "$.fn.active"
+    },
+    {
+      "api": "$.fn.controls"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    }
+  ],
+  "tags": [
+    "диалог",
+    "блокировка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

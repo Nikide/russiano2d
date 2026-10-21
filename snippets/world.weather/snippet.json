@@ -1,0 +1,108 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.weather",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Погода"
+  },
+  "description": {
+    "ru": "Дождь или снег частицами вокруг камеры и игровой эффект (скольжение, видимость)."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.camera.viewport"
+    },
+    {
+      "api": "$.fn.alpha"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.random.range"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "kind",
+      "label": "Погода",
+      "type": "enum",
+      "default": "rain",
+      "options": [
+        "rain",
+        "snow",
+        "none"
+      ]
+    },
+    {
+      "id": "density",
+      "label": "Плотность",
+      "type": "int",
+      "default": 120,
+      "min": 0,
+      "max": 5000
+    },
+    {
+      "id": "wind",
+      "label": "Ветер",
+      "type": "number",
+      "default": 40,
+      "min": -1000,
+      "max": 1000,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "visibility",
+      "label": "Видимость",
+      "type": "number",
+      "default": 0.8,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "погода",
+    "дождь",
+    "снег"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

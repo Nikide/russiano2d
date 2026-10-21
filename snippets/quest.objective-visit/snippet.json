@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.objective-visit",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цель: дойти"
+  },
+  "description": {
+    "ru": "Цель засчитывается, когда игрок пересекает объект-зону."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.quest.isReady"
+    },
+    {
+      "api": "$.quest.progress"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "objective",
+      "label": "Номер цели (с 0)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64
+    },
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "once",
+      "label": "Один раз",
+      "type": "bool",
+      "default": true
+    }
+  ],
+  "tags": [
+    "квест",
+    "точка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

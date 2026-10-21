@@ -1,0 +1,109 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.audio-zone",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Звуковая зона"
+  },
+  "description": {
+    "ru": "Внутри зоны — своя музыка и акустика ($.audio.zone); выход возвращает прежнюю."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.music"
+    },
+    {
+      "api": "$.audio.musicStop"
+    },
+    {
+      "api": "$.audio.removeZone"
+    },
+    {
+      "api": "$.audio.zone"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.fn.zone"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "music",
+      "label": "Музыка",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "material",
+      "label": "Материал",
+      "type": "enum",
+      "default": "concrete",
+      "options": [
+        "concrete",
+        "wood",
+        "tile",
+        "metal",
+        "grass",
+        "cave"
+      ]
+    },
+    {
+      "id": "height",
+      "label": "Высота помещения",
+      "type": "number",
+      "default": 3,
+      "min": 0.5,
+      "max": 100,
+      "unit": "м"
+    }
+  ],
+  "tags": [
+    "звук",
+    "музыка",
+    "акустика"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.cutscene",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Катсцена"
+  },
+  "description": {
+    "ru": "Простая катсцена $.cutscene из шагов «действие:параметры» по событию."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.cutscene.define"
+    },
+    {
+      "api": "$.cutscene.play"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Имя",
+      "type": "string",
+      "default": "intro"
+    },
+    {
+      "id": "event",
+      "label": "Запуск событием",
+      "type": "string",
+      "default": "cutscene:intro"
+    },
+    {
+      "id": "steps",
+      "label": "Шаги",
+      "type": "list",
+      "default": [
+        "letterbox:0.12",
+        "camera:400,300,1.5,600",
+        "say:Мост не выдержит!",
+        "wait:500",
+        "letterbox:0"
+      ]
+    }
+  ],
+  "tags": [
+    "катсцена",
+    "камера"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

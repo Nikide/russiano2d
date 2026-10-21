@@ -1,0 +1,8 @@
+{
+  "values": {
+    "number": 2,
+    "requires": [
+      "chapter_1_done"
+    ]
+  }
+}

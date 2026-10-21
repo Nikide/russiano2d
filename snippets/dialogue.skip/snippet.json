@@ -1,0 +1,64 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "dialogue.skip",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Пропуск реплик"
+  },
+  "description": {
+    "ru": "Клавиша: допечатать реплику, повторно — дальше; удержание — быстрое пролистывание."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.choices"
+    },
+    {
+      "api": "$.dialog.isOpen"
+    },
+    {
+      "api": "$.dialog.next"
+    },
+    {
+      "api": "$.input.down"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "space"
+    },
+    {
+      "id": "fastKey",
+      "label": "Ускорение (удержание)",
+      "type": "string",
+      "default": "left ctrl"
+    }
+  ],
+  "tags": [
+    "диалог",
+    "пропуск"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

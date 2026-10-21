@@ -4331,9 +4331,14 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.slice",
+    "$.quest.accept",
+    "$.quest.define",
+    "$.quest.status"
    ],
    "gaps": [],
    "dependencies": []
@@ -4345,9 +4350,20 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.quest",
+    "$.quest.accept",
+    "$.quest.status",
+    "$.story.flags",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4359,9 +4375,15 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.overlaps",
+    "$.quest.isReady",
+    "$.quest.progress",
+    "$.quest.status",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4373,9 +4395,17 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.quest.isReady",
+    "$.quest.progress",
+    "$.quest.status"
    ],
    "gaps": [],
    "dependencies": []
@@ -4387,9 +4417,18 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.add",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.quest.isReady",
+    "$.quest.progress",
+    "$.quest.status",
+    "$.selection.each",
+    "$.selection.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4401,9 +4440,19 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.input.pressed",
+    "$.quest.isReady",
+    "$.quest.progress",
+    "$.quest.status",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4415,9 +4464,19 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.count",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.remove",
+    "$.input.pressed",
+    "$.quest.isReady",
+    "$.quest.progress",
+    "$.quest.status",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4429,9 +4488,16 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.alive",
+    "$.fn.emit",
+    "$.fn.max",
+    "$.quest.isReady",
+    "$.quest.progress",
+    "$.quest.status",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4443,9 +4509,17 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.quest.isReady",
+    "$.quest.progress",
+    "$.quest.status"
    ],
    "gaps": [],
    "dependencies": []
@@ -4457,9 +4531,22 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.quest",
+    "$.quest.isReady",
+    "$.quest.progress",
+    "$.quest.status",
+    "$.story.flags",
+    "$.story.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -4471,9 +4558,14 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.emit",
+    "$.quest.accept",
+    "$.quest.status",
+    "$.quest.turnIn",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4485,9 +4577,16 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.quest.def",
+    "$.quest.progress",
+    "$.quest.status",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4499,9 +4598,14 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.emit",
+    "$.quest.def",
+    "$.quest.progress",
+    "$.quest.status",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4513,9 +4617,15 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.max",
+    "$.quest.cancel",
+    "$.quest.status",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4527,9 +4637,21 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.alive",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.quest",
+    "$.quest.cancel",
+    "$.quest.status",
+    "$.selection.get",
+    "$.story.flags",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4541,9 +4663,16 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.fn.add",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.has",
+    "$.fn.map",
+    "$.quest.def",
+    "$.quest.progress",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4555,9 +4684,25 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.camera.isOnScreen",
+    "$.camera.viewport",
+    "$.fn.angle",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.height",
+    "$.fn.hide",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.show",
+    "$.fn.size",
+    "$.quest.status",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -4569,9 +4714,16 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.quest.definitions",
+    "$.quest.line",
+    "$.quest.status",
+    "$.store.set",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4583,9 +4735,18 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.quest.isReady",
+    "$.quest.progress",
+    "$.quest.status",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4597,9 +4758,16 @@
    "section": "K",
    "section_title": "Задания, цели и миссии",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.quest"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.min",
+    "$.fn.overlaps",
+    "$.quest.status",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4611,9 +4779,18 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.dialog.define",
+    "$.dialog.play",
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.some",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -4625,12 +4802,26 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.dialog.definition",
+    "$.dialog.off",
+    "$.dialog.on",
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.some",
+    "$.off",
+    "$.on",
+    "$.story.set"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "dialogue.tree"
+   ]
   },
   {
    "n": 223,
@@ -4639,9 +4830,14 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.dialog.flag",
+    "$.fn.count",
+    "$.fn.data",
+    "$.quest",
+    "$.story.flags",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4653,9 +4849,18 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.dialog.definition",
+    "$.dialog.off",
+    "$.dialog.on",
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.story.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -4667,9 +4872,22 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.dialog.off",
+    "$.dialog.on",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.filter",
+    "$.fn.hide",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.fn.show",
+    "$.fn.size",
+    "$.fn.sprite",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -4681,9 +4899,16 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.audio.play",
+    "$.dialog.isOpen",
+    "$.dialog.isTyping",
+    "$.dialog.speed",
+    "$.dialog.text",
+    "$.fn.speed",
+    "$.fn.text",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4695,9 +4920,14 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.dialog.choices",
+    "$.dialog.isOpen",
+    "$.dialog.next",
+    "$.input.down",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4709,9 +4939,16 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.audio.play",
+    "$.dialog.off",
+    "$.dialog.on",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.stop"
    ],
    "gaps": [],
    "dependencies": []
@@ -4723,9 +4960,19 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.dialog.choices",
+    "$.dialog.isOpen",
+    "$.dialog.next",
+    "$.dialog.off",
+    "$.dialog.on",
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4737,9 +4984,15 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.dialog"
+    "$.dialog.isOpen",
+    "$.fn.active",
+    "$.fn.controls",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.velocity",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4751,10 +5004,17 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.story.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -4766,10 +5026,19 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.quest",
+    "$.story.flags",
+    "$.story.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -4781,10 +5050,23 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.camera.viewport",
+    "$.fn.alpha",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.fadeTo",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.off",
+    "$.on",
+    "$.scene.load",
+    "$.story.play",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -4796,10 +5078,17 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.cutscene.define",
+    "$.cutscene.play",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.slice",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -4811,10 +5100,18 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.dialog.definition",
+    "$.dialog.node",
+    "$.dialog.off",
+    "$.dialog.on",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.slice",
+    "$.save.get",
+    "$.save.set",
+    "$.selection.get"
    ],
    "gaps": [],
    "dependencies": []
@@ -4826,10 +5123,19 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on",
+    "$.quest",
+    "$.story.flags",
+    "$.story.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -4841,10 +5147,20 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.some",
+    "$.off",
+    "$.on",
+    "$.quest",
+    "$.save.set",
+    "$.story.flags",
+    "$.story.set",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4856,10 +5172,22 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.find",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.slice",
+    "$.off",
+    "$.on",
+    "$.quest",
+    "$.story.flags",
+    "$.story.set"
    ],
    "gaps": [],
    "dependencies": []
@@ -4871,10 +5199,22 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.fn.alpha",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.fadeTo",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.fn.sprite",
+    "$.off",
+    "$.on",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -4886,10 +5226,22 @@
    "section": "L",
    "section_title": "Диалоги и повествование",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.story",
-    "$.dialog"
+    "$.emit",
+    "$.fn.at",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.fadeTo",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.show",
+    "$.fn.sprite",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -4901,11 +5253,19 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.fn.addClass",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.find",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.removeClass",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -4917,11 +5277,16 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -4933,11 +5298,16 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.slice",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4949,11 +5319,16 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4965,11 +5340,21 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.angle",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.max",
+    "$.fn.min",
+    "$.fn.pos",
+    "$.fn.width",
+    "$.selection.each",
+    "$.selection.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -4981,11 +5366,16 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.off",
+    "$.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -4997,11 +5387,17 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.at",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.find",
+    "$.fn.pos",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5013,11 +5409,24 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.find",
+    "$.fn.hasClass",
+    "$.fn.height",
+    "$.fn.map",
+    "$.fn.pos",
+    "$.fn.removeClass",
+    "$.fn.width",
+    "$.input.mousePressed",
+    "$.input.mouseWorld",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5029,11 +5438,20 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.at",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.find",
+    "$.fn.has",
+    "$.fn.map",
+    "$.input.mousePressed",
+    "$.input.mouseWorld",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5045,11 +5463,23 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.angle",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.distanceTo",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.find",
+    "$.fn.height",
+    "$.fn.map",
+    "$.fn.max",
+    "$.fn.width",
+    "$.input.mousePressed",
+    "$.input.mouseWorld",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5061,11 +5491,17 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -5077,11 +5513,17 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.some",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5093,11 +5535,17 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.fn.flash",
+    "$.fn.max",
+    "$.input.mousePressed",
+    "$.input.mouseWorld",
+    "$.random.int",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5109,11 +5557,14 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.input.pressed",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5125,11 +5576,25 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.find",
+    "$.fn.flash",
+    "$.fn.hasClass",
+    "$.fn.height",
+    "$.fn.map",
+    "$.fn.pos",
+    "$.fn.width",
+    "$.input.mousePressed",
+    "$.input.mouseWorld",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5141,11 +5606,15 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.fn.alpha",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.sensor",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5157,11 +5626,15 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.angle",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.min",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5173,11 +5646,19 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.overlaps",
+    "$.fn.reduce",
+    "$.fn.slice",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5189,11 +5670,16 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on"
    ],
    "gaps": [],
    "dependencies": []
@@ -5205,11 +5691,23 @@
    "section": "M",
    "section_title": "Головоломки и логические механики",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.fn",
-    "$.triggers",
-    "$.signal"
+    "$.emit",
+    "$.fn.angle",
+    "$.fn.at",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.removeClass",
+    "$.fn.velocity",
+    "$.input.pressed",
+    "$.off",
+    "$.on",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5221,11 +5719,19 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.emit",
+    "$.fn.at",
+    "$.fn.emit",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.velocity",
+    "$.selection.get",
+    "$.store",
+    "$.store.get",
+    "$.store.remove",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5237,11 +5743,15 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.emit",
+    "$.fn.overlaps",
+    "$.quest",
+    "$.scene.load",
+    "$.store.set",
+    "$.story.flags",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5253,11 +5763,22 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.fn.find",
+    "$.fn.has",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.some",
+    "$.off",
+    "$.on",
+    "$.prefab.has",
+    "$.prefab.instantiate",
     "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.world.query"
    ],
    "gaps": [],
    "dependencies": []
@@ -5269,11 +5790,19 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.emit",
+    "$.fn.addClass",
+    "$.fn.attr",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.overlaps",
+    "$.fn.slice",
+    "$.save.get",
+    "$.save.set",
+    "$.selection.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5285,11 +5814,19 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.layer",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fs.readJSON",
+    "$.selection.get",
+    "$.tilemap.create",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -5301,14 +5838,20 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.collisionMerge",
+    "$.fn.collisionResult",
+    "$.fn.collisions",
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "world.tilemap-layer"
+   ]
   },
   {
    "n": 267,
@@ -5317,14 +5860,27 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.data",
+    "$.fn.emit",
+    "$.fn.has",
+    "$.fn.height",
+    "$.fn.map",
+    "$.fn.off",
+    "$.fn.on",
+    "$.fn.pos",
+    "$.fn.setTile",
+    "$.fn.tileAt",
+    "$.fn.width",
+    "$.off",
+    "$.on",
+    "$.updateFor"
    ],
    "gaps": [],
-   "dependencies": []
+   "dependencies": [
+    "world.tilemap-layer"
+   ]
   },
   {
    "n": 268,
@@ -5333,11 +5889,12 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.layer",
+    "$.fn.parallax",
+    "$.fn.sprite",
+    "$.layers.parallax"
    ],
    "gaps": [],
    "dependencies": []
@@ -5349,11 +5906,12 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.color",
+    "$.fn.intensity",
+    "$.fn.radius",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5365,11 +5923,21 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.audio.music",
+    "$.audio.musicStop",
+    "$.audio.removeZone",
+    "$.audio.zone",
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.width",
+    "$.fn.zone",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5381,11 +5949,20 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.camera.viewport",
+    "$.fn.alpha",
+    "$.fn.appendTo",
+    "$.fn.at",
+    "$.fn.color",
+    "$.fn.pos",
+    "$.fn.remove",
+    "$.fn.size",
+    "$.random.range",
+    "$.store.set",
+    "$.updateFor",
+    "$.world"
    ],
    "gaps": [],
    "dependencies": []
@@ -5397,11 +5974,17 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.emit",
+    "$.fn.color",
+    "$.fn.emit",
+    "$.fn.map",
+    "$.fn.slice",
+    "$.store.set",
+    "$.time.now",
+    "$.updateFor",
+    "$.world.color"
    ],
    "gaps": [],
    "dependencies": []
@@ -5413,11 +5996,17 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.add",
+    "$.fn.emit",
+    "$.fn.gravity",
+    "$.fn.has",
+    "$.fn.overlaps",
+    "$.fn.velocity",
+    "$.selection.each",
+    "$.selection.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5429,11 +6018,12 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.overlaps",
+    "$.fn.scale",
+    "$.time.scale",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5445,11 +6035,14 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.camera.limits",
+    "$.fn.height",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.fn.width",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5461,11 +6054,11 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.addClass",
+    "$.fn.oneWay",
+    "$.fn.removeClass"
    ],
    "gaps": [],
    "dependencies": []
@@ -5477,11 +6070,18 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.fn.angle",
+    "$.fn.at",
+    "$.fn.damage",
+    "$.fn.every",
+    "$.fn.filter",
+    "$.fn.map",
+    "$.fn.overlaps",
+    "$.fn.pos",
+    "$.selection.each",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5493,11 +6093,18 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.emit",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.fn.fadeTo",
+    "$.fn.overlaps",
+    "$.save",
+    "$.save.get",
+    "$.save.set",
+    "$.selection.get",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5509,11 +6116,16 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.emit",
+    "$.fn.active",
+    "$.fn.attr",
+    "$.fn.emit",
+    "$.fn.height",
+    "$.fn.pos",
+    "$.fn.width",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []
@@ -5525,11 +6137,18 @@
    "section": "N",
    "section_title": "Уровень, мир и окружение",
    "kind": "behavior",
-   "status": "planned",
+   "status": "implemented",
    "api": [
-    "$.world",
-    "$.tilemap",
-    "$.layers"
+    "$.emit",
+    "$.fn.emit",
+    "$.fn.overlaps",
+    "$.save",
+    "$.save.get",
+    "$.save.set",
+    "$.scene.load",
+    "$.selection.get",
+    "$.time.now",
+    "$.updateFor"
    ],
    "gaps": [],
    "dependencies": []

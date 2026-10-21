@@ -1,0 +1,98 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.objective-branch",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цель: развилка"
+  },
+  "description": {
+    "ru": "Одна из несовместимых целей: первое событие ветки засчитывается и закрывает остальные (флаг)."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.quest.isReady"
+    },
+    {
+      "api": "$.quest.progress"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.story.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "branches",
+      "label": "Ветки (событие=номер цели)",
+      "type": "list",
+      "default": [
+        "spared:boss=1",
+        "killed:boss=2"
+      ]
+    },
+    {
+      "id": "flag",
+      "label": "Флаг выбора",
+      "type": "string",
+      "default": "branch"
+    }
+  ],
+  "tags": [
+    "квест",
+    "выбор"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.vn-character",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Персонаж VN"
+  },
+  "description": {
+    "ru": "Персонаж на сцене VN: появление, позиция и эмоция по событиям «событие=позиция:эмоция»."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.fadeTo"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.sprite"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "name",
+      "label": "Имя",
+      "type": "string",
+      "default": "Алиса"
+    },
+    {
+      "id": "emotions",
+      "label": "Эмоции (имя=картинка)",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "cues",
+      "label": "Реплики сцены (событие=left|center|right|hide:эмоция)",
+      "type": "list",
+      "default": []
+    }
+  ],
+  "tags": [
+    "VN",
+    "персонаж"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

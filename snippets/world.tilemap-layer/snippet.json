@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.tilemap-layer",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Слой тайлов"
+  },
+  "description": {
+    "ru": "Карта тайлов из файла проекта (*.tilemap.json, Tilemap Studio) в позиции объекта-маркера."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.layer"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fs.readJSON"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.tilemap.create"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "map",
+      "label": "Tilemap (*.tilemap.json)",
+      "type": "asset",
+      "assetKind": "data",
+      "required": true
+    },
+    {
+      "id": "layer",
+      "label": "Слой отрисовки",
+      "type": "int",
+      "default": 0,
+      "min": -100,
+      "max": 100
+    }
+  ],
+  "tags": [
+    "tilemap",
+    "уровень"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

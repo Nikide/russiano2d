@@ -1,0 +1,89 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.timing",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Попасть в окно"
+  },
+  "description": {
+    "ru": "Нажатие клавиши засчитывается только в окне цикла (индикатор data phase)."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "space"
+    },
+    {
+      "id": "period",
+      "label": "Цикл",
+      "type": "int",
+      "default": 2000,
+      "min": 100,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "window",
+      "label": "Окно (доля цикла)",
+      "type": "number",
+      "default": 0.15,
+      "min": 0.01,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "id": "hits",
+      "label": "Нужно попаданий",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 100
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "тайминг",
+    "ритм"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

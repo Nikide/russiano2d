@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.secret-area",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Тайник"
+  },
+  "description": {
+    "ru": "Скрытая область: первый вход игрока открывает её (стена прозрачна), награда и счёт тайников."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.fadeTo"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.save"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "cover",
+      "label": "Маскирующий узел",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "rewardEvent",
+      "label": "Событие награды",
+      "type": "string",
+      "default": "secret:found"
+    }
+  ],
+  "tags": [
+    "секрет",
+    "исследование"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.objective-deliver",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цель: доставить"
+  },
+  "description": {
+    "ru": "Передача предмета этому персонажу по клавише рядом: предмет уходит из инвентаря."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "node"
+  ],
+  "slots": [
+    {
+      "id": "interaction",
+      "capacity": 1
+    }
+  ],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.count"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.quest.isReady"
+    },
+    {
+      "api": "$.quest.progress"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "objective",
+      "label": "Номер цели (с 0)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64
+    },
+    {
+      "id": "item",
+      "label": "ID предмета",
+      "type": "string",
+      "default": "letter"
+    },
+    {
+      "id": "count",
+      "label": "Сколько",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 10000
+    },
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "key",
+      "label": "Клавиша",
+      "type": "string",
+      "default": "e"
+    }
+  ],
+  "tags": [
+    "квест",
+    "доставка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

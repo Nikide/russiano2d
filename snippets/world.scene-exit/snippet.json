@@ -1,0 +1,79 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.scene-exit",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Выход из сцены"
+  },
+  "description": {
+    "ru": "Зона выхода: при выполненном условии (флаг) загружает целевую сцену."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.scene.load"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "scene",
+      "label": "Сцена",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "spawn",
+      "label": "Точка входа там",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "requireFlag",
+      "label": "Нужен флаг",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "сцена",
+    "выход"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

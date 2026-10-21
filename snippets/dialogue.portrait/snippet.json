@@ -1,0 +1,101 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "dialogue.portrait",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Портрет говорящего"
+  },
+  "description": {
+    "ru": "Портрет и выражение для говорящего: «говорящий:эмоция=картинка»; показывает узел-картинку."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.off"
+    },
+    {
+      "api": "$.dialog.on"
+    },
+    {
+      "api": "$.fn.appendTo"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.hide"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.show"
+    },
+    {
+      "api": "$.fn.size"
+    },
+    {
+      "api": "$.fn.sprite"
+    },
+    {
+      "api": "$.world"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "portraits",
+      "label": "Портреты (имя:эмоция=путь)",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "position",
+      "label": "Позиция на экране",
+      "type": "vec2",
+      "default": [
+        120,
+        560
+      ]
+    },
+    {
+      "id": "size",
+      "label": "Размер",
+      "type": "vec2",
+      "default": [
+        160,
+        160
+      ]
+    }
+  ],
+  "tags": [
+    "диалог",
+    "портрет",
+    "VN"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

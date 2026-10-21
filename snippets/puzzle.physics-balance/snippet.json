@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.physics-balance",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Равновесие"
+  },
+  "description": {
+    "ru": "Весы: удерживать угол платформы в пределах заданное время."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.angle"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "tolerance",
+      "label": "Допуск",
+      "type": "number",
+      "default": 5,
+      "min": 0.1,
+      "max": 90,
+      "unit": "°"
+    },
+    {
+      "id": "hold",
+      "label": "Удерживать",
+      "type": "int",
+      "default": 3000,
+      "min": 100,
+      "max": 600000,
+      "unit": "мс"
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "физика",
+    "весы"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.light-mirrors",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Луч и зеркала"
+  },
+  "description": {
+    "ru": "Луч от источника отражается зеркалами (класс mirror, угол узла) и должен попасть в приёмник."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.angle"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.height"
+    },
+    {
+      "api": "$.fn.max"
+    },
+    {
+      "api": "$.fn.min"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.width"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "direction",
+      "label": "Направление луча",
+      "type": "vec2",
+      "default": [
+        1,
+        0
+      ]
+    },
+    {
+      "id": "mirrors",
+      "label": "Зеркала",
+      "type": "string",
+      "default": ".mirror"
+    },
+    {
+      "id": "receiver",
+      "label": "Приёмник",
+      "type": "entity",
+      "default": "#receiver",
+      "required": true
+    },
+    {
+      "id": "bounces",
+      "label": "Отражений",
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 64
+    },
+    {
+      "id": "range",
+      "label": "Длина отрезка",
+      "type": "number",
+      "default": 2000,
+      "min": 10,
+      "max": 20000,
+      "unit": "пикс."
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "свет",
+    "зеркала"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

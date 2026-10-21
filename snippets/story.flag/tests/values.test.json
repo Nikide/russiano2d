@@ -1,0 +1,7 @@
+{
+  "values": {
+    "rules": [
+      "boss:dead=boss_defeated=true"
+    ]
+  }
+}

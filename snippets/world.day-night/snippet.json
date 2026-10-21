@@ -1,0 +1,82 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.day-night",
+  "version": "1.0.0",
+  "title": {
+    "ru": "День и ночь"
+  },
+  "description": {
+    "ru": "Цикл суток по игровому времени: тон окружения (цвет мира) и событие смены."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.store.set"
+    },
+    {
+      "api": "$.time.now"
+    },
+    {
+      "api": "$.updateFor"
+    },
+    {
+      "api": "$.world.color"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "dayLength",
+      "label": "Длина суток",
+      "type": "number",
+      "default": 240,
+      "min": 10,
+      "max": 86400,
+      "unit": "с"
+    },
+    {
+      "id": "dayColor",
+      "label": "Цвет дня",
+      "type": "color",
+      "default": "#87b5e8"
+    },
+    {
+      "id": "nightColor",
+      "label": "Цвет ночи",
+      "type": "color",
+      "default": "#0b1020"
+    }
+  ],
+  "tags": [
+    "время суток",
+    "атмосфера"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.keypad",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Кодовая панель"
+  },
+  "description": {
+    "ru": "Цифровой код: ввод клавишами 0–9 рядом с панелью, попытки ограничены."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.distanceTo"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "code",
+      "label": "Код",
+      "type": "string",
+      "default": "1234"
+    },
+    {
+      "id": "attempts",
+      "label": "Попыток (0 — без лимита)",
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 1000
+    },
+    {
+      "id": "actor",
+      "label": "Кто взаимодействует",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 2000,
+      "unit": "пикс."
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "код",
+    "замок"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

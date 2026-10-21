@@ -1,0 +1,104 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.failure-condition",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Провал задания"
+  },
+  "description": {
+    "ru": "Провал по смерти отслеживаемого, событию или флагу."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.alive"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.quest.cancel"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "watch",
+      "label": "Не должен погибнуть",
+      "type": "entity",
+      "default": ""
+    },
+    {
+      "id": "event",
+      "label": "Событие провала",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "flag",
+      "label": "Флаг провала",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "failEvent",
+      "label": "Сообщить",
+      "type": "string",
+      "default": "quest:failed"
+    }
+  ],
+  "tags": [
+    "квест",
+    "провал"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

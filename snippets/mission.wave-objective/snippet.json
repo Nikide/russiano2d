@@ -1,0 +1,96 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "mission.wave-objective",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цель миссии: волны"
+  },
+  "description": {
+    "ru": "Цель задания по волнам: пережить N волн ai.wave-director за лимит времени."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest.isReady"
+    },
+    {
+      "api": "$.quest.progress"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "objective",
+      "label": "Номер цели (с 0)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64
+    },
+    {
+      "id": "waves",
+      "label": "Волн",
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "id": "limit",
+      "label": "Лимит (0 — нет)",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 86400000,
+      "unit": "мс"
+    }
+  ],
+  "tags": [
+    "миссия",
+    "волны"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.scene-entry",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Вход в сцену"
+  },
+  "description": {
+    "ru": "Игрок появляется у точки входа, указанной порталом ($.store spawn) или по умолчанию."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.fn.remove"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.store"
+    },
+    {
+      "api": "$.store.get"
+    },
+    {
+      "api": "$.store.remove"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "fallback",
+      "label": "Точка по умолчанию",
+      "type": "vec2",
+      "default": [
+        100,
+        100
+      ]
+    },
+    {
+      "id": "introEvent",
+      "label": "Событие входа",
+      "type": "string",
+      "default": "scene:enter"
+    }
+  ],
+  "tags": [
+    "сцена",
+    "спавн"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

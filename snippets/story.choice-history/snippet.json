@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.choice-history",
+  "version": "1.0.0",
+  "title": {
+    "ru": "История выборов"
+  },
+  "description": {
+    "ru": "Все выборы в диалогах записываются в сохранение ($.save) и data."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.definition"
+    },
+    {
+      "api": "$.dialog.node"
+    },
+    {
+      "api": "$.dialog.off"
+    },
+    {
+      "api": "$.dialog.on"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.selection.get"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "key",
+      "label": "Ключ сохранения",
+      "type": "string",
+      "default": "choices"
+    },
+    {
+      "id": "keep",
+      "label": "Хранить",
+      "type": "int",
+      "default": 200,
+      "min": 1,
+      "max": 100000
+    }
+  ],
+  "tags": [
+    "выбор",
+    "сохранение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

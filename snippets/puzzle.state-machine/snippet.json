@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.state-machine",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Конечный автомат"
+  },
+  "description": {
+    "ru": "Состояния и допустимые переходы «из>в=событие»; текущее — в data и событии."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "start",
+      "label": "Начальное",
+      "type": "string",
+      "default": "closed"
+    },
+    {
+      "id": "transitions",
+      "label": "Переходы (из>в=событие)",
+      "type": "list",
+      "default": [
+        "closed>open=lever:on",
+        "open>closed=lever:off"
+      ]
+    }
+  ],
+  "tags": [
+    "головоломка",
+    "автомат"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

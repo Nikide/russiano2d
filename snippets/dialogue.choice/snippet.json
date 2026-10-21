@@ -1,0 +1,103 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "dialogue.choice",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Выбор в диалоге"
+  },
+  "description": {
+    "ru": "Варианты ответа к реплике диалога dialogue.tree с условием-флагом и записью выбора во флаг."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.definition"
+    },
+    {
+      "api": "$.dialog.off"
+    },
+    {
+      "api": "$.dialog.on"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.story.set"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "dialogue.tree"
+    }
+  ],
+  "fields": [
+    {
+      "id": "dialog",
+      "label": "ID диалога",
+      "type": "string",
+      "default": "guard"
+    },
+    {
+      "id": "line",
+      "label": "Реплика",
+      "type": "string",
+      "default": "start"
+    },
+    {
+      "id": "options",
+      "label": "Варианты (текст | куда | флаг-условие)",
+      "type": "list",
+      "default": [
+        "Подкупить | bye | has_gold"
+      ]
+    },
+    {
+      "id": "record",
+      "label": "Записать выбор во флаг",
+      "type": "string",
+      "default": ""
+    }
+  ],
+  "tags": [
+    "диалог",
+    "выбор"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "dialogue.typewriter",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Печатная машинка"
+  },
+  "description": {
+    "ru": "Скорость печати диалогов и звук символа."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.audio.play"
+    },
+    {
+      "api": "$.dialog.isOpen"
+    },
+    {
+      "api": "$.dialog.isTyping"
+    },
+    {
+      "api": "$.dialog.speed"
+    },
+    {
+      "api": "$.dialog.text"
+    },
+    {
+      "api": "$.fn.speed"
+    },
+    {
+      "api": "$.fn.text"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "int",
+      "default": 40,
+      "min": 1,
+      "max": 1000,
+      "unit": "симв./с"
+    },
+    {
+      "id": "blip",
+      "label": "Звук символа",
+      "type": "asset",
+      "assetKind": "audio"
+    },
+    {
+      "id": "every",
+      "label": "Звук каждые N символов",
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 100
+    }
+  ],
+  "tags": [
+    "диалог",
+    "печать"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

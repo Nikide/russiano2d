@@ -1,0 +1,86 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.checkpoint-chain",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Цепочка контрольных точек"
+  },
+  "description": {
+    "ru": "Контрольные точки по порядку: засчитывается только следующая; прогресс в $.save."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.addClass"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.save.get"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.selection.get"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "points",
+      "label": "Точки по порядку (класс)",
+      "type": "string",
+      "default": ".cp"
+    },
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "key",
+      "label": "Ключ сохранения",
+      "type": "string",
+      "default": "cp_index"
+    }
+  ],
+  "tags": [
+    "checkpoint",
+    "прогресс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

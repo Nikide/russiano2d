@@ -1,0 +1,8 @@
+{
+  "owner": "object:hero",
+  "values": {
+    "switches": [
+      "a=1"
+    ]
+  }
+}

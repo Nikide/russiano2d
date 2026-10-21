@@ -1,0 +1,103 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.definition",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Задание"
+  },
+  "description": {
+    "ru": "Описание задания $.quest: название, выдающий, цели «текст=число», награда, после каких заданий."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.quest.accept"
+    },
+    {
+      "api": "$.quest.define"
+    },
+    {
+      "api": "$.quest.status"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "id",
+      "label": "ID",
+      "type": "string",
+      "default": "relay"
+    },
+    {
+      "id": "title",
+      "label": "Название",
+      "type": "string",
+      "default": "Выключить ретранслятор"
+    },
+    {
+      "id": "giver",
+      "label": "Выдающий",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "objectives",
+      "label": "Цели (текст=число)",
+      "type": "list",
+      "default": [
+        "Найти ретранслятор=1"
+      ]
+    },
+    {
+      "id": "after",
+      "label": "После заданий",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "money",
+      "label": "Награда: деньги",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000000000
+    },
+    {
+      "id": "items",
+      "label": "Награда: предметы (id=число)",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "autoAccept",
+      "label": "Взять сразу",
+      "type": "bool",
+      "default": false
+    }
+  ],
+  "tags": [
+    "квест",
+    "задание"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

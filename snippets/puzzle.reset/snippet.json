@@ -1,0 +1,96 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.reset",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сброс головоломки"
+  },
+  "description": {
+    "ru": "Запоминает исходное положение и данные объектов; событие puzzle:reset возвращает их."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.angle"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.removeClass"
+    },
+    {
+      "api": "$.fn.velocity"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "objects",
+      "label": "Объекты головоломки",
+      "type": "string",
+      "default": ".puzzle-piece"
+    },
+    {
+      "id": "key",
+      "label": "Клавиша сброса",
+      "type": "string",
+      "default": "r"
+    },
+    {
+      "id": "event",
+      "label": "Событие сброса",
+      "type": "string",
+      "default": "puzzle:reset"
+    }
+  ],
+  "tags": [
+    "сброс"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

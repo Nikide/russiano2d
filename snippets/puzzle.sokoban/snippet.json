@@ -1,0 +1,101 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.sokoban",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Сокобан"
+  },
+  "description": {
+    "ru": "Ящики толкаются по клеткам; решено, когда на всех целевых клетках стоят ящики."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "boxes",
+      "label": "Ящики",
+      "type": "string",
+      "default": ".sokoban-box"
+    },
+    {
+      "id": "goals",
+      "label": "Цели",
+      "type": "string",
+      "default": ".sokoban-goal"
+    },
+    {
+      "id": "cell",
+      "label": "Клетка",
+      "type": "int",
+      "default": 32,
+      "min": 4,
+      "max": 512,
+      "unit": "пикс."
+    },
+    {
+      "id": "walls",
+      "label": "Стены",
+      "type": "string",
+      "default": ".wall"
+    },
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "сокобан",
+    "ящики"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

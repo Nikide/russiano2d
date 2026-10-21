@@ -1,0 +1,111 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.moving-hazard",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Движущаяся опасность"
+  },
+  "description": {
+    "ru": "Пила или шар по маршруту: урон при касании с интервалом."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.angle"
+    },
+    {
+      "api": "$.fn.at"
+    },
+    {
+      "api": "$.fn.damage"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.overlaps"
+    },
+    {
+      "api": "$.fn.pos"
+    },
+    {
+      "api": "$.selection.each"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "points",
+      "label": "Маршрут (x,y через ;)",
+      "type": "string",
+      "default": "100,300; 300,300"
+    },
+    {
+      "id": "speed",
+      "label": "Скорость",
+      "type": "number",
+      "default": 120,
+      "min": 0,
+      "max": 900,
+      "step": 5,
+      "unit": "пикс./с"
+    },
+    {
+      "id": "targets",
+      "label": "Кого ранит",
+      "type": "string",
+      "default": ".player"
+    },
+    {
+      "id": "damage",
+      "label": "Урон",
+      "type": "number",
+      "default": 15,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "id": "interval",
+      "label": "Интервал урона",
+      "type": "int",
+      "default": 600,
+      "min": 16,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "spin",
+      "label": "Вращение",
+      "type": "number",
+      "default": 360,
+      "min": -3600,
+      "max": 3600,
+      "unit": "°/с"
+    }
+  ],
+  "tags": [
+    "пила",
+    "ловушка"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

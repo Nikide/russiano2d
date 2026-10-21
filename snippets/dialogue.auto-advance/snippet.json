@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "dialogue.auto-advance",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Автопереход"
+  },
+  "description": {
+    "ru": "Реплики без выбора листаются сами через паузу после печати."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.dialog.choices"
+    },
+    {
+      "api": "$.dialog.isOpen"
+    },
+    {
+      "api": "$.dialog.next"
+    },
+    {
+      "api": "$.dialog.off"
+    },
+    {
+      "api": "$.dialog.on"
+    },
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.input.pressed"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "delay",
+      "label": "Пауза",
+      "type": "int",
+      "default": 1500,
+      "min": 0,
+      "max": 60000,
+      "unit": "мс"
+    },
+    {
+      "id": "enabled",
+      "label": "Включено",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": "toggleKey",
+      "label": "Переключить",
+      "type": "string",
+      "default": "a"
+    }
+  ],
+  "tags": [
+    "диалог",
+    "авто"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

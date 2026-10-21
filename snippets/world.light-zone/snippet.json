@@ -1,0 +1,78 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "world.light-zone",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Световая зона"
+  },
+  "description": {
+    "ru": "Свет узла <light>: радиус, яркость и цвет; мерцание по желанию."
+  },
+  "kind": "behavior",
+  "category": "Мир и уровень",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.fn.color"
+    },
+    {
+      "api": "$.fn.intensity"
+    },
+    {
+      "api": "$.fn.radius"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "radius",
+      "label": "Радиус",
+      "type": "number",
+      "default": 200,
+      "min": 1,
+      "max": 10000,
+      "unit": "пикс."
+    },
+    {
+      "id": "intensity",
+      "label": "Яркость",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "max": 10,
+      "step": 0.05
+    },
+    {
+      "id": "color",
+      "label": "Цвет",
+      "type": "color",
+      "default": "#ffe0a0"
+    },
+    {
+      "id": "flicker",
+      "label": "Мерцание",
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 1,
+      "step": 0.05
+    }
+  ],
+  "tags": [
+    "свет",
+    "освещение"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

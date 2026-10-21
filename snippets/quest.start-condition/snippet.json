@@ -1,0 +1,104 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "quest.start-condition",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Условие начала"
+  },
+  "description": {
+    "ru": "Задание берётся автоматически, когда выполнено условие: флаг, уровень или событие."
+  },
+  "kind": "behavior",
+  "category": "Задания",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.quest.accept"
+    },
+    {
+      "api": "$.quest.status"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "quest",
+      "label": "ID задания",
+      "type": "string",
+      "default": "",
+      "hint": "Из $.quest.define / quest.definition"
+    },
+    {
+      "id": "flag",
+      "label": "Сюжетный флаг",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "level",
+      "label": "Уровень игрока от",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000
+    },
+    {
+      "id": "event",
+      "label": "Или событие",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "id": "player",
+      "label": "Игрок",
+      "type": "entity",
+      "default": "#hero",
+      "required": true
+    }
+  ],
+  "tags": [
+    "квест",
+    "условие"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "puzzle.switch-combination",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Комбинация переключателей"
+  },
+  "description": {
+    "ru": "Решено, когда переключатели (data on) стоят в нужной комбинации."
+  },
+  "kind": "behavior",
+  "category": "Головоломки",
+  "targets": [
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.attr"
+    },
+    {
+      "api": "$.fn.data"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "switches",
+      "label": "Переключатели (id=вкл/выкл)",
+      "type": "list",
+      "default": [
+        "s1=1",
+        "s2=0",
+        "s3=1"
+      ]
+    },
+    {
+      "id": "solvedEvent",
+      "label": "Событие решения",
+      "type": "string",
+      "default": "puzzle:solved"
+    }
+  ],
+  "tags": [
+    "переключатели",
+    "комбинация"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

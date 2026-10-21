@@ -1,0 +1,88 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.relationship-route",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Маршрут по отношениям"
+  },
+  "description": {
+    "ru": "Очки отношений персонажей ведут к маршруту: выше порога — флаг route."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.story.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "characters",
+      "label": "Персонажи (флаг очков=порог)",
+      "type": "list",
+      "default": [
+        "alice_points=10",
+        "bob_points=10"
+      ]
+    },
+    {
+      "id": "routeFlag",
+      "label": "Флаг маршрута",
+      "type": "string",
+      "default": "route"
+    },
+    {
+      "id": "checkEvent",
+      "label": "Проверять по событию",
+      "type": "string",
+      "default": "chapter:end"
+    }
+  ],
+  "tags": [
+    "VN",
+    "маршрут"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

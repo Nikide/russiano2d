@@ -1,0 +1,96 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.chapter",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Глава"
+  },
+  "description": {
+    "ru": "Глава: входные флаги, флаг начала и событие выхода; номер — в $.story и $.save."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.some"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.save.set"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.story.set"
+    },
+    {
+      "api": "$.updateFor"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "number",
+      "label": "Номер",
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 1000
+    },
+    {
+      "id": "title",
+      "label": "Название",
+      "type": "string",
+      "default": "Глава 1"
+    },
+    {
+      "id": "requires",
+      "label": "Нужны флаги",
+      "type": "list",
+      "default": []
+    },
+    {
+      "id": "endEvent",
+      "label": "Событие конца главы",
+      "type": "string",
+      "default": "chapter:end"
+    }
+  ],
+  "tags": [
+    "глава",
+    "сюжет"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}

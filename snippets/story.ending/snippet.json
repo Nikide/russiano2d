@@ -1,0 +1,91 @@
+{
+  "format": "r2d-snippet/1",
+  "id": "story.ending",
+  "version": "1.0.0",
+  "title": {
+    "ru": "Концовка"
+  },
+  "description": {
+    "ru": "Проверка набора условий концовок по событию: первая подходящая — событие ending."
+  },
+  "kind": "behavior",
+  "category": "Диалоги и сюжет",
+  "targets": [
+    "project",
+    "node"
+  ],
+  "slots": [],
+  "requires": [
+    {
+      "api": "$.emit"
+    },
+    {
+      "api": "$.fn.emit"
+    },
+    {
+      "api": "$.fn.every"
+    },
+    {
+      "api": "$.fn.filter"
+    },
+    {
+      "api": "$.fn.find"
+    },
+    {
+      "api": "$.fn.map"
+    },
+    {
+      "api": "$.fn.off"
+    },
+    {
+      "api": "$.fn.on"
+    },
+    {
+      "api": "$.fn.slice"
+    },
+    {
+      "api": "$.off"
+    },
+    {
+      "api": "$.on"
+    },
+    {
+      "api": "$.quest"
+    },
+    {
+      "api": "$.story.flags"
+    },
+    {
+      "api": "$.story.set"
+    }
+  ],
+  "dependencies": [],
+  "fields": [
+    {
+      "id": "endings",
+      "label": "Концовки (имя: флаг, флаг…)",
+      "type": "list",
+      "default": [
+        "good: saved_town, spared_boss",
+        "bad: "
+      ]
+    },
+    {
+      "id": "checkEvent",
+      "label": "Проверять по событию",
+      "type": "string",
+      "default": "game:finale"
+    }
+  ],
+  "tags": [
+    "концовка",
+    "VN"
+  ],
+  "source": "src/behavior.js",
+  "examples": [
+    "examples/example.json"
+  ],
+  "tests": [
+    "tests/values.test.json"
+  ]
+}
