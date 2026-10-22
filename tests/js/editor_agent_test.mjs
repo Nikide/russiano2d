@@ -505,7 +505,7 @@ await atest('правки откатываются: write/edit/delete/move и un
     await T.move_file.run({ from: 'a.js', to: 'c.js' });
     eq([...files.keys()].sort(), ['c.js', 'new.js']);
     eq(files.get('c.js'), 'ОДИН');
-    eq(tools.history.length, 5, 'move пишет два шага');
+    eq(tools.history.length, 4, 'write, edit, delete и move (move — один шаг из двух файлов)');
     truthy((await T.undo_edit.run({ count: 5 })).includes('восстановлен a.js'));
     eq([...files.keys()].sort(), ['a.js', 'b.js']);
     eq(files.get('a.js'), 'один');
@@ -644,6 +644,30 @@ test('trimHistory: старые пары отбрасываются целико
     eq(trimHistory(msgs, 1e9), 0, 'в пределах лимита ничего не трогаем');
     const short = [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }];
     eq(trimHistory(short, 1), 0, 'короткую историю не режем');
+});
+
+await atest('откат snippet_apply и studio_save: один шаг возвращает project.json, точку входа и сгенерированное', async () => {
+    const files = new Map([['project.json', '{"runtime":{"entry":"game.js"}}'], ['game.js', 'старый вход'], ['generated/a.js', 'старый ген']]);
+    const history = [];
+    const host = { ...memHost(files), history,
+        tool: async (a) => {
+            if (a[1] === 'add') { files.set('project.json', '{"runtime":{"entry":"game.js"},"editor":{"snippets":1}}'); return { json: { ok: true, added: ['snippet:h:p'] } }; }
+            if (a[1] === 'generate') { files.set('game.js', 'import generated; старый вход'); files.set('generated/a.js', 'новый ген'); files.set('generated/b.js', 'второй'); return { json: { ok: true, files: [{ path: 'generated/a.js' }, { path: 'generated/b.js' }, { path: 'game.js' }] } }; }
+            return { json: { ok: true } };
+        } };
+    const apply = snippetTools(host).find((x) => x.name === 'snippet_apply');
+    truthy((await apply.run({ owner: 'object:h', package: 'p' })).startsWith('готово'));
+    eq(history.length, 1, 'вся операция — один шаг истории');
+    const undo = editorTools({ ...memHost(files), history }).find((x) => x.name === 'undo_edit');
+    truthy((await undo.run({})).includes('удалён generated/b.js'));
+    eq(files.get('project.json'), '{"runtime":{"entry":"game.js"}}');
+    eq(files.get('game.js'), 'старый вход');
+    eq(files.get('generated/a.js'), 'старый ген');
+    eq(files.has('generated/b.js'), false, 'созданный генератором файл удалён');
+    const saved = [];
+    const studio = studioTools({ tabs: () => [{ path: 'a.re2dmap', active: true }], openTab: async () => {}, studioApi: () => ({ id: 'hammer', save: async () => ({ ok: true }) }), remember: (p) => saved.push(p) });
+    await studio.find((x) => x.name === 'studio_save').run({});
+    eq(saved, ['a.re2dmap'], 'перед сохранением документа студии снимается файл');
 });
 
 finish();

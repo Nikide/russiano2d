@@ -519,7 +519,13 @@ export function studioTools(host) {
           } },
         { name: 'studio_save', mutating: true, description: 'Сохранить документ студии на диск (требует подтверждения).',
           schema: obj({ path: str('путь вкладки; пусто — активная') }, []),
-          run: async (a) => { const r = await need(a.path).save(); return JSON.stringify(r === undefined ? { ok: true } : r).slice(0, 1500); } },
+          run: async (a) => {
+              const api = need(a.path);
+              // перед записью на диск — снимок файла документа (откат через undo_edit / кнопку ↶)
+              if (host.remember) { try { const f = a.path ? safeRel(a.path) : ((host.tabs().find((t) => t.active) || {}).path); if (f) host.remember(f); } catch (_) { /* без снимка */ } }
+              const r = await api.save();
+              return JSON.stringify(r === undefined ? { ok: true } : r).slice(0, 1500);
+          } },
     ];
     if (host.editorOp) {
         tools.push({ name: 'editor_op', mutating: true,
@@ -586,6 +592,18 @@ export function snippetTools(host) {
               const proj = host.abs(''), owner = String(a.owner), pkg = String(a.package);
               const run = async (args) => (await host.tool(args)).json || {};
               const brief = (r) => (r.diagnostics || []).filter((d) => d.severity !== 'info').slice(0, 6).map((d) => d.code + ': ' + d.message);
+              // Снимок для отката: project.json, точка входа и уже сгенерированные файлы — одним шагом истории.
+              const snap = [];
+              if (host.history && host.exists && host.readText) {
+                  let entry = 'main.js';
+                  try { entry = JSON.parse(host.readText('project.json')).runtime.entry || 'main.js'; } catch (_) { /* по умолчанию */ }
+                  for (const p of new Set(['project.json', entry, ...(host.list ? host.list().filter((f) => f.startsWith('generated/')) : [])])) if (host.exists(p)) snap.push(snapshotFile(host, p));
+              }
+              const commit = (gen) => {
+                  if (!host.history || !snap.length) return;
+                  for (const f of (gen && gen.files) || []) if (f.path && !snap.some((x) => x.path === f.path)) snap.push({ path: f.path, before: null });
+                  host.history.push({ items: snap });
+              };
               await run(['project-index', proj, '--write']);
               const add = await run(['snippet', 'add', proj, pkg, '--owner', owner]);
               if (!add.ok && !(add.diagnostics || []).some((d) => d.code === 'SNIP145' || /уже/.test(d.message || ''))) {
@@ -602,6 +620,7 @@ export function snippetTools(host) {
                   if (!set.ok) return 'экземпляр добавлен (' + inst + '), но значения не применены:\n' + brief(set).join('\n');
               }
               const gen = await run(['snippet', 'generate', proj, '--write']);
+              commit(gen);
               if (!gen.ok) return 'экземпляр ' + inst + ' добавлен, генерация не удалась:\n' + brief(gen).join('\n');
               return 'готово: ' + ((add.added || [inst]).join(', ')) + '; файлов сгенерировано: ' + (gen.files || []).length + (brief(gen).length ? '\n' + brief(gen).join('\n') : '');
           } },
@@ -685,18 +704,25 @@ export function grepProject(host, { query, regex, prefix, ext, max }) {
     return { hits, scanned, truncated: false };
 }
 
-// Откат правок агента: history = [{ path, before }] (before === null — файл создан агентом).
+// Откат правок агента. history — список шагов: { items: [{ path, before }] }; before === null — файл создан
+// агентом (при откате удаляется). Один шаг может объединять несколько файлов (snippet_apply, move_file).
 export function undoEdits(history, host, count) {
     const done = [];
     for (let k = 0; k < Math.max(1, count || 1) && history.length; k++) {
-        const h = history.pop();
-        if (h.before === null) { if (host.remove && host.exists(h.path)) host.remove(h.path); else host.writeText(h.path, ''); }
-        else host.writeText(h.path, h.before);
-        done.push((h.before === null ? 'удалён ' : 'восстановлен ') + h.path);
-        if (host.afterUndo) host.afterUndo(h.path);
+        const step = history.pop();
+        const items = step.items || [step];
+        for (const h of items.slice().reverse()) {
+            if (h.before === null) { if (host.remove && host.exists(h.path)) host.remove(h.path); else host.writeText(h.path, ''); }
+            else host.writeText(h.path, h.before);
+            done.push((h.before === null ? 'удалён ' : 'восстановлен ') + h.path);
+            if (host.afterUndo) host.afterUndo(h.path);
+        }
     }
     return done;
 }
+
+// Снимок файла «до» для истории.
+export const snapshotFile = (host, p) => ({ path: p, before: host.exists(p) ? host.readText(p) : null });
 
 export function editorTools(host) {
     const str = (description) => ({ type: 'string', description });
@@ -712,8 +738,8 @@ export function editorTools(host) {
         } catch (e) { return '\nlint: не запустился (' + (e && e.message || e) + ')'; }
     };
     const obj = (props, required) => ({ type: 'object', properties: props, required: required || Object.keys(props) });
-    const history = [];
-    const remember = (p) => { history.push({ path: p, before: host.exists(p) ? host.readText(p) : null }); if (history.length > 100) history.shift(); };
+    const history = host.history || [];
+    const remember = (p) => { history.push({ items: [snapshotFile(host, p)] }); if (history.length > 100) history.shift(); };
     const tools = [
         { name: 'docs_search', description: 'Поиск по встроенной документации движка (строки, содержащие запрос).',
           schema: obj({ query: str('слово или фраза') }),
@@ -783,7 +809,7 @@ export function editorTools(host) {
               if (!host.exists(f)) throw new Error('нет файла ' + f);
               if (host.exists(t)) throw new Error('файл уже есть: ' + t);
               const text = host.readText(f);
-              remember(t); remember(f);
+              history.push({ items: [snapshotFile(host, t), snapshotFile(host, f)] });
               host.writeText(t, text); host.remove(f);
               return 'перемещён ' + f + ' → ' + t;
           } },

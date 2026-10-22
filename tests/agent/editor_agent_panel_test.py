@@ -109,6 +109,14 @@ def _game(directory):
         check(agent, 'true' if inst and inst[0]['values'].get('speed') == 300 and inst[0]['owner'] == 'object:hero' else 'false',
               'игра: snippet_apply записал экземпляр кирпичика со значениями')
         check(agent, 'true' if (dest / 'generated/snippets/index.js').is_file() else 'false', 'игра: код кирпичика сгенерирован')
+        agent.eval(D + '.click("ag-undo");1'); agent.step(10)
+        tm2 = json.loads((dest / 'level.tilemap.json').read_text(encoding='utf-8'))
+        check(agent, 'true' if tm2['layers'][0]['data'][0][0] != 1 else 'false', 'игра: первый откат возвращает файл tilemap до studio_save')
+        agent.eval(D + '.click("ag-undo");1'); agent.step(10)
+        proj2 = json.loads((dest / 'project.json').read_text(encoding='utf-8'))
+        inst2 = [i for i in proj2.get('editor', {}).get('snippets', {}).get('instances', []) if i['package'] == 'movement.platformer']
+        check(agent, 'true' if not inst2 else 'false', 'игра: откат snippet_apply убирает кирпичик из project.json')
+        check(agent, 'false' if (dest / 'generated/snippets/index.js').is_file() else 'true', 'игра: откат snippet_apply удаляет созданный генератором код')
         check(agent, 'false' if '"err"' in log else 'true', 'игра: ни один шаг сценария не вернул ошибку (' + log[-300:] + ')')
 
 

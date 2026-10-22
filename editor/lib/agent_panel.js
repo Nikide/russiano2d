@@ -79,7 +79,8 @@ export function createAgentPanel($, doc, host) {
         // Корень проекта берётся при каждом вызове: new_project/open_project меняют его на ходу.
         const root = () => { const p = host.project(); if (!p) throw new Error('проект не открыт'); return p.abs; };
         const abs = (p) => (p ? root() + '/' + p : root());
-        const tools = editorTools({
+        const history = [];
+        const fsHost = {
             tool: host.tool, abs,
             exists: (p) => $.fs.exists(root() + '/' + p),
             readText: (p) => $.fs.readText(root() + '/' + p),
@@ -87,15 +88,18 @@ export function createAgentPanel($, doc, host) {
             remove: (p) => { $.fs.remove(root() + '/' + p); host.changed(p); },
             afterUndo: (p) => host.changed(p),
             list: () => host.files(),
-        });
-        st.history = tools.history;
-        st.fsHost = { exists: (p) => $.fs.exists(root() + '/' + p), writeText: (p, c) => { $.fs.write(root() + '/' + p, c); host.changed(p); }, remove: (p) => { $.fs.remove(root() + '/' + p); host.changed(p); }, afterUndo: (p) => host.changed(p) };
+            history,
+        };
+        const tools = editorTools(fsHost);
+        st.history = history;
+        st.fsHost = fsHost;
+        const studio = studioTools({ ...host, remember: (p) => history.push({ items: [{ path: p, before: fsHost.exists(p) ? fsHost.readText(p) : null }] }) });
         const interact = interactTools({
             setPlan: (items) => { st.plan = items; render(); },
             ask: (question, options) => new Promise((resolve) => { st.asking = { question, options, resolve }; st.scrollPending = 3; st.mascot.asking(); applyMascot(); render(); }),
         });
         st.agent = createAgent({
-            config: st.cfg, transport, tools: tools.concat(studioTools(host), snippetTools({ tool: host.tool, abs }), interact), confirm,
+            config: st.cfg, transport, tools: tools.concat(studio, snippetTools(fsHost), interact), confirm,
             context: (q) => docContext(host, q, 4),
             events: {
                 text: (t) => { st.mascot.talk(); applyMascot(); push({ kind: 'bot', text: t }); },
