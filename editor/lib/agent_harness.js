@@ -22,6 +22,8 @@ export const PROVIDERS = {
     // OpenCode Go (подписка): OpenAI-протокол chat/completions; список моделей — GET {base}/models.
     // Часть моделей каталога говорит по /responses или /messages — для них нужны «OpenAI-совм.»/«Anthropic» с другим адресом.
     opencode: { label: 'OpenCode Go', protocol: 'openai', auth: 'bearer', base: 'https://opencode.ai/zen/go/v1', model: 'kimi-k2.7-code', sessionHeader: 'x-opencode-session' },
+    // Inception Labs (диффузионные Mercury): OpenAI-протокол; reasoning_effort не шлём — по умолчанию модель сама.
+    inception: { label: 'Inception Mercury', protocol: 'openai', auth: 'bearer', base: 'https://api.inceptionlabs.ai/v1', model: 'mercury-3' },
     deepseek: { label: 'DeepSeek', protocol: 'openai', auth: 'bearer', base: 'https://api.deepseek.com', model: 'deepseek-flash' },
     // GigaChat/GigaCode (Сбер): «Authorization key» из кабинета обменивается на токен (30 мин).
     gigachat: {

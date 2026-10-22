@@ -164,6 +164,7 @@
                     <div id="ag-prov-openai" class="cfg-card"><span class="cfg-name">OpenAI-совместимый</span><span class="cfg-desc">llama-server, Ollama, LM Studio и другие</span></div>
                     <div id="ag-prov-opencode" class="cfg-card"><span class="cfg-name">OpenCode Go</span><span class="cfg-desc">подписка, много моделей</span></div>
                     <div id="ag-prov-deepseek" class="cfg-card"><span class="cfg-name">DeepSeek</span><span class="cfg-desc">deepseek-flash, v4-pro</span></div>
+                    <div id="ag-prov-inception" class="cfg-card"><span class="cfg-name">Inception Mercury</span><span class="cfg-desc">mercury-3 (диффузионная)</span></div>
                     <div id="ag-prov-yandex" class="cfg-card"><span class="cfg-name">YandexGPT</span><span class="cfg-desc">Yandex Cloud, ключ Api-Key</span></div>
                     <div id="ag-prov-gigachat" class="cfg-card"><span class="cfg-name">GigaChat</span><span class="cfg-desc">Сбер, токен по ключу авторизации</span></div>
                 </div>

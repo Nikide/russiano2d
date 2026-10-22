@@ -32,6 +32,7 @@
 | OpenAI-совм. (`/chat/completions`) | `http://localhost:8080/v1` (llama-server, Ollama, LM Studio…) | `Bearer`, по необходимости |
 | DeepSeek | `https://api.deepseek.com` | `Bearer`, модель `deepseek-flash` (по умолчанию) или `deepseek-v4-pro`; список — `GET /models` |
 | OpenCode Go | `https://opencode.ai/zen/go/v1` | ключ из opencode.ai/auth → `Bearer`; харнес сам шлёт `x-opencode-session` (шлюз без него отказывает). Модель из `GET …/models`, по умолчанию `kimi-k2.7-code`. Модели, говорящие по `/responses` или `/messages`, этим провайдером не поддержаны |
+| Inception Mercury | `https://api.inceptionlabs.ai/v1` | `Bearer`, модель `mercury-3` (диффузионная, быстрая); OpenAI-протокол. Бенчмарк `tools/agent_bench.py`: 4 задачи из 4 (файл, звук, спрайт, платформер) |
 | YandexGPT | `https://llm.api.cloud.yandex.net/v1` | API-ключ сервисного аккаунта → `Authorization: Api-Key …`; IAM-токен — введите `Bearer t1.…`. Модель: `gpt://<id каталога>/yandexgpt/latest` |
 | GigaChat / GigaCode (Сбер) | `https://api.giga.chat/v1` | «Authorization key» из кабинета: харнес сам обменивает его на токен (`POST ngw.devices.sberbank.ru:9443/api/v2/oauth`, `scope=GIGACHAT_API_PERS`, `RqUID`) и обновляет по сроку; вызовы инструментов — через `functions`; корневой сертификат Минцифры передаётся только этим HTTPS-запросам |
 
