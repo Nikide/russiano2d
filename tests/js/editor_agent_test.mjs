@@ -7,7 +7,7 @@ async function atest(name, fn) {
     try { await fn(); } catch (e) { err = e; }
     test(name, () => { if (err) throw err; });
 }
-import { studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
+import { snippetTools, fieldLine, snippetLine, studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
 
 const scripted = (replies, seen) => async (url, opts) => {
     seen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
@@ -311,6 +311,45 @@ await atest('r2d_cli: чтение без подтверждения, запис
     let unknown = '';
     try { await eo.run({ op: 'format_disk' }); } catch (e) { unknown = e.message; }
     truthy(unknown.includes('неизвестная'));
+});
+
+test('fieldLine/snippetLine: компактное описание кирпичика', () => {
+    eq(fieldLine({ id: 'speed', type: 'number', default: 220, min: 0, max: 900 }), 'speed:number=220[0..900]');
+    eq(fieldLine({ id: 'keys', type: 'enum', options: ['wasd', 'arrows'], default: 'wasd' }), 'keys:wasd|arrows="wasd"');
+    const line = snippetLine({ id: 'ability.area-effect', title: 'Эффект', description: 'Урон по площади', targets: ['node'], dependencies: [{ id: 'ability.base' }], fields: [{ id: 'radius', type: 'number', default: 80 }] });
+    truthy(line.startsWith('ability.area-effect — Эффект: Урон по площади [node] +зависит: ability.base'));
+    truthy(line.includes('поля: radius:number=80'));
+});
+
+await atest('snippet_find/snippet_apply: поиск, добавление, значения, генерация', async () => {
+    const calls = [];
+    const host = {
+        abs: (p) => '/proj' + (p ? '/' + p : ''),
+        tool: async (a) => {
+            calls.push(a);
+            if (a[1] === 'catalog') return { json: { ok: true, total: 500, packages: [{ id: 'movement.platformer', title: 'Движение платформера', description: 'Бег и прыжок', targets: ['node'], valid: true, fields: [{ id: 'speed', type: 'number', default: 220 }] }] } };
+            if (a[1] === 'add') return { json: { ok: true, added: ['snippet:hero:movement.platformer'] } };
+            if (a[1] === 'set') return { json: { ok: true } };
+            if (a[1] === 'generate') return { json: { ok: true, files: [{ path: 'a' }, { path: 'b' }] } };
+            return { json: { ok: true } };
+        },
+    };
+    const tools = Object.fromEntries(snippetTools(host).map((t) => [t.name, t]));
+    const found = await tools.snippet_find.run({ query: 'прыж' });
+    truthy(found.includes('movement.platformer — Движение платформера') && found.includes('speed:number=220'));
+    eq(calls[0].slice(0, 3), ['snippet', 'catalog', '--project']);
+    const done = await tools.snippet_apply.run({ owner: 'object:hero', package: 'movement.platformer', values: { speed: 300, keys: 'arrows' } });
+    truthy(done.startsWith('готово: snippet:hero:movement.platformer') && done.includes('файлов сгенерировано: 2'));
+    const setCall = calls.find((c) => c[1] === 'set');
+    eq(setCall.slice(3), ['snippet:hero:movement.platformer', 'speed=300', 'keys="arrows"']);
+    eq(calls[0][0], 'snippet');
+    truthy(calls.some((c) => c[0] === 'project-index'), 'граф обновляется перед добавлением');
+    eq(tools.snippet_apply.mutating, true);
+    eq(tools.snippet_find.mutating, undefined);
+    const bad = snippetTools({ abs: (p) => p, tool: async (a) => ({ json: a[1] === 'add' ? { ok: false, diagnostics: [{ code: 'SNIP060', severity: 'error', message: 'owner не найден' }] } : { ok: true } }) });
+    truthy((await bad[1].run({ owner: 'object:x', package: 'p' })).includes('SNIP060: owner не найден'));
+    const none = snippetTools({ abs: (p) => p, tool: async () => ({ json: { ok: true, total: 500, packages: [] } }) });
+    truthy((await none[0].run({ query: 'zzz' })).includes('ничего не найдено'));
 });
 
 finish();

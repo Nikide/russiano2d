@@ -75,7 +75,9 @@ def _game(directory):
     (start / 'main.js').write_text('$.ready(() => {});\n')
     steps = [
         tool_call(1, 'editor_op', {'op': 'new_project', 'args': {'template': 'blank', 'dir': str(dest), 'name': 'Агентская игра'}}),
-        tool_call(2, 'write_file', {'path': 'main.js', 'content': '$.ready(() => { $.log("агент: старт"); });\n'}),
+        tool_call(2, 'write_file', {'path': 'main.js', 'content': '$.scene.add("level", ($) => { $("<sprite>", { id: "hero", x: 100, y: 100 }).appendTo($.world); });\n$.ready(() => { $.log("агент: старт"); });\n'}),
+        tool_call(21, 'snippet_find', {'query': 'platformer'}),
+        tool_call(22, 'snippet_apply', {'owner': 'object:hero', 'package': 'movement.platformer', 'values': {'speed': 300}}),
         tool_call(3, 'editor_op', {'op': 'create_tilemap', 'args': {}}),
         tool_call(4, 'open_tab', {'path': 'level.tilemap.json'}),
         tool_call(5, 'studio_ops', {}),
@@ -102,6 +104,11 @@ def _game(directory):
         check(agent, '$.fs.readText(' + json.dumps(str(dest / 'main.js')) + ').includes("агент: старт")', 'игра: write_file записал скрипт')
         tm = json.loads((dest / 'level.tilemap.json').read_text(encoding='utf-8'))
         check(agent, 'true' if tm['layers'][0]['data'][0][0] == 1 else 'false', 'игра: studio_op paint + studio_save записали тайл в tilemap')
+        proj = json.loads((dest / 'project.json').read_text(encoding='utf-8'))
+        inst = [i for i in proj.get('editor', {}).get('snippets', {}).get('instances', []) if i['package'] == 'movement.platformer']
+        check(agent, 'true' if inst and inst[0]['values'].get('speed') == 300 and inst[0]['owner'] == 'object:hero' else 'false',
+              'игра: snippet_apply записал экземпляр кирпичика со значениями')
+        check(agent, 'true' if (dest / 'generated/snippets/index.js').is_file() else 'false', 'игра: код кирпичика сгенерирован')
         check(agent, 'false' if '"err"' in log else 'true', 'игра: ни один шаг сценария не вернул ошибку (' + log[-300:] + ')')
 
 

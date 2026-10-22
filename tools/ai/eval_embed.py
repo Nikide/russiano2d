@@ -34,6 +34,11 @@ def main():
     out = {"model": args.model, "split": args.split, "n": len(rows),
            "recall@1": float((ranks <= 1).mean()), "recall@5": float((ranks <= 5).mean()),
            "recall@10": float((ranks <= 10).mean()), "mrr": float((1.0 / ranks).mean())}
+    kinds = {}
+    for k in sorted({r.get("kind", "?") for r in rows}):
+        idx = np.array([i for i, r in enumerate(rows) if r.get("kind", "?") == k])
+        kinds[k] = {"n": int(len(idx)), "recall@1": float((ranks[idx] <= 1).mean()), "recall@5": float((ranks[idx] <= 5).mean()), "mrr": float((1.0 / ranks[idx]).mean())}
+    out["by_kind"] = kinds
     print(json.dumps(out, ensure_ascii=False))
 
 

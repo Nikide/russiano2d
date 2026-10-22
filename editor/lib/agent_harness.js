@@ -31,6 +31,7 @@ export const SYSTEM_PROMPT = [
     'Работа: 1) если контекст из доков не хватает — docs_search/docs_show; 2) любой `$.…` метод, в котором не уверен, проверь api_lookup — выдумывать имена нельзя;',
     '3) правь файлы точечно через edit_file (write_file — только для новых файлов или полной замены); после записи .js lint уже запущен автоматически — исправь диагностику;',
     '4) в конце вызови r2d_validate, при изменении игровой логики — run_check (короткий headless-прогон) и убедись, что ошибок нет. Не повторяй проверки без правок.',
+    'Готовое поведение (движение, AI, способности, UI, камера…) не пиши кодом: snippet_find → snippet_apply (объекты в коде создавай с `id`, owner = object:<id>) — это быстрее и дешевле по токенам.',
     'Игра целиком: editor_op new_project (шаблон blank) → скрипты (write_file/edit_file) → ресурсы. Любая студия — через tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: world-edit операции brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (snippet, atlas-grid, world-compile, project-set…). Резерв: JSON-файлы ресурсов через edit_file.',
     'Пути — относительно корня проекта. Сначала посмотри существующие файлы (list_files, read_file), потом пиши.',
 ].join('\n');
@@ -203,7 +204,7 @@ export function compact(messages, keep) {
 export async function docContext(host, question, limit) {
     const res = await host.tool(['docs', 'context', String(question), '--limit', String(limit || 4)]);
     const chunks = res && res.json && res.json.ok ? res.json.chunks : [];
-    return chunks.map((c) => '[' + c.path + ':' + c.line + ']\n' + String(c.text).slice(0, 900)).join('\n---\n');
+    return chunks.map((c) => '[' + (c.kind === 'snippet' ? 'кирпичик → snippet_apply ' : c.kind === 'api' ? 'api ' : '') + c.path + ':' + c.line + ']\n' + String(c.text).slice(0, 900)).join('\n---\n');
 }
 
 export function createAgent({ config, transport, tools, system, confirm, events, context }) {
@@ -417,6 +418,65 @@ export function studioTools(host) {
             } });
     }
     return tools;
+}
+
+
+// Кирпичики (snippets): 500 готовых поведений. Агент берёт их вместо кода с нуля —
+// быстрее и в разы меньше токенов. Оба инструмента — тонкие обёртки над `r2d snippet`.
+export function fieldLine(f) {
+    let t = f.type || 'any';
+    if (f.type === 'enum' && Array.isArray(f.options)) t = f.options.join('|');
+    const range = f.min !== undefined || f.max !== undefined ? '[' + (f.min !== undefined ? f.min : '') + '..' + (f.max !== undefined ? f.max : '') + ']' : '';
+    const def = f.default !== undefined ? '=' + JSON.stringify(f.default) : '';
+    return f.id + ':' + t + def + range + (f.required ? '!' : '');
+}
+
+export function snippetLine(pkg) {
+    const deps = (pkg.dependencies || []).map((d) => d.id).filter(Boolean);
+    const fields = (pkg.fields || []).map(fieldLine).join(', ');
+    const target = (pkg.targets || []).join('/');
+    return pkg.id + ' — ' + pkg.title + (pkg.description ? ': ' + String(pkg.description).slice(0, 140) : '') +
+        (target ? ' [' + target + ']' : '') + (deps.length ? ' +зависит: ' + deps.join(', ') : '') + (fields ? '\n    поля: ' + fields : '');
+}
+
+export function snippetTools(host) {
+    const str = (description) => ({ type: 'string', description });
+    return [
+        { name: 'snippet_find', description: 'Найти готовые кирпичики (поведения: движение, AI, способности, UI, камера…) по слову из названия, описания или тега (по-русски или по-английски: «прыж», «platformer», «ai.chase»). Показывает поля настройки. ПРЕЖДЕ чем писать поведение кодом — ищи здесь.',
+          schema: { type: 'object', properties: { query: str('слово/часть id'), limit: { type: 'number', description: 'сколько вернуть, по умолчанию 6' } }, required: ['query'] },
+          run: async (a) => {
+              const limit = Math.min(15, Math.max(1, Number(a.limit) || 6));
+              const r = (await host.tool(['snippet', 'catalog', '--project', host.abs(''), '--query', String(a.query), '--fields'])).json;
+              if (!r || !r.ok) return JSON.stringify(r);
+              const pk = (r.packages || []).filter((x) => x.valid !== false);
+              if (!pk.length) return 'ничего не найдено по «' + a.query + '» (всего кирпичиков: ' + r.total + '). Попробуйте другое слово, часть id (movement, ai, ability, ui) или тег.';
+              return pk.slice(0, limit).map(snippetLine).join('\n') + (pk.length > limit ? '\n… ещё ' + (pk.length - limit) + ' — уточните запрос' : '');
+          } },
+        { name: 'snippet_apply', mutating: true,
+          description: 'Подключить кирпичик к объекту и сгенерировать код (требует подтверждения): граф проекта обновляется, зависимости добавляются сами, значения полей задаются values. Объект должен быть создан в коде с `id` (например `$("<sprite>", { id: "hero" })`); owner = "object:hero" или "project".',
+          schema: { type: 'object', properties: { owner: str('object:<id> или project'), package: str('id кирпичика, например movement.platformer'),
+              values: { type: 'object', description: 'значения полей, например {"speed":300}' }, links: { type: 'object', description: 'ссылки, например {"target":"object:boss"}' } }, required: ['owner', 'package'] },
+          run: async (a) => {
+              const proj = host.abs(''), owner = String(a.owner), pkg = String(a.package);
+              const run = async (args) => (await host.tool(args)).json || {};
+              const brief = (r) => (r.diagnostics || []).filter((d) => d.severity !== 'info').slice(0, 6).map((d) => d.code + ': ' + d.message);
+              await run(['project-index', proj, '--write']);
+              const add = await run(['snippet', 'add', proj, pkg, '--owner', owner]);
+              if (!add.ok && !(add.diagnostics || []).some((d) => d.code === 'SNIP145' || /уже/.test(d.message || ''))) return 'не добавлено:\n' + brief(add).join('\n');
+              const ownerName = owner.replace(/^object:/, '').replace(/^project$/, 'project');
+              const inst = ((add.added || []).find((id) => id.endsWith(':' + pkg))) || 'snippet:' + ownerName + ':' + pkg;
+              const pairs = [];
+              for (const [k, v] of Object.entries(a.values || {})) pairs.push(k + '=' + JSON.stringify(v));
+              for (const [k, v] of Object.entries(a.links || {})) pairs.push('links.' + k + '=' + JSON.stringify(v));
+              if (pairs.length) {
+                  const set = await run(['snippet', 'set', proj, inst, ...pairs]);
+                  if (!set.ok) return 'экземпляр добавлен (' + inst + '), но значения не применены:\n' + brief(set).join('\n');
+              }
+              const gen = await run(['snippet', 'generate', proj, '--write']);
+              if (!gen.ok) return 'экземпляр ' + inst + ' добавлен, генерация не удалась:\n' + brief(gen).join('\n');
+              return 'готово: ' + ((add.added || [inst]).join(', ')) + '; файлов сгенерировано: ' + (gen.files || []).length + (brief(gen).length ? '\n' + brief(gen).join('\n') : '');
+          } },
+    ];
 }
 
 // Команды r2d, не меняющие файлы: их агент вызывает без подтверждения.

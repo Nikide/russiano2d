@@ -5,7 +5,9 @@
 
 Пары синтетические, без LLM:
   * заголовок раздела → текст раздела (docs/**/*.md, публичные страницы);
-  * описание функции из api.schema.json → «путь + описание» (4111 имён `$`-API).
+  * описание функции из api.schema.json → «путь + описание» (4111 имён `$`-API);
+  * кирпичики (snippets/*/snippet.json): название, описание, теги, «категория + название» → карточка
+    кирпичика (та же, что строит `r2d docs context`).
 Делит по ФАЙЛАМ/путям на train/val/test (80/10/10), чтобы val/test не пересекались
 с train по источнику. Пишет jsonl: {"query","positive","source","kind"}.
 Это стартовый, слабый сигнал; живые вопросы пользователей (RU/EN) его заменят.
@@ -66,13 +68,36 @@ def api_pairs():
         yield bucket(n["path"]), {"query": desc, "positive": pos, "source": n["path"], "kind": "api"}
 
 
+def loc(v):
+    if isinstance(v, dict):
+        return v.get("ru") or v.get("en") or ""
+    return v or ""
+
+
+def snippet_pairs():
+    for path in sorted((ROOT / "snippets").glob("*/snippet.json")):
+        m = json.loads(path.read_text(encoding="utf-8"))
+        sid, title, desc = m.get("id", ""), loc(m.get("title")), loc(m.get("description"))
+        tags = [t for t in m.get("tags", []) if isinstance(t, str)]
+        fields = " ".join(f'{f.get("id","")} ({loc(f.get("label"))})' for f in m.get("fields", []))
+        card = (f"Кирпичик {sid} — {title}\n{desc}\nКатегория: {m.get('category','')}\nТеги: {' '.join(tags)}"
+                + (f"\nПоля: {fields}" if fields else "") + "\nПрименение: snippet_apply")
+        queries = [title, desc, ", ".join(tags), f"{m.get('category','')}: {title}"]
+        if isinstance(m.get("title"), dict) and m["title"].get("en"):
+            queries.append(m["title"]["en"])
+        if isinstance(m.get("description"), dict) and m["description"].get("en"):
+            queries.append(m["description"]["en"])
+        for q in dict.fromkeys(x.strip() for x in queries if x and len(x.strip()) >= 4):
+            yield bucket(sid), {"query": q, "positive": card, "source": f"snippets/{sid}", "kind": "snippet"}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "tools/ai/data"))
     ap.add_argument("--seed", type=int, default=1)
     args = ap.parse_args()
     rows = {"train": [], "val": [], "test": []}
-    for split, row in list(doc_pairs()) + list(api_pairs()):
+    for split, row in list(doc_pairs()) + list(api_pairs()) + list(snippet_pairs()):
         rows[split].append(row)
     rnd = random.Random(args.seed)
     out = Path(args.out)

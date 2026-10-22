@@ -235,7 +235,35 @@ static int docs_search(const SdkArgs *a)
 #define CTX_MAX_TERMS 16
 #define CTX_STEM 6
 
-typedef struct { const R2dPayloadFile *f; size_t off, len; int line; int tf[CTX_MAX_TERMS]; int dl; double score; } CtxChunk;
+typedef struct {
+    const char *text; size_t len;     // текст куска (в бандле или в own)
+    char *own;                        // собственный буфер для синтезированных карточек
+    char path[200]; const char *kind; // doc | snippet | api
+    int line; int tf[CTX_MAX_TERMS]; int dl; double score, weight;
+} CtxChunk;
+
+static CtxChunk *ctx_push(CtxChunk **arr, size_t *count, size_t *cap)
+{
+    if (*count == *cap) {
+        CtxChunk *g = (CtxChunk *)realloc(*arr, *cap * 2 * sizeof **arr);
+        if (!g) return NULL;
+        memset(g + *cap, 0, *cap * sizeof *g);
+        *arr = g; *cap *= 2;
+    }
+    CtxChunk *c = &(*arr)[(*count)++];
+    memset(c, 0, sizeof *c);
+    c->weight = 1.0;
+    return c;
+}
+
+// Локализованная строка манифеста: "текст" или {"ru": "...", "en": "..."}.
+static const char *ctx_loc(const R2dJson *v)
+{
+    if (!v) return "";
+    if (v->type == R2D_JSON_STR) return r2d_json_str(v, "");
+    const char *ru = r2d_json_str(r2d_json_get(v, "ru"), "");
+    return ru[0] ? ru : r2d_json_str(r2d_json_get(v, "en"), "");
+}
 
 // Следующее слово: [start,end) в s; false в конце. Байты >=0x80 — буквы (UTF-8).
 static bool ctx_next(const char *s, size_t n, size_t *pos, size_t *a, size_t *b)
@@ -327,15 +355,10 @@ static int docs_context(const SdkArgs *a)
             const bool soft = le == p && p - start > 1800;
             if ((heading && p > start) || soft || at_end) {
                 if (p > start) {
-                    if (count == cap) {
-                        cap *= 2;
-                        CtxChunk *g = (CtxChunk *)realloc(chunks, cap * sizeof *chunks);
-                        if (!g) { free(chunks); return 2; }
-                        chunks = g;
-                        memset(chunks + count, 0, (cap - count) * sizeof *chunks);
-                    }
-                    CtxChunk *c = &chunks[count++];
-                    c->f = f; c->off = start; c->len = p - start; c->line = start_line;
+                    CtxChunk *c = ctx_push(&chunks, &count, &cap);
+                    if (!c) { free(chunks); return 2; }
+                    c->text = d + start; c->len = p - start; c->line = start_line; c->kind = "doc";
+                    snprintf(c->path, sizeof c->path, "%s", f->path);
                 }
                 start = p; start_line = line;
             }
@@ -344,12 +367,79 @@ static int docs_context(const SdkArgs *a)
         }
     }
 
+    // Кирпичики: карточка из манифеста (id, название, описание, теги, поля).
+    for (int i = 0; i < b->file_count; ++i) {
+        const R2dPayloadFile *f = &b->files[i];
+        const size_t fn = strlen(f->path);
+        if (strncmp(f->path, "snippets/", 9) != 0 || fn < 22 || strcmp(f->path + fn - 13, "/snippet.json") != 0) continue;
+        char *raw = (char *)malloc(f->size + 1);
+        if (!raw) continue;
+        memcpy(raw, f->data, f->size); raw[f->size] = '\0';
+        char jerr[96];
+        R2dJson *m = r2d_json_parse(raw, jerr, sizeof jerr);
+        free(raw);
+        if (!m) continue;
+        R2dSb card; r2d_sb_init(&card);
+        const char *id = r2d_json_str(r2d_json_get(m, "id"), "");
+        r2d_sb_printf(&card, "Кирпичик %s — %s\n%s\nКатегория: %s\nТеги:", id, ctx_loc(r2d_json_get(m, "title")),
+                      ctx_loc(r2d_json_get(m, "description")), r2d_json_str(r2d_json_get(m, "category"), ""));
+        const R2dJson *tags = r2d_json_get(m, "tags");
+        for (size_t k = 0; tags && k < r2d_json_size(tags); ++k) r2d_sb_printf(&card, " %s", r2d_json_str(r2d_json_at(tags, k), ""));
+        const R2dJson *fields = r2d_json_get(m, "fields");
+        if (fields && r2d_json_size(fields)) {
+            r2d_sb_puts(&card, "\nПоля:");
+            for (size_t k = 0; k < r2d_json_size(fields); ++k) {
+                const R2dJson *fd = r2d_json_at(fields, k);
+                r2d_sb_printf(&card, " %s (%s)", r2d_json_str(r2d_json_get(fd, "id"), ""), ctx_loc(r2d_json_get(fd, "label")));
+            }
+        }
+        r2d_sb_puts(&card, "\nПрименение: snippet_apply");
+        CtxChunk *c = ctx_push(&chunks, &count, &cap);
+        if (c) {
+            c->own = strdup(card.data);
+            c->text = c->own; c->len = strlen(c->own); c->kind = "snippet"; c->line = 1;
+            snprintf(c->path, sizeof c->path, "%s", f->path);
+        }
+        r2d_sb_free(&card);
+        r2d_json_free(m);
+    }
+    // API: одна запись на имя схемы (путь, аргументы, описание).
+    {
+        const R2dPayloadFile *sf = r2d_payload_find(b, "api.schema.json");
+        R2dJson *schema = NULL;
+        if (sf) {
+            char *raw = (char *)malloc(sf->size + 1);
+            if (raw) {
+                memcpy(raw, sf->data, sf->size); raw[sf->size] = '\0';
+                char jerr[96];
+                schema = r2d_json_parse(raw, jerr, sizeof jerr);
+                free(raw);
+            }
+        }
+        const R2dJson *names = schema ? r2d_json_get(schema, "names") : NULL;
+        for (size_t k = 0; names && k < r2d_json_size(names); ++k) {
+            const R2dJson *it = r2d_json_at(names, k);
+            const char *desc = r2d_json_str(r2d_json_get(it, "description"), "");
+            const char *path = r2d_json_str(r2d_json_get(it, "path"), "");
+            if (!desc[0] || !path[0]) continue;
+            CtxChunk *c = ctx_push(&chunks, &count, &cap);
+            if (!c) break;
+            const size_t need = strlen(path) + strlen(desc) + 32;
+            c->own = (char *)malloc(need);
+            if (!c->own) break;
+            snprintf(c->own, need, "API %s — %s", path, desc);
+            c->text = c->own; c->len = strlen(c->own); c->kind = "api"; c->line = 1; c->weight = 0.85;
+            snprintf(c->path, sizeof c->path, "api:%s", path);
+        }
+        r2d_json_free(schema);
+    }
+
     // tf по запросным основам и длина куска в словах.
     double total_len = 0;
     int df[CTX_MAX_TERMS] = {0};
     for (size_t k = 0; k < count; ++k) {
         CtxChunk *c = &chunks[k];
-        const char *d = (const char *)c->f->data + c->off;
+        const char *d = c->text;
         size_t pos = 0, s0, e0;
         while (ctx_next(d, c->len, &pos, &s0, &e0)) {
             char st[40];
@@ -369,6 +459,7 @@ static int docs_context(const SdkArgs *a)
             const double tf = c->tf[t];
             c->score += idf * tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * c->dl / avg));
         }
+        c->score *= c->weight;
     }
     qsort(chunks, count, sizeof *chunks, ctx_cmp);
 
@@ -379,7 +470,7 @@ static int docs_context(const SdkArgs *a)
     int shown = 0;
     for (size_t k = 0; k < count && shown < limit && chunks[k].score > 0; ++k) {
         const CtxChunk *c = &chunks[k];
-        const char *d = (const char *)c->f->data + c->off;
+        const char *d = c->text;
         size_t t = c->len < 1800 ? c->len : 1800;
         while (t > 0 && t < c->len && ((unsigned char)d[t] & 0xC0) == 0x80) --t;
         char *text = (char *)malloc(t + 1);
@@ -387,8 +478,8 @@ static int docs_context(const SdkArgs *a)
         memcpy(text, d, t); text[t] = '\0';
         if (shown++) r2d_sb_putc(&out, ',');
         r2d_sb_puts(&out, "{\"path\":");
-        r2d_sb_put_json_string(&out, c->f->path);
-        r2d_sb_printf(&out, ",\"line\":%d,\"score\":%.3f,\"truncated\":%s,\"text\":", c->line, c->score, t < c->len ? "true" : "false");
+        r2d_sb_put_json_string(&out, c->path);
+        r2d_sb_printf(&out, ",\"kind\":\"%s\",\"line\":%d,\"score\":%.3f,\"truncated\":%s,\"text\":", c->kind, c->line, c->score, t < c->len ? "true" : "false");
         r2d_sb_put_json_string(&out, text);
         r2d_sb_putc(&out, '}');
         free(text);
@@ -396,6 +487,7 @@ static int docs_context(const SdkArgs *a)
     r2d_sb_printf(&out, "],\"count\":%d}", shown);
     printf("%s\n", out.data);
     r2d_sb_free(&out);
+    for (size_t k = 0; k < count; ++k) free(chunks[k].own);
     free(chunks);
     return 0;
 }

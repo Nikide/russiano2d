@@ -2,7 +2,7 @@
 // Логика цикла — agent_harness.js; здесь только RmlUi-обвязка. Ключ API живёт
 // только в памяти процесса: на диск и в project.json он не попадает.
 
-import { PROVIDERS, createAgent, editorTools, studioTools, docContext } from './agent_harness.js';
+import { PROVIDERS, createAgent, editorTools, studioTools, snippetTools, docContext } from './agent_harness.js';
 import { esc as escRml } from './studio_kit.js';
 
 // RmlUi считает `{{`/`}}` в тексте выражением привязки данных (JSON с вложенными
@@ -47,7 +47,7 @@ export function createAgentPanel($, doc, host) {
             list: () => host.files(),
         });
         st.agent = createAgent({
-            config: st.cfg, transport, tools: tools.concat(studioTools(host)), confirm,
+            config: st.cfg, transport, tools: tools.concat(studioTools(host), snippetTools({ tool: host.tool, abs: (p) => (p ? root() + '/' + p : root()) })), confirm,
             context: (q) => docContext(host, q, 4),
             events: {
                 text: (t) => push('agent', t),
@@ -110,6 +110,7 @@ export function createAgentPanel($, doc, host) {
             : st.pending.name === 'studio_edit' ? 'изменить документ студии патчем ' + esc(JSON.stringify(pin.patch || {}).replace(/"/g, "'").slice(0, 140))
             : st.pending.name === 'editor_op' ? 'выполнить в Editor <b>' + esc(pin.op || '?') + '</b> ' + esc(JSON.stringify(pin.args || {}).replace(/"/g, "'").slice(0, 120))
             : st.pending.name === 'r2d_cli' ? 'выполнить <b>r2d ' + esc((Array.isArray(pin.args) ? pin.args : []).join(' ').slice(0, 140)) + '</b>'
+            : st.pending.name === 'snippet_apply' ? 'подключить кирпичик <b>' + esc(pin.package || '?') + '</b> к <b>' + esc(pin.owner || '?') + '</b> ' + esc(JSON.stringify(pin.values || {}).replace(/"/g, "'").slice(0, 100))
             : st.pending.name === 'studio_save' ? 'сохранить документ студии <b>' + esc(pin.path || 'активной вкладки') + '</b>'
             : 'записать <b>' + esc(pin.path || '?') + '</b> (' + String(String(pin.content || '').length) + ' симв.)';
         const ask = st.pending

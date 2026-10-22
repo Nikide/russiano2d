@@ -14,6 +14,7 @@ C-заголовок с массивом байт. Движок распаков
   * assets/fonts, assets/icons — встроенные ресурсы движка (как в base_path);
   * docs/…*.md — только публичные страницы (tools/public_docs.py);
   * templates/… — шаблоны проектов;
+  * snippets/<id>/snippet.json — манифесты кирпичиков (поиск контекста агентом);
   * api.schema.json, russiano2d.d.ts — схема и типы `$` (r2d lint без файлов рядом).
 Результат детерминирован: одинаковое дерево — одинаковые байты.
 """
@@ -57,6 +58,9 @@ def collect(repo: Path):
         if not public_docs.is_internal_doc(path):
             files.append((path, full))
     files += walk(repo / "templates", repo, "")
+    # Манифесты кирпичиков (без исходников): каталог для `r2d docs context` и агента.
+    for path, full in walk(repo / "snippets", repo, "", only_ext=("snippet.json",)):
+        files.append((path, full))
     for name in ("api.schema.json", "russiano2d.d.ts"):   # схема $ для lint без файлов рядом
         if (repo / name).is_file():
             files.append((name, repo / name))
