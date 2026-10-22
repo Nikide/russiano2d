@@ -139,6 +139,7 @@ def _interact(directory):
         tool_call(2, 'ask_user', {'question': 'Какой жанр?', 'options': ['Платформер', 'Шутер']}),
         tool_call(3, 'search_project', {'query': 'ready'}),
         tool_call(4, 'write_file', {'path': 'notes.txt', 'content': 'жанр выбран'}),
+        tool_call(5, 'plan', {'items': [{'text': 'Спросить жанр', 'status': 'done'}, {'text': 'Записать заметку', 'status': 'done'}]}),
         reply({'type': 'text', 'text': 'Готово, записал.'}),
     ]
     with Agent(game='editor', scene=str(project), seed=15) as agent:
