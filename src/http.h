@@ -49,6 +49,14 @@ int r2d_http_request(const char *method, const char *url, const char *body,
                      const char *const *header_values, int header_count,
                      double timeout_ms);
 
+// То же с собственным корневым сертификатом: ca — PEM-текст («-----BEGIN…») или путь к PEM-файлу;
+// NULL — системное хранилище. Нужен серверам с российским корневым УЦ (GigaChat): в системе его
+// обычно нет, а проверку TLS отключать нельзя. Заменяет хранилище только для этого запроса.
+int r2d_http_request_ex(const char *method, const char *url, const char *body,
+                        const char *const *header_names,
+                        const char *const *header_values, int header_count,
+                        double timeout_ms, const char *ca);
+
 // Готов ли запрос. При true результат копируется в out (его надо освободить
 // через r2d_http_free) и запись удаляется.
 bool r2d_http_poll(int id, R2DHttpResult *out);

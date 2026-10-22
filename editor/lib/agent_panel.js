@@ -53,7 +53,7 @@ export function createAgentPanel($, doc, host) {
     };
 
     function transport(url, opts) {
-        return $.http.post(url, opts.body, { headers: opts.headers, timeout: opts.timeout }).then((res) => {
+        return $.http.post(url, opts.body, { headers: opts.headers, timeout: opts.timeout, ca: opts.ca }).then((res) => {
             let json = null;
             try { json = res.json(); } catch (_) { json = null; }
             return { ok: res.ok, status: res.status, json, text: res.body };

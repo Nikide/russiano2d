@@ -386,7 +386,7 @@ static void r2d__curl_finish(R2DHttpEntry *e, CURLcode code)
 static bool r2d__curl_start(R2DHttpEntry *e, const char *method, const char *url,
                             const char *body,
                             const char *const *names, const char *const *values,
-                            int header_count, double timeout_ms)
+                            int header_count, double timeout_ms, const char *ca)
 {
     CURL *easy = curl_easy_init();
     if (!easy) return false;
@@ -426,6 +426,14 @@ static bool r2d__curl_start(R2DHttpEntry *e, const char *method, const char *url
     curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "");
     curl_easy_setopt(easy, CURLOPT_USERAGENT, "russiano2d/" R2D_VERSION_STRING);
     if (e->hdrs) curl_easy_setopt(easy, CURLOPT_HTTPHEADER, e->hdrs);
+    if (ca && *ca) {
+        if (strstr(ca, "-----BEGIN")) {
+            struct curl_blob blob = { (void *)ca, strlen(ca), CURL_BLOB_COPY };   // libcurl копирует PEM сам
+            curl_easy_setopt(easy, CURLOPT_CAINFO_BLOB, &blob);
+        } else {
+            curl_easy_setopt(easy, CURLOPT_CAINFO, ca);
+        }
+    }
 
     // GET без тела — обычный HTTPGET; для остальных методов (и для тела)
     // честно ставим CUSTOMREQUEST, чтобы DELETE/PUT не превратились в POST.
@@ -861,6 +869,15 @@ int r2d_http_request(const char *method, const char *url, const char *body,
                      const char *const *header_values, int header_count,
                      double timeout_ms)
 {
+    return r2d_http_request_ex(method, url, body, header_names, header_values, header_count, timeout_ms, NULL);
+}
+
+int r2d_http_request_ex(const char *method, const char *url, const char *body,
+                        const char *const *header_names,
+                        const char *const *header_values, int header_count,
+                        double timeout_ms, const char *ca)
+{
+    (void)ca;   // используется только бэкендом libcurl
     R2DHttpEntry *e = r2d__entry_new();
     if (!e) return -1;
     e->timeout_ms = timeout_ms > 0 ? timeout_ms : R2D_HTTP_DEFAULT_TIMEOUT_MS;
@@ -893,7 +910,7 @@ int r2d_http_request(const char *method, const char *url, const char *body,
 
 #ifdef R2D_HTTP_CURL
     if (!r2d__curl_start(e, use_method, url, body, header_names, header_values,
-                         header_count, e->timeout_ms)) {
+                         header_count, e->timeout_ms, ca)) {
         r2d__entry_fail(e, "не удалось подготовить запрос (libcurl)");
     }
     return e->id;
@@ -1074,6 +1091,7 @@ static JSValue r2d__js_http_request(JSContext *ctx, JSValueConst this_val,
     }
     char *method = r2d__js_opt_string(ctx, opts, "method");
     char *body = r2d__js_opt_string(ctx, opts, "body");
+    char *ca = r2d__js_opt_string(ctx, opts, "ca");
 
     JSValue timeout_val = JS_GetPropertyStr(ctx, opts, "timeout");
     double timeout = 0;
@@ -1101,14 +1119,15 @@ static JSValue r2d__js_http_request(JSContext *ctx, JSValueConst this_val,
         }
     }
 
-    const int id = r2d_http_request(method, url, body, names, values,
-                                    (names && values) ? header_count : 0, timeout);
+    const int id = r2d_http_request_ex(method, url, body, names, values,
+                                       (names && values) ? header_count : 0, timeout, ca);
 
     free(names);
     free(values);
     JS_FreeCString(ctx, url);
     if (method) JS_FreeCString(ctx, method);
     if (body) JS_FreeCString(ctx, body);
+    if (ca) JS_FreeCString(ctx, ca);
     r2d__js_free_flat_strings(ctx, flat, flat_count);
     return JS_NewInt32(ctx, id);
 }

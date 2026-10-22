@@ -88,6 +88,7 @@ await $.http.download('http://localhost:8080/pack.json', 'downloads/pack.json');
 | `json` | любое | — | сериализуется в тело, ставит `Content-Type: application/json` |
 | `query` | объект | — | добавляется к URL: `{ q: 'да' }` → `?q=%D0%B4%D0%B0` |
 | `timeout` | мс | `15000` | таймаут запроса; по истечении — `reject` |
+| `ca` | строка | системное хранилище | свой корневой сертификат для HTTPS: PEM-текст (`-----BEGIN CERTIFICATE-----…`) или путь к PEM-файлу; заменяет хранилище только для этого запроса. Нужен серверам с российским корневым УЦ (GigaChat): проверку TLS отключать нельзя. Работает в сборке с libcurl |
 
 ```js
 await $.http.post('http://localhost:8080/login',

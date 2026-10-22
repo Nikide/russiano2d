@@ -9,7 +9,7 @@ async function atest(name, fn) {
 }
 import { trimHistory, usageOf, numberLines, grepProject, undoEdits, interactTools } from '../../editor/lib/agent_harness.js';
 import { createMascot, mascotFrames } from '../../editor/lib/agent_mascot.js';
-import { testConnection, snippetTools, fieldLine, snippetLine, studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
+import { testConnection, snippetTools, fieldLine, snippetLine, studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, gigachatSchema, PROVIDERS, SYSTEM_PROMPT, SYSTEM_PROMPT_COMPACT } from '../../editor/lib/agent_harness.js';
 
 const scripted = (replies, seen) => async (url, opts) => {
     seen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
@@ -146,9 +146,11 @@ await atest('GigaChat: OAuth-токен кэшируется, functions и funct
     ];
     const transport = async (url, opts) => { calls.push({ url, headers: opts.headers, body: opts.body }); return { ok: true, status: 200, json: replies.shift() }; };
     const log = [], texts = [];
+    PROVIDERS.gigachat.toolSubset.push('echo');
     const agent = createAgent({ config: { provider: 'gigachat', base: PROVIDERS.gigachat.base, model: 'GigaChat-2', key: 'Qkxh' },
         transport, tools: toolsOf(log), events: { text: (t) => texts.push(t) } });
     await agent.send('привет');
+    PROVIDERS.gigachat.toolSubset.pop();
     eq(calls[0].url, PROVIDERS.gigachat.oauthUrl);
     eq(calls[0].headers.authorization, 'Basic Qkxh');
     truthy(/^[0-9a-f-]{36}$/.test(calls[0].headers.rquid));
@@ -163,6 +165,8 @@ await atest('GigaChat: OAuth-токен кэшируется, functions и funct
     eq(second.at(-2).function_call.arguments, { x: 3 });
     eq(calls.length, 3, 'токен получен один раз');
     eq(texts, ['готово']);
+    // набор функций для GigaChat сужен: всё в подмножестве существует среди инструментов Editor
+    truthy(PROVIDERS.gigachat.toolSubset.includes('write_file') && !PROVIDERS.gigachat.toolSubset.includes('studio_op'));
 });
 
 await atest('GigaChat: ошибка токена понятна, срок токена учитывается', async () => {
@@ -750,6 +754,80 @@ await atest('generate_sound: слова/пресет → sfx-gen, защита �
     try { await T.generate_sound.run({ path: 'assets/sfx/q.wav', text: 'абракадабра' }); } catch (e) { e4 = e.message; }
     truthy(e4.includes('не понял'), 'ошибка синтезатора возвращается агенту как есть');
     eq(files.has('assets/sfx/q.wav'), false);
+});
+
+await atest('GigaChat: схемы без properties/items и type-union нормализуются, исходные не меняются; корневой УЦ передаётся', async () => {
+    const src = { type: 'object', properties: { palette: { type: 'object', description: 'p' }, frames: { type: 'array' }, rows: { type: 'array', items: { type: 'string' } }, args: { type: ['object', 'array'], description: 'a' }, nested: { type: 'object', properties: { a: { type: 'object' } } } }, required: [] };
+    const fixed = gigachatSchema(src);
+    strictEq(JSON.stringify(fixed.properties.palette.properties), '{}');
+    strictEq(fixed.properties.frames.items.type, 'string');
+    strictEq(JSON.stringify(fixed.properties.rows.items), '{"type":"string"}');
+    strictEq(fixed.properties.args.type, 'object');
+    strictEq(JSON.stringify(fixed.properties.nested.properties.a.properties), '{}');
+    truthy(!('properties' in src.properties.palette), 'исходная схема не тронута');
+    const seen = [];
+    const transport = async (url, opts) => {
+        seen.push({ url, ca: opts.ca });
+        if (url.includes('oauth')) return { ok: true, status: 200, json: { access_token: 't', expires_at: Date.now() + 1800000 } };
+        return { ok: true, status: 200, json: { choices: [{ message: { content: 'ок' }, finish_reason: 'stop' }] } };
+    };
+    await callModel({ provider: 'gigachat', base: PROVIDERS.gigachat.base, model: 'GigaChat-2', key: 'k' }, transport, 's', [{ role: 'user', content: 'x' }], []);
+    truthy(seen.length === 2 && seen.every((r) => r.ca && r.ca.startsWith('-----BEGIN CERTIFICATE-----')), 'oauth и чат идут с корневым УЦ Минцифры');
+    seen.length = 0;
+    await callModel({ provider: 'anthropic', base: 'https://x', model: 'm', key: 'k', protocol: 'openai' }, transport, 's', [{ role: 'user', content: 'x' }], []);
+    truthy(seen[0].ca === undefined, 'другие провайдеры идут с системным хранилищем');
+});
+
+await atest('GigaChat получает компактный системный промпт, остальные провайдеры — полный', async () => {
+    truthy(SYSTEM_PROMPT_COMPACT.length < 900 && SYSTEM_PROMPT.length > 3000 && SYSTEM_PROMPT_COMPACT.includes('engine-basics'));
+    const systems = [];
+    const transport = async (url, opts) => {
+        if (url.includes('oauth')) return { ok: true, status: 200, json: { access_token: 't', expires_at: Date.now() + 1800000 } };
+        const body = JSON.parse(opts.body);
+        systems.push((body.messages && body.messages[0] && body.messages[0].content) || body.system);
+        return { ok: true, status: 200, json: { choices: [{ message: { content: 'ок' }, finish_reason: 'stop' }], content: [{ type: 'text', text: 'ок' }], stop_reason: 'end_turn' } };
+    };
+    for (const provider of ['gigachat', 'deepseek']) {
+        const agent = createAgent({ config: { provider, base: PROVIDERS[provider].base, model: 'm', key: 'k' }, transport, tools: [], events: {} });
+        await agent.send('привет');
+    }
+    strictEq(systems[0], SYSTEM_PROMPT_COMPACT);
+    strictEq(systems[1], SYSTEM_PROMPT);
+});
+
+await atest('вызов функции, написанный текстом, не принимается за ответ: один пинок и настоящий вызов', async () => {
+    const seen = [], log = [], texts = [];
+    const agent = createAgent({
+        config: { provider: 'deepseek', base: 'https://x', model: 'm', key: 'K' },
+        transport: scripted([
+            { choices: [{ message: { content: 'echo(x=5)\nГотово.' }, finish_reason: 'stop' }] },
+            { choices: [{ message: { content: null, tool_calls: [{ id: 'c1', function: { name: 'echo', arguments: '{"x":5}' } }] }, finish_reason: 'tool_calls' }] },
+            { choices: [{ message: { content: 'сделано' }, finish_reason: 'stop' }] },
+        ], seen),
+        tools: toolsOf(log), events: { text: (t) => texts.push(t) },
+    });
+    await agent.send('вызови echo');
+    strictEq(log.length, 1, 'после пинка инструмент вызван по-настоящему');
+    truthy(seen[1].body.messages.some((m) => m.role === 'user' && String(m.content).includes('по одной за ответ')), 'модели сказали, что вызов текстом не выполнен');
+    strictEq(texts.at(-1), 'сделано');
+});
+
+await atest('GigaChat: functions_state_id возвращается в историю вызова и не уходит в историю как поле блока', async () => {
+    const seen = [], log = [];
+    const agent = createAgent({
+        config: { provider: 'gigachat', base: PROVIDERS.gigachat.base, model: 'GigaChat-2', key: 'k', _token: { value: 't', exp: Date.now() + 1e6 } },
+        transport: scripted([
+            { choices: [{ message: { content: '', function_call: { name: 'echo', arguments: { x: 3 } }, functions_state_id: 'state-1' }, finish_reason: 'function_call' }] },
+            { choices: [{ message: { content: 'готово' }, finish_reason: 'stop' }] },
+        ], seen),
+        tools: toolsOf(log), events: {},
+    });
+    await agent.send('вызови echo');
+    const assistant = seen[1].body.messages.find((m) => m.role === 'assistant');
+    strictEq(assistant.functions_state_id, 'state-1');
+    strictEq(assistant.function_call.name, 'echo');
+    const result = seen[1].body.messages.find((m) => m.role === 'function');
+    strictEq(result.name, 'echo');
 });
 
 finish();

@@ -11,6 +11,8 @@
 // protocol: anthropic | openai | gigachat. auth: как ключ уходит в запрос
 // (bearer — `Authorization: Bearer`, api-key — `Authorization: Api-Key`,
 // x-api-key — заголовок Anthropic, oauth — сначала обмен на токен).
+import { RU_ROOT_CA_PEM } from './ru_root_ca.js';
+
 export const PROVIDERS = {
     anthropic: { label: 'Anthropic', protocol: 'anthropic', auth: 'x-api-key', base: 'https://api.anthropic.com', model: 'claude-sonnet-5-5' },
     openai: { label: 'OpenAI-совм.', protocol: 'openai', auth: 'bearer', base: 'http://localhost:8080/v1', model: 'local' },
@@ -23,8 +25,11 @@ export const PROVIDERS = {
     deepseek: { label: 'DeepSeek', protocol: 'openai', auth: 'bearer', base: 'https://api.deepseek.com', model: 'deepseek-flash' },
     // GigaChat/GigaCode (Сбер): «Authorization key» из кабинета обменивается на токен (30 мин).
     gigachat: {
-        label: 'GigaChat', protocol: 'gigachat', auth: 'oauth', base: 'https://gigachat.devices.sberbank.ru/api/v1', model: 'GigaChat-2',
-        oauthUrl: 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth', scope: 'GIGACHAT_API_PERS',
+        label: 'GigaChat', protocol: 'gigachat', auth: 'oauth', base: 'https://api.giga.chat/v1', model: 'GigaChat-2',
+        oauthUrl: 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth', scope: 'GIGACHAT_API_PERS', ca: RU_ROOT_CA_PEM,
+        compactPrompt: true,
+        // GigaChat уверенно вызывает функции, пока их немного: остальные доступны через r2d_cli.
+        toolSubset: ['plan', 'list_files', 'read_file', 'write_file', 'edit_file', 'search_project', 'api_lookup', 'snippet_find', 'snippet_apply', 'skill_load', 'r2d_lint', 'r2d_validate', 'run_check', 'playtest', 'screenshot_check', 'pixel_art', 'generate_sound', 'undo_edit'],
     },
 };
 
@@ -36,14 +41,18 @@ export const SYSTEM_PROMPT = [
     'Шпаргалка (проверенные идиомы): `$.ready(($) => { $.gfx.color("#141824"); $.world.gravity(0, 1800).bounds(0, 0, 1280, 720); … });` (bounds ставит невидимые стены по краям — без них герой улетает за уровень) (в `$.ready`: сцены `$.scene.add("level", ($) => { … })` и запуск `$.scene.load("level")`).',
     'Объекты для кирпичиков создавай с ЛИТЕРАЛЬНЫМ id (`id: "coin1"`), не в цикле с id из строки — граф их иначе не увидит. ФИЗИКА ЕСТЬ ТОЛЬКО У ВИДОВ УЗЛОВ: герой — `$("<player>", { id: "hero" }).at(200, 300).size(26, 30).color("#e07040").controls({ axis: "both", coyote: 100, jumpBuffer: 120 }).collision(26, 30).appendTo($.world)`;',
     'земля и платформы — ТВЁРДЫЕ `$("<wall>", { id: "p1" }).at(x, y).size(200, 24).color("#5a6a5a").appendTo($.world)` (голый `<sprite>` — просто картинка: без гравитации и столкновений, герой пройдёт сквозь); монета — `$("<sprite>", { id: "coin1" }).at(x, y).size(18, 18).color("#ffd040")` + кирпичик interact.pickup;',
-    'текст: `const label = $("<text>", { text: "Счёт: 0", size: 32 }).at(40, 40).appendTo($.world); label.text("Счёт: 1")` (так обновляется); кирпичик interact.pickup шлёт на герое событие `collect` с `{ value }`: `hero.on("collect", (e) => { score += e.value || 1; label.text("Счёт: " + score); })`; картинка: `$("<sprite>", { src: "assets/a.png", w: 64, h: 64 })`. Строку `import "./generated/snippets/index.js"` добавляет генератор кирпичиков — сам её не пиши.',
-    'Вид от первого лица / 2.5D (бумер-шутер): НОВЫЙ API `$.re2dWorld` — `docs_show highlevel/re2d` (карта Hammer .re2dmap → `r2d world-compile <карта> --renderer` → .re2dworld; `const world = $.re2dWorld.load("maps/level.re2dworld").backend("gpu"); const ctrl = world.controller({ radius: 14, height: 56, eye: 48, step: 9 }); ctrl.place(x, y, 0); $.render(() => world.render(view, 640, 360));`, где `view = { x, y, h, yaw, pitch, fov, near }` обновляется из ctrl и мыши). НЕ используй `.kind(Re2D)`/`$.camera.kind` — это legacy. Не оборачивай вызовы в try/catch (ошибки должны быть видны). После изменения сцены вызови screenshot_check: `КАДР ПУСТОЙ` — игра не работает, найди причину.',
+    'текст: `const label = $("<text>", { text: "Счёт: 0", size: 32 }).at(40, 40).appendTo($.world); label.text("Счёт: 1")` (так обновляется); кирпичик interact.pickup шлёт на герое событие `collect` с `{ value }`: `hero.on("collect", (e) => { score += e.value || 1; label.text("Счёт: " + score); })`; картинка: создай `<sprite>` и передай в `src` путь к существующему PNG. Импорт сгенерированных кирпичиков добавляет их генератор — сам его не пиши.',
+    'Вид от первого лица / 2.5D (бумер-шутер): НОВЫЙ API `$.re2dWorld` — `docs_show highlevel/re2d` (карта Hammer .re2dmap → `r2d world-compile <карта> --renderer` → собранный .re2dworld; `const world = $.re2dWorld.load(worldPath).backend("gpu"); const ctrl = world.controller({ radius: 14, height: 56, eye: 48, step: 9 }); ctrl.place(x, y, 0); $.render(() => world.render(view, 640, 360));`, где `view = { x, y, h, yaw, pitch, fov, near }` обновляется из ctrl и мыши). НЕ используй `.kind(Re2D)`/`$.camera.kind` — это legacy. Не оборачивай вызовы в try/catch (ошибки должны быть видны). После изменения сцены вызови screenshot_check: `КАДР ПУСТОЙ` — игра не работает, найди причину.',
     'Инструменты: search_project (grep по файлам) и read_file со start/end вместо чтения целиком; для длинных задач начни с plan и обновляй его; при неоднозначной задаче спроси ask_user (кнопки вариантов); для проверки игры playtest (ввод + eval состояния: позиция героя, счёт, подбор предметов; grid:true — ASCII-карта кадра); ошибочную правку откати undo_edit.',
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
     'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
-    'НАВЫКИ — справочники «как делать»: skill_list, затем skill_load перед незнакомой работой: generate-sound (звуки), game-workflow (игра целиком), genre-kits (жанр → набор kit.*), platformer, top-down-action, fps-2-5d, rpg-systems, story-dialogue, enemy-ai, level-design, game-feel, audio, ui-hud, save-progress, playtest-qa, pixel-art. Нужен спрайт/тайл, а готовой картинки нет — загрузи pixel-art и нарисуй pixel_art (ASCII-срез покажет результат), затем `.sprite("assets/x.png")`. Нужен звуковой эффект — загрузи generate-sound и вызови generate_sound (слова или пресет → WAV; монета, выстрел, взрыв, прыжок, удар, бонус, клик); музыку создать нельзя — только существующие файлы.',
+    'НАВЫКИ — справочники «как делать»: skill_list, затем skill_load перед незнакомой работой: engine-basics (идиомы и ловушки `$`), generate-sound (звуки), game-workflow (игра целиком), genre-kits (жанр → набор kit.*), platformer, top-down-action, fps-2-5d, rpg-systems, story-dialogue, enemy-ai, level-design, game-feel, audio, ui-hud, save-progress, playtest-qa, pixel-art. Нужен спрайт/тайл, а готовой картинки нет — загрузи pixel-art и нарисуй pixel_art (ASCII-срез покажет результат), затем укажи созданный файл в `.sprite(path)`. Нужен звуковой эффект — загрузи generate-sound и вызови generate_sound (слова или пресет → WAV; монета, выстрел, взрыв, прыжок, удар, бонус, клик); музыку создать нельзя — только существующие файлы.',
     'Пути — относительно корня проекта. Сначала list_files/read_file, потом пиши.',
 ].join('\n');
+
+// GigaChat на длинном системном промпте перестаёт вызывать функции и пишет вызовы текстом («write_file(path=…)»), а на коротком
+// (проверено на 6 задачах из 6) вызывает их исправно. Поэтому для него промпт сжат, а правила движка лежат в навыках (skill_load).
+export const SYSTEM_PROMPT_COMPACT = 'Ты — агент внутри редактора игрового движка Russiano2D. Отвечай по-русски, коротко. Любое действие с проектом выполняй вызовом функции, а не описанием в тексте; вызывай по одной функции за ответ и жди результата. Перед работой над кодом игры вызови skill_load engine-basics, перед другой незнакомой работой — skill_load (список — skill_list). `$`-API проверяй функцией api_lookup; готовое поведение ищи функцией snippet_find и подключай snippet_apply. Пути — относительно корня проекта.';
 
 export function toolSpecs(tools) {
     return tools.map((t) => ({ name: t.name, description: t.description, schema: t.schema }));
@@ -133,17 +142,33 @@ export async function gigachatToken(cfg, transport, now) {
     const key = String(cfg.key || '').replace(/^Basic\s+/i, '');
     const res = await transport(cfg.oauthUrl || spec.oauthUrl, {
         headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json', rquid: uuid4(), authorization: 'Basic ' + key },
-        body: 'scope=' + (cfg.scope || spec.scope), timeout: cfg.timeout || 30000,
+        body: 'scope=' + (cfg.scope || spec.scope), timeout: cfg.timeout || 30000, ca: cfg.ca || spec.ca,
     });
     const data = res.json;
     if (!res.ok || !data || !data.access_token) {
-        throw new Error('GigaChat: не удалось получить токен (' + String(data && (data.message || data.error) || res.status).slice(0, 200) + ')');
+        const why = data && (data.message || data.error);
+        throw new Error('GigaChat: не удалось получить токен (' + (why === undefined || why === null ? 'HTTP ' + res.status : (typeof why === 'string' ? why : JSON.stringify(why))).slice(0, 200) + ')');
     }
     cfg._token = { value: data.access_token, exp: Number(data.expires_at) || t + 25 * 60000 };
     return data.access_token;
 }
 
 // GigaChat принимает `functions`; результат функции обязан быть JSON-строкой.
+// GigaChat отвергает схему, где у type:'object' нет `properties` (422 «Field 'properties.x.properties' is missing»),
+// а у type:'array' нет `items`: добавляем пустые описания рекурсивно, не меняя исходные схемы инструментов.
+export function gigachatSchema(schema) {
+    if (!schema || typeof schema !== 'object') return schema;
+    if (Array.isArray(schema)) return schema.map(gigachatSchema);
+    const out = {};
+    for (const [k, v] of Object.entries(schema)) out[k] = k === 'properties' && v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([n, x]) => [n, gigachatSchema(x)])) : (k === 'items' ? gigachatSchema(v) : v);
+    // В одном публичном инструменте редактора args принимает object | array. GigaChat валидирует type строго как строку;
+    // object достаточно: модель может передать именованные параметры, а локальный обработчик по-прежнему принимает оба вида.
+    if (Array.isArray(out.type) && out.type.length) out.type = out.type.includes('object') ? 'object' : out.type[0];
+    if (out.type === 'object' && !out.properties) out.properties = {};
+    if (out.type === 'array' && !out.items) out.items = { type: 'string' };
+    return out;
+}
+
 function gigachatBody(cfg, system, messages, tools) {
     const names = new Map();
     for (const m of messages) if (Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_use') names.set(b.id, b.name);
@@ -154,7 +179,11 @@ function gigachatBody(cfg, system, messages, tools) {
             const text = m.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
             const call = m.content.find((b) => b.type === 'tool_use');
             const msg = { role: 'assistant', content: text };
-            if (call) msg.function_call = { name: call.name, arguments: call.input || {} };
+            if (call) {
+                msg.function_call = { name: call.name, arguments: call.input || {} };
+                // Без functions_state_id GigaChat не связывает результат с вызовом и повторяет тот же вызов по кругу.
+                if (call._fsid) msg.functions_state_id = call._fsid;
+            }
             out.push(msg);
         } else {
             for (const b of m.content) if (b.type === 'tool_result') out.push({ role: 'function', name: names.get(b.tool_use_id) || 'tool', content: JSON.stringify({ result: b.content }) });
@@ -162,7 +191,7 @@ function gigachatBody(cfg, system, messages, tools) {
     }
     return {
         model: cfg.model, messages: out, max_tokens: cfg.maxTokens || 4096,
-        ...(tools.length ? { functions: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.schema })), function_call: 'auto' } : {}),
+        ...(tools.length ? { functions: tools.map((t) => ({ name: t.name, description: t.description, parameters: gigachatSchema(t.schema) })), function_call: 'auto' } : {}),
     };
 }
 
@@ -192,7 +221,7 @@ export async function callModel(cfg, transport, system, messages, tools) {
         if (spec.sessionHeader) headers[spec.sessionHeader] = cfg._session || (cfg._session = uuid4());
         body = openaiBody(cfg, system, messages, tools);
     }
-    const res = await transport(url, { headers, body: JSON.stringify(body), timeout: cfg.timeout || 120000 });
+    const res = await transport(url, { headers, body: JSON.stringify(body), timeout: cfg.timeout || 120000, ca: protocol === 'gigachat' ? (cfg.ca || spec.ca) : cfg.ca });
     const data = res.json;
     if (!res.ok || !data) {
         const detail = data && (data.error && (data.error.message || data.error)) || res.text || ('HTTP ' + res.status);
@@ -205,7 +234,7 @@ export async function callModel(cfg, transport, system, messages, tools) {
         if (m.function_call && m.function_call.name) {
             let input = m.function_call.arguments;
             if (typeof input === 'string') { try { input = JSON.parse(input); } catch (_) { input = { _raw: input }; } }
-            blocks.push({ type: 'tool_use', id: 'gc_' + (++giga_seq), name: m.function_call.name, input: input || {} });
+            blocks.push({ type: 'tool_use', id: 'gc_' + (++giga_seq), name: m.function_call.name, input: input || {}, ...(m.functions_state_id ? { _fsid: m.functions_state_id } : {}) });
         }
         return { blocks, stop: data.choices && data.choices[0] && data.choices[0].finish_reason, usage: usageOf(data) };
     }
@@ -285,6 +314,8 @@ export async function docContext(host, question, limit) {
 export function createAgent({ config, transport, tools, system, confirm, events, context }) {
     const ev = events || {};
     const byName = new Map(tools.map((t) => [t.name, t]));
+    const subset = (PROVIDERS[config.provider] || {}).toolSubset;
+    const offered = subset ? tools.filter((t) => subset.includes(t.name)) : tools;
     const state = { messages: [], running: false, stop: false, usage: { input: 0, output: 0, cached: 0, calls: 0 } };
 
     async function runTool(block) {
@@ -313,13 +344,13 @@ export function createAgent({ config, transport, tools, system, confirm, events,
         }
         state.messages.push({ role: 'user', content });
         const limit = config.maxSteps || 12;
-        let idle = 0, announced = 0;
+        let idle = 0, announced = 0, textCalls = 0;
         try {
             for (let step = 0; step < limit; step++) {
                 if (state.stop) { if (ev.error) ev.error('остановлено'); return; }
                 compact(state.messages, config.keepResults || 6);
                 trimHistory(state.messages, config.maxContextChars || 150000);
-                const reply = await callModel(config, transport, system || SYSTEM_PROMPT, state.messages, tools);
+                const reply = await callModel(config, transport, system || ((PROVIDERS[config.provider] || {}).compactPrompt ? SYSTEM_PROMPT_COMPACT : SYSTEM_PROMPT), state.messages, offered);
                 state.usage.calls++;
                 if (reply.usage) {
                     state.usage.input += reply.usage.input; state.usage.output += reply.usage.output; state.usage.cached += reply.usage.cached;
@@ -332,6 +363,14 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 if (!calls.length) {
                     // Слабые модели пишут «теперь применю…» и останавливаются: просим вызвать инструмент.
                     const said = reply.blocks.filter((b) => b.type === 'text').map((b) => b.text).join(' ');
+                    // Модели с function-calling «вслепую» (GigaChat) иногда пишут вызов ТЕКСТОМ: `write_file(path=…)` или `read_file "x"`.
+                    const names = tools.map((t) => t.name).filter((n) => /^\w+$/.test(n));
+                    const textual = names.length && new RegExp('^\\s*(?:' + names.join('|') + ')\\b\\s*[({"\\w]', 'm').test(said);
+                    if (textual && textCalls < 3) {
+                        textCalls++;
+                        state.messages.push({ role: 'user', content: 'Ты написал вызов функции текстом — он не выполнен, ничего не изменилось. Вызывай функции по одной за ответ: сейчас вызови только первую нужную функцию (не пиши её имя и аргументы в ответе), остальное сделаешь после результата.' });
+                        continue;
+                    }
                     if (announced < 2 && !/\?\s*$/.test(said.trim()) && /(теперь|сейчас|далее|приступаю|применю|применяю|запишу|создам|сделаю|добавлю|напишу|следующ)/i.test(said.slice(-200))) {
                         announced++;
                         state.messages.push({ role: 'user', content: 'Ты описал действие, но не вызвал инструмент — ничего не изменилось. Вызови нужный инструмент сейчас (snippet_apply, write_file или edit_file).' });

@@ -1,3 +1,8 @@
+> GIGACHAT В АГЕНТЕ (2026-10-22). Корневой сертификат Минцифры вшит в Editor и передаётся новой опцией `$.http` `ca`
+> (PEM-текст или путь; заменяет хранилище только для запроса, проверка TLS остаётся). Для GigaChat: схемы функций с `properties`/`items`,
+> `functions_state_id`, короткий системный промпт, сокращённый набор функций, обработка вызова, написанного текстом. Навык `engine-basics`.
+> Надёжность вызова функций у `GigaChat-2` ниже, чем у DeepSeek/Kimi; `GigaChat-2-Max` лучше. Тесты: `tests/js/editor_agent_test.mjs`.
+
 > ПРОЦЕДУРНЫЕ ЗВУКИ: `$.sfxgen`, `r2d sfx-gen`, инструмент агента `generate_sound` (2026-10-22).
 > Из rFXGen взят только синтез (без raylib/raygui-интерфейса): C-ядро `src/sfxgen.c` (алгоритм sfxr, параметры и пресеты
 > как у rFXGen — coin, laser, explosion, powerup, hurt, jump, blip, random; детерминированно, мягкий ограничитель),

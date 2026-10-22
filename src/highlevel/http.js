@@ -166,6 +166,7 @@ function buildRequest(opts) {
         timeout: DEFAULT_TIMEOUT_MS,
     };
     if (Number(opts.timeout) > 0) request.timeout = Number(opts.timeout);
+    if (opts.ca !== undefined && opts.ca !== null && opts.ca !== '') request.ca = String(opts.ca);   // свой корневой УЦ: PEM-текст или путь
 
     if (opts.json !== undefined) {
         request.body = JSON.stringify(opts.json);
