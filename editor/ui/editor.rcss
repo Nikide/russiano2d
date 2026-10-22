@@ -288,15 +288,20 @@ scrollbarcorner { background-color: transparent; }
     display: flex; flex-direction: column; width: 300px; flex: 0 0 300px;
     background-color: #1b1e24; border-left: 1px #2a2f39;
 }
-.insp-path { display: block; padding: 0px 14px 10px 14px; font-size: 12px; color: #8b93a3; border-bottom: 1px #2a2f39; }
-.insp-sec { display: block; padding: 10px 14px 4px 14px; }
-.insp-label { display: block; font-size: 12px; color: #8b93a3; margin-bottom: 4px; }
-.insp-value {
-    display: block; padding: 6px 10px; margin-bottom: 8px; font-size: 13px; color: #d7dce6;
-    background-color: #14161b; border-width: 1px; border-color: #2f3440; border-radius: 5px;
-}
-.insp-row { display: flex; flex-direction: row; align-items: center; }
-.insp-row .insp-value { flex: 1 1 0; margin-right: 6px; }
+.insp-head { display: block; padding: 4px 16px 12px 16px; border-bottom: 1px #2a2f39; }
+.insp-name { display: block; font-size: 15px; font-weight: bold; color: #e6e9ef; word-break: break-all; }
+.insp-path { display: block; margin-top: 2px; font-size: 11px; color: #7d8596; word-break: break-all; }
+.insp-sec { display: block; padding: 10px 16px 6px 16px; }
+.insp-title { display: block; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: #7d8596; margin-bottom: 6px; }
+.kv { display: flex; flex-direction: row; align-items: flex-start; padding: 6px 0px; border-bottom: 1px #242932; }
+.kv-k { flex: 0 0 88px; font-size: 12px; color: #8b93a3; }
+.kv-v { flex: 1 1 0; font-size: 13px; color: #e6e9ef; word-break: break-all; }
+.kv-act { flex: 0 0 auto; margin-left: 8px; font-size: 12px; color: #4fa3ff; cursor: pointer; }
+.kv-act:hover { color: #8cc4ff; text-decoration: underline; }
+.dot { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 4px; background-color: #6b7280; }
+.dot.ok { background-color: #3fb950; }
+.dot.warn { background-color: #e3b341; }
+.dot.err { background-color: #f14c4c; }
 .insp-note { display: block; font-size: 12px; color: #6b7280; margin-bottom: 8px; }
 
 /* --- Нижняя панель ----------------------------------------------------------- */

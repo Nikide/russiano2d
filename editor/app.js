@@ -1535,10 +1535,19 @@ export function createEditor($) {
         }
     }
 
-    function inspectorField(label, value, action) {
-        return '<span class="insp-label">' + esc(label) + '</span>' +
-            (action ? '<div class="insp-row"><span class="insp-value">' + esc(value) + '</span><span class="btn" data-key="' + esc(action) + '" style="margin-left: 0px;">Открыть</span></div>'
-                : '<span class="insp-value">' + esc(value) + '</span>');
+    // Строка «свойство — значение»; tone: 'ok' | 'warn' | 'err' красит значение маркером состояния.
+    function inspectorField(label, value, action, tone) {
+        const v = (tone ? '<span class="dot ' + tone + '"></span>' : '') + esc(value);
+        return '<div class="kv"><span class="kv-k">' + esc(label) + '</span><span class="kv-v">' + v + '</span>' +
+            (action ? '<span class="kv-act" data-key="' + esc(action) + '">Открыть</span>' : '') + '</div>';
+    }
+
+    function inspectorHead(t) {
+        if (!t) return '<div class="insp-head"><span class="insp-name">' + esc(s.project.title || 'Проект') + '</span><span class="insp-path">Проект</span></div>';
+        const parts = String(t.path).split('/');
+        const name = parts.pop();
+        return '<div class="insp-head"><span class="insp-name">' + esc(name) + '</span><span class="insp-path">' +
+            esc(parts.length ? parts.join(' / ') : 'корень проекта') + '</span></div>';
     }
 
     // Resolve the dotted expression beneath the caret to a public `$` API path.
@@ -1561,7 +1570,7 @@ export function createEditor($) {
     function renderInspector() {
         if (!s.project) return;
         const t = activeTab();
-        let html = '<span class="insp-path">' + esc(t ? 'ПРОЕКТ / ' + t.path : 'ПРОЕКТ') + '</span><div class="insp-sec">';
+        let html = inspectorHead(t) + '<div class="insp-sec">';
         if (!t) {
             const p = s.project;
             html += inspectorField('Название', p.title) + inspectorField('Версия', p.version || '—') +
@@ -1570,7 +1579,7 @@ export function createEditor($) {
                 inspectorField('Манифест', 'project.json' + (manifest().v2 ? ' (schema 2)' : ''), 'open:project.json') +
                 inspectorField('Файлов', String(s.entries.length));
             const m = manifest();
-            html += '</div><div class="insp-sec"><span class="insp-label">Сцены</span>';
+            html += '</div><div class="insp-sec"><span class="insp-title">Сцены</span>';
             if (m.scenes.length) {
                 for (const name of m.scenes)
                     html += '<div class="tree-row" data-key="scene:' + esc(name) + '" style="padding-left: 4px;"><span class="tree-ico studio">' + icon('play_arrow') + '</span>' + esc(name) + (name === m.start ? '<span class="muted"> · старт</span>' : '') + '</div>';
@@ -1580,10 +1589,11 @@ export function createEditor($) {
             }
         } else if (t.model) {
             const m = t.model, c = m.caret, list = s.diags.get(t.path) || [];
-            html += inspectorField('Файл', t.path) + inspectorField('Язык', t.lang) +
+            const errs = list.filter((d) => d.severity === 'error').length, rest = list.length - errs;
+            html += inspectorField('Язык', t.lang) +
                 inspectorField('Строк', String(m.lineCount())) +
-                inspectorField('Состояние', m.dirty ? 'изменён, не сохранён' : 'сохранён') +
-                inspectorField('Проблемы', list.length ? list.filter((d) => d.severity === 'error').length + ' ошибок, ' + list.filter((d) => d.severity !== 'error').length + ' прочих' : 'нет');
+                inspectorField('Состояние', m.dirty ? 'изменён, не сохранён' : 'сохранён', null, m.dirty ? 'warn' : 'ok') +
+                inspectorField('Проблемы', list.length ? errs + ' ошибок, ' + rest + ' прочих' : 'нет', null, errs ? 'err' : rest ? 'warn' : 'ok');
             // Навигация по коду: сцены, зарегистрированные этим файлом ($.scene.add),
             // и узлы с id. Это поиск по тексту, а не модель сцены.
             const scenes = [], ids = [];
@@ -1594,14 +1604,14 @@ export function createEditor($) {
                 if (id && ids.length < 20) ids.push({ name: '#' + id[1], line: i + 1 });
             });
             if (scenes.length || ids.length) {
-                html += '</div><div class="insp-sec"><span class="insp-label">В этом файле</span>';
+                html += '</div><div class="insp-sec"><span class="insp-title">В этом файле</span>';
                 for (const x of scenes) html += '<div class="tree-row" data-key="line:' + x.line + '" style="padding-left: 4px;"><span class="tree-ico studio">' + icon('movie') + '</span>сцена ' + esc(x.name) + '<span class="muted"> · стр. ' + x.line + '</span></div>';
                 for (const x of ids) html += '<div class="tree-row" data-key="line:' + x.line + '" style="padding-left: 4px;"><span class="tree-ico js">' + icon('tag') + '</span>' + esc(x.name) + '<span class="muted"> · стр. ' + x.line + '</span></div>';
                 html += '<span class="insp-note">Найдено по тексту файла: $.scene.add(…) и id: …</span>';
             }
             void c;
         } else if (t.kind === 'studio') {
-            html += inspectorField('Файл', t.path) + inspectorField('Студия', t.studio.title);
+            html += inspectorField('Студия', t.studio.title);
             for (const [label, value] of studios.summary(t)) html += inspectorField(label, value);
         } else {
             const entry = s.entries.find((e) => e.path === t.path) || {};
