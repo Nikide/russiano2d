@@ -7,6 +7,7 @@ async function atest(name, fn) {
     try { await fn(); } catch (e) { err = e; }
     test(name, () => { if (err) throw err; });
 }
+import { createModelStore, validCustomId } from '../../editor/lib/agent_models.js';
 import { trimHistory, usageOf, numberLines, grepProject, undoEdits, interactTools } from '../../editor/lib/agent_harness.js';
 import { createMascot, mascotFrames } from '../../editor/lib/agent_mascot.js';
 import { testConnection, snippetTools, fieldLine, snippetLine, studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, gigachatSchema, PROVIDERS, SYSTEM_PROMPT, SYSTEM_PROMPT_COMPACT } from '../../editor/lib/agent_harness.js';
@@ -355,6 +356,49 @@ await atest('ленивый набор инструментов: редкие г
     truthy(!more[0].includes('studio_op') && more[1].includes('studio_op') && more[1].includes('tabs'));
     const viaSkill = await run('сделай игру', [[{ type: 'tool_use', id: 'a', name: 'skill_load', input: { name: 'pixel-art' } }], [{ type: 'text', text: 'ок' }]]);
     truthy(!viaSkill[0].includes('pixel_art') && viaSkill[1].includes('pixel_art'));
+});
+
+await atest('хранилище моделей: профили, свои провайдеры, запоминание ключа, список моделей', async () => {
+    let disk = null;
+    const mk = () => createModelStore({ read: () => disk && JSON.parse(JSON.stringify(disk)), write: (o) => { disk = JSON.parse(JSON.stringify(o)); } });
+    const m = mk(); m.load();
+    eq(m.state.active, 'anthropic');
+    eq(m.configured('anthropic'), false);
+    eq(m.configured('openai'), true, 'локальному серверу ключ не нужен');
+    m.set('deepseek', { key: 'KEY1', model: 'deepseek-v4-pro' });
+    m.activate('deepseek');
+    eq(m.cfg().provider, 'deepseek'); eq(m.cfg().model, 'deepseek-v4-pro'); eq(m.cfg().key, 'KEY1');
+    truthy(!JSON.stringify(disk).includes('KEY1'), 'ключ по умолчанию на диск не пишется');
+    m.set('deepseek', { remember: true });
+    truthy(JSON.stringify(disk).includes('KEY1'), 'с «запомнить» ключ пишется');
+    const c = m.addCustom({ id: 'my-gw', label: 'Мой шлюз', protocol: 'anthropic', base: 'https://gw.example/', model: 'm1' });
+    eq(c.base, 'https://gw.example'); eq(PROVIDERS['my-gw'].auth, 'x-api-key');
+    m.activate('my-gw');
+    eq(m.cfg().protocol, 'anthropic');
+    let bad = ''; try { m.addCustom({ id: 'my-gw', protocol: 'openai', base: 'https://x' }); } catch (e) { bad = e.message; }
+    truthy(bad.includes('уже есть'));
+    truthy(validCustomId('Bad ID').length > 0 && validCustomId('ok-1', []) === '');
+    // новый «запуск»: настройки вернулись, свой провайдер зарегистрирован, ключ без «запомнить» пропал
+    delete PROVIDERS['my-gw'];
+    const m2 = mk(); m2.load();
+    eq(m2.state.active, 'my-gw'); truthy(!!PROVIDERS['my-gw']); eq(m2.profile('deepseek').key, 'KEY1');
+    m2.set('deepseek', { remember: false });
+    const m3 = mk(); m3.load();
+    eq(m3.profile('deepseek').key, '');
+    // список моделей запрашивается и сохраняется
+    m3.set('opencode', { key: 'K' });
+    let url = '';
+    const transport = async (u, o) => { url = u; return { ok: true, status: 200, json: { data: [{ id: 'a-free' }, { id: 'b' }] } }; };
+    eq(m3.needsModels('opencode', 1000), true);
+    eq(await m3.refreshModels('opencode', transport, 1000), ['a-free', 'b']);
+    eq(url, 'https://opencode.ai/zen/go/v1/models');
+    eq(m3.needsModels('opencode', 2000), false);
+    eq(m3.needsModels('opencode', 1000 + 90000000), true, 'через сутки — снова');
+    eq(m3.needsModels('gigachat', 1000), false);
+    const m4 = mk(); m4.load();
+    eq(m4.profile('opencode').models, ['a-free', 'b']);
+    m4.removeCustom('my-gw');
+    eq(m4.state.active, 'anthropic'); truthy(!PROVIDERS['my-gw']);
 });
 
 await atest('r2d_cli: чтение без подтверждения, запись — с подтверждением; editor_op', async () => {

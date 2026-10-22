@@ -77,9 +77,9 @@ def run_task(name, args):
     err = ""
     with Agent(game="editor", scene=str(tmp), seed=1) as a:
         settle(a, E + ".state.project!==null && " + E + ".state.busy===0")
-        a.eval(D + '.click("bt-agent");' + D + f'.click("ag-prov-{args.provider}");' + D + f'.setValue("ag-key",{json.dumps(os.environ["AG_KEY"])});'
-               + (D + f'.setValue("ag-model",{json.dumps(args.model)});' if args.model else "")
-               + D + f'.setValue("ag-steps","{args.steps}");' + D + f'.setValue("ag-input",{json.dumps(prompt)});' + D + '.click("ag-send");1')
+        a.eval(E + f'.models.set({json.dumps(args.provider)},{{key:{json.dumps(os.environ["AG_KEY"])}' + (f',model:{json.dumps(args.model)}' if args.model else '') + '});'
+               + E + f'.models.activate({json.dumps(args.provider)});' + E + f'.models.setBehavior({{maxSteps:{args.steps}}});'
+               + D + '.click("bt-agent");' + D + f'.setValue("ag-input",{json.dumps(prompt)});' + D + '.click("ag-send");1')
         while time.time() - t0 < args.timeout:
             time.sleep(1)
             a.step(2)

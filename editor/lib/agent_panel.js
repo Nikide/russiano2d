@@ -2,7 +2,8 @@
 // Логика цикла — agent_harness.js; здесь только RmlUi-обвязка. Ключ API живёт
 // только в памяти процесса: на диск и в project.json он не попадает.
 
-import { PROVIDERS, createAgent, editorTools, studioTools, snippetTools, interactTools, docContext, testConnection, undoEdits } from './agent_harness.js';
+import { createAgent, editorTools, studioTools, snippetTools, interactTools, docContext, undoEdits } from './agent_harness.js';
+import { httpTransport } from './agent_models.js';
 import { createMascot } from './agent_mascot.js';
 import { esc as escRml } from './studio_kit.js';
 
@@ -44,25 +45,23 @@ function argSummary(name, input) {
     return short(JSON.stringify(i) === '{}' ? '' : JSON.stringify(i), 54);
 }
 
-const PREFS_FILE = 'agent.local.json';
 const SESSION_FILE = '.r2d-agent.json';   // беседа с агентом: лежит в проекте, чтобы продолжить с того же места
 const SESSION_MAX_BYTES = 1500000;
 
 export function createAgentPanel($, doc, host) {
     const icon = (n) => $.ui.icon(n) || '';
+    const models = host.models;
     const st = {
-        cfg: { provider: 'anthropic', base: PROVIDERS.anthropic.base, model: PROVIDERS.anthropic.model, key: '', folder: '', maxSteps: 24 },
-        log: [], agent: null, pending: null, busy: false, open: false, cfgOpen: false, expanded: new Set(), scrollPending: 0, warmed: false,
-        mascot: createMascot(), mascotOn: true, mcKey: '', testing: false, plan: [], asking: null, history: null, usage: { input: 0, output: 0, cached: 0, calls: 0 },
+        log: [], agent: null, pending: null, busy: false, open: false, expanded: new Set(), scrollPending: 0, warmed: false,
+        mascot: createMascot(), mcKey: '', plan: [], asking: null, history: null, usage: { input: 0, output: 0, cached: 0, calls: 0 },
     };
+    // Настройки — в общем хранилище моделей (вкладка «Модели»): панель только читает их.
+    Object.defineProperty(st, 'cfg', { get: () => models.cfg() });
+    Object.defineProperty(st, 'mascotOn', { get: () => models.state.mascotOn });
+    let cfgSig = '';
+    const sigOf = () => { const c = models.cfg(); return [c.provider, c.base, c.model, c.key, c.folder].join('|'); };
 
-    function transport(url, opts) {
-        return $.http.post(url, opts.body, { headers: opts.headers, timeout: opts.timeout, ca: opts.ca }).then((res) => {
-            let json = null;
-            try { json = res.json(); } catch (_) { json = null; }
-            return { ok: res.ok, status: res.status, json, text: res.body };
-        });
-    }
+    const transport = httpTransport($);
 
     function push(entry) {
         st.log.push(entry);
@@ -104,7 +103,7 @@ export function createAgentPanel($, doc, host) {
             ask: (question, options) => new Promise((resolve) => { st.asking = { question, options, resolve }; st.scrollPending = 3; st.mascot.asking(); applyMascot(); render(); }),
         });
         st.agent = createAgent({
-            config: st.cfg, transport, tools: tools.concat(studio, snippetTools(fsHost), interact), confirm,
+            config: models.cfg(), transport, tools: tools.concat(studio, snippetTools(fsHost), interact), confirm,
             context: (q) => docContext(host, q, 4),
             events: {
                 text: (t) => { st.mascot.talk(); applyMascot(); push({ kind: 'bot', text: t }); },
@@ -137,7 +136,7 @@ export function createAgentPanel($, doc, host) {
             let from = Math.max(0, messages.length - 80);
             let text;
             for (;;) {
-                text = JSON.stringify({ version: 1, savedAt: Date.now(), provider: st.cfg.provider, messages: messages.slice(from), log, plan: st.plan, usage: st.usage });
+                text = JSON.stringify({ version: 1, savedAt: Date.now(), provider: models.state.active, messages: messages.slice(from), log, plan: st.plan, usage: st.usage });
                 if (text.length <= SESSION_MAX_BYTES || from >= messages.length - 2) break;
                 from += Math.max(2, ((messages.length - from) / 4) | 0);
             }
@@ -168,39 +167,12 @@ export function createAgentPanel($, doc, host) {
         render();
     }
 
-    // Настройки между запусками: провайдер, адрес, модель, шаги, маскот. Ключ — только в памяти.
-    function loadPrefs() {
-        let p = null;
-        try { p = $.fs.readJSON(PREFS_FILE, null); } catch (_) { p = null; }
-        if (!p || typeof p !== 'object' || !PROVIDERS[p.provider]) return;
-        st.cfg.provider = p.provider;
-        if (typeof p.base === 'string' && p.base) st.cfg.base = p.base;
-        if (typeof p.model === 'string' && p.model) st.cfg.model = p.model;
-        if (p.maxSteps >= 1 && p.maxSteps <= 100) st.cfg.maxSteps = p.maxSteps | 0;
-        if (typeof p.mascotOn === 'boolean') st.mascotOn = p.mascotOn;
-    }
-    function savePrefs() {
-        try { $.fs.writeJSON(PREFS_FILE, { version: 1, provider: st.cfg.provider, base: st.cfg.base, model: st.cfg.model, maxSteps: st.cfg.maxSteps, mascotOn: st.mascotOn }); } catch (_) { /* настройки не критичны */ }
-    }
-
-    function readFields() {
-        st.cfg.base = String(doc.value('ag-base') || '').trim();
-        st.cfg.model = String(doc.value('ag-model') || '').trim();
-        const key = String(doc.value('ag-key') || '').trim();
-        if (key !== st.cfg.key) st.cfg._token = null;   // новый ключ — новый токен
-        st.cfg.key = key;
-        const steps = parseInt(String(doc.value('ag-steps') || ''), 10);
-        if (steps >= 1 && steps <= 100) st.cfg.maxSteps = steps;
-        savePrefs();
-    }
-
     async function send(override) {
         const text = typeof override === 'string' ? override : String(doc.value('ag-input') || '').trim();
         if (!text || st.busy) return;
-        readFields();
         if (!host.project()) { push({ kind: 'err', text: 'Сначала откройте проект.' }); return; }
-        if (PROVIDERS[st.cfg.provider].auth !== 'bearer' && !st.cfg.key) {
-            push({ kind: 'err', text: 'Нужен API-ключ: он вводится на вкладке «Настройки агента».' }); host.showSettings(); return;
+        if (!models.configured(models.state.active)) {
+            push({ kind: 'err', text: 'Нужен API-ключ: введите его на вкладке «Модели».' }); host.showSettings(); return;
         }
         if (!st.agent) build();
         if (typeof override !== 'string') doc.setValue('ag-input', '');
@@ -225,17 +197,6 @@ export function createAgentPanel($, doc, host) {
         st.pending = null;
         p.resolve(ok);
         if (ok) { st.mascot.thinking(); applyMascot(); }
-        render();
-    }
-
-    function setProvider(id) {
-        readFields();
-        st.cfg.provider = id;
-        st.cfg.base = PROVIDERS[id].base; st.cfg.model = PROVIDERS[id].model;
-        if (st.agent) st.keep = st.agent.state.messages.slice();
-        st.agent = null;
-        doc.setValue('ag-base', st.cfg.base); doc.setValue('ag-model', st.cfg.model);
-        savePrefs();
         render();
     }
 
@@ -342,19 +303,15 @@ export function createAgentPanel($, doc, host) {
     }
 
     function render() {
-        const provider = PROVIDERS[st.cfg.provider];
-        if (st.cfgOpen) {
-            for (const id of Object.keys(PROVIDERS)) doc.cls('ag-prov-' + id, 'on', st.cfg.provider === id);
-            doc.text('cfg-mascot', st.mascotOn ? 'Маскот: вкл' : 'Маскот: выкл');
-            doc.cls('cfg-mascot', 'on', st.mascotOn);
-        }
+        const provider = models.spec(models.state.active);
+        const cur = models.profile(models.state.active);
         if (!st.open) return;
         warm();
-        const needKey = provider.auth !== 'bearer' && !String(doc.value('ag-key') || st.cfg.key).trim();
+        const needKey = !models.configured(models.state.active);
         const pill = st.asking ? ['wait', 'Ждёт ответа'] : st.pending ? ['wait', 'Ждёт подтверждения'] : st.busy ? ['busy', 'Работает'] : needKey ? ['need', 'Нужен ключ'] : ['', 'Готов'];
         doc.text('ag-state', pill[1]);
         for (const c of ['busy', 'wait', 'need']) doc.cls('ag-state', c, pill[0] === c);
-        doc.text('ag-model-chip', esc(provider.label + ' · ' + (st.cfg.model || provider.model) + '  ›'));
+        doc.text('ag-model-chip', esc(provider.label + ' · ' + (cur.model || provider.model) + '  ›'));
         doc.text('ag-usage', st.usage.calls ? esc('↑' + kfmt(st.usage.input) + ' ↓' + kfmt(st.usage.output) + (st.usage.cached ? ' · кэш ' + kfmt(st.usage.cached) : '')) : '');
         doc.cls('ag-send', 'hidden', st.busy);
         doc.cls('ag-stop', 'hidden', !st.busy);
@@ -369,23 +326,8 @@ export function createAgentPanel($, doc, host) {
         applyMascot();
     }
 
-    async function runTest() {
-        if (st.testing) return;
-        readFields();
-        st.testing = true;
-        doc.cls('cfg-result', 'ok', false); doc.cls('cfg-result', 'err', false);
-        doc.text('cfg-result', 'Проверяю…');
-        const r = await testConnection(st.cfg, transport);
-        st.testing = false;
-        doc.cls('cfg-result', 'ok', r.ok); doc.cls('cfg-result', 'err', !r.ok);
-        doc.text('cfg-result', esc(r.ok ? 'Подключение работает · ' + r.ms + ' мс · ответ: «' + r.text + '»' : r.error));
-        if (r.ok) { st.mascot.success(); } else { st.mascot.failure('Не подключилась…'); }
-        applyMascot();
-    }
-
     function wire() {
         doc.text('ag-clear', icon('add_comment')); doc.text('ag-undo', icon('undo'));
-        for (const id of Object.keys(PROVIDERS)) doc.on('ag-prov-' + id, 'click', () => setProvider(id));
         doc.on('ag-send', 'click', () => { st.mascot.wake(); send(); });
         doc.on('ag-stop', 'click', () => { if (st.agent) st.agent.stop(); if (st.asking) answerAsk(null); answer(false); });
         doc.on('ag-clear', 'click', () => { st.log.length = 0; st.expanded.clear(); st.agent = null; st.keep = null; st.usage = { input: 0, output: 0, cached: 0, calls: 0 }; st.pending = null; st.plan = []; if (st.asking) { st.asking.resolve(null); st.asking = null; } saveSession(); render(); });
@@ -395,9 +337,7 @@ export function createAgentPanel($, doc, host) {
             push({ kind: 'note', text: 'Откат: ' + (done.join('; ') || 'нечего откатывать') });
         });
         doc.on('ag-model-chip', 'click', () => host.showSettings());
-        doc.on('cfg-test', 'click', () => { runTest(); });
-        doc.on('cfg-done', 'click', () => { readFields(); host.showChat(); });
-        doc.on('cfg-mascot', 'click', () => { readFields(); st.mascotOn = !st.mascotOn; savePrefs(); st.mcKey = ''; render(); applyMascot(); });
+        doc.on('ag-gear', 'click', () => host.showSettings());
         doc.on('mc', 'click', () => { st.mascot.poke(); applyMascot(); });
         doc.on('ag-log', 'click', (_id, _ev, key) => {
             if (!key) return;
@@ -405,18 +345,24 @@ export function createAgentPanel($, doc, host) {
             else if (key.startsWith('continue:')) { const e = st.log[Number(key.slice(9))]; if (e && !e.used && !st.busy) { e.used = true; send('Продолжай с того места, где остановился. Заверши задачу и кратко отчитайся.'); } }
             else if (key.startsWith('sug:')) { doc.setValue('ag-input', SUGGESTIONS[Number(key.slice(4))] || ''); doc.focus('ag-input'); }
         });
-        loadPrefs();
-        doc.setValue('ag-base', st.cfg.base); doc.setValue('ag-model', st.cfg.model); doc.setValue('ag-steps', String(st.cfg.maxSteps));
+        doc.text('ag-gear', icon('settings'));
+        cfgSig = sigOf();
+        // Смена модели/ключа во вкладке «Модели»: беседа остаётся, агент пересоздаётся с новой настройкой.
+        models.onChange(() => {
+            const sig = sigOf();
+            if (sig !== cfgSig) { cfgSig = sig; if (st.agent) { st.keep = st.agent.state.messages.slice(); st.agent = null; } }
+            st.mcKey = ''; render(); applyMascot();
+        });
         applyMascot();
     }
 
     const api = {
         render, wire, state: st,
         // Вызывается Editor при смене вкладки нижней панели: чат и/или настройки видны.
-        setOpen(chat, cfg) {
-            const was = st.open + '|' + st.cfgOpen;
-            st.open = !!chat; st.cfgOpen = !!cfg;
-            if (was === st.open + '|' + st.cfgOpen) return;
+        setOpen(chat) {
+            const was = st.open;
+            st.open = !!chat;
+            if (was === st.open) return;
             if (st.open) st.scrollPending = 3;
             render();
         },

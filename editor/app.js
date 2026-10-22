@@ -19,6 +19,7 @@ import { createExtensionHost } from './lib/shared/extensions.js';
 import { createGraphPanel } from './lib/graph_panel.js';
 import { createSnippetsPanel } from './lib/snippets_panel.js';
 import { createAgentPanel } from './lib/agent_panel.js';
+import { createModelStore } from './lib/agent_models.js';
 import { normalizeGraph, describe as describeGraph } from './lib/shared/graph_model.js';
 
 const DOC = 'ui/editor.rml';
@@ -42,7 +43,11 @@ export function createEditor($) {
     const code = createCodeView($, doc, publicApiSymbols($));
     let extensionHost = null;
     const icon = (name) => $.ui.icon(name) || '';
+    // Модели агента: общее хранилище для вкладки «Модели» и панели «Агент» (agent.local.json).
+    const models = createModelStore({ read: () => $.fs.readJSON('agent.local.json', null), write: (o) => $.fs.writeJSON('agent.local.json', o) });
+    models.load();
     const studios = createStudioHost($, {
+        models,
         log: (t) => log(t), setStatus: (t, k) => setStatus(t, k),
         run: (opts) => run(opts), stop: () => stop(),
         projectRoot: () => (s.project ? s.project.abs : ''),
@@ -106,7 +111,8 @@ export function createEditor($) {
     const agentPanel = createAgentPanel($, doc, {
         project: () => s.project,
         layout: () => renderLayout(),
-        showSettings: () => { s.bottom = 'agentcfg'; s.bottomCollapsed = false; renderAll(); },
+        showSettings: () => { if (s.project) openFile('agent:models', 0, 0); },
+        models,
         showChat: () => { s.bottom = 'agent'; s.bottomCollapsed = false; renderAll(); },
         tool: (args) => tool(args),
         files: () => s.entries.map((e) => e.path).filter(Boolean),
@@ -1316,6 +1322,7 @@ export function createEditor($) {
     // --- палитра ----------------------------------------------------------------
 
     const COMMANDS = [
+        { id: 'models', label: 'Агент: модели и ключи', keys: '', run: () => { if (s.project) openFile('agent:models', 0, 0); } },
         { id: 'quickOpen', label: 'Перейти к файлу…', keys: 'Cmd/Ctrl+P', run: () => openPalette('files') },
         { id: 'symbols', label: 'Перейти к символу в файле…', keys: 'Cmd/Ctrl+Shift+O', run: () => openPalette('symbols') },
         { id: 'save', label: 'Файл: сохранить', keys: 'Cmd/Ctrl+S', run: () => save() },
@@ -1536,10 +1543,11 @@ export function createEditor($) {
 
     function renderTabs() {
         doc.html('tabs', s.tabs.map((t) => {
-            const [ic, cls] = fileIcon({ path: t.path, tool: null });
+            const virtual = t.path === 'agent:models';   // вкладка без файла
+            const [ic, cls] = virtual ? ['smart_toy', ''] : fileIcon({ path: t.path, tool: null });
             const dirty = t.model ? t.model.dirty : t.kind === 'studio' ? studios.dirty(t) : !!t.dirty;
             return '<span class="tab' + (t.id === s.active ? ' on' : '') + '" data-key="t:' + esc(t.id) + '">' +
-                '<span class="tab-ico tree-ico ' + cls + '">' + icon(ic) + '</span>' + esc(baseName(t.path)) +
+                '<span class="tab-ico tree-ico ' + cls + '">' + icon(ic) + '</span>' + esc(virtual ? 'Модели' : baseName(t.path)) +
                 '<span class="tab-x' + (dirty ? ' tab-dirty' : '') + '" data-key="x:' + esc(t.id) + '">' + icon(dirty ? 'circle' : 'close') + '</span></span>';
         }).join(''));
     }
@@ -1673,12 +1681,11 @@ export function createEditor($) {
         const errors = problems.filter((d) => d.severity === 'error').length;
         doc.text('prob-badge', String(problems.length));
         doc.cls('prob-badge', 'zero', problems.length === 0);
-        for (const b of ['problems', 'output', 'console', 'graph', 'agent', 'agentcfg']) doc.cls('bt-' + b, 'on', s.bottom === b);
+        for (const b of ['problems', 'output', 'console', 'graph', 'agent']) doc.cls('bt-' + b, 'on', s.bottom === b);
         doc.cls('gp', 'hidden', s.bottom !== 'graph');
         doc.cls('ag', 'hidden', s.bottom !== 'agent');
-        doc.cls('agcfg', 'hidden', s.bottom !== 'agentcfg');
-        doc.cls('bottom-body', 'hidden', s.bottom === 'graph' || s.bottom === 'agent' || s.bottom === 'agentcfg');
-        agentPanel.setOpen(s.bottom === 'agent' && !s.bottomCollapsed, s.bottom === 'agentcfg' && !s.bottomCollapsed);
+        doc.cls('bottom-body', 'hidden', s.bottom === 'graph' || s.bottom === 'agent');
+        agentPanel.setOpen(s.bottom === 'agent' && !s.bottomCollapsed);
         doc.text('bt-toggle', icon(s.bottomCollapsed ? 'expand_less' : 'expand_more'));
         if (s.bottom === 'problems') {
             doc.html('bottom-body', problems.length
@@ -1731,7 +1738,7 @@ export function createEditor($) {
         doc.cls('side-search', 'hidden', s.side !== 'search');
         doc.cls('bottom', 'collapsed', s.bottomCollapsed);
         doc.cls('bottom', 'graph', s.bottom === 'graph');
-        doc.cls('bottom', 'agent', s.bottom === 'agent' || s.bottom === 'agentcfg');
+        doc.cls('bottom', 'agent', s.bottom === 'agent');
         doc.cls('bottom', 'tall', s.bottom === 'graph' && graphPanel.state.full);
         for (const r of ['project', 'search', 'snippets', 'run', 'tools']) doc.cls('rail-' + r, 'on', s.side === r && !s.sidebarHidden);
         code.invalidate();
@@ -1870,7 +1877,7 @@ export function createEditor($) {
             else if (key.startsWith('line:')) { const t = activeTab(); if (t && t.model) { t.model.goto(parseInt(key.slice(5), 10), 1); code.ensureCaretVisible(); focusCode(); } }
         });
 
-        for (const b of ['problems', 'output', 'console', 'graph', 'agent', 'agentcfg']) doc.on('bt-' + b, 'click', () => { s.bottom = b; s.bottomCollapsed = false; renderBottom(); renderLayout(); if (b === 'graph') graphPanel.render(); });
+        for (const b of ['problems', 'output', 'console', 'graph', 'agent']) doc.on('bt-' + b, 'click', () => { s.bottom = b; s.bottomCollapsed = false; renderBottom(); renderLayout(); if (b === 'graph') graphPanel.render(); });
         agentPanel.wire();
         doc.on('bt-toggle', 'click', () => { s.bottomCollapsed = !s.bottomCollapsed; renderBottom(); renderLayout(); });
         doc.on('bottom-body', 'click', (id, ev, key) => {
@@ -2069,7 +2076,7 @@ export function createEditor($) {
         state: s, showGraph, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
         searchProject, openSearchResult, showProjectSearch, runAgentSession, snippets, showSnippets,
         manifest, migrateProject, reindex, checkIndex, graphInfo, refreshProjectJson, graph: graphPanel, showPM, createProject, createTilemap, createScript, createNarrativeScene, openProjectDialog, pickNewProjectDir, openFileDialog,
-        agent: agentPanel, openPalette, closePalette, activeTab, closeTab, code, studios, extensions: extensionHost,
+        agent: agentPanel, models, openPalette, closePalette, activeTab, closeTab, code, studios, extensions: extensionHost,
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
     };
 }

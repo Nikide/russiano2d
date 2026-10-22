@@ -1,0 +1,4 @@
+<rml><head><link type="text/rcss" href="kit.rcss"/><link type="text/rcss" href="models.rcss"/><title>Модели</title></head><body>
+<div class="st-root md-root">
+ <div id="md-scroll" class="md-scroll"><div id="md-body" class="md-body"></div></div>
+</div></body></rml>

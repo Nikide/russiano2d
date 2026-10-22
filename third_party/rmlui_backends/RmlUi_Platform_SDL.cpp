@@ -505,6 +505,15 @@ int RmlSDL::GetKeyModifierState()
 
 	if (sdl_mods & mod_ctrl)
 		retval |= Rml::Input::KM_CTRL;
+#if defined(__APPLE__)
+	// macOS: Cmd+V/C/X/A в полях ввода работают как Ctrl+… (RmlUi знает только KM_CTRL).
+#if SDL_MAJOR_VERSION >= 3
+	if (sdl_mods & SDL_KMOD_GUI)
+#else
+	if (sdl_mods & KMOD_GUI)
+#endif
+		retval |= Rml::Input::KM_CTRL;
+#endif
 
 	if (sdl_mods & mod_shift)
 		retval |= Rml::Input::KM_SHIFT;

@@ -18,8 +18,9 @@ import * as input from './input.js';
 import * as re2dsprite from './re2dsprite.js';
 import * as rmlui from './rmlui.js';
 import * as project from './project.js';
+import * as models from './models.js';
 
-const MODULES = [atlas, hammer, narrative, spriteMesh, tilemap, particles, collision, parallax, fonts, audio, input, re2dsprite, rmlui, project];
+const MODULES = [atlas, hammer, narrative, spriteMesh, tilemap, particles, collision, parallax, fonts, audio, input, re2dsprite, rmlui, project, models];
 
 export const NATIVE = MODULES.map((m) => Object.assign({ native: true, module: m }, m.meta));
 

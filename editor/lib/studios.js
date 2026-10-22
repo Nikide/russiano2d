@@ -20,7 +20,7 @@ export function createStudioHost($, editor) {
     let hostCounter = 0;
     function hostFor(tab) {
         return {
-            $, id: ++hostCounter,
+            $, id: ++hostCounter, models: editor.models,
             root: () => editor.projectRoot(),
             async backend(args) {
                 const res = await $.sdk.tool(args);

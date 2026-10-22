@@ -60,7 +60,7 @@ def _hammer(directory):
         settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
         agent.eval('globalThis.__q=' + json.dumps(steps) + ';globalThis.__seen=[];'
                    '$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
-        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' +
+        agent.eval(D + '.click("bt-agent");' + E + '.models.set("anthropic",{key:"k"});' +
                    D + '.setValue("ag-input","собери бокс на карте");' + D + '.click("ag-send");1')
         # студийные операции требуют подтверждения: отвечаем «Разрешить» на каждый запрос
         for _ in range(3):
@@ -98,7 +98,7 @@ def _game(directory):
     with Agent(game='editor', scene=str(start), seed=14) as agent:
         settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
         agent.eval('globalThis.__q=' + json.dumps(steps) + ';$.http._setBackend((r)=>globalThis.__q.shift());1')
-        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' +
+        agent.eval(D + '.click("bt-agent");' + E + '.models.set("anthropic",{key:"k"});' +
                    D + '.setValue("ag-input","сделай игру");' + D + '.click("ag-send");1')
         for _ in range(400):
             agent.step(3)
@@ -144,7 +144,7 @@ def _interact(directory):
     with Agent(game='editor', scene=str(project), seed=15) as agent:
         settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
         agent.eval('globalThis.__q=' + json.dumps(steps) + ';globalThis.__seen=[];$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
-        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","сделай игру");' + D + '.click("ag-send");1')
+        agent.eval(D + '.click("bt-agent");' + E + '.models.set("anthropic",{key:"k"});' + D + '.setValue("ag-input","сделай игру");' + D + '.click("ag-send");1')
         settle(agent, E + '.agent.state.asking!==null', seconds=30)
         check(agent, D + '.content("ag-plan").includes("Спросить жанр")', 'чеклист плана показан в панели')
         check(agent, D + '.content("ag-ask").includes("Какой жанр?") && ' + D + '.content("ag-ask").includes("Шутер")', 'вопрос агента показан кнопками вариантов')
@@ -173,7 +173,7 @@ def _pixel(directory):
     with Agent(game='editor', scene=str(project), seed=17) as agent:
         settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
         agent.eval('globalThis.__q=' + json.dumps(steps) + ';globalThis.__seen=[];$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
-        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","нарисуй монету");' + D + '.click("ag-send");1')
+        agent.eval(D + '.click("bt-agent");' + E + '.models.set("anthropic",{key:"k"});' + D + '.setValue("ag-input","нарисуй монету");' + D + '.click("ag-send");1')
         settle(agent, E + '.agent.state.pending!==null', seconds=30)
         check(agent, D + '.content("ag-ask").includes("coin.png")', 'pixel_art: карточка подтверждения называет файл')
         agent.eval(D + '.click("ag-yes");1')
@@ -199,7 +199,7 @@ def _sound(directory):
     with Agent(game='editor', scene=str(project), seed=18) as agent:
         settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
         agent.eval('globalThis.__q=' + json.dumps(steps) + ';globalThis.__seen=[];$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
-        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","сделай звук прыжка");' + D + '.click("ag-send");1')
+        agent.eval(D + '.click("bt-agent");' + E + '.models.set("anthropic",{key:"k"});' + D + '.setValue("ag-input","сделай звук прыжка");' + D + '.click("ag-send");1')
         settle(agent, E + '.agent.state.pending!==null', seconds=30)
         check(agent, D + '.content("ag-ask").includes("jump.wav")', 'generate_sound: карточка подтверждения называет файл')
         agent.eval(D + '.click("ag-yes");1')
@@ -222,7 +222,7 @@ def _session(directory):
     with Agent(game='editor', scene=str(project), seed=21) as agent:
         settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
         agent.eval('globalThis.__q=' + json.dumps(first) + ';$.http._setBackend((r)=>globalThis.__q.shift());1')
-        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","сделай платформер");' + D + '.click("ag-send");1')
+        agent.eval(D + '.click("bt-agent");' + E + '.models.set("anthropic",{key:"k"});' + D + '.setValue("ag-input","сделай платформер");' + D + '.click("ag-send");1')
         settle(agent, '!' + E + '.agent.state.busy && ' + D + '.content("ag-log").includes("Первый ответ")', seconds=20)
         check(agent, 'true' if (project / '.r2d-agent.json').is_file() else 'false', 'беседа: файл .r2d-agent.json записан в проект после хода')
         check(agent, '!$.fs.readText(' + json.dumps(str(project / '.r2d-agent.json')) + ').includes("\\"k\\"")', 'беседа: ключ не попал в файл беседы')
@@ -232,7 +232,7 @@ def _session(directory):
         agent.eval(D + '.click("bt-agent");1'); agent.step(6)
         check(agent, D + '.content("ag-log").includes("Первый ответ") && ' + D + '.content("ag-log").includes("восстановлена")', 'беседа: после перезапуска лента на месте')
         agent.eval('globalThis.__q=' + json.dumps(second) + ';globalThis.__seen=[];$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
-        agent.eval(D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","что дальше?");' + D + '.click("ag-send");1')
+        agent.eval(E + '.models.set("anthropic",{key:"k"});' + D + '.setValue("ag-input","что дальше?");' + D + '.click("ag-send");1')
         settle(agent, '!' + E + '.agent.state.busy && ' + D + '.content("ag-log").includes("Продолжаю.")', seconds=20)
         check(agent, 'String(globalThis.__seen[0].body).includes("сделай платформер")', 'беседа: модель получила прежнюю историю')
         agent.eval(D + '.click("ag-clear");1'); agent.step(4)
@@ -248,7 +248,7 @@ def _limit(directory):
     with Agent(game='editor', scene=str(project), seed=16) as agent:
         settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
         agent.eval('globalThis.__q=' + json.dumps(steps) + ';$.http._setBackend((r)=>globalThis.__q.shift());1')
-        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-steps","2");' + D + '.setValue("ag-input","долгая задача");' + D + '.click("ag-send");1')
+        agent.eval(D + '.click("bt-agent");' + E + '.models.set("anthropic",{key:"k"});' + E + '.models.setBehavior({maxSteps:2});' + D + '.setValue("ag-input","долгая задача");' + D + '.click("ag-send");1')
         settle(agent, 'JSON.stringify(' + E + '.agent.state.log).includes("limit")', seconds=40)
         settle(agent, '!' + E + '.agent.state.busy', seconds=20)
         check(agent, D + '.content("ag-log").includes("Продолжить")', 'при лимите шагов в журнале кнопка «Продолжить»')
@@ -276,14 +276,21 @@ def _run():
                        '$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
             agent.eval(D + '.click("bt-agent");1'); agent.step(2)
             check(agent, E + '.agent.state.open && ' + D + '.rect("ag").h>150', 'вкладка «Агент» в нижней панели открывает чат')
-            agent.eval(D + '.click("bt-agentcfg");1'); agent.step(6)
-            check(agent, E + '.agent.state.cfgOpen && ' + D + '.rect("agcfg").h>150 && ' + D + '.rect("cfg-test").w>50', 'настройки агента — отдельная вкладка с кнопкой проверки подключения')
+            # шестерёнка в шапке агента открывает вкладку «Модели»
+            agent.eval(D + '.click("ag-gear");1'); agent.step(8)
+            check(agent, E + '.activeTab()&&' + E + '.activeTab().path==="agent:models"', 'шестерёнка открывает вкладку «Модели»')
+            check(agent, E + '.activeTab().api.snapshot().providers.length>=7', 'во вкладке «Модели» видны все провайдеры')
             agent.eval('$.http._setBackend((r)=>({status:200,body:JSON.stringify({content:[{type:"text",text:"ок"}]}),headers:""}));1')
-            agent.eval(D + '.setValue("ag-key","test-key");' + D + '.click("cfg-test");1')
-            settle(agent, '!' + E + '.agent.state.testing', seconds=15)
-            check(agent, D + '.content("cfg-result").includes("Подключение работает")', 'проверка подключения показывает успех')
-            agent.eval(D + '.click("cfg-done");1'); agent.step(6)
-            check(agent, E + '.agent.state.open && !' + E + '.agent.state.cfgOpen', '«К чату» возвращает на вкладку чата')
+            agent.eval(E + '.activeTab().api.doc.setValue("md-key","test-key");1')
+            agent.eval(E + '.activeTab().api.act("test:anthropic");1')
+            agent.step(30)
+            check(agent, E + '.models.configured("anthropic")&&' + E + '.models.profile("anthropic").key==="test-key"', 'ключ из формы подключает провайдера (зелёная точка)')
+            # свой провайдер: форма → хранилище → agent.local.json
+            agent.eval(E + '.activeTab().api.act("add:x");1'); agent.step(4)
+            agent.eval(D.replace('$.ui.doc("ui/editor.rml")', E + '.activeTab().api.doc') + '.setValue("md-n-label","Мой шлюз");' + E + '.activeTab().api.doc.setValue("md-n-id","gw-test");' + E + '.activeTab().api.doc.setValue("md-n-base","https://gw.example/v1");' + E + '.activeTab().api.doc.setValue("md-n-model","m-1");1')
+            agent.eval(E + '.activeTab().api.act("create:x");1'); agent.step(4)
+            check(agent, E + '.models.list().some((r)=>r.id==="gw-test"&&r.custom)&&$.fs.readJSON("agent.local.json",null).custom[0].id==="gw-test"', 'свой провайдер добавляется во вкладке и сохраняется')
+            agent.eval(E + '.closeTab("agent:models");1'); agent.step(3)
             agent.eval('globalThis.__q=' + json.dumps(scripted) + ';globalThis.__seen=[];'
                        '$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
             agent.eval(D + '.setValue("ag-input","прочитай main.js и запиши notes.txt");' + D + '.click("ag-send");1')
@@ -302,8 +309,8 @@ def _run():
             check(agent, '(()=>{const h=globalThis.__seen[0].headers;const i=h.indexOf("x-api-key");return i>=0&&h[i+1]==="test-key"&&!String(globalThis.__seen[0].body).includes("test-key");})()', 'ключ уходит только в заголовок запроса')
             check(agent, '!JSON.stringify($.fs.readText(' + json.dumps(str(project / 'project.json')) + ')).includes("test-key")', 'ключ не записан в project.json')
             # настройки живут между запусками (без ключа)
-            agent.eval(D + '.click("ag-prov-gigachat");' + D + '.setValue("ag-model","GigaChat-2-Max");' + D + '.setValue("ag-steps","31");' + D + '.setValue("ag-key","secret-xyz");' + D + '.click("cfg-mascot");1'); agent.step(3)
-            check(agent, '(()=>{const p=$.fs.readJSON("agent.local.json",null);return !!p&&p.provider==="gigachat"&&p.maxSteps===31&&p.mascotOn===false;})()', 'настройки агента сохранены в agent.local.json')
+            agent.eval(E + '.models.set("gigachat",{model:"GigaChat-2-Max",key:"secret-xyz"});' + E + '.models.activate("gigachat");' + E + '.models.setBehavior({maxSteps:31,mascotOn:false});1'); agent.step(3)
+            check(agent, '(()=>{const p=$.fs.readJSON("agent.local.json",null);return !!p&&p.active==="gigachat"&&p.maxSteps===31&&p.mascotOn===false&&p.profiles.gigachat.model==="GigaChat-2-Max";})()', 'настройки агента сохранены в agent.local.json')
             check(agent, '!$.fs.readText("agent.local.json").includes("secret-xyz")', 'ключ не попал в файл настроек')
             agent.eval('$.fs.remove("agent.local.json");1')
         _hammer(directory)
