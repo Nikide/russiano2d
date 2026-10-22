@@ -856,6 +856,16 @@ bool r2d_gui_focus(R2DGui *g, int doc, const char *element_id, bool focus)
     return true;
 }
 
+bool r2d_gui_scroll(R2DGui *g, int doc, const char *element_id, int mode, float offset)
+{
+    Rml::Element *el = r2d__element(g, doc, element_id);
+    if (!el) return false;
+    if (mode == 0) el->SetScrollTop(0.0f);
+    else if (mode == 1) el->SetScrollTop(el->GetScrollHeight());   // RmlUi зажмёт до максимума
+    else el->SetScrollTop(offset);
+    return true;
+}
+
 // Геометрия РАСКЛАДКИ: последний посчитанный бокс, даже если элемент сейчас
 // скрыт. Нужна тем, кто проверяет вычисленные размеры (тесты раскладки,
 // инструменты SDK), а не видимость. `r2d_gui_get_rect` для этого не годится:

@@ -114,6 +114,8 @@ bool r2d_gui_click(R2DGui *g, int doc, const char *element_id);
 // focus=true — Element::Focus(), false — Blur(). false, если элемента нет или
 // он не принимает фокус.
 bool r2d_gui_focus(R2DGui *g, int doc, const char *element_id, bool focus);
+// Прокрутка контейнера: mode 0 — в начало, 1 — в конец, 2 — на offset пикселей.
+bool r2d_gui_scroll(R2DGui *g, int doc, const char *element_id, int mode, float offset);
 // Встраивание документа в область другого (студия во вкладке редактора):
 // place — прямоугольник документа в пикселях контекста, w/h <= 0 — вернуть
 // раскладку из RCSS; front — поднять документ над остальными.

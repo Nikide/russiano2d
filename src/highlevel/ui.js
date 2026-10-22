@@ -835,6 +835,12 @@ function makeDoc(id, path) {
         click(element) { return engine.ui.click(id, element); },
         /** Клавиатурный фокус элемента (поле ввода): focus(id) / focus(id, false) — снять. */
         focus(element, on) { return typeof engine.ui.focus === 'function' ? engine.ui.focus(id, element, on !== false) : false; },
+        /** Прокрутка контейнера: scroll(id) — в конец, scroll(id, 'top'), scroll(id, число) — на N пикселей. */
+        scroll(element, to) {
+            if (typeof engine.ui.scroll !== 'function') return false;
+            if (typeof to === 'number') return engine.ui.scroll(id, element, 2, to);
+            return engine.ui.scroll(id, element, to === 'top' ? 0 : 1, 0);
+        },
         /** Встроить документ в прямоугольник {x, y, w, h} (пиксели, как rect()); null — весь экран. */
         place(rect) {
             const r = rect || { x: 0, y: 0, w: 0, h: 0 };

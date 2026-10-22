@@ -1,4 +1,4 @@
-// Панель «Агент» в нижней части Editor: чат + настройки + подтверждение записи.
+// Панель «Агент»: правая боковая панель Editor — чат, подключение, подтверждение действий.
 // Логика цикла — agent_harness.js; здесь только RmlUi-обвязка. Ключ API живёт
 // только в памяти процесса: на диск и в project.json он не попадает.
 
@@ -9,10 +9,41 @@ import { esc as escRml } from './studio_kit.js';
 // объектами ломал разметку): разделяем парные скобки невидимым пробелом.
 const esc = (t) => escRml(t).replace(/\{(?=\{)/g, '{\u200b').replace(/\}(?=\})/g, '}\u200b');
 
+// Иконка и подпись инструмента в журнале.
+const TOOL_UI = {
+    docs_search: ['search', 'Поиск в документации'], docs_show: ['menu_book', 'Страница документации'], api_lookup: ['functions', 'Проверка API'],
+    list_files: ['folder_open', 'Файлы проекта'], read_file: ['description', 'Чтение файла'], write_file: ['edit_document', 'Запись файла'],
+    edit_file: ['edit', 'Правка файла'], r2d_validate: ['fact_check', 'Проверка проекта'], r2d_lint: ['rule', 'Линт'],
+    run_check: ['play_arrow', 'Прогон игры'], screenshot_check: ['photo_camera', 'Проверка кадра'], project_info: ['info', 'О проекте'],
+    r2d_cli: ['terminal', 'Команда r2d'], tabs: ['tab', 'Вкладки'], open_tab: ['tab', 'Открыть вкладку'], studio_ops: ['widgets', 'Операции студии'],
+    studio_state: ['widgets', 'Состояние студии'], studio_edit: ['tune', 'Правка студии'], studio_op: ['construction', 'Операция студии'],
+    studio_save: ['save', 'Сохранение студии'], editor_op: ['build', 'Операция Editor'], snippet_find: ['extension', 'Поиск кирпичика'],
+    snippet_apply: ['extension', 'Кирпичик'],
+};
+
+const SUGGESTIONS = [
+    'Собери простой платформер: сцена, герой с управлением, платформы, монеты и счёт',
+    'Найди готовые кирпичики для врага, который преследует игрока, и подключи их',
+    'Проверь проект: validate, lint и прогон игры, исправь найденные проблемы',
+    'Собери карту из трёх комнат в Hammer и скомпилируй её',
+];
+
+const short = (t, n) => { const x = String(t === undefined || t === null ? '' : t).replace(/\s+/g, ' ').trim(); return x.length > n ? x.slice(0, n - 1) + '…' : x; };
+
+function argSummary(name, input) {
+    const i = input || {};
+    if (name === 'snippet_apply') return short((i.package || '?') + ' · ' + (i.owner || '?'), 54);
+    if (name === 'r2d_cli') return short((Array.isArray(i.args) ? i.args : []).join(' '), 54);
+    if (name === 'studio_op') return short((i.op || '?') + (i.args ? ' ' + JSON.stringify(i.args) : ''), 54);
+    for (const k of ['query', 'name', 'page', 'path', 'package', 'op', 'owner', 'scene']) if (i[k]) return short(i[k], 54);
+    return short(JSON.stringify(i) === '{}' ? '' : JSON.stringify(i), 54);
+}
+
 export function createAgentPanel($, doc, host) {
+    const icon = (n) => $.ui.icon(n) || '';
     const st = {
         cfg: { provider: 'anthropic', base: PROVIDERS.anthropic.base, model: PROVIDERS.anthropic.model, key: '', folder: '', maxSteps: 24 },
-        log: [], agent: null, pending: null, busy: false,
+        log: [], agent: null, pending: null, busy: false, open: false, settings: true, expanded: new Set(), scrollPending: 0, warmed: false,
     };
 
     function transport(url, opts) {
@@ -23,15 +54,17 @@ export function createAgentPanel($, doc, host) {
         });
     }
 
-    function push(kind, text) {
-        st.log.push({ kind, text: String(text) });
+    function push(entry) {
+        st.log.push(entry);
         if (st.log.length > 400) st.log.splice(0, st.log.length - 400);
+        st.scrollPending = 3;
         render();
     }
 
     function confirm(name, input) {
         return new Promise((resolve) => {
             st.pending = { name, input, resolve };
+            st.scrollPending = 3;
             render();
         });
     }
@@ -39,21 +72,28 @@ export function createAgentPanel($, doc, host) {
     function build() {
         // Корень проекта берётся при каждом вызове: new_project/open_project меняют его на ходу.
         const root = () => { const p = host.project(); if (!p) throw new Error('проект не открыт'); return p.abs; };
+        const abs = (p) => (p ? root() + '/' + p : root());
         const tools = editorTools({
-            tool: host.tool, abs: (p) => (p ? root() + '/' + p : root()),
+            tool: host.tool, abs,
             exists: (p) => $.fs.exists(root() + '/' + p),
             readText: (p) => $.fs.readText(root() + '/' + p),
             writeText: (p, c) => { $.fs.write(root() + '/' + p, c); host.changed(p); },
             list: () => host.files(),
         });
         st.agent = createAgent({
-            config: st.cfg, transport, tools: tools.concat(studioTools(host), snippetTools({ tool: host.tool, abs: (p) => (p ? root() + '/' + p : root()) })), confirm,
+            config: st.cfg, transport, tools: tools.concat(studioTools(host), snippetTools({ tool: host.tool, abs })), confirm,
             context: (q) => docContext(host, q, 4),
             events: {
-                text: (t) => push('agent', t),
-                tool: (n, i) => push('tool', n + ' ' + JSON.stringify(i).slice(0, 160)),
-                result: (n, o) => push('result', String(o).slice(0, 400)),
-                error: (m) => push('err', m),
+                text: (t) => push({ kind: 'bot', text: t }),
+                tool: (name, input) => push({ kind: 'tool', name, input, status: 'run' }),
+                result: (name, out, isErr) => {
+                    for (let i = st.log.length - 1; i >= 0; i--) {
+                        const e = st.log[i];
+                        if (e.kind === 'tool' && e.status === 'run' && e.name === name) { e.status = isErr ? 'err' : 'ok'; e.result = String(out); break; }
+                    }
+                    render();
+                },
+                error: (m) => push({ kind: 'err', text: m }),
             },
         });
     }
@@ -69,16 +109,18 @@ export function createAgentPanel($, doc, host) {
     async function send() {
         const text = String(doc.value('ag-input') || '').trim();
         if (!text || st.busy) return;
-        if (!host.project()) { push('err', 'сначала откройте проект'); return; }
         readFields();
-        if (PROVIDERS[st.cfg.provider].auth !== 'bearer' && !st.cfg.key) { push('err', 'нужен API-ключ (поле «ключ»)'); return; }
+        if (!host.project()) { push({ kind: 'err', text: 'Сначала откройте проект.' }); return; }
+        if (PROVIDERS[st.cfg.provider].auth !== 'bearer' && !st.cfg.key) {
+            st.settings = true; push({ kind: 'err', text: 'Нужен API-ключ: укажите его в настройках подключения.' }); return;
+        }
         if (!st.agent) build();
         doc.setValue('ag-input', '');
-        push('user', text);
-        st.busy = true; render();
+        push({ kind: 'user', text });
+        st.busy = true; st.settings = false; render();
         try { await st.agent.send(text); }
-        catch (e) { push('err', e && e.message || String(e)); }
-        finally { st.busy = false; st.pending = null; render(); }
+        catch (e) { push({ kind: 'err', text: e && e.message || String(e) }); }
+        finally { st.busy = false; st.pending = null; for (const e of st.log) if (e.status === 'run') e.status = 'err'; st.scrollPending = 3; render(); }
     }
 
     function answer(ok) {
@@ -106,38 +148,106 @@ export function createAgentPanel($, doc, host) {
         try { Promise.resolve($.sdk.tool(['docs', 'context', 'прогрев', '--limit', '1', '--quiet'])).catch(() => {}); } catch (_) { /* без прогрева */ }
     }
 
+    function askCard() {
+        const p = st.pending;
+        if (!p) return '';
+        const i = p.input || {};
+        let title = 'Нужно подтверждение', body = '';
+        const code = (t, cls) => '<span class="' + cls + '">' + esc(short(t, 700)) + '</span>';
+        switch (p.name) {
+        case 'write_file': title = 'Записать файл'; body = '<b>' + esc(i.path || '?') + '</b> · ' + String(String(i.content || '').length) + ' симв.' + code(String(i.content || '').split('\n').slice(0, 8).join('\n'), 'ask-code'); break;
+        case 'edit_file': title = 'Изменить файл'; body = '<b>' + esc(i.path || '?') + '</b>' + code(i.old_string || '', 'ask-del') + code(i.new_string || '', 'ask-add'); break;
+        case 'studio_op': title = 'Операция студии'; body = '<b>' + esc(i.op || '?') + '</b>' + code(JSON.stringify(i.args || {}), 'ask-code'); break;
+        case 'studio_edit': title = 'Правка документа студии'; body = code(JSON.stringify(i.patch || {}), 'ask-code'); break;
+        case 'studio_save': title = 'Сохранить документ студии'; body = '<b>' + esc(i.path || 'активная вкладка') + '</b>'; break;
+        case 'editor_op': title = 'Операция Editor'; body = '<b>' + esc(i.op || '?') + '</b>' + code(JSON.stringify(i.args || {}), 'ask-code'); break;
+        case 'r2d_cli': title = 'Команда r2d'; body = code('r2d ' + (Array.isArray(i.args) ? i.args.join(' ') : ''), 'ask-code'); break;
+        case 'snippet_apply': title = 'Подключить кирпичик'; body = '<b>' + esc(i.package || '?') + '</b> → <b>' + esc(i.owner || '?') + '</b>' + (i.values ? code(JSON.stringify(i.values), 'ask-code') : ''); break;
+        default: body = '<b>' + esc(p.name) + '</b>' + code(JSON.stringify(i), 'ask-code');
+        }
+        return '<span class="ask-head">' + icon('shield') + ' ' + esc(title) + '</span><div class="ask-body">' + body + '</div>' +
+            '<div class="ask-btns"><span id="ag-yes" class="ask-yes">Разрешить</span><span id="ag-no" class="ask-no">Отклонить</span></div>';
+    }
+
+    function logHtml() {
+        if (!st.log.length) {
+            return '<div class="ag-empty"><span class="ag-empty-ic">' + icon('smart_toy') + '</span><span class="ag-empty-h">Чем помочь?</span>' +
+                '<span class="ag-empty-p">Агент ищет в документации и кирпичиках, читает и правит файлы проекта, работает со студиями и проверяет результат. Изменения — только с вашего подтверждения.</span>' +
+                SUGGESTIONS.map((t, n) => '<div class="ag-sug" data-key="sug:' + n + '">' + esc(t) + '</div>').join('') + '</div>';
+        }
+        let out = '', tools = '';
+        const flush = () => { if (tools) { out += '<div class="ag-tools">' + tools + '</div>'; tools = ''; } };
+        st.log.forEach((e, idx) => {
+            if (e.kind === 'tool') {
+                const ui = TOOL_UI[e.name] || ['build', e.name];
+                const stIcon = e.status === 'ok' ? icon('check_circle') : e.status === 'err' ? icon('error') : icon('more_horiz');
+                tools += '<div class="agt" data-key="tool:' + idx + '"><span class="agt-ic">' + icon(ui[0]) + '</span><span class="agt-name">' + esc(ui[1]) + '</span>' +
+                    '<span class="agt-arg">' + esc(argSummary(e.name, e.input)) + '</span><span class="agt-st ' + e.status + '">' + stIcon + '</span></div>';
+                if (st.expanded.has(idx) && e.result !== undefined) tools += '<span class="agt-res">' + esc(short(e.result, 900)) + '</span>';
+                return;
+            }
+            flush();
+            if (e.kind === 'user') out += '<div class="agm"><span class="ag-ub">' + esc(e.text) + '</span></div>';
+            else if (e.kind === 'bot') out += '<div class="agm agm-bot"><span class="ag-av">' + icon('smart_toy') + '</span><span class="ag-bt">' + esc(e.text) + '</span></div>';
+            else out += '<span class="ag-errbox">' + esc(e.text) + '</span>';
+        });
+        flush();
+        if (st.busy && !st.pending) out += '<span class="ag-working">Агент работает…</span>';
+        return out;
+    }
+
     function render() {
+        if (!st.open) return;
         warm();
+        const provider = PROVIDERS[st.cfg.provider];
         for (const id of Object.keys(PROVIDERS)) doc.cls('ag-prov-' + id, 'on', st.cfg.provider === id);
+        doc.cls('ag-settings', 'hidden', !st.settings);
+        const needKey = provider.auth !== 'bearer' && !String(doc.value('ag-key') || st.cfg.key).trim();
+        const pill = st.pending ? ['wait', 'Ждёт подтверждения'] : st.busy ? ['busy', 'Работает'] : needKey ? ['need', 'Нужен ключ'] : ['', 'Готов'];
+        doc.text('ag-state', pill[1]);
+        for (const c of ['busy', 'wait', 'need']) doc.cls('ag-state', c, pill[0] === c);
+        doc.text('ag-model-chip', esc(provider.label + ' · ' + (st.cfg.model || provider.model)));
         doc.cls('ag-send', 'disabled', st.busy);
+        doc.cls('ag-send', 'hidden', st.busy);
         doc.cls('ag-stop', 'hidden', !st.busy);
-        const rows = st.log.map((m) => '<div class="ag-msg ag-' + m.kind + '">' + esc(m.text) + '</div>').join('');
-        const pin = st.pending && st.pending.input || {};
-        const what = !st.pending ? '' : st.pending.name === 'edit_file'
-            ? 'изменить <b>' + esc(pin.path || '?') + '</b> (' + String(String(pin.old_string || '').length) + ' → ' + String(String(pin.new_string || '').length) + ' симв.)'
-            : st.pending.name === 'studio_op' ? 'применить в студии <b>' + esc(pin.op || '?') + '</b> ' + esc(JSON.stringify(pin.args || {}).replace(/"/g, "'").slice(0, 140))
-            : st.pending.name === 'studio_edit' ? 'изменить документ студии патчем ' + esc(JSON.stringify(pin.patch || {}).replace(/"/g, "'").slice(0, 140))
-            : st.pending.name === 'editor_op' ? 'выполнить в Editor <b>' + esc(pin.op || '?') + '</b> ' + esc(JSON.stringify(pin.args || {}).replace(/"/g, "'").slice(0, 120))
-            : st.pending.name === 'r2d_cli' ? 'выполнить <b>r2d ' + esc((Array.isArray(pin.args) ? pin.args : []).join(' ').slice(0, 140)) + '</b>'
-            : st.pending.name === 'snippet_apply' ? 'подключить кирпичик <b>' + esc(pin.package || '?') + '</b> к <b>' + esc(pin.owner || '?') + '</b> ' + esc(JSON.stringify(pin.values || {}).replace(/"/g, "'").slice(0, 100))
-            : st.pending.name === 'studio_save' ? 'сохранить документ студии <b>' + esc(pin.path || 'активной вкладки') + '</b>'
-            : 'записать <b>' + esc(pin.path || '?') + '</b> (' + String(String(pin.content || '').length) + ' симв.)';
-        const ask = st.pending
-            ? '<div class="ag-ask"><span class="ag-ask-text">Агент хочет ' + what + '</span>' +
-              '<button id="ag-yes" class="out-filter on">Разрешить</button><button id="ag-no" class="out-filter">Отклонить</button></div>'
-            : '';
-        doc.html('ag-log', rows ? rows + ask : (ask || '<span class="empty">Спросите агента: он ищет в документации, читает файлы проекта, запускает lint/validate и пишет файлы с вашего подтверждения.</span>'));
+        doc.html('ag-log', logHtml());
+        doc.cls('ag-ask', 'hidden', !st.pending);
+        doc.html('ag-ask', askCard());
         if (st.pending) { doc.on('ag-yes', 'click', () => answer(true)); doc.on('ag-no', 'click', () => answer(false)); }
     }
 
     function wire() {
+        doc.text('ag-settings-btn', icon('tune')); doc.text('ag-clear', icon('add_comment'));
         for (const id of Object.keys(PROVIDERS)) doc.on('ag-prov-' + id, 'click', () => setProvider(id));
         doc.on('ag-send', 'click', () => { send(); });
-        doc.on('ag-input', 'change', () => { send(); });
         doc.on('ag-stop', 'click', () => { if (st.agent) st.agent.stop(); answer(false); });
-        doc.on('ag-clear', 'click', () => { st.log.length = 0; st.agent = null; render(); });
+        doc.on('ag-clear', 'click', () => { st.log.length = 0; st.expanded.clear(); st.agent = null; st.pending = null; render(); });
+        doc.on('ag-settings-btn', 'click', () => { st.settings = !st.settings; render(); });
+        doc.on('ag-model-chip', 'click', () => { st.settings = !st.settings; render(); });
+        doc.on('ag-settings-done', 'click', () => { readFields(); st.settings = false; render(); });
+        doc.on('ag-log', 'click', (_id, _ev, key) => {
+            if (!key) return;
+            if (key.startsWith('tool:')) { const n = Number(key.slice(5)); if (st.expanded.has(n)) st.expanded.delete(n); else st.expanded.add(n); render(); }
+            else if (key.startsWith('sug:')) { doc.setValue('ag-input', SUGGESTIONS[Number(key.slice(4))] || ''); doc.focus('ag-input'); }
+        });
         doc.setValue('ag-base', st.cfg.base); doc.setValue('ag-model', st.cfg.model);
     }
 
-    return { render, wire, state: st };
+    const api = {
+        render, wire, state: st,
+        // Вызывается Editor при смене вкладки нижней панели.
+        setOpen(on) {
+            if (st.open === !!on) return;
+            st.open = !!on;
+            if (st.open) { st.scrollPending = 3; render(); }
+        },
+        // Раз в кадр: автопрокрутка вниз (после раскладки новой разметки) и Ctrl/⌘+Enter в поле ввода.
+        tick(primaryDown) {
+            if (!st.open) return;
+            // прокрутка вниз — через пару кадров: RmlUi сначала должен пересчитать раскладку новой разметки
+            if (st.scrollPending > 0 && --st.scrollPending === 0) doc.scroll('ag-log');
+            if (primaryDown && $.ui.typing() && $.input.pressed('enter')) send();
+        },
+    };
+    return api;
 }

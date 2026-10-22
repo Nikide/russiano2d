@@ -264,6 +264,12 @@ bool r2d_gui_front(R2DGui *g, int doc)
     return false;
 }
 
+bool r2d_gui_scroll(R2DGui *g, int doc, const char *element_id, int mode, float offset)
+{
+    R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id); R2D_UNUSED(mode); R2D_UNUSED(offset);
+    return false;
+}
+
 bool r2d_gui_focus(R2DGui *g, int doc, const char *element_id, bool focus)
 {
     R2D_UNUSED(g); R2D_UNUSED(doc); R2D_UNUSED(element_id); R2D_UNUSED(focus);

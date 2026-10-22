@@ -128,12 +128,12 @@ def _run():
             agent.eval('globalThis.__q=' + json.dumps(scripted) + ';globalThis.__seen=[];'
                        '$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
             agent.eval(D + '.click("bt-agent");1'); agent.step(2)
-            check(agent, E + '.state.bottom==="agent" && ' + D + '.rect("ag").h>0', 'вкладка «Агент» открывает панель')
+            check(agent, E + '.agent.state.open && ' + D + '.rect("ag").h>150', 'вкладка «Агент» в нижней панели открывает чат')
             agent.eval(D + '.setValue("ag-key","test-key");' + D + '.setValue("ag-input","прочитай main.js и запиши notes.txt");' +
                        D + '.click("ag-send");1')
             settle(agent, E + '.agent.state.pending!==null')
             check(agent, 'globalThis.__seen.length===2', 'после чтения файла модель вызвана повторно')
-            check(agent, D + '.content("ag-log").includes("Разрешить") && !$.fs.exists(' + json.dumps(str(project / 'notes.txt')) + ')',
+            check(agent, D + '.content("ag-ask").includes("Разрешить") && !$.fs.exists(' + json.dumps(str(project / 'notes.txt')) + ')',
                   'запись ждёт подтверждения и ещё не выполнена')
             agent.eval(D + '.click("ag-yes");1')
             settle(agent, '!' + E + '.agent.state.busy')

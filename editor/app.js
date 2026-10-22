@@ -105,6 +105,7 @@ export function createEditor($) {
     // --- агент: чат с моделью и инструментами Editor (editor/lib/agent_harness.js) ---
     const agentPanel = createAgentPanel($, doc, {
         project: () => s.project,
+        layout: () => renderLayout(),
         tool: (args) => tool(args),
         files: () => s.entries.map((e) => e.path).filter(Boolean),
         tabs: () => s.tabs.map((t, i) => ({ index: i, path: t.path, studio: t.api ? t.api.id : (t.kind === 'studio' ? t.studio && t.studio.id : 'code'),
@@ -1349,7 +1350,7 @@ export function createEditor($) {
         { id: 'build-to', label: 'Проект: собрать в папку…', keys: '', run: () => buildToDialog() },
         { id: 'sidebar', label: 'Вид: боковая панель', keys: 'Cmd/Ctrl+B', run: () => { s.sidebarHidden = !s.sidebarHidden; renderLayout(); } },
         { id: 'panel', label: 'Вид: нижняя панель', keys: 'Cmd/Ctrl+J', run: () => { s.bottomCollapsed = !s.bottomCollapsed; renderLayout(); } },
-        { id: 'agent', label: 'Вид: агент', keys: '', run: () => { s.bottom = 'agent'; s.bottomCollapsed = false; renderAll(); } },
+        { id: 'agent', label: 'Вид: агент', keys: 'Cmd/Ctrl+Shift+A', run: () => { s.bottom = 'agent'; s.bottomCollapsed = false; renderAll(); } },
         { id: 'problems', label: 'Вид: проблемы', keys: '', run: () => { s.bottom = 'problems'; s.bottomCollapsed = false; renderAll(); } },
         { id: 'output', label: 'Вид: вывод', keys: '', run: () => { s.bottom = 'output'; s.bottomCollapsed = false; renderAll(); } },
     ];
@@ -1674,7 +1675,7 @@ export function createEditor($) {
         doc.cls('gp', 'hidden', s.bottom !== 'graph');
         doc.cls('ag', 'hidden', s.bottom !== 'agent');
         doc.cls('bottom-body', 'hidden', s.bottom === 'graph' || s.bottom === 'agent');
-        if (s.bottom === 'agent') agentPanel.render();
+        agentPanel.setOpen(s.bottom === 'agent' && !s.bottomCollapsed);
         doc.text('bt-toggle', icon(s.bottomCollapsed ? 'expand_less' : 'expand_more'));
         if (s.bottom === 'problems') {
             doc.html('bottom-body', problems.length
@@ -1955,6 +1956,7 @@ export function createEditor($) {
         if ($.input.pressed('p')) openPalette(shift ? 'commands' : 'files');
         if (shift && $.input.pressed('o')) openPalette('symbols');
         if (shift && $.input.pressed('f')) showProjectSearch();
+        if (shift && $.input.pressed('a')) { s.bottom = 'agent'; s.bottomCollapsed = false; renderAll(); }
         if ($.input.pressed('s') && !own.includes('s')) { if (shift) saveAll(); else save(); }
         // История студии Editor ведёт Editor (в полях ввода — их собственная правка текста).
         if (at && at.inst && !$.ui.typing() && !s.palette) {
@@ -1976,6 +1978,7 @@ export function createEditor($) {
             return;
         }
         shortcuts();
+        agentPanel.tick(primary());
         if (s.palette) filterPalette();
         if (s.focus === 'search') {
             const query = String(doc.value('search-input') || '');

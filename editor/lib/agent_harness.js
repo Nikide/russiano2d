@@ -272,7 +272,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 for (const call of calls) {
                     if (ev.tool) ev.tool(call.name, call.input);
                     const r = await runTool(call);
-                    if (ev.result) ev.result(call.name, r.text);
+                    if (ev.result) ev.result(call.name, r.text, r.error);
                     const t = byName.get(call.name);
                     if (t && !r.error && (typeof t.mutating === 'function' ? t.mutating(call.input || {}) : t.mutating)) acted = true;
                     results.push({ type: 'tool_result', tool_use_id: call.id, content: r.text, is_error: r.error });

@@ -3028,6 +3028,20 @@ static JSValue r2d__js_ui_focus(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_NewBool(ctx, ok);
 }
 
+// engine.ui.scroll(doc, id, mode, offset?) → bool: 0 — в начало, 1 — в конец, 2 — на offset px.
+static JSValue r2d__js_ui_scroll(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const int doc = r2d__arg_int(ctx, argc, argv, 0, -1);
+    const char *element = r2d__arg_str(ctx, argc, argv, 1);
+    const int mode = r2d__arg_int(ctx, argc, argv, 2, 1);
+    const float offset = (float)r2d__arg_num(ctx, argc, argv, 3, 0.0);
+    const bool ok = s && s->gui && element && r2d_gui_scroll(s->gui, doc, element, mode, offset);
+    if (element) JS_FreeCString(ctx, element);
+    return JS_NewBool(ctx, ok);
+}
+
 // engine.ui.place(doc, x, y, w, h) → bool: прямоугольник документа (w<=0 — сброс).
 static JSValue r2d__js_ui_place(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -6683,6 +6697,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, ui, "layoutRect", r2d__js_ui_layout_rect, 2);
     r2d__set_fn(ctx, ui, "click", r2d__js_ui_click, 2);
     r2d__set_fn(ctx, ui, "focus", r2d__js_ui_focus, 3);
+    r2d__set_fn(ctx, ui, "scroll", r2d__js_ui_scroll, 4);
     r2d__set_fn(ctx, ui, "place", r2d__js_ui_place, 5);
     r2d__set_fn(ctx, ui, "front", r2d__js_ui_front, 1);
     r2d__set_fn(ctx, ui, "typing", r2d__js_ui_typing, 0);
