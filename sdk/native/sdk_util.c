@@ -2,6 +2,7 @@
 // Общие помощники r2d: диагностика, файлы, пути, процессы, аргументы.
 // ===========================================================================
 #include "sdk.h"
+#include "payload.h"
 
 #include <SDL3/SDL.h>
 
@@ -92,6 +93,17 @@ void sdk_report_put_counts(const SdkReport *r, R2dSb *out)
 char *sdk_read_file(const char *path, size_t *size)
 {
     size_t n = 0;
+    // Файл встроенного пакета бинарника: «r2d-builtin:<путь в пакете>».
+    if (path && strncmp(path, SDK_BUILTIN_PREFIX, sizeof SDK_BUILTIN_PREFIX - 1) == 0) {
+        const R2dPayloadFile *packed = r2d_payload_find(r2d_bundle(), path + sizeof SDK_BUILTIN_PREFIX - 1);
+        if (!packed) return NULL;
+        char *copy = (char *)malloc(packed->size + 1);
+        if (!copy) return NULL;
+        memcpy(copy, packed->data, packed->size);
+        copy[packed->size] = '\0';
+        if (size) *size = packed->size;
+        return copy;
+    }
     void *data = SDL_LoadFile(path, &n);
     if (!data) return NULL;
     char *copy = (char *)malloc(n + 1);
@@ -365,7 +377,7 @@ static bool takes_value(const char *flag)
         "--cell", "--cols", "--rows", "--prefix", "--duration", "--tags",
         "--root", "--game", "--fixed-dt", "--format", "--width", "--height",
         "--op", "--args", "--user-extensions", "--builtin-extensions",
-        "--offset", "--limit", "--schema",
+        "--offset", "--limit", "--schema", "--filter", "--out-dir",
         "--catalog", "--query", "--owner", "--id", "--slot",
         "--tag", "--kind", "--title", "--category", "--body", "--w", "--h", "--deps", "--from",
         NULL,

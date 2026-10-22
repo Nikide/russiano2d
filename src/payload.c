@@ -17,6 +17,11 @@
 #include <zstd.h>
 #endif
 
+#ifdef R2D_HAVE_BUNDLE
+#include <zlib.h>
+#include "r2d_bundle_data.h"
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
 #elif defined(__APPLE__)
@@ -681,6 +686,7 @@ static bool attach_embedded(void)
 
 bool r2d_payload_attach_self(void)
 {
+    if (g_payload) return true;   // встроенный пакет редактора уже активен
 #ifdef R2D_EMBEDDED_PAYLOAD
     if (attach_embedded()) return true;
 #endif
@@ -800,10 +806,62 @@ bool r2d_payload_attach_self(void)
     return true;
 }
 
+static R2dPayload *g_bundle = NULL;
+
+const R2dPayload *r2d_bundle(void)
+{
+#ifdef R2D_HAVE_BUNDLE
+    if (g_bundle) return g_bundle;
+    uint8_t *container = (uint8_t *)SDL_malloc((size_t)r2d_bundle_raw_size);
+    if (!container) return NULL;
+    uLongf raw = (uLongf)r2d_bundle_raw_size;
+    if (uncompress(container, &raw, r2d_bundle_data, (uLong)r2d_bundle_packed_size) != Z_OK ||
+        raw != (uLongf)r2d_bundle_raw_size) {
+        R2D_ERROR("встроенный пакет: не распаковался");
+        SDL_free(container);
+        return NULL;
+    }
+    char err[256];
+    R2dPayload *bundle = r2d_payload_parse(container, (size_t)raw, err, sizeof err);
+    if (!bundle) {
+        R2D_ERROR("встроенный пакет: %s", err);
+        SDL_free(container);
+        return NULL;
+    }
+    bundle->builtin = true;
+    g_bundle = bundle;
+    return g_bundle;
+#else
+    return NULL;
+#endif
+}
+
+bool r2d_payload_attach_builtin(void)
+{
+    if (g_payload) return true;
+    R2dPayload *bundle = (R2dPayload *)(void *)r2d_bundle();
+    if (!bundle) return false;
+    g_payload = bundle;
+    return true;
+}
+
+const R2dPayloadFile *r2d_payload_find_user(const char *path)
+{
+    if (g_payload && g_payload->builtin) {
+        if (!path || !*path) return NULL;
+        const R2dPayloadFile *file = r2d_payload_find(g_payload, path);
+        return file && SDL_strcmp(file->path, path) == 0 ? file : NULL;
+    }
+    return r2d_payload_find(g_payload, path);
+}
+
 void r2d_payload_shutdown(void)
 {
+    if (g_payload == g_bundle) g_bundle = NULL;
     r2d_payload_free(g_payload);
     g_payload = NULL;
+    r2d_payload_free(g_bundle);
+    g_bundle = NULL;
 }
 
 // ---------------------------------------------------------------------------

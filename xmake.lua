@@ -399,6 +399,7 @@ target("r2d")
                 "R2D_GLSLANG_FLAT_INCLUDES=1",
                 "R2D_ENABLE_RMLUI=1",
                 "R2D_ENABLE_ZSTD=1",
+                "R2D_HAVE_BUNDLE=1",
                 "RMLUI_SDL_VERSION_MAJOR=3",
                 "RMLUI_STATIC_LIB",
                 "R2D_HAVE_SDK=1",

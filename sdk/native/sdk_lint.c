@@ -7,6 +7,7 @@
 // R2D014 (тип свойства).
 // ===========================================================================
 #include "sdk.h"
+#include "payload.h"
 
 #include <SDL3/SDL.h>
 #include <ctype.h>
@@ -42,6 +43,9 @@ static void schema_free(ApiSchema *s)
     free(s->items);
     memset(s, 0, sizeof *s);
 }
+
+// Условное «имя файла»: схема лежит не на диске, а во встроенном пакете.
+#define SDK_BUILTIN_SCHEMA SDK_BUILTIN_PREFIX "api.schema.json"
 
 static bool load_schema(const char *path, ApiSchema *out)
 {
@@ -431,6 +435,11 @@ bool sdk_schema_resolve(const char *explicit_path, const char *preferred_dir,
         sdk_join(sdk_exe_dir(), relative[i], candidate, sizeof candidate);
         if (sdk_file_exists(candidate)) { snprintf(out, cap, "%s", candidate); return true; }
     }
+    // Файла нигде нет: схема из встроенного пакета (бинарник без каталога рядом).
+    if (r2d_payload_find(r2d_bundle(), "api.schema.json")) {
+        snprintf(out, cap, "%s", SDK_BUILTIN_SCHEMA);
+        return true;
+    }
     snprintf(out, cap, "%s", "api.schema.json");
     return false;
 }
@@ -440,7 +449,8 @@ int sdk_lint_run(const char *schema_path, const char *target, SdkReport *rep, in
 {
     ApiSchema schema;
     if (!schema_path || !schema_path[0]) schema_path = "api.schema.json";
-    if (!sdk_file_exists(schema_path) || !load_schema(schema_path, &schema)) {
+    if ((strcmp(schema_path, SDK_BUILTIN_SCHEMA) != 0 && !sdk_file_exists(schema_path)) ||
+        !load_schema(schema_path, &schema)) {
         sdk_diag(rep, SDK_ERROR, "SDK_LINT_SCHEMA", schema_path, NULL, NULL,
                  "нет/битая api.schema.json; сначала выполните r2d api generate");
         return -1;

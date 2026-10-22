@@ -787,8 +787,13 @@ int main(int argc, char **argv)
     static char editor_dir[2048], project_abs[4096];
     static char *edit_argv[64];
     if (argc == 1 || (argc > 1 && SDL_strcmp(argv[1], "edit") == 0)) {
-        if (!r2d__find_editor(editor_dir, sizeof editor_dir)) {
-            fprintf(stderr, "r2d: каталог editor/ не найден рядом с бинарником; запуск игры — r2d --game <каталог>\n");
+        // Каталог editor/ рядом с бинарником (разработка редактора) старше
+        // встроенного пакета; R2D_EDITOR_BUILTIN=1 заставляет взять встроенный.
+        const char *force_builtin = SDL_getenv("R2D_EDITOR_BUILTIN");
+        const bool use_builtin = (force_builtin && force_builtin[0] == '1') ||
+                                 !r2d__find_editor(editor_dir, sizeof editor_dir);
+        if (use_builtin && !r2d_payload_attach_builtin()) {
+            fprintf(stderr, "r2d: каталог editor/ не найден, во встроенном пакете редактора тоже нет; запуск игры — r2d --game <каталог>\n");
             return 2;
         }
         project_abs[0] = '\0';
@@ -800,12 +805,15 @@ int main(int argc, char **argv)
             SDL_free(cwd);
         }
         edit_argv[0] = argv[0];
-        edit_argv[1] = "--game";
-        edit_argv[2] = editor_dir;
-        edit_argv[3] = "--scene";
-        edit_argv[4] = project_abs;
+        int n = 1;
+        // Встроенный пакет: --game не нужен, точка входа лежит в самом грузе.
+        if (!use_builtin) {
+            edit_argv[n++] = "--game";
+            edit_argv[n++] = editor_dir;
+        }
+        edit_argv[n++] = "--scene";
+        edit_argv[n++] = project_abs;
         // Опции после проекта идут движку как есть: r2d edit game --headless.
-        int n = 5;
         for (int i = 3; i < argc && n < 63; ++i) edit_argv[n++] = argv[i];
         edit_argv[n] = NULL;
         argc = n;

@@ -73,6 +73,9 @@ void sdk_report_put_counts(const SdkReport *r, R2dSb *out);
 // ---------------------------------------------------------------------------
 // Читает файл целиком; результат — malloc'нутая строка с завершающим нулём
 // (освобождать free()). NULL, если файла нет.
+// Префикс «файла» из встроенного пакета бинарника (tools/embed_bundle.py);
+// sdk_read_file читает такие пути из памяти, остальное — с диска.
+#define SDK_BUILTIN_PREFIX "r2d-builtin:"
 char *sdk_read_file(const char *path, size_t *size);
 bool  sdk_write_file(const char *path, const void *data, size_t size);
 bool  sdk_file_exists(const char *path);
@@ -387,6 +390,7 @@ int sdk_lint_run(const char *schema_path,const char *target,SdkReport *rep,int *
 bool sdk_schema_resolve(const char *explicit_path, const char *preferred_dir,
                         char *out, size_t cap);
 int cmd_docs_generate(const SdkArgs *a);
+int sdk_cmd_docs(const SdkArgs *a);   // docs list|show|search|generate (sdk_docs.c)
 // project_validate берёт schema_path из --schema (NULL — искать самим).
 void sdk_project_validate(const char *dir,const char *schema_path,SdkReport *rep);
 int sdk_cmd_run(const SdkArgs *a);

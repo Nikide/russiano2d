@@ -103,6 +103,9 @@ typedef struct R2dPayload {
     size_t          plain_size;
     bool            encrypted;
     bool            compressed;   // тело груза было сжато zstd
+    // Груз — встроенный пакет движка (editor/, docs/, templates/), а не игра:
+    // пользовательские файлы ($.fs) он не подменяет (r2d_payload_find_user).
+    bool            builtin;
     // Диагностика старта: сколько заняла распаковка тела (0 — груз не сжат).
     // Число честное — это замер самой операции, а не оценка по размеру.
     double          decompress_ms;
@@ -153,6 +156,17 @@ void r2d_payload_shutdown(void);
 
 // Активный груз или NULL.
 const R2dPayload *r2d_payload_active(void);
+
+// --- Встроенный пакет движка (tools/embed_bundle.py) ------------------------
+// Редактор, шаблоны и публичная документация лежат внутри бинарника. Пакет
+// распаковывается при первом обращении; NULL — сборка без пакета или ошибка.
+const R2dPayload *r2d_bundle(void);
+// Делает пакет активным грузом (запуск редактора без каталога editor/).
+bool r2d_payload_attach_builtin(void);
+// Поиск для пользовательских файлов ($.fs): у встроенного груза — только точное
+// совпадение пути, иначе «<проект>/main.js» совпал бы с main.js редактора по
+// суффиксу. Для обычного груза игры — то же, что r2d_payload_find.
+const R2dPayloadFile *r2d_payload_find_user(const char *path);
 
 // Имя точки входа из груза (пустая строка, если груза нет).
 const char *r2d_payload_entry(void);

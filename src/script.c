@@ -403,6 +403,16 @@ static JSModuleDef *r2d__module_loader(JSContext *ctx, const char *module_name, 
 
     // Собранная игра: модуль лежит в грузе байткодом — исходников рядом нет.
     const R2dPayloadFile *packed = r2d_payload_find(r2d_payload_active(), module_name);
+    if (packed && r2d_payload_active()->builtin) {
+        // Встроенный пакет редактора несёт исходники, а не байткод.
+        char *text = (char *)SDL_malloc(packed->size + 1);
+        if (!text) return NULL;
+        memcpy(text, packed->data, packed->size);
+        text[packed->size] = '\0';
+        JSModuleDef *mod = r2d__load_builtin_source(ctx, s, text, module_name);
+        SDL_free(text);
+        return mod;
+    }
     if (packed) {
         JSValue val = JS_ReadObject(ctx, packed->data, packed->size, JS_READ_OBJ_BYTECODE);
         if (JS_IsException(val)) {
@@ -2466,7 +2476,7 @@ static JSValue r2d__js_read_bytes(JSContext *ctx, JSValueConst this_val, int arg
     const char *rel = r2d__arg_str(ctx, argc, argv, 0);
     if (!rel || !s) { if (rel) JS_FreeCString(ctx, rel); return JS_UNDEFINED; }
 
-    const R2dPayloadFile *packed = r2d_payload_find(r2d_payload_active(), rel);
+    const R2dPayloadFile *packed = r2d_payload_find_user(rel);
     if (packed) {
         JSValue out = JS_NewUint8ArrayCopy(ctx, (const uint8_t *)packed->data, packed->size);
         JS_FreeCString(ctx, rel);
@@ -4990,7 +5000,7 @@ static JSValue r2d__js_fs_read_text(JSContext *ctx, JSValueConst this_val, int a
     const char *path = r2d__arg_str(ctx, argc, argv, 0);
     if (!path || !s) { if (path) JS_FreeCString(ctx, path); return JS_UNDEFINED; }
 
-    const R2dPayloadFile *packed = r2d_payload_find(r2d_payload_active(), path);
+    const R2dPayloadFile *packed = r2d_payload_find_user(path);
     if (packed) {
         JSValue out = JS_NewStringLen(ctx, (const char *)packed->data, packed->size);
         JS_FreeCString(ctx, path);
@@ -5248,7 +5258,7 @@ static JSValue r2d__js_fs_exists(JSContext *ctx, JSValueConst this_val, int argc
     const char *path = r2d__arg_str(ctx, argc, argv, 0);
     if (!path || !s) { if (path) JS_FreeCString(ctx, path); return JS_FALSE; }
 
-    if (r2d_vfs_has(path)) {
+    if (r2d_payload_find_user(path) != NULL) {
         JS_FreeCString(ctx, path);
         return JS_TRUE;
     }
@@ -7162,7 +7172,19 @@ static bool r2d__run_entry(R2DScript *s)
 #else
     // Собранная игра: точка входа лежит в грузе готовым байткодом.
     const R2dPayloadFile *packed_entry = r2d_payload_find(r2d_payload_active(), s->entry_name);
-    if (packed_entry) {
+    if (packed_entry && r2d_payload_active()->builtin) {
+        char *text = (char *)SDL_malloc(packed_entry->size + 1);
+        if (!text) return false;
+        memcpy(text, packed_entry->data, packed_entry->size);
+        text[packed_entry->size] = '\0';
+        compiled = JS_Eval(s->ctx, text, packed_entry->size, s->entry_name,
+                           JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+        SDL_free(text);
+        if (JS_IsException(compiled)) {
+            r2d__capture_error(s);
+            return false;
+        }
+    } else if (packed_entry) {
         compiled = JS_ReadObject(s->ctx, packed_entry->data, packed_entry->size,
                                  JS_READ_OBJ_BYTECODE);
         if (JS_IsException(compiled)) {

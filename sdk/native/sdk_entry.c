@@ -36,7 +36,7 @@ static const Command k_commands[] = {
     { "snippet",  sdk_cmd_snippet,  "сниппеты: catalog|validate|check|add|set|remove|generate (editor.snippets → generated/snippets)" },
     { "api",      sdk_cmd_api,      "machine-readable $ API: dump/check/generate" },
     { "lint",     sdk_cmd_lint,     "API-aware линтер JS: $ API, коды R2D001…" },
-    { "docs",     cmd_docs_generate, "generated $ API reference (docs generate)" },
+    { "docs",     sdk_cmd_docs,      "документация из бинарника: docs list|show|search; docs generate — generated $ API reference" },
     { "doctor",   sdk_cmd_doctor,   "health check: runtime/API/schema/typings/docs/project/lint" },
     { "atlas-grid",   sdk_cmd_atlas_grid,   "создать атлас спрайтов сеткой из картинки" },
     { "atlas-format", sdk_cmd_atlas_format, "привести атлас к каноническому виду" },

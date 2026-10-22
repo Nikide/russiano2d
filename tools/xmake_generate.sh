@@ -28,6 +28,9 @@ build_tool r2d_embed_shaders
 echo "generated: JS"
 "$OUT/tools/r2d_embed_js" src/highlevel "$OUT/r2d_js_data.h"
 
+echo "generated: bundle (editor, templates, docs, fonts)"
+python3 tools/embed_bundle.py "$OUT/r2d_bundle_data.h" "$ROOT"
+
 echo "generated: icons"
 "$OUT/tools/r2d_embed_icons" third_party/material_icons/MaterialIcons-Regular.ttf \
     third_party/material_icons/MaterialIcons-Regular.codepoints "$OUT/r2d_icons_data.h"
