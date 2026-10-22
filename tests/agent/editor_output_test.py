@@ -60,14 +60,14 @@ def _run():
             agent.eval(D + '.click("bt-output");1'); agent.step(2)
             agent.eval(D + '.click("output-filter-build");1'); agent.step(2)
             check(agent, E + '.state.outputFilter==="build" && ' +
-                  D + '.content("bottom-body").includes("<span class=\\"out-source\\">Build</span>") && !' +
-                  D + '.content("bottom-body").includes("<span class=\\"out-source\\">Run</span>")',
+                  D + '.content("bottom-body").includes("<span class=\\"out-source\\">Сборка</span>") && !' +
+                  D + '.content("bottom-body").includes("<span class=\\"out-source\\">Запуск</span>")',
                   'Build filter displays only Build records')
 
             agent.eval(D + '.click("output-filter-run");1'); agent.step(2)
             check(agent, E + '.state.outputFilter==="run" && ' +
-                  D + '.content("bottom-body").includes("<span class=\\"out-source\\">Run</span>") && !' +
-                  D + '.content("bottom-body").includes("<span class=\\"out-source\\">Build</span>")',
+                  D + '.content("bottom-body").includes("<span class=\\"out-source\\">Запуск</span>") && !' +
+                  D + '.content("bottom-body").includes("<span class=\\"out-source\\">Сборка</span>")',
                   'Run filter displays only Run records')
 
             tab = agent.eval(E + '.activeTab()')
