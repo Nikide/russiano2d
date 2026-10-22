@@ -260,7 +260,7 @@ export function createAgentPanel($, doc, host) {
 
     function logHtml() {
         if (!st.log.length) {
-            return '<div class="ag-empty"><span class="ag-empty-ic">' + icon('smart_toy') + '</span><span class="ag-empty-h">Чем помочь?</span>' +
+            return '<div class="ag-empty"><span class="ag-empty-av"></span><span class="ag-empty-h">Чем помочь?</span>' +
                 '<span class="ag-empty-p">Агент ищет в документации и кирпичиках, читает и правит файлы проекта, работает со студиями и проверяет результат. Изменения — только с вашего подтверждения.</span>' +
                 SUGGESTIONS.map((t, n) => '<div class="ag-sug" data-key="sug:' + n + '">' + esc(t) + '</div>').join('') + '</div>';
         }
@@ -382,7 +382,7 @@ export function createAgentPanel($, doc, host) {
             if (proj && st.sessionFor !== proj.abs && !st.busy) switchProject(proj.abs);
             if (st.mascot.tick(dt || 1 / 60, st.busy || !!st.pending)) applyMascot();
             if (!st.open) return;
-            if (st.scrollPending > 0 && --st.scrollPending === 0) doc.scroll('ag-log');
+            if (st.scrollPending > 0 && --st.scrollPending === 0 && st.log.length) doc.scroll('ag-log');   // пустой чат остаётся сверху
             if (primaryDown && $.ui.typing() && $.input.pressed('enter')) send();
         },
     };
