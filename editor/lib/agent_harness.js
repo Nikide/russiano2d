@@ -41,7 +41,7 @@ export const SYSTEM_PROMPT = [
     'Инструменты: search_project (grep по файлам) и read_file со start/end вместо чтения целиком; для длинных задач начни с plan и обновляй его; при неоднозначной задаче спроси ask_user (кнопки вариантов); для проверки игры playtest (ввод + eval состояния: позиция героя, счёт, подбор предметов; grid:true — ASCII-карта кадра); ошибочную правку откати undo_edit.',
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
     'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
-    'НАВЫКИ — справочники «как делать»: skill_list, затем skill_load перед незнакомой работой: game-workflow (игра целиком), genre-kits (жанр → набор kit.*), platformer, top-down-action, fps-2-5d, rpg-systems, story-dialogue, enemy-ai, level-design, game-feel, audio, ui-hud, save-progress, playtest-qa, pixel-art. Нужен спрайт/тайл, а готовой картинки нет — загрузи pixel-art и нарисуй pixel_art (ASCII-срез покажет результат), затем `.sprite("assets/x.png")`. Звуков создать нельзя: используй только существующие файлы.',
+    'НАВЫКИ — справочники «как делать»: skill_list, затем skill_load перед незнакомой работой: generate-sound (звуки), game-workflow (игра целиком), genre-kits (жанр → набор kit.*), platformer, top-down-action, fps-2-5d, rpg-systems, story-dialogue, enemy-ai, level-design, game-feel, audio, ui-hud, save-progress, playtest-qa, pixel-art. Нужен спрайт/тайл, а готовой картинки нет — загрузи pixel-art и нарисуй pixel_art (ASCII-срез покажет результат), затем `.sprite("assets/x.png")`. Нужен звуковой эффект — загрузи generate-sound и вызови generate_sound (слова или пресет → WAV; монета, выстрел, взрыв, прыжок, удар, бонус, клик); музыку создать нельзя — только существующие файлы.',
     'Пути — относительно корня проекта. Сначала list_files/read_file, потом пиши.',
 ].join('\n');
 
@@ -890,6 +890,36 @@ export function editorTools(host) {
               const r = (await host.tool(['pixel-art', host.abs('.r2d-check/pixel.json')])).json;
               if (!r || !r.ok) throw new Error(r ? (r.message || r.code) : 'pixel-art не ответил');
               return pixelReport(p, r, false) + '\n[preview: ' + host.abs(prev) + ']';
+          } },
+        { name: 'generate_sound', mutating: true,
+          description: 'Сгенерировать звуковой эффект и записать WAV в проект (требует подтверждения): описание словами или пресет → дескриптор R2D SFX → процедурный синтез. text — словами («короткий высокий прыжок», «big explosion»; распознаёт монету, выстрел/лазер, взрыв, бонус, удар/урон, прыжок, клик) или preset: coin, laser, explosion, powerup, hurt, jump, blip, random. seed — другой вариант того же звука; mutate 0..1 — вариация; params — точная подстройка полей (wave: square|saw|sine|noise, freq, decay, slide…; skill_load generate-sound). Вернёт длительность, пик, высоту тона и ASCII-огибающую: по ним видно, что получилось, без слуха. Играть: `$.sound.play("assets/sfx/x.wav")`.',
+          schema: { type: 'object', properties: {
+              path: str('куда записать, например assets/sfx/jump.wav'), text: str('описание звука словами'), preset: str('coin | laser | explosion | powerup | hurt | jump | blip | random'),
+              seed: { type: 'number', description: 'вариант звука' }, mutate: { type: 'number', description: 'случайная вариация 0..1' },
+              params: { type: 'object', description: 'поля дескриптора поверх пресета: wave, attack, sustain, punch, decay, freq, minFreq, slide, deltaSlide, vibratoDepth, vibratoSpeed, changeAmount, changeSpeed, duty, dutySweep, repeat, phaserOffset, phaserSweep, lpf, lpfSweep, lpfResonance, hpf, hpfSweep, volume' },
+              overwrite: { type: 'boolean', description: 'заменить существующий файл (откат невозможен)' } }, required: ['path'] },
+          run: async (a) => {
+              const p = safeRel(a.path);
+              if (!/\.wav$/i.test(p)) throw new Error('path должен оканчиваться на .wav');
+              const existed = host.exists(p);
+              if (existed && !a.overwrite) throw new Error('файл уже есть: чтобы заменить, укажите overwrite:true (откат тогда невозможен) или другое имя');
+              if (!a.text && !a.preset && !a.params) throw new Error('нужен text (описание словами), preset или params');
+              const spec = { out: host.abs(p) };
+              for (const k of ['text', 'preset', 'seed', 'mutate', 'params']) if (a[k] !== undefined) spec[k] = a[k];
+              host.writeText('.r2d-check/sfx.json', JSON.stringify(spec));
+              const r = (await host.tool(['sfx-gen', host.abs('.r2d-check/sfx.json')])).json;
+              if (!r || !r.ok) throw new Error(r ? (r.message || r.code) : 'sfx-gen не ответил');
+              if (!existed) history.push({ items: [{ path: p, before: null }] });
+              const pr = r.params || {};
+              const set = Object.entries(pr).filter(([k, v]) => k === 'wave' || (typeof v === 'number' && v !== 0 && k !== 'seed')).map(([k, v]) => k + '=' + v).join(' ');
+              const warn = [];
+              if (r.clipped > 0) warn.push('есть срез (clipped ' + r.clipped + ') — уменьши params.volume');
+              if (r.seconds < 0.05) warn.push('звук короче 50 мс — увеличь sustain/decay');
+              if (r.peak < 0.1) warn.push('очень тихо — подними params.volume или punch');
+              return 'звук ' + p + ' (' + r.preset + ', seed ' + pr.seed + '): ' + r.seconds + ' с, пик ' + r.peak + ', rms ' + r.rms + (r.pitchHz ? ', тон ≈ ' + r.pitchHz + ' Гц' : '') + (existed ? ' (файл перезаписан, откат недоступен)' : '') +
+                  '\nогибающая (слева направо — время, высота — громкость):\n' + (r.envelope || []).join('\n') +
+                  '\nдескриптор: ' + set + (warn.length ? '\nвнимание: ' + warn.join('; ') : '') +
+                  '\nиграть: $.sound.play("' + p + '")';
           } },
         { name: 'api_lookup', description: 'Проверить имя `$`-API по схеме движка: есть ли метод и какие у него аргументы (точное имя, префикс или часть, например `$.scene.add` или `tween`).',
           schema: obj({ name: str('путь или его часть') }),

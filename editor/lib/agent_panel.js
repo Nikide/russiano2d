@@ -22,7 +22,7 @@ const TOOL_UI = {
     snippet_apply: ['extension', 'Кирпичик'], search_project: ['manage_search', 'Поиск по проекту'], delete_file: ['delete', 'Удаление файла'],
     move_file: ['drive_file_move', 'Перемещение файла'], undo_edit: ['undo', 'Откат правок'], playtest: ['sports_esports', 'Плейтест игры'],
     plan: ['checklist', 'План'], ask_user: ['help', 'Вопрос'],
-    pixel_art: ['brush', 'Рисую спрайт'], pixel_preview: ['image', 'Просмотр спрайта'], skill_list: ['school', 'Навыки'], skill_load: ['school', 'Навык'],
+    pixel_art: ['brush', 'Рисую спрайт'], generate_sound: ['volume_up', 'Генерирую звук'], pixel_preview: ['image', 'Просмотр спрайта'], skill_list: ['school', 'Навыки'], skill_load: ['school', 'Навык'],
 };
 
 const SUGGESTIONS = [

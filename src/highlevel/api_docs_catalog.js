@@ -15432,6 +15432,152 @@ export const API_DOCS_CATALOG = {
         "kind": "object",
         "description": "Модуль src/highlevel/sfx.js (задача task-69, разделение §F docs/VFX_ROADMAP.md). Правило: что слышно → $.sfx, что видно → $.vfx (vfx.md). В $.sfx нет и не должно быть визуальных имён: ни flash, ни shake, ни hitStop — это всё $.vfx."
     },
+    "$.sfxgen.presets": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "имена пресетов: coin, laser, explosion, powerup, hurt, jump, blip, random"
+    },
+    "$.sfxgen.defaults": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "дескриптор по умолчанию"
+    },
+    "$.sfxgen.preset": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "дескриптор из пресета; opts — seed и любые поля поверх"
+    },
+    "$.sfxgen.describe": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "слова → { preset, params } или null, если тип звука не опознан"
+    },
+    "$.sfxgen.mutate": {
+        "kind": "function",
+        "arity": 3,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            },
+            {
+                "name": "arg2",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "вариация (amount 0..1, по умолчанию 0.1)"
+    },
+    "$.sfxgen.render": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "посчитать звук; с path — записать WAV. → { samples, seconds, peak, rms, clipped, pitchHz, path? }"
+    },
+    "$.sfxgen.make": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "WAV в кэше (по хешу дескриптора) → путь файла"
+    },
+    "$.sfxgen.bank": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "несколько вариантов в банк для $.sfx.play(name)"
+    },
+    "$.sfxgen.cacheDir": {
+        "kind": "function",
+        "arity": 1,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "каталог кэша (по умолчанию sfxgen_cache)"
+    },
+    "$.sfxgen.resolve": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "spec → дескриптор"
+    },
+    "$.sfxgen": {
+        "kind": "object",
+        "description": "Звук из описания, без файлов: слова или пресет → дескриптор R2D SFX → процедурный синтез (C) → WAV. Ядро — src/sfxgen.c: алгоритм sfxr (Tomas Pettersson, MIT), набор параметров и пресетов совместим с rFXGen (raylib technologies, zlib). Целиком rFXGen в движок не встроен: у него интерфейс на raylib/raygui, движку нужен только расчёт сэмплов."
+    },
     "$.signal.emit": {
         "kind": "function",
         "arity": 1,
@@ -21647,6 +21793,22 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "Только для тестов: подставить бэкенд вместо engine.sdk."
+    },
+    "$.sfxgen.play": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "Сгенерировать и сыграть: play('coin', { volume: 0.8 })."
     },
     "$.sound.musicPitch": {
         "kind": "function",

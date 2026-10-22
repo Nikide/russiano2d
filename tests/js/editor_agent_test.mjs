@@ -104,7 +104,7 @@ await atest('editorTools: write_file/read_file через host, mutating тол�
     eq(await by.read_file.run({ path: 'a.js' }), 'x');
     eq(await by.list_files.run({}), 'a.js');
     eq(await by.docs_show.run({ page: 'ui' }), 'T');
-    eq(tools.filter((t) => t.mutating === true).map((t) => t.name), ['write_file', 'edit_file', 'delete_file', 'move_file', 'undo_edit', 'pixel_art']);
+    eq(tools.filter((t) => t.mutating === true).map((t) => t.name), ['write_file', 'edit_file', 'delete_file', 'move_file', 'undo_edit', 'pixel_art', 'generate_sound']);
 });
 
 await atest('контекст из доков подкладывается к вопросу, сбой поиска не мешает', async () => {
@@ -714,6 +714,42 @@ await atest('навыки и пиксель-арт: skill_list/skill_load, pixel
     const pv = await T.pixel_preview.run({ path: 'assets/hero.png' });
     truthy(pv.includes('спрайт assets/hero.png') && pv.includes('[preview:'));
     eq(JSON.parse(files.get('.r2d-check/pixel.json')).base, '/p/assets/hero.png');
+});
+
+await atest('generate_sound: слова/пресет → sfx-gen, защита от перезаписи, откат, предупреждения, ошибки синтезатора', async () => {
+    const files = new Map(), calls = [];
+    let reply = { ok: true, preset: 'jump', seconds: 0.14, peak: 0.4, rms: 0.2, clipped: 0, pitchHz: 528, envelope: ['..  ', '##. '], params: { wave: 'square', freq: 0.3, slide: 0.25, decay: 0.2, seed: 4 } };
+    const tools = editorTools(memHost(files, { tool: async (a) => {
+        calls.push(a);
+        if (a[0] === 'sfx-gen') { if (reply.ok) files.set(JSON.parse(files.get('.r2d-check/sfx.json')).out.replace('/p/', ''), 'WAV'); return { json: reply }; }
+        return { json: { ok: true } };
+    } }));
+    const T = Object.fromEntries(tools.map((x) => [x.name, x]));
+    const out = await T.generate_sound.run({ path: 'assets/sfx/jump.wav', text: 'короткий прыжок', seed: 4 });
+    const spec = JSON.parse(files.get('.r2d-check/sfx.json'));
+    eq(spec.out, '/p/assets/sfx/jump.wav'); eq(spec.text, 'короткий прыжок'); eq(spec.seed, 4);
+    truthy(out.includes('звук assets/sfx/jump.wav (jump, seed 4): 0.14 с') && out.includes('тон ≈ 528') && out.includes('##.') && out.includes('$.sound.play("assets/sfx/jump.wav")'));
+    truthy(out.includes('wave=square') && out.includes('slide=0.25'), 'в ответе — ненулевые поля дескриптора');
+    eq(tools.history.length, 1, 'новый файл — шаг истории');
+    let e1 = '';
+    try { await T.generate_sound.run({ path: 'assets/sfx/jump.wav', preset: 'coin' }); } catch (e) { e1 = e.message; }
+    truthy(e1.includes('overwrite'), 'существующий файл не трогаем без overwrite');
+    const over = await T.generate_sound.run({ path: 'assets/sfx/jump.wav', preset: 'coin', overwrite: true });
+    truthy(over.includes('откат недоступен'));
+    let e2 = '';
+    try { await T.generate_sound.run({ path: 'assets/sfx/x.mp3', preset: 'coin' }); } catch (e) { e2 = e.message; }
+    truthy(e2.includes('.wav'));
+    let e3 = '';
+    try { await T.generate_sound.run({ path: 'assets/sfx/y.wav' }); } catch (e) { e3 = e.message; }
+    truthy(e3.includes('text'), 'без описания — подсказка');
+    reply = { ...reply, clipped: 12, peak: 0.99, seconds: 0.02 };
+    const warn = await T.generate_sound.run({ path: 'assets/sfx/z.wav', preset: 'hurt' });
+    truthy(warn.includes('внимание') && warn.includes('clipped 12') && warn.includes('короче 50 мс'), 'срез и короткий звук — предупреждения');
+    reply = { ok: false, code: 'SDK_SFX', message: 'text: не понял, какой это звук' };
+    let e4 = '';
+    try { await T.generate_sound.run({ path: 'assets/sfx/q.wav', text: 'абракадабра' }); } catch (e) { e4 = e.message; }
+    truthy(e4.includes('не понял'), 'ошибка синтезатора возвращается агенту как есть');
+    eq(files.has('assets/sfx/q.wav'), false);
 });
 
 finish();

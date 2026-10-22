@@ -9,6 +9,7 @@
 #include "script.h"
 
 #include "noise.h"
+#include "sfxgen.h"
 #include "profile.h"
 // RE2D — необязательный слой 3D-авторинга спрайтов (см. xmake.lua,
 // R2D_ENABLE_RE2D). При выключенной опции ни заголовков, ни биндингов нет:
@@ -6493,6 +6494,173 @@ static void r2d__install_noise(JSContext *ctx, JSValue engine)
 }
 
 
+// ===========================================================================
+// engine.sfxgen.* — процедурные звуковые эффекты для $.sfxgen (src/sfxgen.c).
+// Дескриптор — обычный объект JS: wave ("square"|"saw"|"sine"|"noise"), числа 0..1 / -1..1 и seed.
+// ===========================================================================
+static JSValue r2d__sfx_to_js(JSContext *ctx, const R2DSfx *fx)
+{
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "wave", JS_NewString(ctx, r2d_sfx_wave_name(fx->wave)));
+    int n = 0;
+    const R2DSfxField *fields = r2d_sfx_fields(&n);
+    for (int i = 0; i < n; ++i)
+        JS_SetPropertyStr(ctx, o, fields[i].name, JS_NewFloat64(ctx, *(const float *)((const char *)fx + fields[i].offset)));
+    JS_SetPropertyStr(ctx, o, "seed", JS_NewUint32(ctx, fx->seed));
+    return o;
+}
+
+// Объект JS → дескриптор. Неизвестное поле или не число — исключение с подсказкой (никаких молчаливых игнорирований).
+static bool r2d__sfx_from_js(JSContext *ctx, JSValueConst obj, R2DSfx *fx)
+{
+    r2d_sfx_defaults(fx);
+    if (!JS_IsObject(obj)) {
+        JS_ThrowTypeError(ctx, "sfxgen: описание звука — объект (например {wave:'square', freq:0.4, decay:0.3})");
+        return false;
+    }
+    JSPropertyEnum *props = NULL;
+    uint32_t count = 0;
+    if (JS_GetOwnPropertyNames(ctx, &props, &count, obj, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) < 0) return false;
+    int nf = 0;
+    const R2DSfxField *fields = r2d_sfx_fields(&nf);
+    bool ok = true;
+    for (uint32_t i = 0; ok && i < count; ++i) {
+        const char *key = JS_AtomToCString(ctx, props[i].atom);
+        if (!key) { ok = false; break; }
+        JSValue v = JS_GetProperty(ctx, obj, props[i].atom);
+        if (!JS_IsUndefined(v) && !JS_IsNull(v)) {
+            if (!strcmp(key, "wave")) {
+                int w = -1;
+                if (JS_IsNumber(v)) JS_ToInt32(ctx, &w, v);
+                else { const char *s = JS_ToCString(ctx, v); if (s) { w = r2d_sfx_wave_from_name(s); JS_FreeCString(ctx, s); } }
+                if (w < 0 || w > 3) { JS_ThrowRangeError(ctx, "sfxgen: wave — 'square', 'saw', 'sine' или 'noise'"); ok = false; }
+                else fx->wave = w;
+            } else if (!strcmp(key, "seed")) {
+                uint32_t sd = 1;
+                JS_ToUint32(ctx, &sd, v);
+                fx->seed = sd ? sd : 1;
+            } else {
+                int found = -1;
+                for (int f = 0; f < nf; ++f) if (!strcmp(fields[f].name, key)) { found = f; break; }
+                double num = 0;
+                if (found < 0) { JS_ThrowRangeError(ctx, "sfxgen: нет поля «%s» (поля: wave, attack, sustain, punch, decay, freq, minFreq, slide, deltaSlide, vibratoDepth, vibratoSpeed, changeAmount, changeSpeed, duty, dutySweep, repeat, phaserOffset, phaserSweep, lpf, lpfSweep, lpfResonance, hpf, hpfSweep, volume, seed)", key); ok = false; }
+                else if (JS_ToFloat64(ctx, &num, v) < 0 || num != num) { JS_ThrowTypeError(ctx, "sfxgen: поле «%s» — число %g…%g", key, fields[found].lo, fields[found].hi); ok = false; }
+                else *(float *)((char *)fx + fields[found].offset) = (float)num;
+            }
+        }
+        JS_FreeValue(ctx, v);
+        JS_FreeCString(ctx, key);
+    }
+    js_free(ctx, props);
+    if (ok) r2d_sfx_clamp(fx);
+    return ok;
+}
+
+static JSValue r2d__js_sfxgen_presets(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    JSValue arr = JS_NewArray(ctx);
+    for (int i = 0; i < r2d_sfx_preset_count(); ++i) JS_SetPropertyUint32(ctx, arr, (uint32_t)i, JS_NewString(ctx, r2d_sfx_preset_name(i)));
+    return arr;
+}
+
+static JSValue r2d__js_sfxgen_defaults(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DSfx fx; r2d_sfx_defaults(&fx);
+    return r2d__sfx_to_js(ctx, &fx);
+}
+
+static JSValue r2d__js_sfxgen_preset(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    const char *name = r2d__arg_str(ctx, argc, argv, 0);
+    R2DSfx fx;
+    const int rc = name ? r2d_sfx_preset(&fx, name, (uint32_t)r2d__arg_int(ctx, argc, argv, 1, 1)) : -1;
+    if (name) JS_FreeCString(ctx, name);
+    return rc == 0 ? r2d__sfx_to_js(ctx, &fx) : JS_NULL;
+}
+
+// engine.sfxgen.text(words, seed) → { preset, params } | null
+static JSValue r2d__js_sfxgen_text(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    const char *words = r2d__arg_str(ctx, argc, argv, 0);
+    if (!words) return JS_NULL;
+    R2DSfx fx;
+    r2d_sfx_defaults(&fx);
+    const char *preset = r2d_sfx_from_text(&fx, words, (uint32_t)r2d__arg_int(ctx, argc, argv, 1, 1));
+    JS_FreeCString(ctx, words);
+    if (!preset) return JS_NULL;
+    JSValue o = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, o, "preset", JS_NewString(ctx, preset));
+    JS_SetPropertyStr(ctx, o, "params", r2d__sfx_to_js(ctx, &fx));
+    return o;
+}
+
+static JSValue r2d__js_sfxgen_mutate(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DSfx fx;
+    if (argc < 1 || !r2d__sfx_from_js(ctx, argv[0], &fx)) return JS_EXCEPTION;
+    r2d_sfx_mutate(&fx, (uint32_t)r2d__arg_int(ctx, argc, argv, 1, 1), (float)r2d__arg_num(ctx, argc, argv, 2, 0.1));
+    return r2d__sfx_to_js(ctx, &fx);
+}
+
+// engine.sfxgen.render(params, path?) → { samples, seconds, peak, rms, clipped, pitchHz, path? }.
+// Без path только считает (проверка звука без файла); с path пишет WAV (каталоги создаются).
+static JSValue r2d__js_sfxgen_render(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    R2DSfx fx;
+    if (argc < 1 || !r2d__sfx_from_js(ctx, argv[0], &fx)) return JS_EXCEPTION;
+    const size_t cap = r2d_sfx_max_samples();
+    int16_t *pcm = (int16_t *)SDL_malloc(cap * sizeof(int16_t));
+    if (!pcm) return JS_ThrowOutOfMemory(ctx);
+    const size_t n = r2d_sfx_render(&fx, pcm, cap);
+    JSValue out = JS_NewObject(ctx);
+    R2DSfxStats st;
+    r2d_sfx_analyze(pcm, n, &st);
+    JS_SetPropertyStr(ctx, out, "samples", JS_NewInt64(ctx, (int64_t)n));
+    JS_SetPropertyStr(ctx, out, "seconds", JS_NewFloat64(ctx, st.seconds));
+    JS_SetPropertyStr(ctx, out, "peak", JS_NewFloat64(ctx, st.peak));
+    JS_SetPropertyStr(ctx, out, "rms", JS_NewFloat64(ctx, st.rms));
+    JS_SetPropertyStr(ctx, out, "clipped", JS_NewInt32(ctx, st.clipped));
+    JS_SetPropertyStr(ctx, out, "pitchHz", JS_NewFloat64(ctx, st.freq_hz));
+    // Только строка считается путём: undefined/null без этой проверки превратились бы в файл «undefined».
+    const char *path = (argc > 1 && JS_IsString(argv[1])) ? r2d__arg_str(ctx, argc, argv, 1) : NULL;
+    if (path && path[0]) {
+        char full[4096], dir_error[320];
+        r2d_app_resolve_path(s ? s->app : NULL, full, sizeof full, path);
+        r2d__fs_ensure_parent(full, dir_error, sizeof dir_error);
+        if (n == 0 || r2d_sfx_write_wav(full, pcm, n) != 0) {
+            SDL_free(pcm);
+            JS_FreeValue(ctx, out);
+            JSValue err = JS_ThrowInternalError(ctx, n == 0 ? "sfxgen: звук получился пустым (проверьте sustain/decay и freq)" : "sfxgen: не удалось записать WAV «%s»", path);
+            JS_FreeCString(ctx, path);
+            return err;
+        }
+        JS_SetPropertyStr(ctx, out, "path", JS_NewString(ctx, path));
+    }
+    if (path) JS_FreeCString(ctx, path);
+    SDL_free(pcm);
+    return out;
+}
+
+static void r2d__install_sfxgen(JSContext *ctx, JSValue engine)
+{
+    JSValue o = JS_NewObject(ctx);
+    r2d__set_fn(ctx, o, "presets",  r2d__js_sfxgen_presets, 0);
+    r2d__set_fn(ctx, o, "defaults", r2d__js_sfxgen_defaults, 0);
+    r2d__set_fn(ctx, o, "preset",   r2d__js_sfxgen_preset, 2);
+    r2d__set_fn(ctx, o, "text",     r2d__js_sfxgen_text, 2);
+    r2d__set_fn(ctx, o, "mutate",   r2d__js_sfxgen_mutate, 3);
+    r2d__set_fn(ctx, o, "render",   r2d__js_sfxgen_render, 2);
+    JS_SetPropertyStr(ctx, engine, "sfxgen", o);
+}
+
+
 static JSValue r2d__make_engine(JSContext *ctx)
 {
 
@@ -6517,6 +6685,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__install_window(ctx, engine);
     r2d__install_hitch(ctx, engine);
     r2d__install_noise(ctx, engine);
+    r2d__install_sfxgen(ctx, engine);
     r2d__set_fn(ctx, engine, "setExit", r2d__js_set_exit, 1);
     r2d__set_fn(ctx, engine, "setSnapshot", r2d__js_set_snapshot, 1);
     r2d__set_fn(ctx, engine, "setAgentQuery", r2d__js_set_agent_query, 1);

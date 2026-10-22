@@ -20,7 +20,7 @@
 | 4. Цель | монеты/враги/выход: кирпичики `interact.pickup`, `ai.*`, `world.level-exit` | `playtest` с `eval` счёта/здоровья |
 | 5. Спрайты | `skill_load pixel-art`, `pixel_art` для героя, врага, тайла, предмета; `.sprite('assets/x.png')` | `screenshot_check grid:true` |
 | 6. HUD и экраны | `skill_load ui-hud`: здоровье, счёт, пауза, «игра окончена» | скриншот |
-| 7. Ощущения | `skill_load game-feel`, `audio`: тряска, вспышка, частицы, звук | глазами/скриншот |
+| 7. Ощущения | `skill_load game-feel`, `audio`, `generate-sound`: тряска, вспышка, частицы, сгенерированные звуки | глазами/скриншот |
 | 8. Финал | `r2d_lint`, `r2d_validate`, `run_check`, итоговый `playtest` всего пути | всё зелёное |
 
 ## 3. Правила, которые экономят шаги

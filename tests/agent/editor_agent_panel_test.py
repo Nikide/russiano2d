@@ -177,6 +177,33 @@ def _pixel(directory):
         check(agent, '!$.fs.exists(' + json.dumps(str(project / 'assets/coin.png')) + ')', 'pixel_art: кнопка отката удаляет спрайт')
 
 
+def _sound(directory):
+    project = Path(directory) / 'sxproject'
+    project.mkdir()
+    (project / 'project.json').write_text(json.dumps({'format': 2, 'title': 'Sound', 'entry': 'main.js'}))
+    (project / 'main.js').write_text('$.ready(() => {});\n')
+    steps = [
+        tool_call(1, 'skill_load', {'name': 'generate-sound'}),
+        tool_call(2, 'generate_sound', {'path': 'assets/sfx/jump.wav', 'text': 'короткий высокий прыжок', 'seed': 4}),
+        reply({'type': 'text', 'text': 'Звук прыжка готов.'}),
+    ]
+    with Agent(game='editor', scene=str(project), seed=18) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval('globalThis.__q=' + json.dumps(steps) + ';globalThis.__seen=[];$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
+        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","сделай звук прыжка");' + D + '.click("ag-send");1')
+        settle(agent, E + '.agent.state.pending!==null', seconds=30)
+        check(agent, D + '.content("ag-ask").includes("jump.wav")', 'generate_sound: карточка подтверждения называет файл')
+        agent.eval(D + '.click("ag-yes");1')
+        settle(agent, '!' + E + '.agent.state.busy', seconds=30)
+        check(agent, 'String(globalThis.__seen[1].body).includes("generate_sound")', 'generate_sound: навык загружен до вызова инструмента')
+        check(agent, 'String(globalThis.__seen[2].body).includes("звук assets/sfx/jump.wav (jump") && String(globalThis.__seen[2].body).includes("огибающая (слева")', 'generate_sound: агент получил огибающую и тип звука')
+        wav = project / 'assets/sfx/jump.wav'
+        check(agent, 'true' if wav.is_file() and wav.read_bytes()[:4] == b'RIFF' and wav.stat().st_size > 1000 else 'false', 'generate_sound: WAV записан в проект')
+        check(agent, D + '.content("ag-log").includes("Звук прыжка готов.")', 'generate_sound: итоговый ответ показан')
+        agent.eval(D + '.click("ag-undo");1'); agent.step(6)
+        check(agent, 'true' if not wav.exists() else 'false', 'generate_sound: кнопка отката удаляет звук')
+
+
 def _limit(directory):
     project = Path(directory) / 'lproject'
     project.mkdir()
@@ -243,6 +270,7 @@ def _run():
         _interact(directory)
         _limit(directory)
         _pixel(directory)
+        _sound(directory)
     print(f'editor_agent_panel_test: {checks} checks', flush=True)
     return 0
 

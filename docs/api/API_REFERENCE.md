@@ -6,7 +6,7 @@
 
 Engine version: "2.0.0"
 
-Entries: 4111
+Entries: 4124
 
 ## $
 
@@ -111,6 +111,7 @@ Entries: 4111
 | `selectors` | object | — — Реестр пользовательских правил селекторов для поиска узлов. |
 | `sequence` | function | `(arg0: any) -> any` — Создать последовательность действий, выполняемых по шагам/таймингам. |
 | `sfx` | object | — — Модуль src/highlevel/sfx.js (задача task-69, разделение §F docs/VFX_ROADMAP.md). Правило: что слышно → $.sfx, что видно → $.vfx (vfx.md). В $.sfx нет и не должно быть визуальных имён: ни flash, ни shake, ни hitStop — это всё $.vfx. |
+| `sfxgen` | object | — — Звук из описания, без файлов: слова или пресет → дескриптор R2D SFX → процедурный синтез (C) → WAV. Ядро — src/sfxgen.c: алгоритм sfxr (Tomas Pettersson, MIT), набор параметров и пресетов совместим с rFXGen (raylib technologies, zlib). Целиком rFXGen в движок не встроен: у него интерфейс на raylib/raygui, движку нужен только расчёт сэмплов. |
 | `signal` | object | — — signal.js — именованная шина событий в духе Godot: on / once / off / emit / waitFor, с приоритетами, отложенной доставкой и счётчиками подписчиков. Это «радио» игры: один объект крикнул — все, кому надо, услышали, и никто ни о ком не знает. |
 | `sound` | object | — — Эффекты, позиционное звучание, музыка. Позиционность приблизительная: SDL_mixer умеет панораму (pan −1..1) и громкость, поэтому «где звучит» вычисляется относительно камеры. Для 2D этого достаточно: источник слева — в левом ухе. |
 | `spriteMesh` | object | — — Загрузка и отрисовка baked SpriteMesh cache в редакторском viewport. |
@@ -2949,6 +2950,22 @@ Entries: 4111
 | `preset` | function | `(arg0: any, arg1: any) -> any` — задать/дополнить пресет (делегат $.hits.preset) |
 | `presets` | function | `() -> any` — имена пресетов попадания (тот же список, что $.hits.presets()) |
 
+## $.sfxgen
+
+| Name | Kind | Signature / value |
+|---|---|---|
+| `bank` | function | `(arg0: any, arg1: any) -> any` — несколько вариантов в банк для $.sfx.play(name) |
+| `cacheDir` | function | `(arg0: any) -> any` — каталог кэша (по умолчанию sfxgen_cache) |
+| `defaults` | function | `() -> any` — дескриптор по умолчанию |
+| `describe` | function | `(arg0: any, arg1: any) -> any` — слова → { preset, params } или null, если тип звука не опознан |
+| `make` | function | `(arg0: any, arg1: any) -> any` — WAV в кэше (по хешу дескриптора) → путь файла |
+| `mutate` | function | `(arg0: any, arg1: any, arg2: any) -> any` — вариация (amount 0..1, по умолчанию 0.1) |
+| `play` | function | `(arg0: any, arg1: any) -> any` — Сгенерировать и сыграть: play('coin', { volume: 0.8 }). |
+| `preset` | function | `(arg0: any, arg1: any) -> any` — дескриптор из пресета; opts — seed и любые поля поверх |
+| `presets` | function | `() -> any` — имена пресетов: coin, laser, explosion, powerup, hurt, jump, blip, random |
+| `render` | function | `(arg0: any, arg1: any) -> any` — посчитать звук; с path — записать WAV. → { samples, seconds, peak, rms, clipped, pitchHz, path? } |
+| `resolve` | function | `(arg0: any, arg1: any) -> any` — spec → дескриптор |
+
 ## $.signal
 
 | Name | Kind | Signature / value |
@@ -4508,6 +4525,7 @@ Entries: 4111
 | `setTimeScale` | function | `(arg0: any) -> any` |
 | `setUpdate` | function | `(arg0: any) -> any` |
 | `setVelocity` | function | `(arg0: any, arg1: any, arg2: any) -> any` |
+| `sfxgen` | object | — |
 | `shapeCount` | function | `(arg0: any) -> any` |
 | `shapeEnabled` | function | `(arg0: any, arg1: any) -> any` |
 | `shapeOverlaps` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |

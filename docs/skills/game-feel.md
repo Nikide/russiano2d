@@ -13,6 +13,7 @@
 | Волна, молния, след | `$.vfx.shockwave`, `$.vfx.lightning`, `$.vfx.trail`, `animation.afterimage` | рывок, взрыв, магия |
 | Всё сразу в точке удара | `$.vfx.impact(x, y, { sound: 'имя' })`, `$.hitFx` | удар по врагу, пуля в стену |
 | Частицы | `$('<particles>', $.particles.preset('sparks'))`; пресеты: `explosion`, `smoke`, `sparks`, `fire`, `rain`, `dust` | искры, пыль при посадке, дым, огонь |
+| Сгенерировать звук удара/подбора | навык `generate-sound` → `generate_sound`, затем `$.sound.play(путь)` |
 | Звук удара | `$.hits.preset('sword', { hitStop: 60, sound: 'sfx/sword.wav' })` + `$.sfx.play('sword')` | любой удар |
 | Числа урона, комбо | `health.damage-number`, `feedback.combo-popup`, `feedback.screen-pulse` | подтверждение силы удара |
 | Сжатие/растяжение | `$.hits.squash` | прыжок, посадка |

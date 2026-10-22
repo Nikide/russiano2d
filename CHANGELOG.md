@@ -1,3 +1,12 @@
+> ПРОЦЕДУРНЫЕ ЗВУКИ: `$.sfxgen`, `r2d sfx-gen`, инструмент агента `generate_sound` (2026-10-22).
+> Из rFXGen взят только синтез (без raylib/raygui-интерфейса): C-ядро `src/sfxgen.c` (алгоритм sfxr, параметры и пресеты
+> как у rFXGen — coin, laser, explosion, powerup, hurt, jump, blip, random; детерминированно, мягкий ограничитель),
+> конвейер описание словами → дескриптор R2D SFX → синтез → WAV (44100 Гц, моно, 16 бит). `$.sfxgen`: `presets/preset/describe/
+> mutate/render/make/play/bank/cacheDir` (кэш по хешу дескриптора, банки для `$.sfx.play`). CLI `r2d sfx-gen <spec.json>` отвечает
+> длительностью, пиком, тоном и ASCII-огибающей (проверка без слуха), пишет WAV и `.rfx`. Агент: `generate_sound` + навык
+> `generate-sound`. Раскладка `.rfx` воспроизведена по описанию и на файлах оригинала не сверялась. Тесты: `r2d_sfxgen_test` (Unity),
+> `tests/js/sfxgen_test.mjs`, `tests/agent/highlevel_sfxgen_test.py`, `tests/sfxgen_skill_test.py`. Документация: `docs/highlevel/sfxgen.md`.
+
 > EDITOR — РЕДАКТОР КОДА БЛИЖЕ К VS CODE (2026-10-21).
 > Отступ — только табы (таб = 4 колонки на экране); Save приводит ведущие пробелы `.js`/`.rcss`/`.rml` к табам.
 > Аудит `editor/lib/code_model.js`/`code_view.js`. Исправлено: Shift+Tab без выделения

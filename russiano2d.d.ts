@@ -2352,6 +2352,20 @@ interface R2D_sfx {
     presets(): any;
 }
 
+interface R2D_sfxgen {
+    bank(arg0: any, arg1: any): any;
+    cacheDir(arg0: any): any;
+    defaults(): any;
+    describe(arg0: any, arg1: any): any;
+    make(arg0: any, arg1: any): any;
+    mutate(arg0: any, arg1: any, arg2: any): any;
+    play(arg0: any, arg1: any): any;
+    preset(arg0: any, arg1: any): any;
+    presets(): any;
+    render(arg0: any, arg1: any): any;
+    resolve(arg0: any, arg1: any): any;
+}
+
 interface R2D_signal {
     bus(): any;
     clear(arg0: any): any;
@@ -3656,6 +3670,7 @@ declare interface R2DGlobal {
     selectors: R2D_selectors;
     sequence(arg0: any): any;
     sfx: R2D_sfx;
+    sfxgen: R2D_sfxgen;
     signal: R2D_signal;
     sound: R2D_sound;
     spriteMesh: R2D_spriteMesh;

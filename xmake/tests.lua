@@ -89,6 +89,15 @@ test_target("r2d_audio_fx_test", {
     sanitize = "address,undefined",
 })
 
+test_target("r2d_sfxgen_test", {
+    sources = {
+        "tests/sfxgen/sfxgen_test.c",
+        "src/sfxgen.c",
+    },
+    links = { "m" },
+    sanitize = "address,undefined",
+})
+
 test_target("r2d_profile_test", {
     sources = {
         "tests/profile/profile_test.c",

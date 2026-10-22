@@ -19,7 +19,7 @@ const BY_TOOL = {
 const TOOL_KIND = {
     docs_search: 'search', docs_show: 'search', api_lookup: 'search', snippet_find: 'search', search_project: 'search',
     list_files: 'read', read_file: 'read', project_info: 'read', tabs: 'read', studio_state: 'read', studio_ops: 'read',
-    write_file: 'write', edit_file: 'write', delete_file: 'write', move_file: 'write', undo_edit: 'write', plan: 'write',
+    write_file: 'write', edit_file: 'write', delete_file: 'write', move_file: 'write', undo_edit: 'write', plan: 'write', pixel_art: 'write', generate_sound: 'write', skill_load: 'search', skill_list: 'search', pixel_preview: 'read',
     r2d_validate: 'check', r2d_lint: 'check', run_check: 'check', screenshot_check: 'check', playtest: 'check', r2d_cli: 'check',
     snippet_apply: 'snippet',
     open_tab: 'studio', studio_edit: 'studio', studio_op: 'studio', studio_save: 'studio', editor_op: 'studio',
