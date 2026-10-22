@@ -314,7 +314,7 @@ export function createAgentPanel($, doc, host) {
         doc.cls('mc-bubble', 'hidden', !m.bubble || !st.mascotOn);
         doc.cls('mc', 'off', !st.mascotOn);
         // на вкладке — маленький «крабик»: во время работы показывает текущий кадр, в покое — улыбка
-        doc.attr('bt-agent-mc', 'class', st.busy || st.pending || m.mode === 'success' || m.mode === 'failure' ? cls : 'mc-idle-0');
+        doc.attr('bt-agent-mc', 'class', st.busy || st.pending || m.mode === 'success' || m.mode === 'failure' ? cls : 'mc-r0-0');
     }
 
     function render() {

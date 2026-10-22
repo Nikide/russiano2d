@@ -121,7 +121,7 @@
             <span id="bt-output" class="btab">Вывод</span>
             <span id="bt-console" class="btab">Консоль</span>
             <span id="bt-graph" class="btab">Граф</span>
-            <span id="bt-agent" class="btab"><span id="bt-agent-mc" class="mc-idle-0"></span>Агент</span>
+            <span id="bt-agent" class="btab"><span id="bt-agent-mc" class="mc-r0-0"></span>Агент</span>
             <span class="grow"></span>
             <span id="bt-toggle" class="tb-btn icon"></span>
         </div>
@@ -150,7 +150,7 @@
                 <textarea id="ag-input" class="ag-input" value=""></textarea>
                 <div id="ag-mc-wrap">
                     <span id="mc-bubble" class="hidden"></span>
-                    <span id="mc" class="mc-idle-0"></span>
+                    <span id="mc" class="mc-r0-0"></span>
                 </div>
                 <div id="ag-compose-side">
                     <span id="ag-send" class="ag-send">Отправить</span>

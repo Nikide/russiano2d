@@ -345,7 +345,7 @@ def _run():
             agent.eval(D + '.setValue("ag-input","прочитай main.js и запиши notes.txt");' + D + '.click("ag-send");1')
             # маскот: пока агент занят, кадр и иконка на вкладке меняются
             settle(agent, E + '.agent.state.busy', seconds=10)
-            check(agent, E + '.agent.state.mascot.state.mode!=="idle" && ' + D + '.attr("bt-agent-mc","class")!=="mc-idle-0"', 'маскот играет рабочую анимацию, иконка на вкладке меняется')
+            check(agent, E + '.agent.state.mascot.state.mode!=="idle" && ' + D + '.attr("bt-agent-mc","class")!=="mc-r0-0"', 'маскот играет рабочую анимацию, иконка на вкладке меняется')
             settle(agent, E + '.agent.state.pending!==null')
             check(agent, E + '.agent.state.mascot.state.mode==="waiting" && ' + D + '.content("mc-bubble").includes("подтверждение")', 'в ожидании подтверждения маскот спрашивает')
             check(agent, 'globalThis.__seen.length===2', 'после чтения файла модель вызвана повторно')

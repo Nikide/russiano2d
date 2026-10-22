@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """Нарезка листа маскота «Руси-чан» в атлас для Editor.
 
-    mascot_slice.py assets/mascot/sheet_alpha.png [--out editor/ui] [--debug dir]
+    mascot_slice.py [assets/mascot/sheet_v2.png] [--out editor/ui] [--debug dir]
 
-Лист — сетка 8x8: либо картинка на тёмном фоне с шахматкой (grabCut), либо уже с прозрачностью
-(sheet_alpha.png: границы строк неравномерны, ищутся по проекции альфы). Ряды по порядку:
-  idle (стоит), walk (ходьба), run (бег), crab (ползёт «крабиком»), act (работа: ноутбук, ключ, коробка),
-  emo (эмоции), fx (идея, карта, галочка, предупреждение…), misc (разное).
-Скрипт режет сетку, вырезает фон (grabCut + пиксели, далёкие от цвета фона по краю ячейки),
-кладёт кадры в ячейки 156x156 (по центру, ноги внизу) в один PNG-атлас и пишет
-mascot.rcss (@spritesheet, имена вида idle_0), mascot.json. Результат детерминирован.
-Нужны pillow-совместимый opencv и numpy.
+Лист (sheet_v2.png) — 20 столбцов x 11 строк кадров на прозрачном фоне; в последней строке
+мелкие значки (хвост, головы, череп, «?», «!», сердце, лампочка, ключ, ноутбук, коробка…),
+расставленные не по сетке, поэтому они режутся по связным областям. Строки листа:
+  0  стоит лицом, поворот, спиной         1  ходьба, ходьба спиной
+  2  бег (с линиями скорости), «!»         3  покачивания, ноутбук, лампочка, коробка, присела
+  4  эмоции: сердце, ноты, световые мечи    5  ключ, ноты, «?», ноутбук на полу
+  6  ждёт, «?», капля, планшет              7  «!», ноты, мечи, коробка, каштан
+  8  разное, летающая тарелка (8.19)        9  «?», серая тень, вихрь (9.15), спит на подушке (9.16)
+  10 значки
+Каждый кадр кладётся в ячейку 64x64 БЕЗ масштабирования (в интерфейсе маскот те же 64 px —
+пиксель в пиксель): ноги на общей линии строки, центр по центру ячейки. Кадр режется по
+связным областям (спрайт целиком, вместе с эффектом рядом), а не по линиям сетки: так не
+отрезаются ноты, лампочки и широкие позы. Имена кадров — r<строка>_<столбец> (r4_3);
+в RmlUi это класс .mc-r4-3. Результат детерминирован. Нужны opencv и numpy.
 """
 import argparse
 import json
@@ -19,136 +25,152 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-ROWS = ["idle", "walk", "run", "crab", "act", "emo", "fx", "misc"]
-CELL = 156
-INSET = 4          # отступ от линий сетки
+COLS = 20
+ROWS = 11
+CELL = 64
+BODY_MIN = 220          # площадь, с которой область считается телом спрайта, а не эффектом
+ALPHA_MIN = 40          # слабее — бахрома/шум, считаем фоном
 
 
-def cut(rgb, box):
-    x0, y0, x1, y1 = box
-    crop = rgb[y0:y1, x0:x1].copy()
-    h, w = crop.shape[:2]
-    mask = np.zeros((h, w), np.uint8)
-    cv2.setRNGSeed(7)
-    bgd, fgd = np.zeros((1, 65), np.float64), np.zeros((1, 65), np.float64)
-    cv2.grabCut(crop, mask, (2, 2, w - 4, h - 4), bgd, fgd, 6, cv2.GC_INIT_WITH_RECT)
-    alpha = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
-    # серые предметы (ноутбук, ключ, коробка): пиксели, далёкие от цвета фона по краю ячейки
-    border = np.concatenate([crop[0, :], crop[-1, :], crop[:, 0], crop[:, -1]]).astype(np.float32)
-    bg0 = np.median(border, axis=0)
-    far = (np.abs(crop.astype(np.float32) - bg0).max(axis=2) > 40).astype(np.uint8) * 255
-    far = cv2.morphologyEx(far, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-    near = cv2.dilate(alpha, np.ones((9, 9), np.uint8))
-    cnt, lab2, st2, _ = cv2.connectedComponentsWithStats(far)
-    for i in range(1, cnt):
-        comp = lab2 == i
-        if st2[i, cv2.CC_STAT_AREA] >= 30 and (near[comp] > 0).any():
-            alpha[comp] = 255
-    # мелкий мусор (шахматка) убираем; значки рядом с персонажем остаются
-    n, lab, stats, _ = cv2.connectedComponentsWithStats(alpha)
-    keep = np.zeros_like(alpha)
-    for i in range(1, n):
-        if stats[i, cv2.CC_STAT_AREA] >= 14:
-            keep[lab == i] = 255
-    keep = cv2.erode(keep, np.ones((2, 2), np.uint8))
-    keep = cv2.GaussianBlur(keep, (0, 0), 0.8)
-    return np.dstack([crop, keep])
+def bands(proj, gap=0):
+    out, start = [], None
+    for i, v in enumerate(proj):
+        if v > gap and start is None:
+            start = i
+        elif v <= gap and start is not None:
+            out.append([start, i - 1])
+            start = None
+    if start is not None:
+        out.append([start, len(proj) - 1])
+    return out
 
 
-def row_bounds(alpha, rows=8):
-    """Границы строк неравномерной сетки: минимумы проекции альфы около k*H/rows."""
-    h = alpha.shape[0]
-    proj = cv2.GaussianBlur((alpha > 60).sum(axis=1).astype(np.float32).reshape(-1, 1), (1, 0), 3).ravel()
-    bounds = [0]
-    for k in range(1, rows):
-        c = int(k * h / rows)
-        lo, hi = max(bounds[-1] + 40, c - 48), min(h - 40, c + 48)
-        bounds.append(int(lo + np.argmin(proj[lo:hi])))
-    bounds.append(h)
-    return bounds
-
-
-def clean_alpha_cell(rgba):
-    """Лист уже с альфой: срезаем слабую альфу, чужие обрывки на краях ячейки, фиксируем бахрому."""
-    a = rgba[:, :, 3].astype(np.float32)
-    a = np.clip((a - 40.0) * (255.0 / 175.0), 0, 255).astype(np.uint8)
-    h, w = a.shape
-    n, lab, st, _ = cv2.connectedComponentsWithStats((a > 20).astype(np.uint8))
-    keep = np.zeros_like(a)
-    for i in range(1, n):
-        x, y, cw, ch, area = st[i]
-        touches_side = x <= 1 or x + cw >= w - 1
-        if area >= 400 or (area >= 14 and not touches_side):
-            keep[lab == i] = 255
-    a = np.where(keep > 0, a, 0).astype(np.uint8)
-    a = cv2.erode(a, np.ones((2, 2), np.uint8))
-    out = rgba.copy()
-    out[:, :, 3] = a
+def row_bands(alpha):
+    """Полосы строк: промежутки без пикселей; слитую полосу (две строки) режем по минимуму проекции."""
+    proj = (alpha > 0).sum(axis=1)
+    found = bands(proj)
+    out = []
+    for lo, hi in found:
+        if len(out) + 1 + sum(1 for b in found if b[0] > lo) < ROWS and hi - lo > 80:
+            mid = (lo + hi) // 2
+            cut = mid - 12 + int(np.argmin(proj[mid - 12:mid + 12]))
+            out += [[lo, cut - 1], [cut, hi]]
+        else:
+            out.append([lo, hi])
+    if len(out) != ROWS:
+        raise SystemExit(f"ожидалось {ROWS} строк кадров, найдено {len(out)}: {out}")
     return out
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("sheet")
+    ap.add_argument("sheet", nargs="?", default="assets/mascot/sheet_v2.png")
     ap.add_argument("--out", default="editor/ui")
     ap.add_argument("--debug")
     args = ap.parse_args()
     raw = cv2.imread(args.sheet, cv2.IMREAD_UNCHANGED)
-    has_alpha = raw.ndim == 3 and raw.shape[2] == 4 and (raw[:, :, 3] < 5).mean() > 0.2
-    rgb = raw[:, :, :3] if raw.ndim == 3 else cv2.cvtColor(raw, cv2.COLOR_GRAY2BGR)
-    H, W = rgb.shape[:2]
-    cw, ch = W / 8.0, H / 8.0
-    rb = row_bounds(raw[:, :, 3]) if has_alpha else [int(r * ch) for r in range(9)]
-    frames, anims = [], {}
-    for r, row in enumerate(ROWS):
-        names = []
-        for c in range(8):
-            name = f"{row}_{c}"
-            if has_alpha:
-                cell = raw[rb[r]:rb[r + 1], int(c * cw):int((c + 1) * cw)]
-                rgba = clean_alpha_cell(cell)
-                ys, xs = np.where(rgba[:, :, 3] > 0)
-                if len(ys):
-                    rgba = rgba[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-                frames.append((name, rgba))
-            else:
-                box = (int(c * cw) + INSET, rb[r] + INSET, int((c + 1) * cw) - INSET, rb[r + 1] - INSET)
-                frames.append((name, cut(rgb, box)))
+    if raw is None or raw.ndim != 3 or raw.shape[2] != 4:
+        raise SystemExit("нужен PNG/WebP с альфа-каналом (прозрачный фон)")
+    H, W = raw.shape[:2]
+    # слабую альфу срезаем: на листе она даёт шлейф у краёв кадров
+    a = raw[:, :, 3].astype(np.float32)
+    a = np.clip((a - ALPHA_MIN) * (255.0 / (255 - ALPHA_MIN)), 0, 255).astype(np.uint8)
+    sheet = raw.copy()
+    sheet[:, :, 3] = a
+    rb = row_bands(a)
+    pitch = W / COLS
+    atlas = np.zeros((ROWS * CELL, COLS * CELL, 4), np.uint8)
+    names = []
+    for r, (y0, y1) in enumerate(rb):
+        band = sheet[y0:y1 + 1]
+        mask = (band[:, :, 3] > 0).astype(np.uint8)
+        n, lab, st, cen = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        owner = np.full(mask.shape, -1, np.int32)        # номер ячейки каждого пикселя
+        body = np.zeros(mask.shape, bool)                # пиксели «тела» (по ним центрируем кадр)
+        if r == ROWS - 1:
+            # значки: по порядку слева направо, каждый в своей ячейке
+            order = sorted((i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] >= 12), key=lambda i: cen[i][0])
+            if len(order) != COLS:
+                raise SystemExit(f"в строке значков найдено {len(order)} вместо {COLS}")
+            for c, i in enumerate(order):
+                owner[lab == i] = c
+                body[lab == i] = True
+        else:
+            # Кадры идут слева направо, но НЕ по равномерной сетке (шаг 40–46 px, у строк разный сдвиг,
+            # и кадров в строке бывает меньше COLS). Тело спрайта — крупная связная область; слитые
+            # соседи (касание, шлейф) шире одного спрайта и делятся по ширине. Мелкие области
+            # (ноты, искры, лампочки) прикрепляются к ближайшему по x телу.
+            cells = []                                    # [x_центр, пиксели-тело]
+            for i in range(1, n):
+                if st[i, cv2.CC_STAT_AREA] < BODY_MIN:
+                    continue
+                comp = lab == i
+                w = int(st[i, cv2.CC_STAT_WIDTH])
+                x0 = int(st[i, cv2.CC_STAT_LEFT])
+                parts = 1 if w <= CELL - 6 else max(2, int(round(w / pitch)))
+                for k in range(parts):
+                    lo, hi = x0 + w * k // parts, x0 + w * (k + 1) // parts
+                    sub = comp.copy()
+                    sub[:, :lo] = False
+                    sub[:, hi:] = False
+                    if sub.any():
+                        cells.append([(lo + hi) / 2.0, sub])
+            cells.sort(key=lambda t: t[0])
+            if len(cells) > COLS:
+                raise SystemExit(f"строка {r}: {len(cells)} кадров, а в атласе {COLS} столбцов")
+            for c, (_, sub) in enumerate(cells):
+                owner[sub] = c
+                body[sub] = True
+            centers = np.array([t[0] for t in cells])
+            for i in range(1, n):
+                if st[i, cv2.CC_STAT_AREA] >= BODY_MIN or st[i, cv2.CC_STAT_AREA] < 6:
+                    continue
+                j = int(np.argmin(np.abs(centers - cen[i][0])))
+                if abs(centers[j] - cen[i][0]) <= CELL * 0.75:
+                    owner[(lab == i) & (owner < 0)] = j
+            print(f"строка {r}: кадров {len(cells)}")
+        for c in range(COLS):
+            name = f"r{r}_{c}"
+            ys, xs = np.where(owner == c)
+            if not len(ys):
+                continue                                   # в строке меньше кадров, чем столбцов
             names.append(name)
-        anims[row] = names
-    atlas = np.zeros((8 * CELL, 8 * CELL, 4), np.uint8)
-    index = {}
-    for k, (fname, rgba) in enumerate(frames):
-        h, w = rgba.shape[:2]
-        s = min(1.0, CELL / max(h, w))
-        if s < 1.0:
-            rgba = cv2.resize(rgba, (max(1, int(w * s)), max(1, int(h * s))), interpolation=cv2.INTER_AREA)
-            h, w = rgba.shape[:2]
-        cx, cy = (k % 8) * CELL, (k // 8) * CELL
-        atlas[cy + CELL - h:cy + CELL, cx + (CELL - w) // 2:cx + (CELL - w) // 2 + w] = rgba
-        index[fname] = (cx, cy)
+            bx = np.nonzero(((owner == c) & body).any(axis=0))[0]
+            cx = int((bx.min() + bx.max() + 1) // 2)       # центр тела
+            # ноги — на линии строки: нижняя граница полосы кладётся на последнюю строку ячейки
+            dx = xs - cx + CELL // 2
+            dy = CELL - 1 - (y1 - (ys + y0))
+            ok = (dx >= 0) & (dx < CELL) & (dy >= 0) & (dy < CELL)
+            if not ok.all():
+                print(f"{name}: за пределами ячейки {int((~ok).sum())} px (отсечены)")
+            atlas[r * CELL + dy[ok], c * CELL + dx[ok]] = band[ys[ok], xs[ok]]
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(out / "mascot.png"), atlas)
     lines = ["/* Сгенерировано tools/mascot_slice.py — не править руками. */", "@spritesheet mascot {", "    src: mascot.png;", "    resolution: 1x;"]
-    for fname, (x, y) in index.items():
-        lines.append(f"    {fname}: {x}px {y}px {CELL}px {CELL}px;")
+    for name in names:
+        r, c = (int(v) for v in name[1:].split("_"))
+        lines.append(f"    {name}: {c * CELL}px {r * CELL}px {CELL}px {CELL}px;")
     lines.append("}")
     lines.append("")
-    for fname in index:
-        lines.append(f".mc-{fname.replace('_', '-')} {{ decorator: image({fname}); }}")
+    for name in names:
+        lines.append(f".mc-{name.replace('_', '-')} {{ decorator: image({name}); }}")
     (out / "mascot.rcss").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    (out / "mascot.json").write_text(json.dumps({"cell": CELL, "anims": anims}, ensure_ascii=False, indent=1), encoding="utf-8")
+    (out / "mascot.json").write_text(json.dumps({"cell": CELL, "cols": COLS, "rows": ROWS, "frames": names}, ensure_ascii=False, indent=1), encoding="utf-8")
     if args.debug:
         d = Path(args.debug)
         d.mkdir(parents=True, exist_ok=True)
-        bg = np.zeros_like(atlas[:, :, :3]); bg[:] = (27, 22, 20)
-        a = atlas[:, :, 3:4].astype(np.float32) / 255.0
-        comp = (atlas[:, :, :3] * a + bg * (1 - a)).astype(np.uint8)
-        for fname, (x, y) in index.items():
-            cv2.putText(comp, fname, (x + 3, y + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (200, 200, 200), 1)
+        S = 2
+        big = cv2.resize(atlas, None, fx=S, fy=S, interpolation=cv2.INTER_NEAREST)
+        al = big[:, :, 3:4].astype(np.float32) / 255.0
+        bg = np.full(big[:, :, :3].shape, (40, 34, 30), np.float32)
+        comp = (big[:, :, :3] * al + bg * (1 - al)).astype(np.uint8)
+        for name in names:
+            r, c = (int(v) for v in name[1:].split("_"))
+            cv2.putText(comp, name[1:].replace("_", "."), (c * CELL * S + 2, r * CELL * S + 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 220, 255), 1)
         cv2.imwrite(str(d / "contact.png"), comp)
-    print("кадров:", len(frames), "атлас:", atlas.shape[1], "x", atlas.shape[0])
+    print("кадров:", len(names), "атлас:", atlas.shape[1], "x", atlas.shape[0])
 
 
 if __name__ == "__main__":

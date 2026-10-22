@@ -589,7 +589,7 @@ test('маскот: инструмент → кадры и реплика, ус�
     m.tool('write_file');
     eq(m.state.mode, 'tool:write');
     eq(m.state.bubble, 'Пишу код…');
-    truthy(['act_0', 'act_1'].includes(m.state.frame));
+    truthy(['r3_7', 'r5_15'].includes(m.state.frame));
     m.tick(0.3, true);
     eq(m.state.mode, 'tool:write', 'пока агент занят — остаёмся в роли');
     m.tool('r2d_validate');
@@ -607,7 +607,7 @@ test('маскот: инструмент → кадры и реплика, ус�
     m.tick(6, false);
     eq(m.state.mode, 'idle');
     m.tick(50, false);
-    truthy(m.state.sleeping && m.state.frame === 'fx_6', 'после долгого покоя засыпает');
+    truthy(m.state.sleeping && m.state.frame === 'r9_15', 'после долгого покоя засыпает');
     m.wake();
     eq(m.state.sleeping, false);
     m.poke();
@@ -615,7 +615,7 @@ test('маскот: инструмент → кадры и реплика, ус�
     truthy(m.state.bubble.length > 0);
     const known = new Set(['idle', 'walk', 'run', 'crab', 'act', 'emo', 'ico'].flatMap((k) => []));
     const f = mascotFrames();
-    for (const spec of Object.values(f.tools)) truthy(spec[0].every((n) => /^(act|emo|crab|idle|fx|misc)_\d+$/.test(n)));
+    for (const spec of Object.values(f.tools)) truthy(spec[0].every((n) => /^r\d+_\d+$/.test(n)));
     void known;
 });
 
