@@ -143,6 +143,25 @@ def _interact(directory):
         check(agent, D + '.content("ag-log").includes("Откат")', 'откат отмечен в журнале')
 
 
+def _limit(directory):
+    project = Path(directory) / 'lproject'
+    project.mkdir()
+    (project / 'project.json').write_text(json.dumps({'format': 2, 'title': 'Limit', 'entry': 'main.js'}))
+    (project / 'main.js').write_text('$.ready(() => {});\n')
+    steps = [tool_call(1, 'list_files', {}), tool_call(2, 'list_files', {}), reply({'type': 'text', 'text': 'Дошёл до конца.'})]
+    with Agent(game='editor', scene=str(project), seed=16) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval('globalThis.__q=' + json.dumps(steps) + ';$.http._setBackend((r)=>globalThis.__q.shift());1')
+        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-steps","2");' + D + '.setValue("ag-input","долгая задача");' + D + '.click("ag-send");1')
+        settle(agent, 'JSON.stringify(' + E + '.agent.state.log).includes("limit")', seconds=40)
+        settle(agent, '!' + E + '.agent.state.busy', seconds=20)
+        check(agent, D + '.content("ag-log").includes("Продолжить")', 'при лимите шагов в журнале кнопка «Продолжить»')
+        idx = agent.eval(E + '.agent.state.log.findIndex(e=>e.kind==="limit")')
+        agent.eval(D + '.click("ag-continue-' + str(idx) + '");1')
+        settle(agent, '!' + E + '.agent.state.busy && ' + D + '.content("ag-log").includes("Дошёл до конца")', seconds=40)
+        check(agent, D + '.content("ag-log").includes("Дошёл до конца")', 'после продолжения агент завершает задачу')
+
+
 def _run():
     with tempfile.TemporaryDirectory(prefix='r2d-agentpanel-') as directory:
         project = Path(directory) / 'project'
@@ -188,6 +207,7 @@ def _run():
         _hammer(directory)
         _game(directory)
         _interact(directory)
+        _limit(directory)
     print(f'editor_agent_panel_test: {checks} checks', flush=True)
     return 0
 

@@ -702,3 +702,8 @@ scrollbarcorner { background-color: transparent; }
 .ask-opts { display: flex; flex-direction: row; flex-wrap: wrap; }
 .ask-q { display: block; font-size: 13px; color: #e6e9ef; margin-bottom: 9px; }
 #ag-undo.disabled { color: #4f5664; }
+
+#ag-usage { display: block; margin-left: 10px; font-size: 11px; color: #6f7a8f; }
+
+.ag-limit { display: flex; flex-direction: row; align-items: center; margin: 0px 0px 12px 0px; padding: 9px 12px; background-color: #221d10; border-width: 1px; border-color: #5a4713; border-radius: 9px; }
+.ag-limit-t { display: block; flex: 1 1 0; font-size: 12px; color: #f2c14e; }

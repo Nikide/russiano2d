@@ -7,7 +7,7 @@ async function atest(name, fn) {
     try { await fn(); } catch (e) { err = e; }
     test(name, () => { if (err) throw err; });
 }
-import { numberLines, grepProject, undoEdits, interactTools } from '../../editor/lib/agent_harness.js';
+import { usageOf, numberLines, grepProject, undoEdits, interactTools } from '../../editor/lib/agent_harness.js';
 import { createMascot, mascotFrames } from '../../editor/lib/agent_mascot.js';
 import { testConnection, snippetTools, fieldLine, snippetLine, studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
 
@@ -551,6 +551,48 @@ await atest('playtest: сценарий превращается в сессию
     let long = '';
     try { await T.playtest.run({ steps: [{ frames: 600 }, { frames: 600 }, { frames: 600 }, { frames: 600 }, { frames: 600 }, { frames: 600 }] }); } catch (e) { long = e.message; }
     truthy(long.includes('слишком длинный'));
+});
+
+await atest('токены: нормализация usage трёх протоколов, суммы в агенте, prompt caching и вырезание служебных полей', async () => {
+    eq(usageOf({ usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 900, cache_creation_input_tokens: 50 } }), { input: 1050, output: 20, cached: 900 });
+    eq(usageOf({ usage: { prompt_tokens: 500, completion_tokens: 40, prompt_cache_hit_tokens: 300 } }), { input: 500, output: 40, cached: 300 });
+    eq(usageOf({ usage: { prompt_tokens: 10, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 4 } } }), { input: 10, output: 2, cached: 4 });
+    eq(usageOf({}), null);
+    const seen = [], totals = [];
+    const withUsage = (content, u) => ({ content, stop_reason: 'end_turn', usage: u });
+    const agent = createAgent({
+        config: { provider: 'anthropic', base: 'https://x', model: 'm' },
+        transport: scripted([withUsage([{ type: 'tool_use', id: 'u1', name: 'echo', input: { x: 1 } }], { input_tokens: 100, output_tokens: 10 }),
+            withUsage([{ type: 'text', text: 'ок' }], { input_tokens: 20, output_tokens: 5, cache_read_input_tokens: 100 })], seen),
+        tools: toolsOf([]), events: { usage: (u, sum) => totals.push({ ...sum }) },
+    });
+    agent.state.messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'z', content: 'x'.repeat(500), _compact: true }] });
+    await agent.send('?');
+    eq(agent.state.usage, { input: 220, output: 15, cached: 100, calls: 2 });
+    eq(totals.length, 2);
+    const b = seen[0].body;
+    truthy(Array.isArray(b.system) && b.system[0].cache_control.type === 'ephemeral', 'system помечен для кэша');
+    eq(b.tools.at(-1).cache_control.type, 'ephemeral');
+    truthy(!JSON.stringify(b.messages).includes('_compact'), 'служебные поля не уходят в API');
+    const noCache = [];
+    await createAgent({ config: { provider: 'anthropic', base: 'https://x', model: 'm', cache: false }, transport: scripted([anth({ type: 'text', text: 'ок' })], noCache), tools: toolsOf([]) }).send('?');
+    eq(typeof noCache[0].body.system, 'string', 'cache:false отключает кэширование');
+});
+
+await atest('лимит шагов: событие limit вместо ошибки, а повторный send продолжает диалог', async () => {
+    const seen = [], limits = [], errs = [];
+    const call = (id) => anth({ type: 'tool_use', id, name: 'echo', input: { x: 1 } });
+    const agent = createAgent({
+        config: { provider: 'anthropic', base: 'https://x', model: 'm', maxSteps: 2 },
+        transport: scripted([call('a'), call('b'), anth({ type: 'text', text: 'Готово.' })], seen), tools: toolsOf([]),
+        events: { limit: (n) => limits.push(n), error: (m) => errs.push(m) },
+    });
+    await agent.send('долго');
+    eq(limits, [2]);
+    eq(errs, []);
+    await agent.send('Продолжай');
+    eq(seen.length, 3);
+    truthy(agent.state.messages.length > 5, 'история сохранена между send');
 });
 
 finish();

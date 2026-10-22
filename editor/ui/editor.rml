@@ -131,6 +131,7 @@
             <div id="ag-top">
                 <span id="ag-state" class="ag-pill">Готов</span>
                 <span id="ag-model-chip" class="ag-modelchip"></span>
+                <span id="ag-usage" title="Токены за диалог (по данным API): отправлено · получено · из кэша"></span>
                 <span class="grow"></span>
                 <span id="ag-undo" class="tb-btn icon" title="Откатить последнюю правку агента"></span>
                 <span id="ag-clear" class="tb-btn icon" title="Новый диалог"></span>

@@ -31,6 +31,7 @@ const SUGGESTIONS = [
     'Собери карту из трёх комнат в Hammer и скомпилируй её',
 ];
 
+const kfmt = (n) => (n >= 10000 ? Math.round(n / 1000) + 'k' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n));
 const short = (t, n) => { const x = String(t === undefined || t === null ? '' : t).replace(/\s+/g, ' ').trim(); return x.length > n ? x.slice(0, n - 1) + '…' : x; };
 
 function argSummary(name, input) {
@@ -47,7 +48,7 @@ export function createAgentPanel($, doc, host) {
     const st = {
         cfg: { provider: 'anthropic', base: PROVIDERS.anthropic.base, model: PROVIDERS.anthropic.model, key: '', folder: '', maxSteps: 24 },
         log: [], agent: null, pending: null, busy: false, open: false, cfgOpen: false, expanded: new Set(), scrollPending: 0, warmed: false,
-        mascot: createMascot(), mascotOn: true, mcKey: '', testing: false, plan: [], asking: null, history: null,
+        mascot: createMascot(), mascotOn: true, mcKey: '', testing: false, plan: [], asking: null, history: null, usage: { input: 0, output: 0, cached: 0, calls: 0 },
     };
 
     function transport(url, opts) {
@@ -107,6 +108,8 @@ export function createAgentPanel($, doc, host) {
                     render();
                 },
                 error: (m) => { st.mascot.failure('Не получилось…'); applyMascot(); push({ kind: 'err', text: m }); },
+                usage: (_u, sum) => { st.usage = { ...sum }; render(); },
+                limit: (n) => { st.mascot.failure('Устала… продолжим?'); applyMascot(); push({ kind: 'limit', text: 'Достигнут лимит шагов (' + n + ') — агент остановился на середине.' }); },
             },
         });
     }
@@ -121,8 +124,8 @@ export function createAgentPanel($, doc, host) {
         if (steps >= 1 && steps <= 100) st.cfg.maxSteps = steps;
     }
 
-    async function send() {
-        const text = String(doc.value('ag-input') || '').trim();
+    async function send(override) {
+        const text = typeof override === 'string' ? override : String(doc.value('ag-input') || '').trim();
         if (!text || st.busy) return;
         readFields();
         if (!host.project()) { push({ kind: 'err', text: 'Сначала откройте проект.' }); return; }
@@ -130,7 +133,7 @@ export function createAgentPanel($, doc, host) {
             push({ kind: 'err', text: 'Нужен API-ключ: он вводится на вкладке «Настройки агента».' }); host.showSettings(); return;
         }
         if (!st.agent) build();
-        doc.setValue('ag-input', '');
+        if (typeof override !== 'string') doc.setValue('ag-input', '');
         push({ kind: 'user', text });
         st.busy = true; st.mascot.wake(); st.mascot.thinking(); applyMascot(); render();
         let failed = false;
@@ -238,6 +241,7 @@ export function createAgentPanel($, doc, host) {
             }
             flush();
             if (e.kind === 'user') out += '<div class="agm"><span class="ag-ub">' + esc(e.text) + '</span></div>';
+            else if (e.kind === 'limit') out += '<div class="ag-limit"><span class="ag-limit-t">' + esc(e.text) + '</span>' + (e.used ? '' : '<span id="ag-continue-' + idx + '" class="ag-send" data-key="continue:' + idx + '">Продолжить</span>') + '</div>';
             else if (e.kind === 'note') out += '<span class="ag-note">' + esc(e.text) + '</span>';
             else if (e.kind === 'bot') out += '<div class="agm agm-bot"><span class="ag-av"></span><span class="ag-bt">' + esc(e.text) + '</span></div>';
             else out += '<span class="ag-errbox">' + esc(e.text) + '</span>';
@@ -276,6 +280,7 @@ export function createAgentPanel($, doc, host) {
         doc.text('ag-state', pill[1]);
         for (const c of ['busy', 'wait', 'need']) doc.cls('ag-state', c, pill[0] === c);
         doc.text('ag-model-chip', esc(provider.label + ' · ' + (st.cfg.model || provider.model) + '  ›'));
+        doc.text('ag-usage', st.usage.calls ? esc('↑' + kfmt(st.usage.input) + ' ↓' + kfmt(st.usage.output) + (st.usage.cached ? ' · кэш ' + kfmt(st.usage.cached) : '')) : '');
         doc.cls('ag-send', 'hidden', st.busy);
         doc.cls('ag-stop', 'hidden', !st.busy);
         doc.html('ag-log', logHtml());
@@ -308,7 +313,7 @@ export function createAgentPanel($, doc, host) {
         for (const id of Object.keys(PROVIDERS)) doc.on('ag-prov-' + id, 'click', () => setProvider(id));
         doc.on('ag-send', 'click', () => { st.mascot.wake(); send(); });
         doc.on('ag-stop', 'click', () => { if (st.agent) st.agent.stop(); if (st.asking) answerAsk(null); answer(false); });
-        doc.on('ag-clear', 'click', () => { st.log.length = 0; st.expanded.clear(); st.agent = null; st.pending = null; st.plan = []; if (st.asking) { st.asking.resolve(null); st.asking = null; } render(); });
+        doc.on('ag-clear', 'click', () => { st.log.length = 0; st.expanded.clear(); st.agent = null; st.usage = { input: 0, output: 0, cached: 0, calls: 0 }; st.pending = null; st.plan = []; if (st.asking) { st.asking.resolve(null); st.asking = null; } render(); });
         doc.on('ag-undo', 'click', () => {
             if (!st.history || !st.history.length || st.busy) return;
             const done = undoEdits(st.history, st.fsHost, 1);
@@ -322,6 +327,7 @@ export function createAgentPanel($, doc, host) {
         doc.on('ag-log', 'click', (_id, _ev, key) => {
             if (!key) return;
             if (key.startsWith('tool:')) { const n = Number(key.slice(5)); if (st.expanded.has(n)) st.expanded.delete(n); else st.expanded.add(n); render(); }
+            else if (key.startsWith('continue:')) { const e = st.log[Number(key.slice(9))]; if (e && !e.used && !st.busy) { e.used = true; send('Продолжай с того места, где остановился. Заверши задачу и кратко отчитайся.'); } }
             else if (key.startsWith('sug:')) { doc.setValue('ag-input', SUGGESTIONS[Number(key.slice(4))] || ''); doc.focus('ag-input'); }
         });
         doc.setValue('ag-base', st.cfg.base); doc.setValue('ag-model', st.cfg.model); doc.setValue('ag-steps', String(st.cfg.maxSteps));

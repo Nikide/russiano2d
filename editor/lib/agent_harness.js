@@ -48,11 +48,39 @@ export function toolSpecs(tools) {
     return tools.map((t) => ({ name: t.name, description: t.description, schema: t.schema }));
 }
 
+// Служебные поля блоков истории (`_compact` и т.п.) наружу не отдаём: API отвергает незнакомые ключи.
+function publicBlocks(messages) {
+    return messages.map((m) => (typeof m.content === 'string' ? m : {
+        role: m.role,
+        content: m.content.map((b) => Object.fromEntries(Object.entries(b).filter(([k]) => !k.startsWith('_')))),
+    }));
+}
+
+// Anthropic: system и определения инструментов — неизменный префикс, его помечаем для prompt caching
+// (повторные запросы читают префикс из кэша: быстрее и дешевле); так же — хвост истории.
 function anthropicBody(cfg, system, messages, tools) {
+    const msgs = publicBlocks(messages);
+    const last = msgs[msgs.length - 1];
+    if (cfg.cache !== false && last && Array.isArray(last.content) && last.content.length) {
+        last.content[last.content.length - 1] = { ...last.content[last.content.length - 1], cache_control: { type: 'ephemeral' } };
+    }
+    const defs = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema }));
+    if (cfg.cache !== false && defs.length) defs[defs.length - 1] = { ...defs[defs.length - 1], cache_control: { type: 'ephemeral' } };
     return {
-        model: cfg.model, max_tokens: cfg.maxTokens || 4096, system, messages,
-        ...(tools.length ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema })) } : {}),
+        model: cfg.model, max_tokens: cfg.maxTokens || 4096,
+        system: cfg.cache !== false ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] : system,
+        messages: msgs,
+        ...(defs.length ? { tools: defs } : {}),
     };
+}
+
+// Расход токенов из ответа API → { input, output, cached }: единый вид для всех протоколов.
+export function usageOf(data) {
+    const u = data && data.usage;
+    if (!u) return null;
+    const input = (u.input_tokens ?? u.prompt_tokens ?? 0) + (u.cache_creation_input_tokens || 0);
+    const cached = u.cache_read_input_tokens ?? u.prompt_cache_hit_tokens ?? (u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) ?? 0;
+    return { input: input + (u.cache_read_input_tokens || 0), output: u.output_tokens ?? u.completion_tokens ?? 0, cached };
 }
 
 function openaiMessages(system, messages) {
@@ -178,10 +206,10 @@ export async function callModel(cfg, transport, system, messages, tools) {
             if (typeof input === 'string') { try { input = JSON.parse(input); } catch (_) { input = { _raw: input }; } }
             blocks.push({ type: 'tool_use', id: 'gc_' + (++giga_seq), name: m.function_call.name, input: input || {} });
         }
-        return { blocks, stop: data.choices && data.choices[0] && data.choices[0].finish_reason };
+        return { blocks, stop: data.choices && data.choices[0] && data.choices[0].finish_reason, usage: usageOf(data) };
     }
     if (protocol === 'anthropic') {
-        return { blocks: (data.content || []).filter((b) => b.type === 'text' || b.type === 'tool_use'), stop: data.stop_reason };
+        return { blocks: (data.content || []).filter((b) => b.type === 'text' || b.type === 'tool_use'), stop: data.stop_reason, usage: usageOf(data) };
     }
     const msg = data.choices && data.choices[0] && data.choices[0].message || {};
     const blocks = [];
@@ -191,7 +219,7 @@ export async function callModel(cfg, transport, system, messages, tools) {
         try { input = JSON.parse(c.function.arguments || '{}'); } catch (_) { input = { _raw: c.function.arguments }; }
         blocks.push({ type: 'tool_use', id: c.id, name: c.function.name, input });
     }
-    return { blocks, stop: data.choices && data.choices[0] && data.choices[0].finish_reason };
+    return { blocks, stop: data.choices && data.choices[0] && data.choices[0].finish_reason, usage: usageOf(data) };
 }
 
 // Старые результаты инструментов (кроме последних keep) заменяются кратким следом:
@@ -234,7 +262,7 @@ export async function docContext(host, question, limit) {
 export function createAgent({ config, transport, tools, system, confirm, events, context }) {
     const ev = events || {};
     const byName = new Map(tools.map((t) => [t.name, t]));
-    const state = { messages: [], running: false, stop: false };
+    const state = { messages: [], running: false, stop: false, usage: { input: 0, output: 0, cached: 0, calls: 0 } };
 
     async function runTool(block) {
         const tool = byName.get(block.name);
@@ -268,6 +296,11 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 if (state.stop) { if (ev.error) ev.error('остановлено'); return; }
                 compact(state.messages, config.keepResults || 6);
                 const reply = await callModel(config, transport, system || SYSTEM_PROMPT, state.messages, tools);
+                state.usage.calls++;
+                if (reply.usage) {
+                    state.usage.input += reply.usage.input; state.usage.output += reply.usage.output; state.usage.cached += reply.usage.cached;
+                    if (ev.usage) ev.usage(reply.usage, state.usage);
+                }
                 if (!reply.blocks.length) { if (ev.error) ev.error('модель вернула пустой ответ'); return; }
                 state.messages.push({ role: 'assistant', content: reply.blocks });
                 for (const b of reply.blocks) if (b.type === 'text' && ev.text) ev.text(b.text);
@@ -301,7 +334,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 }
                 state.messages.push({ role: 'user', content: results });
             }
-            if (ev.error) ev.error('достигнут лимит шагов (' + limit + ')');
+            if (ev.limit) ev.limit(limit); else if (ev.error) ev.error('достигнут лимит шагов (' + limit + ')');
         } finally { state.running = false; }
     }
 
