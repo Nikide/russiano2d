@@ -26,11 +26,13 @@ export const PROVIDERS = {
 };
 
 export const SYSTEM_PROMPT = [
-    'Ты — агент внутри Editor движка Russiano2D (2D/2.5D, один бинарник r2d, игровой API — `$`).',
-    'Сначала ищи в документации (docs_search / docs_show) и проверяй имена `$`-API, потом пиши код.',
-    'Не выдумывай методы `$`: сомневаешься — docs_search.',
-    'После правки .js запускай r2d_lint, после правки проекта — r2d_validate, исправляй диагностику.',
-    'Пути — относительно корня проекта. Отвечай по-русски, коротко.',
+    'Ты — агент внутри Editor движка Russiano2D (2D/2.5D, один бинарник r2d, игровой API — `$`). Отвечай по-русски, коротко.',
+    'Правила движка: игровой код использует только публичный `$` API; не пиши второй движок, ECS, свой scene graph/event bus/менеджеры.',
+    'Работа: 1) если контекст из доков не хватает — docs_search/docs_show; 2) любой `$.…` метод, в котором не уверен, проверь api_lookup — выдумывать имена нельзя;',
+    '3) правь файлы точечно через edit_file (write_file — только для новых файлов или полной замены); после записи .js lint уже запущен автоматически — исправь диагностику;',
+    '4) в конце вызови r2d_validate, при изменении игровой логики — run_check (короткий headless-прогон) и убедись, что ошибок нет. Не повторяй проверки без правок.',
+    'Вкладки: tabs/open_tab/studio_state/studio_op/studio_save. Карты .re2dmap собирай в Hammer через studio_op (brush.create, entity.create, element.create…): сначала studio_state, после серии правок validate, затем studio_save. Файлы других студий (атлас, tilemap…) можно править и как JSON через edit_file.',
+    'Пути — относительно корня проекта. Сначала посмотри существующие файлы (list_files, read_file), потом пиши.',
 ].join('\n');
 
 export function toolSpecs(tools) {
@@ -181,6 +183,19 @@ export async function callModel(cfg, transport, system, messages, tools) {
     return { blocks, stop: data.choices && data.choices[0] && data.choices[0].finish_reason };
 }
 
+// Старые результаты инструментов (кроме последних keep) заменяются кратким следом:
+// длинные чтения файлов не оплачиваются токенами на каждом следующем шаге.
+export function compact(messages, keep) {
+    const slots = [];
+    for (const m of messages) if (Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_result') slots.push(b);
+    for (const b of slots.slice(0, Math.max(0, slots.length - keep))) {
+        if (!b._compact && String(b.content).length > 300) {
+            b.content = String(b.content).slice(0, 200) + '\n… [результат свёрнут, ' + String(b.content).length + ' симв.; перечитайте при необходимости]';
+            b._compact = true;
+        }
+    }
+}
+
 // events: { text(t), tool(name,input), result(name,out), error(msg) } — все необязательные.
 // Куски документации по вопросу → текст для подкладывания к сообщению (экономит
 // ходы docs_search). Источник — `r2d docs context` (BM25); сюда же встанет
@@ -224,6 +239,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
         try {
             for (let step = 0; step < limit; step++) {
                 if (state.stop) { if (ev.error) ev.error('остановлено'); return; }
+                compact(state.messages, config.keepResults || 6);
                 const reply = await callModel(config, transport, system || SYSTEM_PROMPT, state.messages, tools);
                 if (!reply.blocks.length) { if (ev.error) ev.error('модель вернула пустой ответ'); return; }
                 state.messages.push({ role: 'assistant', content: reply.blocks });
@@ -246,6 +262,66 @@ export function createAgent({ config, transport, tools, system, confirm, events,
     return { state, send, stop() { state.stop = true; }, reset() { state.messages.length = 0; } };
 }
 
+// Вкладки и студии. Hammer (.re2dmap) принимает операции native `world-edit`
+// через сессию карты — с общей историей Undo, диагностикой и перерисовкой.
+const WORLD_OPS = [
+    'brush.create {rect:[x,y,w,h]|polygon:[[x,y],…], bottom, top, id?, tool?, tags?}',
+    'brush.set / brush.move / brush.delete / brush.duplicate / brush.clip / brush.vertex.move {id,…}',
+    'face.set {brush, face:"side|floor|ceiling", material?, color?, tags?}',
+    'entity.create {kind:"light|…", x, y, h?, id?, angle?, tags?} / entity.set / entity.delete {id}',
+    'element.create {section:"cells|walls|portals|stairs|slopes|lights", value:{id, rect:[x,y,w,h], spans:[{bottom,top}], …}} / element.replace / element.move / element.delete',
+    'world.set {patch:{w,h,regionSize,boundary,floorColor,…}} / visgroup.ensure / visgroup.state',
+];
+const NAMED_OPS = ['validate', 'compile', 'undo', 'redo', 'setGrid', 'select'];
+
+export function studioTools(host) {
+    const str = (description) => ({ type: 'string', description });
+    const obj = (props, required) => ({ type: 'object', properties: props, required: required === undefined ? Object.keys(props) : required });
+    const need = (path) => {
+        const api = host.studioApi(path ? safeRel(path) : '');
+        if (!api) throw new Error(path ? 'вкладка «' + path + '» не открыта как студия (open_tab)' : 'активная вкладка — не студия');
+        return api;
+    };
+    return [
+        { name: 'tabs', description: 'Открытые вкладки Editor: путь, студия (code, hammer, atlas, tilemap…), несохранённые правки, активная.', schema: obj({}),
+          run: async () => JSON.stringify(host.tabs()) },
+        { name: 'open_tab', description: 'Открыть файл проекта во вкладке (карта .re2dmap откроется в Hammer, атлас — в Atlas и т.д.) и сделать активной.',
+          schema: obj({ path: str('относительный путь') }),
+          run: async (a) => { await host.openTab(safeRel(a.path)); return JSON.stringify(host.tabs().filter((t) => t.active)); } },
+        { name: 'studio_state', description: 'Состояние студии вкладки: выделение, инструмент, диагностика, а для Hammer — содержимое карты (brushes, entities, cells…, до ~6000 символов).',
+          schema: obj({ path: str('путь вкладки; пусто — активная') }, []),
+          run: async (a) => {
+              const api = need(a.path);
+              const out = { studio: api.id, snapshot: typeof api.snapshot === 'function' ? api.snapshot() : null };
+              if (api.diagnostics) { try { out.diagnostics = api.diagnostics().slice(0, 12); } catch (_) { /* нет диагностики */ } }
+              if (api.map) out.map = api.map;
+              return JSON.stringify(out).slice(0, 6000);
+          } },
+        { name: 'studio_op', mutating: true,
+          description: 'Операция студии на вкладке (требует подтверждения). Hammer: op — операция world-edit с точкой (аргументы — объект args) или одна из именованных: ' +
+              NAMED_OPS.join(', ') + ' (args — массив позиционных аргументов). Операции карты: ' + WORLD_OPS.join('; ') +
+              '. Координаты — единицы карты, сетка обычно 16. Ответ содержит ok и диагностику; после серии правок вызови validate.',
+          schema: obj({ op: str('имя операции'), args: { type: ['object', 'array'], description: 'аргументы' }, path: str('путь вкладки; пусто — активная') }, ['op']),
+          run: async (a) => {
+              const api = need(a.path);
+              const op = String(a.op);
+              let result;
+              if (op.includes('.')) {
+                  if (!api.session || typeof api.session.apply !== 'function') throw new Error('эта студия не принимает операции карты: ' + op);
+                  result = await api.session.apply(op, a.args && !Array.isArray(a.args) ? a.args : {});
+              } else {
+                  if (!NAMED_OPS.includes(op) || !api.ops || typeof api.ops[op] !== 'function') throw new Error('неизвестная операция «' + op + '», доступны: ' + NAMED_OPS.join(', '));
+                  result = await api.ops[op](...(Array.isArray(a.args) ? a.args : []));
+              }
+              if (api.render) api.render();
+              return JSON.stringify(result === undefined ? { ok: true } : result).slice(0, 3000);
+          } },
+        { name: 'studio_save', mutating: true, description: 'Сохранить карту/документ студии на диск (требует подтверждения).',
+          schema: obj({ path: str('путь вкладки; пусто — активная') }, []),
+          run: async (a) => { const r = await need(a.path).save(); return JSON.stringify(r === undefined ? { ok: true } : r).slice(0, 1500); } },
+    ];
+}
+
 // Безопасный путь внутри проекта: без абсолютных, `..` и скрытых служебных каталогов.
 export function safeRel(p) {
     const s = String(p || '').replace(/\\/g, '/').replace(/^\.\//, '');
@@ -257,6 +333,15 @@ export function safeRel(p) {
 // Набор инструментов Editor. host: { tool(args)→{json,output}, readText, writeText, exists, list() }.
 export function editorTools(host) {
     const str = (description) => ({ type: 'string', description });
+    // lint после записи .js: диагностика сразу в результате — экономит отдельный шаг.
+    const autoLint = async (p) => {
+        if (!/\.m?js$/.test(p) || !host.abs) return '';
+        try {
+            const r = (await host.tool(['lint', host.abs(p), '--json'])).json;
+            const d = (r && (r.diagnostics || r.problems)) || [];
+            return d.length ? '\nlint: ' + d.length + ' замечаний:\n' + JSON.stringify(d.slice(0, 8)) : '\nlint: чисто';
+        } catch (e) { return '\nlint: не запустился (' + (e && e.message || e) + ')'; }
+    };
     const obj = (props, required) => ({ type: 'object', properties: props, required: required || Object.keys(props) });
     return [
         { name: 'docs_search', description: 'Поиск по встроенной документации движка (строки, содержащие запрос).',
@@ -269,9 +354,43 @@ export function editorTools(host) {
           run: async () => host.list().join('\n') },
         { name: 'read_file', description: 'Прочитать файл проекта.', schema: obj({ path: str('относительный путь') }),
           run: async (a) => { const p = safeRel(a.path); if (!host.exists(p)) throw new Error('нет файла ' + p); return host.readText(p); } },
-        { name: 'write_file', description: 'Создать или перезаписать файл проекта (требует подтверждения).', mutating: true,
+        { name: 'write_file', description: 'Создать файл или полностью заменить (требует подтверждения). Для правок существующих файлов используй edit_file. После записи .js автоматически запускается lint.', mutating: true,
           schema: obj({ path: str('относительный путь'), content: str('полное содержимое') }),
-          run: async (a) => { const p = safeRel(a.path); host.writeText(p, String(a.content)); return 'записано ' + p; } },
+          run: async (a) => { const p = safeRel(a.path); host.writeText(p, String(a.content)); return 'записано ' + p + await autoLint(p); } },
+        { name: 'edit_file', description: 'Заменить фрагмент в файле (требует подтверждения): old_string должен встретиться ровно один раз. Дёшево по токенам. После правки .js запускается lint.', mutating: true,
+          schema: obj({ path: str('относительный путь'), old_string: str('точный фрагмент'), new_string: str('замена') }),
+          run: async (a) => {
+              const p = safeRel(a.path);
+              if (!host.exists(p)) throw new Error('нет файла ' + p);
+              const text = host.readText(p), old = String(a.old_string);
+              if (!old) throw new Error('old_string пуст');
+              const first = text.indexOf(old);
+              if (first < 0) throw new Error('old_string не найден в ' + p + ' (перечитайте файл)');
+              if (text.indexOf(old, first + 1) >= 0) throw new Error('old_string встречается несколько раз — добавьте контекст');
+              host.writeText(p, text.slice(0, first) + String(a.new_string) + text.slice(first + old.length));
+              return 'изменено ' + p + await autoLint(p);
+          } },
+        { name: 'api_lookup', description: 'Проверить имя `$`-API по схеме движка: есть ли метод и какие у него аргументы (точное имя, префикс или часть, например `$.scene.add` или `tween`).',
+          schema: obj({ name: str('путь или его часть') }),
+          run: async (a) => {
+              const r = (await host.tool(['docs', 'api', String(a.name), '--limit', '8'])).json;
+              if (!r || !r.ok) return JSON.stringify(r);
+              if (!r.count) return 'в схеме нет «' + a.name + '». Такого `$`-API не существует — не используй; поищи docs_search.';
+              return (r.exact ? '' : 'точного совпадения нет, похожие:\n') + r.entries.map((e) =>
+                  e.path + ' [' + e.kind + ']' + (e.args ? '(' + e.args.join(', ') + ')' : '') + ' — ' + String(e.description).slice(0, 200)).join('\n');
+          } },
+        { name: 'project_info', description: 'Сведения о проекте: project.json, точка входа, сцены.', schema: obj({}),
+          run: async () => JSON.stringify((await host.tool(['project', host.abs('')])).json).slice(0, 4000) },
+        { name: 'run_check', description: 'Короткий headless-прогон игры (N кадров): вернёт ошибки скриптов из вывода. Запускай после изменения игровой логики.',
+          schema: { type: 'object', properties: { frames: { type: 'number', description: 'кадров, по умолчанию 120' }, scene: str('сцена (необязательно)') }, required: [] },
+          run: async (a) => {
+              const args = ['run', host.abs(''), '--headless', '--frames', String(Math.min(600, Math.max(5, Number(a.frames) || 120)))];
+              if (a.scene) args.push('--scene', String(a.scene));
+              const r = await host.tool(args);
+              const text = String(r.output || r.error || (r.json ? JSON.stringify(r.json) : ''));
+              const bad = text.split('\n').filter((l) => /error|ошибк|exception|TypeError|ReferenceError|не найден/i.test(l));
+              return bad.length ? 'ОШИБКИ:\n' + bad.slice(0, 12).join('\n') : 'прогон без ошибок (' + (args[4]) + ' кадров)';
+          } },
         { name: 'r2d_lint', description: 'r2d lint по файлу .js проекта; вернёт диагностики.',
           schema: obj({ path: str('относительный путь .js') }),
           run: async (a) => JSON.stringify((await host.tool(['lint', host.abs(safeRel(a.path)), '--json'])).json) },

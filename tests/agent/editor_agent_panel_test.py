@@ -29,6 +29,44 @@ def reply(*content):
     return {'status': 200, 'body': json.dumps({'content': list(content), 'stop_reason': 'end_turn'}), 'headers': ''}
 
 
+def tool_call(i, name, args):
+    return reply({'type': 'tool_use', 'id': 'h%d' % i, 'name': name, 'input': args})
+
+
+def _hammer(directory):
+    import shutil
+    project = Path(directory) / 'hproject'
+    project.mkdir()
+    (project / 'project.json').write_text(json.dumps({'format': 2, 'title': 'Hammer agent', 'entry': 'main.js'}))
+    (project / 'main.js').write_text('$.ready(() => {});\n')
+    shutil.copyfile(ROOT / 'tests/fixtures/sdk/world/editor_base.re2dmap', project / 'a.re2dmap')
+    steps = [
+        tool_call(1, 'open_tab', {'path': 'a.re2dmap'}),
+        tool_call(2, 'studio_state', {}),
+        tool_call(3, 'studio_op', {'op': 'brush.create', 'args': {'rect': [96, 96, 32, 32], 'bottom': 0, 'top': 64, 'id': 'agent.box'}}),
+        tool_call(4, 'studio_op', {'op': 'validate', 'args': []}),
+        tool_call(5, 'studio_save', {}),
+        reply({'type': 'text', 'text': 'Карта собрана.'}),
+    ]
+    with Agent(game='editor', scene=str(project), seed=13) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval('globalThis.__q=' + json.dumps(steps) + ';globalThis.__seen=[];'
+                   '$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
+        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' +
+                   D + '.setValue("ag-input","собери бокс на карте");' + D + '.click("ag-send");1')
+        # студийные операции требуют подтверждения: отвечаем «Разрешить» на каждый запрос
+        for _ in range(3):
+            settle(agent, E + '.agent.state.pending!==null || !' + E + '.agent.state.busy', seconds=40)
+            if agent.eval(E + '.agent.state.pending!==null'):
+                agent.eval(D + '.click("ag-yes");1')
+        settle(agent, '!' + E + '.agent.state.busy', seconds=40)
+        check(agent, D + '.content("ag-log").includes("Карта собрана.")', 'Hammer: агент прошёл open_tab → studio_op → studio_save')
+        check(agent, E + '.activeTab().api.id==="hammer"', 'Hammer: карта открыта в студии')
+        saved = (project / 'a.re2dmap').read_text(encoding='utf-8')
+        checks_ok = '"agent.box"' in saved
+        check(agent, 'true' if checks_ok else 'false', 'Hammer: brush.create сохранён в .re2dmap на диске')
+
+
 def _run():
     with tempfile.TemporaryDirectory(prefix='r2d-agentpanel-') as directory:
         project = Path(directory) / 'project'
@@ -58,6 +96,7 @@ def _run():
             check(agent, D + '.content("ag-log").includes("Готово.")', 'итоговый ответ показан в панели')
             check(agent, '(()=>{const h=globalThis.__seen[0].headers;const i=h.indexOf("x-api-key");return i>=0&&h[i+1]==="test-key"&&!String(globalThis.__seen[0].body).includes("test-key");})()', 'ключ уходит только в заголовок запроса')
             check(agent, '!JSON.stringify($.fs.readText(' + json.dumps(str(project / 'project.json')) + ')).includes("test-key")', 'ключ не записан в project.json')
+        _hammer(directory)
     print(f'editor_agent_panel_test: {checks} checks', flush=True)
     return 0
 

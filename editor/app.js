@@ -107,6 +107,10 @@ export function createEditor($) {
         project: () => s.project,
         tool: (args) => tool(args),
         files: () => s.entries.map((e) => e.path).filter(Boolean),
+        tabs: () => s.tabs.map((t, i) => ({ index: i, path: t.path, studio: t.api ? t.api.id : (t.kind === 'studio' ? t.studio && t.studio.id : 'code'),
+            dirty: !!(t.model ? t.model.dirty : t.api && t.api.dirty && t.api.dirty()), active: t === activeTab() })),
+        openTab: async (p) => { const t = openFile(p, 0, 0); if (!t) throw new Error('не удалось открыть ' + p); if (t.opening) await t.opening; if (t.error) throw new Error(t.error); },
+        studioApi: (p) => { const t = p ? s.tabs.find((x) => x.path === p) : activeTab(); return t && t.api ? t.api : null; },
         changed: (p) => { refreshTree(); const t = s.tabs.find((x) => x.path === p); if (t && t.model && !t.model.dirty) { const x = $.fs.readText(full(p)); if (typeof x === 'string') { t.model.setText(x); t.diskText = x; } } },
     });
 
@@ -808,7 +812,7 @@ export function createEditor($) {
                 tab.studio = studio;
                 tab.abs = full(relPath);
                 tab.loading = true;
-                studios.open(tab).then(() => {
+                tab.opening = studios.open(tab).then(() => {
                     if (!s.tabs.includes(tab)) return;
                     tab.loading = false;
                     if (tab.problemTarget && tab.inst && tab.inst.navigateDiagnostic) { tab.inst.navigateDiagnostic(tab.problemTarget); tab.problemTarget = null; }

@@ -6,12 +6,14 @@
 //   r2d docs list [--filter текст]
 //   r2d docs show <страница> [--raw]       страница: highlevel/ui, ui.md, docs/ui.md
 //   r2d docs search <запрос> [--limit N]
+//   r2d docs api <путь|часть> [--limit N]  сигнатуры `$`-API из api.schema.json (есть ли такое имя)
 //   r2d docs context <вопрос> [--limit N]  лучшие куски по BM25 (RU/EN) — готовый контекст для агента
 //   r2d docs generate [--out-dir DIR]      прежнее поведение: generated $ API reference
 // Без подкоманды и с --out-dir работает «generate» (совместимость).
 // ===========================================================================
 #include "sdk.h"
 #include "payload.h"
+#include "json.h"
 
 #include <SDL3/SDL.h>
 #include <ctype.h>
@@ -398,6 +400,97 @@ static int docs_context(const SdkArgs *a)
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// docs api: поиск имён `$`-API в схеме из бинарника. Точное совпадение пути —
+// первым, затем префикс, затем подстрока (без учёта регистра). Нужен агенту,
+// чтобы проверить, что метод существует и какие у него аргументы, не читая доки.
+// ---------------------------------------------------------------------------
+static int api_rank(const char *path, const char *q)
+{
+    char *p = fold(path, strlen(path)), *n = fold(q, strlen(q));
+    int rank = 0;
+    if (p && n) {
+        if (strcmp(p, n) == 0 || (strncmp(n, "$.", 2) != 0 && strcmp(p + (strncmp(p, "$.", 2) == 0 ? 2 : 0), n) == 0)) rank = 3;
+        else if (strncmp(p, n, strlen(n)) == 0) rank = 2;
+        else if (strstr(p, n)) rank = 1;
+    }
+    free(p); free(n);
+    return rank;
+}
+
+static int docs_api(const SdkArgs *a)
+{
+    const char *query = sdk_arg_positional(a, 1);
+    if (!query || !query[0]) {
+        printf("{\"ok\":false,\"code\":\"SDK_DOCS_USAGE\",\"message\":\"r2d docs api <путь|часть> [--limit N]\"}\n");
+        return 2;
+    }
+    const R2dPayload *b = bundle_or_fail("docs api");
+    if (!b) return 2;
+    const R2dPayloadFile *f = r2d_payload_find(b, "api.schema.json");
+    if (!f) {
+        printf("{\"ok\":false,\"code\":\"SDK_DOCS_NO_SCHEMA\",\"message\":\"в сборке нет api.schema.json\"}\n");
+        return 2;
+    }
+    char err[160];
+    char *text = (char *)malloc(f->size + 1);
+    if (!text) return 2;
+    memcpy(text, f->data, f->size);
+    text[f->size] = '\0';
+    R2dJson *root = r2d_json_parse(text, err, sizeof err);
+    free(text);
+    const R2dJson *names = root ? r2d_json_get(root, "names") : NULL;
+    if (!names) {
+        r2d_json_free(root);
+        printf("{\"ok\":false,\"code\":\"SDK_DOCS_BAD_SCHEMA\",\"message\":\"api.schema.json не разобран\"}\n");
+        return 2;
+    }
+    const char *limit_arg = sdk_arg_value(a, "--limit");
+    int limit = limit_arg ? atoi(limit_arg) : 12;
+    if (limit < 1 || limit > 50) limit = 12;
+
+    R2dSb out; r2d_sb_init(&out);
+    r2d_sb_puts(&out, "{\"ok\":true,\"query\":");
+    r2d_sb_put_json_string(&out, query);
+    r2d_sb_puts(&out, ",\"entries\":[");
+    int shown = 0;
+    bool exact = false;
+    const int total = (int)r2d_json_size(names);
+    for (int rank = 3; rank >= 1 && shown < limit; --rank) {
+        for (int i = 0; i < total && shown < limit; ++i) {
+            const R2dJson *item = r2d_json_at(names, (size_t)i);
+            const char *path = r2d_json_str(r2d_json_get(item, "path"), "");
+            if (api_rank(path, query) != rank) continue;
+            if (rank == 3) exact = true;
+            if (shown++) r2d_sb_putc(&out, ',');
+            r2d_sb_puts(&out, "{\"path\":");
+            r2d_sb_put_json_string(&out, path);
+            r2d_sb_puts(&out, ",\"kind\":");
+            r2d_sb_put_json_string(&out, r2d_json_str(r2d_json_get(item, "kind"), ""));
+            r2d_sb_puts(&out, ",\"description\":");
+            r2d_sb_put_json_string(&out, r2d_json_str(r2d_json_get(item, "description"), ""));
+            const R2dJson *args = r2d_json_get(item, "args");
+            if (args) {
+                r2d_sb_puts(&out, ",\"args\":[");
+                for (int k = 0; k < (int)r2d_json_size(args); ++k) {
+                    const R2dJson *ar = r2d_json_at(args, (size_t)k);
+                    if (k) r2d_sb_putc(&out, ',');
+                    r2d_sb_put_json_string(&out, r2d_json_str(r2d_json_get(ar, "name"), "?"));
+                }
+                r2d_sb_puts(&out, "]");
+            }
+            const char *ret = r2d_json_str(r2d_json_get(item, "returns"), "");
+            if (ret[0]) { r2d_sb_puts(&out, ",\"returns\":"); r2d_sb_put_json_string(&out, ret); }
+            r2d_sb_putc(&out, '}');
+        }
+    }
+    r2d_sb_printf(&out, "],\"count\":%d,\"exact\":%s}", shown, exact ? "true" : "false");
+    printf("%s\n", out.data);
+    r2d_sb_free(&out);
+    r2d_json_free(root);
+    return 0;
+}
+
 int sdk_cmd_docs(const SdkArgs *a)
 {
     const char *sub = sdk_arg_positional(a, 0);
@@ -406,6 +499,7 @@ int sdk_cmd_docs(const SdkArgs *a)
     if (strcmp(sub, "show") == 0) return docs_show(a);
     if (strcmp(sub, "search") == 0) return docs_search(a);
     if (strcmp(sub, "context") == 0) return docs_context(a);
-    printf("{\"ok\":false,\"code\":\"SDK_DOCS_USAGE\",\"message\":\"docs list|show|search|context|generate\"}\n");
+    if (strcmp(sub, "api") == 0) return docs_api(a);
+    printf("{\"ok\":false,\"code\":\"SDK_DOCS_USAGE\",\"message\":\"docs list|show|search|context|api|generate\"}\n");
     return 2;
 }

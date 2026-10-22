@@ -2,8 +2,12 @@
 // Логика цикла — agent_harness.js; здесь только RmlUi-обвязка. Ключ API живёт
 // только в памяти процесса: на диск и в project.json он не попадает.
 
-import { PROVIDERS, createAgent, editorTools, docContext } from './agent_harness.js';
-import { esc } from './studio_kit.js';
+import { PROVIDERS, createAgent, editorTools, studioTools, docContext } from './agent_harness.js';
+import { esc as escRml } from './studio_kit.js';
+
+// RmlUi считает `{{`/`}}` в тексте выражением привязки данных (JSON с вложенными
+// объектами ломал разметку): разделяем парные скобки невидимым пробелом.
+const esc = (t) => escRml(t).replace(/\{(?=\{)/g, '{\u200b').replace(/\}(?=\})/g, '}\u200b');
 
 export function createAgentPanel($, doc, host) {
     const st = {
@@ -42,7 +46,7 @@ export function createAgentPanel($, doc, host) {
             list: () => host.files(),
         });
         st.agent = createAgent({
-            config: st.cfg, transport, tools, confirm,
+            config: st.cfg, transport, tools: tools.concat(studioTools(host)), confirm,
             context: (q) => docContext(host, q, 4),
             events: {
                 text: (t) => push('agent', t),
@@ -98,9 +102,14 @@ export function createAgentPanel($, doc, host) {
         doc.cls('ag-send', 'disabled', st.busy);
         doc.cls('ag-stop', 'hidden', !st.busy);
         const rows = st.log.map((m) => '<div class="ag-msg ag-' + m.kind + '">' + esc(m.text) + '</div>').join('');
+        const pin = st.pending && st.pending.input || {};
+        const what = !st.pending ? '' : st.pending.name === 'edit_file'
+            ? 'изменить <b>' + esc(pin.path || '?') + '</b> (' + String(String(pin.old_string || '').length) + ' → ' + String(String(pin.new_string || '').length) + ' симв.)'
+            : st.pending.name === 'studio_op' ? 'применить в студии <b>' + esc(pin.op || '?') + '</b> ' + esc(JSON.stringify(pin.args || {}).replace(/"/g, "'").slice(0, 140))
+            : st.pending.name === 'studio_save' ? 'сохранить документ студии <b>' + esc(pin.path || 'активной вкладки') + '</b>'
+            : 'записать <b>' + esc(pin.path || '?') + '</b> (' + String(String(pin.content || '').length) + ' симв.)';
         const ask = st.pending
-            ? '<div class="ag-ask"><span class="ag-ask-text">Агент хочет записать <b>' + esc(st.pending.input && st.pending.input.path || '?') +
-              '</b> (' + String((st.pending.input && st.pending.input.content || '').length) + ' симв.)</span>' +
+            ? '<div class="ag-ask"><span class="ag-ask-text">Агент хочет ' + what + '</span>' +
               '<button id="ag-yes" class="out-filter on">Разрешить</button><button id="ag-no" class="out-filter">Отклонить</button></div>'
             : '';
         doc.html('ag-log', rows ? rows + ask : (ask || '<span class="empty">Спросите агента: он ищет в документации, читает файлы проекта, запускает lint/validate и пишет файлы с вашего подтверждения.</span>'));
