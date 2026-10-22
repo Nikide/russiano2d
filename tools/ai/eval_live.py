@@ -4,7 +4,7 @@
     R2D_BINARY=… python3 tools/ai/eval_live.py [--limit 4] [--data tools/ai/data/live.jsonl]
 
 Считает BM25 (`--no-ai`) и гибрид (BM25 + встроенная модель) на одних и тех же вопросах:
-`expect` — подстрока пути (документ или id кирпичика), достаточно одного попадания в первые k.
+`expect` — подстроки пути через «|» (документ или id кирпичика, любая подходит), достаточно одного попадания в первые k.
 Это то, что реально видит агент, а не метрики синтетической пары запрос/пассаж.
 """
 import argparse
@@ -40,7 +40,7 @@ def main():
         mode = None
         for r in rows:
             paths, mode = ask(binary, r["query"], args.limit, ai)
-            ranks = [i for i, p in enumerate(paths) if r["expect"] in p]
+            ranks = [i for i, p in enumerate(paths) if any(e in p for e in r["expect"].split("|"))]
             if ranks:
                 hit[args.limit] += 1
                 if ranks[0] == 0:
