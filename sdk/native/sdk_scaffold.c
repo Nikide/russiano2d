@@ -11,6 +11,7 @@
 // файлах метка `{{name}}` заменяется именем проекта.
 // ===========================================================================
 #include "sdk.h"
+#include "payload.h"
 
 #include <SDL3/SDL.h>
 
@@ -30,6 +31,47 @@ static void emit(R2dSb *out)
 }
 
 // Каталог шаблонов: --root, ./templates, рядом с бинарником.
+// Шаблоны встроенного пакета (templates/…) распаковываются в кэш пользователя
+// один раз: дальше `templates` и `new` работают с обычным каталогом, как и с
+// templates/ рядом с бинарником. Имя каталога несёт хэш содержимого, поэтому
+// обновлённый бинарник получает свежую копию, а не старую.
+#define BUILTIN_TEMPLATES_PREFIX "templates/"
+
+static bool builtin_templates_root(char *out, size_t cap)
+{
+    const R2dPayload *bundle = r2d_bundle();
+    if (!bundle) return false;
+    const size_t plen = strlen(BUILTIN_TEMPLATES_PREFIX);
+    uint64_t hash = 1469598103934665603ull;   // FNV-1a
+    int count = 0;
+    for (int i = 0; i < bundle->file_count; ++i) {
+        const R2dPayloadFile *f = &bundle->files[i];
+        if (strncmp(f->path, BUILTIN_TEMPLATES_PREFIX, plen) != 0) continue;
+        for (const char *p = f->path; *p; ++p) hash = (hash ^ (uint8_t)*p) * 1099511628211ull;
+        for (size_t k = 0; k < f->size; ++k) hash = (hash ^ f->data[k]) * 1099511628211ull;
+        count++;
+    }
+    if (count == 0) return false;
+    char *pref = SDL_GetPrefPath("Russiano2D", "r2d");
+    if (!pref) return false;
+    snprintf(out, cap, "%stemplates-%016llx", pref, (unsigned long long)hash);
+    SDL_free(pref);
+    char mark[1700];
+    snprintf(mark, sizeof mark, "%s/.ready", out);
+    if (sdk_file_exists(mark)) return true;   // уже распакованы
+    for (int i = 0; i < bundle->file_count; ++i) {
+        const R2dPayloadFile *f = &bundle->files[i];
+        if (strncmp(f->path, BUILTIN_TEMPLATES_PREFIX, plen) != 0) continue;
+        char dest[2048], dir[2048];
+        snprintf(dest, sizeof dest, "%s/%s", out, f->path + plen);
+        snprintf(dir, sizeof dir, "%s", dest);
+        char *slash = strrchr(dir, '/');
+        if (slash) { *slash = '\0'; SDL_CreateDirectory(dir); }
+        if (!sdk_write_file(dest, f->data, f->size)) return false;
+    }
+    return sdk_write_file(mark, "1", 1);   // метка последней: полуготовый каталог не принимается
+}
+
 static bool templates_root(const SdkArgs *a, char *out, size_t cap)
 {
     const char *given = sdk_arg_value(a, "--root");
@@ -49,7 +91,8 @@ static bool templates_root(const SdkArgs *a, char *out, size_t cap)
     // the same executable use the repository templates from a nested build.
     sdk_join(sdk_exe_dir(), "../../../../../templates", cand, sizeof cand);
     if (sdk_is_dir(cand)) { snprintf(out, cap, "%s", cand); return true; }
-    return false;
+    // Одиночный бинарник без templates/ рядом: шаблоны лежат внутри него.
+    return builtin_templates_root(out, cap);
 }
 
 static bool id_ok(const char *id)

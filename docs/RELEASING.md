@@ -69,14 +69,20 @@ Release version [1.2.14]:
 
 ```text
 dist/
-    macos-arm64/      {r2d, editor/, templates/, docs/}
-    macos-x86_64/     {r2d, editor/, templates/, docs/}
-    windows-x86_64/   {r2d.exe, editor/, templates/, docs/}
+    macos-arm64/      {r2d, AGENTS.md, README.md}
+    macos-x86_64/     {r2d, AGENTS.md, README.md}
+    windows-x86_64/   {r2d.exe, AGENTS.md, README.md}
     russiano2d-vX.Y.Z-macos-arm64.tar.gz
     russiano2d-vX.Y.Z-macos-x86_64.tar.gz
     russiano2d-vX.Y.Z-windows-x86_64.zip
     SHA256SUMS.txt
 ```
+
+Каталогов `docs/`, `editor/`, `templates/`, `assets/` и `game/` в пакете нет: всё это вшито в
+бинарник (`tools/embed_bundle.py`). Документация читается командой `r2d docs list|show|search`,
+шаблоны — `r2d templates` и `r2d new` (при первом обращении распаковываются в кэш пользователя),
+шрифты и иконка окна берутся из бинарника, если рядом нет `assets/`. Короткий `AGENTS.md` рядом
+только объясняет, как достать документацию. Рядом лежат `api.schema.json` и `russiano2d.d.ts`.
 
 Linux x86_64 из локального релиза временно исключён (`R2D_BUILD_LINUX=1`
 возвращает его в `release_build`). На Linux движок собирается штатно:

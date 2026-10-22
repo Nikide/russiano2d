@@ -1494,6 +1494,14 @@ void r2d_app_set_window_icon(R2DApp *app)
     } else {
         icon = IMG_Load(icon_path);
     }
+    if (!icon) {
+        // Одиночный бинарник без assets/icons рядом: общая иконка r2d из встроенного пакета.
+        const R2dPayloadFile *builtin = r2d_builtin_asset("assets/icons/russiano2d.png");
+        if (builtin) {
+            SDL_IOStream *io = SDL_IOFromConstMem(builtin->data, builtin->size);
+            if (io) icon = IMG_Load_IO(io, true);
+        }
+    }
     if (icon) {
         if (!SDL_SetWindowIcon(app->window, icon))
             R2D_WARN("не удалось поставить иконку окна: %s", SDL_GetError());

@@ -88,7 +88,16 @@ public:
                 return to_handle(mem);
             }
         }
-        return OpenOnDisk(path);
+        Rml::FileHandle disk = OpenOnDisk(path, false);
+        if (disk) return disk;
+        // Одиночный бинарник без assets/ рядом: шрифты и иконки движка из
+        // встроенного пакета (только assets/fonts и assets/icons).
+        if (const R2dPayloadFile *builtin = r2d_builtin_asset(path.c_str())) {
+            auto *mem = new MemoryFile(builtin->data, builtin->size);
+            memory_files_.insert(mem);
+            return to_handle(mem);
+        }
+        return OpenOnDisk(path, true);
     }
 
 private:
@@ -103,7 +112,7 @@ private:
         return memory_files_.count(file) ? file : nullptr;
     }
 
-    Rml::FileHandle OpenOnDisk(const Rml::String &path)
+    Rml::FileHandle OpenOnDisk(const Rml::String &path, bool warn)
     {
         // Тот же поиск, что у текстур/JSON: выбранный --game перед base_path.
         // Включает относительные RCSS и изображения внутри документа.
@@ -134,8 +143,10 @@ private:
             if (f) return reinterpret_cast<Rml::FileHandle>(f);
         }
 
-        Rml::Log::Message(Rml::Log::LT_WARNING, "не удалось открыть файл для RmlUi: %s",
-                          candidates[0].c_str());
+        if (warn) {
+            Rml::Log::Message(Rml::Log::LT_WARNING, "не удалось открыть файл для RmlUi: %s",
+                              candidates[0].c_str());
+        }
         return reinterpret_cast<Rml::FileHandle>(nullptr);
     }
 
@@ -501,6 +512,19 @@ R2DGui *r2d_gui_create(SDL_GPUDevice *device, SDL_Window *window, const char *ba
                     R2D_WARN("RmlUi: не удалось загрузить шрифт %s", full.c_str());
                 } else {
                     R2D_LOG("RmlUi: шрифт %s", f.c_str());
+                }
+            }
+        }
+        if (fonts.empty() && payload_fonts == 0) {
+            // Одиночный бинарник: шрифты движка берём из встроенного пакета.
+            const char *builtin[32];
+            const int builtin_count = r2d_builtin_font_paths(builtin, 32);
+            for (int i = 0; i < builtin_count; ++i) {
+                if (Rml::LoadFontFace(builtin[i])) {
+                    ++payload_fonts;
+                    R2D_LOG("RmlUi: встроенный шрифт — %s", builtin[i]);
+                } else {
+                    R2D_WARN("RmlUi: не удалось загрузить встроенный шрифт: %s", builtin[i]);
                 }
             }
         }

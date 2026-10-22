@@ -22,10 +22,11 @@ REQUIRED = (
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
     "api.schema.json",
-    "editor/project.json",
-    "editor/main.js",
-    "templates/blank/template.json",
+    "AGENTS.md",
+    "README.md",
 )
+# Вшито в бинарник (tools/embed_bundle.py): рядом с ним этих каталогов быть не должно.
+EMBEDDED_DIRS = ("docs", "editor", "templates", "assets", "game")
 BINARIES = {
     "linux": ("r2d",),
     "macos": ("r2d",),
@@ -107,6 +108,9 @@ def main():
         check(binary in flat, "исполняемый файл %s в корне" % binary)
     for required in REQUIRED:
         check(required in flat, "обязательный файл %s" % required)
+    stray = sorted(d for d in EMBEDDED_DIRS if any(n == d or n.startswith(d + "/") for n in flat))
+    check(not stray, "документация, редактор, шаблоны и ресурсы вшиты в бинарник, отдельных каталогов нет" +
+          (" (%s)" % ", ".join(stray) if stray else ""))
     forbidden_apps = sorted(n for n in flat if "SDK.app/" in n or PurePosixPath(n).name in {
         "r2d-sdk", "r2d-sdk.exe", "russiano2d-sdk", "russiano2d-sdk.exe"
     })

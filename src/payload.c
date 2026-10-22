@@ -845,6 +845,41 @@ bool r2d_payload_attach_builtin(void)
     return true;
 }
 
+// Запасные ресурсы движка из встроенного пакета: шрифты и иконка окна. Игре без
+// каталога assets/ рядом (одиночный бинарник) они нужны, чтобы текст рисовался.
+// Только эти два каталога: остальное бандл игре не подсовывает.
+static bool builtin_asset_dir(const char *path)
+{
+    return SDL_strncmp(path, "assets/fonts/", 13) == 0 || SDL_strncmp(path, "assets/icons/", 13) == 0;
+}
+
+const R2dPayloadFile *r2d_builtin_asset(const char *path)
+{
+    if (!path) return NULL;
+    while (path[0] == '.' && path[1] == '/') path += 2;
+    if (!builtin_asset_dir(path)) return NULL;
+    const R2dPayload *bundle = r2d_bundle();
+    if (!bundle) return NULL;
+    const R2dPayloadFile *file = r2d_payload_find(bundle, path);
+    return file && SDL_strcmp(file->path, path) == 0 ? file : NULL;
+}
+
+int r2d_builtin_font_paths(const char **out, int cap)
+{
+    const R2dPayload *bundle = r2d_bundle();
+    if (!bundle || !out || cap <= 0) return 0;
+    int n = 0;
+    for (int i = 0; i < bundle->file_count && n < cap; ++i) {
+        const char *p = bundle->files[i].path;
+        if (SDL_strncmp(p, "assets/fonts/", 13) != 0) continue;
+        const size_t len = SDL_strlen(p);
+        if (len < 5) continue;
+        if (SDL_strcasecmp(p + len - 4, ".ttf") != 0 && SDL_strcasecmp(p + len - 4, ".otf") != 0) continue;
+        out[n++] = p;
+    }
+    return n;
+}
+
 const R2dPayloadFile *r2d_payload_find_user(const char *path)
 {
     if (g_payload && g_payload->builtin) {
@@ -901,6 +936,12 @@ void r2d_vfs_free(uint8_t *data)
         if (data >= g_payload->buffer && data < g_payload->buffer + g_payload->buffer_size) return;
         if (g_payload->plain &&
             data >= g_payload->plain && data < g_payload->plain + g_payload->plain_size) return;
+    }
+    // Встроенный пакет, когда он не активный груз (r2d_builtin_asset): те же правила.
+    if (g_bundle && g_bundle != g_payload) {
+        if (data >= g_bundle->buffer && data < g_bundle->buffer + g_bundle->buffer_size) return;
+        if (g_bundle->plain &&
+            data >= g_bundle->plain && data < g_bundle->plain + g_bundle->plain_size) return;
     }
     SDL_free(data);
 }

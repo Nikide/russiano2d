@@ -86,11 +86,11 @@ from public_docs import (  # noqa: E402  (импорт после правки s
     public_docs_ignore,
 )
 
-#: Корневые элементы пакета (кладутся рядом с бинарником).
-PACKAGE_ROOT_ENTRIES = ("editor", "templates", "docs",
-                        # Generated $ API artifacts: SDK consumers get the same
-                        # schema/typings the CLI/lint/doctor use.
-                        "api.schema.json", "russiano2d.d.ts")
+#: Корневые элементы пакета (кладутся рядом с бинарником). Редактор, шаблоны,
+#: документация, шрифты и иконки вшиты в сам бинарник (tools/embed_bundle.py),
+#: поэтому каталогов editor/, templates/, docs/, assets/ и game/ в пакете нет:
+#: остаются схема `$` и типы для редакторов кода.
+PACKAGE_ROOT_ENTRIES = ("api.schema.json", "russiano2d.d.ts")
 
 
 def package_root_entries() -> List[str]:
@@ -389,88 +389,17 @@ def collect_runtime_files(
     for name in DOC_FILES:
         if os.path.exists(os.path.join(ROOT, name)):
             files.append((name, name))
-    # Игра по умолчанию — демо VN (game_vn). Платформер из game/ в пакет
-    # больше не кладём; он остаётся в репозитории как демо.
-    if os.path.isdir(os.path.join(ROOT, "game_vn")):
-        files.append(("game_vn", "game"))
-    elif os.path.isdir(os.path.join(ROOT, "game")):
-        files.append(("game", "game"))
-    if os.path.isdir(os.path.join(ROOT, "assets")):
-        files.append(("assets", "assets"))
     if with_demos and os.path.isdir(os.path.join(ROOT, "demos")):
         files.append(("demos", "demos"))
     return files
 
 
-#: Порядок, в котором документы идут в приложении; остальные — по алфавиту.
-AGENTS_DOC_ORDER = (
-    "docs/AGENT_IMPLEMENTATION_RULES.md",
-    "docs/PHILOSOPHY.md",
-    "docs/UI_RMLUI_LAW.md",
-    "docs/ARCHITECTURE.md",
-    "docs/HIGH_LEVEL_API.md",
-    "docs/AGENT_API.md",
-    "docs/BUILD.md",
-    "docs/tutorial-first-game.md",
-    "docs/tutorial-platformer.md",
-    "docs/tutorial-menus.md",
-    # Вертикальные примеры спецификации: у каждого свой гайд рядом с API.
-    "docs/tutorial-melee.md",
-    "docs/tutorial-runtime-integration.md",
-    "docs/demos.md",
-    "docs/TASKS.md",
-    "docs/HIGH_LEVEL_API_PERF.md",
-)
-
-
-def agents_doc_files() -> List[str]:
-    """ПУБЛИЧНЫЕ документы движка: ``docs/*.md`` и ``docs/highlevel/*.md``.
-
-    Список не задаётся руками: новый файл в docs/ попадёт в AGENTS.md сам,
-    поэтому документ не может разойтись с документацией. Исключение одно —
-    `INTERNAL_DOCS`: внутренние рабочие документы в поставку не идут (иначе
-    чужой отчёт и наши журналы приёмки уезжали бы в пакет одним файлом).
-    """
-    found = [
-        os.path.relpath(path, ROOT)
-        for path in (
-            glob.glob(os.path.join(ROOT, "docs", "*.md"))
-            + glob.glob(os.path.join(ROOT, "docs", "highlevel", "*.md"))
-        )
-        if not is_internal_doc(os.path.relpath(path, ROOT))
-    ]
-    preferred = [name for name in AGENTS_DOC_ORDER if name in found]
-    rest = sorted(name for name in found if name not in preferred)
-    return preferred + rest
-
-
-def agents_docs_appendix() -> str:
-    """Собрать приложение со всей документацией движка целиком."""
-    files = agents_doc_files()
-    if not files:
-        return ""
-
-    toc = ["\n\n---\n\n# Приложение: вся документация движка\n",
-           "\nНиже — полные тексты справочников, чтобы не искать их в интернете.\n\n"]
-    bodies = []
-    for name in files:
-        with open(os.path.join(ROOT, name), encoding="utf-8") as handle:
-            text = handle.read()
-        title = name
-        for line in text.splitlines():
-            if line.startswith("# "):
-                title = line[2:].strip()
-                break
-        toc.append("* %s — `%s`\n" % (title, name))
-        bodies.append(
-            "\n\n---\n\n## %s\n\n<sub>источник: `%s`</sub>\n\n%s"
-            % (title, name, text)
-        )
-    return "".join(toc) + "".join(bodies)
-
-
 def render_agents_doc(platform_name: str, version: str) -> str:
-    """Полный текст AGENTS.md для платформы: шаблон + вся документация."""
+    """Текст AGENTS.md для платформы: короткая инструкция из шаблона.
+
+    Документацию сюда не склеиваем: она лежит в самом бинарнике, и AGENTS.md
+    говорит только, как достать её командой ``r2d docs``.
+    """
     binary = binary_name(platform_name)
     run, run_note, build_note = platform_runtime_note(platform_name, binary)
     values = {
@@ -489,7 +418,7 @@ def render_agents_doc(platform_name: str, version: str) -> str:
         text = handle.read()
     for key, value in values.items():
         text = re.sub(r"\{\{\s*" + key + r"\s*\}\}", lambda _m, v=value: v, text)
-    return text + agents_docs_appendix()
+    return text
 
 
 def platform_runtime_note(platform_name: str, binary: str) -> Tuple[str, str, str]:
@@ -811,8 +740,7 @@ def package_platform(
             log("    пропускаю отсутствующий %s" % source)
             continue
         if os.path.isdir(source_path):
-            # package_ignore = мусор ОС + INTERNAL_DOCS: каталог `docs/` едет в
-            # пакет без внутренних рабочих документов, но с публичными.
+            # package_ignore = мусор ОС + внутренние рабочие документы.
             shutil.copytree(source_path, dest_path, dirs_exist_ok=True,
                             ignore=package_ignore)
         else:

@@ -47,6 +47,7 @@ if [ -n "${R2D_BINARY:-}" ]; then
     run "$R2D_BINARY" validate game --json
     run "$R2D_BINARY" snippet catalog --strict --json
     run python3 scripts/snippet_matrix.py --check
+    run python3 tests/standalone_binary_test.py
 fi
 
 echo

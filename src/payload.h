@@ -168,6 +168,14 @@ bool r2d_payload_attach_builtin(void);
 // суффиксу. Для обычного груза игры — то же, что r2d_payload_find.
 const R2dPayloadFile *r2d_payload_find_user(const char *path);
 
+// Запасные ресурсы движка из встроенного пакета для игры без каталога assets/
+// рядом (одиночный бинарник): ТОЛЬКО assets/fonts/* и assets/icons/*. Зовётся
+// после того, как груз игры и диск ничего не дали, поэтому файлы игры никогда
+// не перекрываются. Указатель данных живёт до выхода; r2d_vfs_free его не освобождает.
+const R2dPayloadFile *r2d_builtin_asset(const char *path);
+// Пути встроенных .ttf/.otf (assets/fonts/…); возвращает, сколько записано в out.
+int r2d_builtin_font_paths(const char **out, int cap);
+
 // Имя точки входа из груза (пустая строка, если груза нет).
 const char *r2d_payload_entry(void);
 

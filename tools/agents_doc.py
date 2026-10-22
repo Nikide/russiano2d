@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Собрать AGENTS.md (и README.md) из шаблона и ВСЕЙ документации движка.
+"""Собрать AGENTS.md и README.md пакета из шаблонов tools/templates.
 
-Список документов не задаётся руками: берутся все ``docs/*.md`` и
-``docs/highlevel/*.md``, поэтому новый файл документации попадает в AGENTS.md
-сам, и документ не может разойтись с текстами.
+AGENTS.md короткий: документация лежит внутри бинарника, и файл объясняет,
+как достать её командой ``r2d docs``. Рядом с бинарником каталога docs/ нет.
 
 Один и тот же код использует упаковщик релиза (``tools/release.py``) и
 локальный скрипт сборки (``build_and_push.command``) — вручную ничего собирать не
@@ -15,11 +14,8 @@
     python3 tools/agents_doc.py --platform macos-arm64 \\
         --out dist/macos-arm64/AGENTS.md
 
-    # обновить документы во всех папках dist/<платформа>/
+    # обновить README.md и AGENTS.md во всех папках dist/<платформа>/
     python3 tools/agents_doc.py --all
-
-    # посмотреть, какие документы попадут в приложение
-    python3 tools/agents_doc.py --list
 """
 
 from __future__ import annotations
@@ -50,9 +46,7 @@ def write_one(platform_name: str, out_path: str, version: str) -> int:
     os.makedirs(folder, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as handle:
         handle.write(text)
-    print("AGENTS.md: %s — %d КБ, документов %d"
-          % (out_path, len(text.encode("utf-8")) // 1024,
-             len(release.agents_doc_files())))
+    print("AGENTS.md: %s — %d КБ" % (out_path, len(text.encode("utf-8")) // 1024))
     return 0
 
 
@@ -68,15 +62,13 @@ def refresh_out_dir(out_dir: str, version: str) -> int:
             continue
         # Refresh source documentation too, then regenerate checksums AND the
         # archive. Editing only AGENTS/README made dist differ from its tarball.
-        # Копируем только ПУБЛИЧНУЮ документацию: внутренние рабочие документы
-        # (docs/internal/**, журналы приёмки и отчёты, SDK_HANDOFF.md) в поставку
-        # не идут — правило INTERNAL_DOCS в tools/release.py.
-        docs = os.path.join(target, 'docs')
-        if os.path.isdir(docs): shutil.rmtree(docs)
-        shutil.copytree(os.path.join(ROOT, 'docs'), docs, ignore=release.package_ignore)
+        # Рядом с бинарником нет ни документации, ни редактора, ни шаблонов, ни
+        # ресурсов: всё это вшито в r2d. Каталоги от прежних сборок убираем,
+        # чтобы они не уехали в архив.
+        for stale in ('docs', 'editor', 'templates', 'assets', 'game'):
+            stale_dir = os.path.join(target, stale)
+            if os.path.isdir(stale_dir): shutil.rmtree(stale_dir)
         for source in release.package_root_entries():
-            if source == 'docs':
-                continue
             path = os.path.join(ROOT, source)
             if os.path.isfile(path):
                 shutil.copy2(path, os.path.join(target, source))
@@ -127,16 +119,9 @@ def main(argv: List[str]) -> int:
                         help="обновить README.md и AGENTS.md во всех dist/<платформа>/")
     parser.add_argument("--dir", default="dist", help="каталог сборок (по умолчанию dist)")
     parser.add_argument("--version", default=None, help="версия (по умолчанию из VERSION)")
-    parser.add_argument("--list", action="store_true", help="показать список документов")
     options = parser.parse_args(argv)
 
     version = options.version or release.read_version()
-
-    if options.list:
-        for name in release.agents_doc_files():
-            print(name)
-        print("всего документов: %d" % len(release.agents_doc_files()))
-        return 0
 
     if options.all:
         return refresh_out_dir(options.dir, version)

@@ -512,6 +512,18 @@ static void autoload_default_font(void)
         SDL_EnumerateDirectory(dir, r2d__collect_font, NULL);
     }
 
+    // 3. Ни в грузе игры, ни на диске шрифтов нет (одиночный бинарник): берём
+    // встроенные из пакета движка, иначе текст не рисовался бы вовсе.
+    if (g_candidates.count == 0) {
+        const char *builtin[R2D_FONT_CANDIDATES];
+        const int n = r2d_builtin_font_paths(builtin, R2D_FONT_CANDIDATES);
+        for (int i = 0; i < n; ++i) {
+            SDL_snprintf(g_candidates.paths[g_candidates.count],
+                         sizeof g_candidates.paths[0], "%s", builtin[i]);
+            g_candidates.count++;
+        }
+    }
+
     if (g_candidates.count == 0) return;
 
     // 1. Явное предпочтение движка. Roboto выбран как универсальный: он
@@ -606,7 +618,15 @@ static unsigned char *read_font_file(const char *path, size_t *out_size)
         if (r2d_vfs_has(full)) data = r2d_vfs_read(full, &size);
         if (!data) data = (unsigned char *)SDL_LoadFile(full, &size);
     }
-    if (!data) return NULL;
+    if (!data) {
+        // Последний запас: шрифт встроенного пакета (данные принадлежат ему).
+        const R2dPayloadFile *builtin = r2d_builtin_asset(path);
+        if (builtin) {
+            *out_size = builtin->size;
+            return builtin->data;
+        }
+        return NULL;
+    }
     *out_size = size;
     return data;
 }

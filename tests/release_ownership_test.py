@@ -107,8 +107,8 @@ def test_dist_contract():
     print("\n== dist и валидация пакетов ==")
     check("def archive_name(" in read("tools/release.py"), "имя архива — release.archive_name()")
     validator = read("tools/ci_package_check.py")
-    check("VERSION" in validator and '"editor/main.js"' in validator,
-          "валидатор пакета проверяет VERSION и единый Editor")
+    check("VERSION" in validator and '"AGENTS.md"' in validator and "EMBEDDED_DIRS" in validator,
+          "валидатор пакета проверяет VERSION, AGENTS.md и отсутствие каталогов, вшитых в бинарник")
     check('"r2d",' in validator and '"r2d.exe",' in validator,
           "валидатор пакета требует единственный движковый executable")
     check("__pycache__" in validator and ".DS_Store" in validator,
