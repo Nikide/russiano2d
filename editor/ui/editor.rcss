@@ -627,7 +627,7 @@ scrollbarcorner { background-color: transparent; }
 /* маскот */
 #ag-body { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0px; }
 #ag-col { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0px; min-height: 0px; }
-#ag-side { display: block; width: 230px; flex: 0 0 230px; padding: 6px 12px 0px 0px; text-align: center; }
+#ag-side { display: block; width: 230px; flex: 0 0 230px; padding: 6px 12px 0px 0px; text-align: center; overflow-y: auto; }
 #mc { display: block; width: 200px; height: 200px; margin: 0px auto; cursor: pointer; }
 #mc.off { display: none; }
 #ag-side.off { display: none; }
@@ -693,10 +693,10 @@ scrollbarcorner { background-color: transparent; }
 .ag-stop:hover { background-color: #d92d20; }
 
 /* план задач */
-#ag-plan { display: block; flex: 0 0 auto; margin: 8px 12px 0px 24px; padding: 8px 12px; background-color: #181b21; border-width: 1px; border-color: #262b35; border-radius: 9px; }
+#ag-plan { display: block; margin: 10px 0px 10px 0px; padding: 8px 10px; text-align: left; background-color: #181b21; border-width: 1px; border-color: #262b35; border-radius: 9px; }
 .plan-head { display: block; margin-bottom: 4px; font-size: 11px; color: #8b93a3; }
-.plan-row { display: flex; flex-direction: row; align-items: center; padding: 2px 0px; font-size: 12px; color: #9aa2b1; }
-.plan-ic { display: block; width: 18px; font-size: 14px; color: #5d6575; }
+.plan-row { display: flex; flex-direction: row; align-items: flex-start; padding: 2px 0px; white-space: normal; font-size: 12px; color: #9aa2b1; }
+.plan-ic { display: block; flex: 0 0 18px; width: 18px; font-size: 14px; color: #5d6575; }
 .plan-row.doing { color: #e6e9ef; }
 .plan-row.doing .plan-ic { color: #9cc2ff; }
 .plan-row.done { color: #6f7a8f; }

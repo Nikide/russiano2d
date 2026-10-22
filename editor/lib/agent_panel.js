@@ -299,7 +299,7 @@ export function createAgentPanel($, doc, host) {
         doc.attr('mc', 'class', cls);
         doc.text('mc-bubble', esc(m.bubble));
         doc.cls('mc-bubble', 'hidden', !m.bubble || !st.mascotOn);
-        doc.cls('ag-side', 'off', !st.mascotOn);
+        doc.cls('mc', 'off', !st.mascotOn);
         // на вкладке — маленький «крабик»: во время работы показывает текущий кадр, в покое — улыбка
         doc.attr('bt-agent-mc', 'class', st.busy || st.pending || m.mode === 'success' || m.mode === 'failure' ? cls : 'mc-idle-0');
     }
@@ -321,6 +321,7 @@ export function createAgentPanel($, doc, host) {
         doc.cls('ag-stop', 'hidden', !st.busy);
         doc.html('ag-log', logHtml());
         doc.cls('ag-plan', 'hidden', !st.plan.length);
+        doc.cls('ag-side', 'off', !st.mascotOn && !st.plan.length);
         doc.html('ag-plan', planHtml());
         doc.cls('ag-undo', 'disabled', !(st.history && st.history.length));
         doc.cls('ag-ask', 'hidden', !st.pending && !st.asking);
