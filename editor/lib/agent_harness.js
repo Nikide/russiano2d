@@ -29,14 +29,15 @@ export const PROVIDERS = {
 };
 
 export const SYSTEM_PROMPT = [
-    'Ты — агент внутри Editor движка Russiano2D (2D/2.5D, один бинарник r2d, игровой API — `$`). Отвечай по-русски, коротко.',
-    'Правила движка: игровой код использует только публичный `$` API; не пиши второй движок, ECS, свой scene graph/event bus/менеджеры.',
-    'Работа: 1) если контекст из доков не хватает — docs_search/docs_show; 2) любой `$.…` метод, в котором не уверен, проверь api_lookup — выдумывать имена нельзя;',
-    '3) правь файлы точечно через edit_file (write_file — только для новых файлов или полной замены); после записи .js lint уже запущен автоматически — исправь диагностику;',
-    '4) в конце вызови r2d_validate, при изменении игровой логики — run_check (короткий headless-прогон) и убедись, что ошибок нет. Не повторяй проверки без правок.',
-    'Готовое поведение (движение, AI, способности, UI, камера…) не пиши кодом: snippet_find → snippet_apply (объекты в коде создавай с `id`, owner = object:<id>) — это быстрее и дешевле по токенам.',
-    'Игра целиком: editor_op new_project (шаблон blank) → скрипты (write_file/edit_file) → ресурсы. Любая студия — через tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: world-edit операции brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (snippet, atlas-grid, world-compile, project-set…). Резерв: JSON-файлы ресурсов через edit_file.',
-    'Пути — относительно корня проекта. Сначала посмотри существующие файлы (list_files, read_file), потом пиши.',
+    'Ты — агент внутри Editor движка Russiano2D (2D/2.5D, один бинарник r2d, игровой API — `$`). Отвечай по-русски, коротко. Действуй, а не исследуй: 3–5 вызовов инструментов на простую задачу.',
+    'Правила: только публичный `$` API; не пиши второй движок, ECS, свой scene graph/event bus/менеджеры. Имя `$.…`, в котором не уверен, проверь api_lookup один раз (не гадай именами).',
+    'ГОТОВОЕ ПОВЕДЕНИЕ (движение, прыжок, AI, способности, камера, UI) НЕ ПИШИ КОДОМ: snippet_find → snippet_apply. Не вызывай `r2d_cli snippet catalog` — это 500 кирпичиков, используй snippet_find с одним словом.',
+    'Объект, к которому цепляется кирпичик, создай в коде с `id`, затем snippet_apply с owner "object:<id>".',
+    'Шпаргалка (проверенные идиомы): `$.ready(($) => { $.gfx.color("#141824"); $.world.gravity(0, 1800); $("<player>", { id: "hero" }).at(200, 300).appendTo($.world); $.camera.follow("#hero"); });` — ',
+    'текст: `$("<text>", { text: "Очки", size: 32 }).at(640, 40).appendTo($.world)`; картинка: `$("<sprite>", { src: "assets/a.png", w: 64, h: 64 })`; сцены: `$.scene.add("level", ($) => { … })` и запуск `$.scene.load("level")` (внутри `$.ready`). Строку `import "./generated/snippets/index.js"` добавляет генератор кирпичиков — сам её не пиши.',
+    'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
+    'Игра целиком: editor_op new_project (шаблон blank) → код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
+    'Пути — относительно корня проекта. Сначала list_files/read_file, потом пиши.',
 ].join('\n');
 
 export function toolSpecs(tools) {
@@ -243,6 +244,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
         }
         state.messages.push({ role: 'user', content });
         const limit = config.maxSteps || 12;
+        let idle = 0;
         try {
             for (let step = 0; step < limit; step++) {
                 if (state.stop) { if (ev.error) ev.error('остановлено'); return; }
@@ -254,11 +256,19 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 const calls = reply.blocks.filter((b) => b.type === 'tool_use');
                 if (!calls.length) return;
                 const results = [];
+                let acted = false;
                 for (const call of calls) {
                     if (ev.tool) ev.tool(call.name, call.input);
                     const r = await runTool(call);
                     if (ev.result) ev.result(call.name, r.text);
+                    const t = byName.get(call.name);
+                    if (t && !r.error && (typeof t.mutating === 'function' ? t.mutating(call.input || {}) : t.mutating)) acted = true;
                     results.push({ type: 'tool_result', tool_use_id: call.id, content: r.text, is_error: r.error });
+                }
+                // Слабые модели застревают в разведке: после нескольких шагов без единой правки подталкиваем к действию.
+                idle = acted ? 0 : idle + 1;
+                if (idle >= (config.nudgeAfter || 4) && idle % (config.nudgeAfter || 4) === 0) {
+                    results.push({ type: 'text', text: 'Хватит исследовать: ты уже ' + idle + ' шагов ничего не меняешь. Действуй сейчас: найди кирпичик (snippet_find) или напиши код (write_file/edit_file), затем r2d_validate. Не вызывай больше docs_search/api_lookup подряд.' });
                 }
                 state.messages.push({ role: 'user', content: results });
             }
@@ -506,6 +516,8 @@ export function editorTools(host) {
         try {
             const r = (await host.tool(['lint', host.abs(p), '--json'])).json;
             const d = (r && (r.diagnostics || r.problems)) || [];
+            // Граф проекта (editor.graph) держим свежим: иначе validate шумит R2D206, а кирпичики не видят объекты.
+            try { await host.tool(['project-index', host.abs(''), '--write']); } catch (_) { /* индекс необязателен */ }
             return d.length ? '\nlint: ' + d.length + ' замечаний:\n' + JSON.stringify(d.slice(0, 8)) : '\nlint: чисто';
         } catch (e) { return '\nlint: не запустился (' + (e && e.message || e) + ')'; }
     };
@@ -563,6 +575,9 @@ export function editorTools(host) {
           schema: { type: 'object', properties: { args: { type: 'array', items: { type: 'string' }, description: 'например ["snippet","catalog"]' } }, required: ['args'] },
           run: async (a) => {
               if (!Array.isArray(a.args) || !a.args.length) throw new Error('args — непустой массив строк');
+              const w = a.args.map(String);
+              if (w[0] === 'snippet' && w[1] === 'catalog' && !w.includes('--query') && !w.includes('--id')) return 'Каталог целиком — 500 кирпичиков, слишком много. Используй snippet_find с одним словом (например «прыж», «ai», «ability»).';
+              if (w[0] === 'docs' && w[1] === 'list' && !w.includes('--filter')) return 'Список всех страниц слишком длинный. Используй docs_search/api_lookup или `docs list --filter слово`.';
               const r = await host.tool(a.args.map(String));
               return String(r.output || (r.json ? JSON.stringify(r.json) : r.error || '')).slice(0, 8000);
           } },

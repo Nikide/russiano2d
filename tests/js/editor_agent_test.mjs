@@ -365,4 +365,19 @@ await atest('OpenCode Go: Bearer и один x-opencode-session на всю бе
     eq(seen[1].headers['x-opencode-session'], seen[0].headers['x-opencode-session']);
 });
 
+await atest('подталкивание: после серии шагов без правок в ответ добавляется напоминание, правка сбрасывает счётчик', async () => {
+    const seen = [];
+    const peek = () => anth({ type: 'tool_use', id: 'p' + seen.length, name: 'echo', input: { x: 1 } });
+    const write = () => anth({ type: 'tool_use', id: 'w', name: 'wr', input: {} });
+    const agent = createAgent({
+        config: { provider: 'anthropic', base: 'https://x', model: 'm', nudgeAfter: 3, maxSteps: 10 },
+        transport: scripted([peek(), peek(), peek(), write(), peek(), anth({ type: 'text', text: 'ок' })], seen), tools: toolsOf([]), confirm: async () => true,
+    });
+    await agent.send('?');
+    const lastUser = (i) => seen[i].body.messages.at(-1).content;
+    eq(lastUser(2).some((b) => b.type === 'text'), false);
+    eq(lastUser(3).some((b) => b.type === 'text' && b.text.includes('Хватит исследовать')), true);
+    eq(lastUser(4).some((b) => b.type === 'text'), false, 'после правки напоминания нет');
+});
+
 finish();

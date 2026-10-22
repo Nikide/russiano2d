@@ -339,6 +339,48 @@ package("tinyexr-r2d")
     end)
 package_end()
 
+package("llama.cpp-r2d")
+    set_homepage("https://github.com/ggml-org/llama.cpp")
+    set_description("llama.cpp b11669 (local recipe: static, only libllama for embeddings)")
+    add_urls("https://github.com/ggml-org/llama.cpp/archive/refs/tags/b11669.tar.gz")
+    add_versions("0.11669.0", "e06ba4fa263e30fdb9f0e65f00a8965202ddaa0c51f548a67e1f9b2164d04efc")
+    add_deps("cmake")
+    on_install(function (package)
+        local configs = {
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DBUILD_SHARED_LIBS=OFF",
+            "-DLLAMA_BUILD_TESTS=OFF", "-DLLAMA_BUILD_EXAMPLES=OFF", "-DLLAMA_BUILD_TOOLS=OFF",
+            "-DLLAMA_BUILD_SERVER=OFF", "-DLLAMA_BUILD_APP=OFF", "-DLLAMA_BUILD_COMMON=OFF", "-DLLAMA_CURL=OFF", "-DLLAMA_OPENSSL=OFF",
+            "-DGGML_OPENMP=OFF", "-DGGML_NATIVE=OFF",
+        }
+        if package:is_plat("macosx") then
+            table.insert(configs, "-DGGML_METAL=ON")
+            table.insert(configs, "-DGGML_METAL_EMBED_LIBRARY=ON")
+            table.insert(configs, "-DGGML_ACCELERATE=ON")
+        end
+        import("package.tools.cmake").install(package, configs, {cmake_generator = "Ninja"})
+    end)
+    on_load(function (package)
+        package:add("includedirs", "include")
+        package:add("links", "llama", "ggml", "ggml-cpu", "ggml-base")
+        if package:is_plat("macosx") then
+            package:add("links", "ggml-metal", "ggml-blas")
+            package:add("frameworks", "Accelerate", "Metal", "MetalKit", "Foundation")
+        end
+        if package:is_plat("linux") then
+            package:add("syslinks", "pthread", "m", "dl")
+        end
+    end)
+package_end()
+
+-- Встроенная модель эмбеддингов (tools/ai/export_gguf.py → models/r2d-embed.gguf).
+-- Нет файла — сборка без ИИ-поиска, `r2d docs context` работает по BM25.
+local r2d_ai_model = path.join(os.projectdir(), "models", "r2d-embed.gguf")
+local r2d_have_ai = os.isfile(r2d_ai_model)
+if r2d_have_ai then
+    add_requires("llama.cpp-r2d 0.11669.0", {system = false})
+end
+
 add_requires("libsdl3 3.4.16", {system = false})
 add_requires("libsdl3_image", {system = false})
 add_requires("libsdl3_mixer 3.2.4", {system = false})
@@ -406,6 +448,12 @@ target("r2d")
                 "R2D_SDK_VERSION=\"" .. version .. "\"")
     add_packages("libsdl3", "libsdl3_image", "libsdl3_mixer", "quickjs-ng", "box2d", "rmlui",
                  "freetype", "zstd", "stb", "tinyexr-r2d")
+    if r2d_have_ai then
+        add_packages("llama.cpp-r2d")
+        add_defines("R2D_HAVE_AI=1", "R2D_AI_MODEL_PATH=\"" .. r2d_ai_model .. "\"")
+        add_files("third_party/ai_model/ai_model_data.c")
+        add_extrafiles(r2d_ai_model)
+    end
     if is_plat("macosx") then
         add_packages("libcurl", "glslang", "spirv-cross")
         add_defines("R2D_HTTP_WITH_CURL=1", "R2D_ENABLE_LIVE_SHADERS=1")

@@ -157,3 +157,6 @@ docs/*HANDOFF*.md
 docs/NEXT_SESSION.md
 demos/real2d/HANDOFF_DEFECTS.md
 demos/real2d/from_agent_to_agent.md
+
+# Весовая модель эмбеддингов (tools/ai/export_gguf.py): большой артефакт, не в git
+models/

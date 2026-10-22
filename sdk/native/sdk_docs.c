@@ -14,6 +14,7 @@
 #include "sdk.h"
 #include "payload.h"
 #include "json.h"
+#include "ai_embed.h"
 
 #include <SDL3/SDL.h>
 #include <ctype.h>
@@ -239,7 +240,7 @@ typedef struct {
     const char *text; size_t len;     // текст куска (в бандле или в own)
     char *own;                        // собственный буфер для синтезированных карточек
     char path[200]; const char *kind; // doc | snippet | api
-    int line; int tf[CTX_MAX_TERMS]; int dl; double score, weight;
+    int line; int tf[CTX_MAX_TERMS]; int dl; double score, weight, cos;
 } CtxChunk;
 
 static CtxChunk *ctx_push(CtxChunk **arr, size_t *count, size_t *cap)
@@ -305,6 +306,84 @@ static bool ctx_stop(const char *st)
 static int ctx_cmp(const void *x, const void *y)
 {
     const double a = ((const CtxChunk *)x)->score, b = ((const CtxChunk *)y)->score;
+    return a < b ? 1 : a > b ? -1 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Векторы корпуса: считаются встроенной моделью один раз и лежат в кэше
+// пользователя; ключ — хеш текстов всех кусков + id модели, поэтому новая сборка
+// с другими доками сама пересчитает индекс.
+// ---------------------------------------------------------------------------
+typedef struct { char magic[8]; unsigned long long model, corpus; unsigned int count, dim; } VecHeader;
+
+static unsigned long long ctx_corpus_id(const CtxChunk *chunks, size_t count)
+{
+    unsigned long long h = 1469598103934665603ULL;
+    for (size_t k = 0; k < count; ++k) {
+        for (size_t i = 0; i < chunks[k].len; ++i) { h ^= (unsigned char)chunks[k].text[i]; h *= 1099511628211ULL; }
+        h ^= 0xFF; h *= 1099511628211ULL;
+    }
+    return h;
+}
+
+// Возвращает массив count*R2D_AI_DIM float (free) или NULL (нет модели/ошибка).
+static float *ctx_vectors(const CtxChunk *chunks, size_t count, bool quiet)
+{
+    if (!r2d_ai_available() || getenv("R2D_NO_AI")) return NULL;
+    char err[200];
+    if (!r2d_ai_open(err, sizeof err)) { if (!quiet) fprintf(stderr, "docs context: %s\n", err); return NULL; }
+    VecHeader want;
+    memcpy(want.magic, "R2DVEC01", 8);
+    want.model = r2d_ai_model_id(); want.corpus = ctx_corpus_id(chunks, count);
+    want.count = (unsigned int)count; want.dim = R2D_AI_DIM;
+    char path[1100] = "";
+    char *pref = SDL_GetPrefPath("Russiano2D", "r2d");
+    if (pref) { snprintf(path, sizeof path, "%sdocs-vec-%016llx.bin", pref, want.corpus ^ want.model); SDL_free(pref); }
+    const size_t bytes = count * R2D_AI_DIM * sizeof(float);
+    float *vec = (float *)malloc(bytes);
+    if (!vec) return NULL;
+    if (path[0]) {
+        FILE *f = fopen(path, "rb");
+        if (f) {
+            VecHeader h;
+            const bool ok = fread(&h, sizeof h, 1, f) == 1 && memcmp(&h, &want, sizeof h) == 0 && fread(vec, 1, bytes, f) == bytes;
+            fclose(f);
+            if (ok) return vec;
+        }
+    }
+    if (!quiet) fprintf(stderr, "docs context: индексирую %zu кусков встроенной моделью (один раз)…\n", count);
+    for (size_t k = 0; k < count; ++k) {
+        char buf[1100];
+        size_t t = chunks[k].len < 900 ? chunks[k].len : 900;
+        while (t > 0 && t < chunks[k].len && ((unsigned char)chunks[k].text[t] & 0xC0) == 0x80) --t;
+        memcpy(buf, "passage: ", 9);
+        memcpy(buf + 9, chunks[k].text, t);
+        buf[9 + t] = '\0';
+        if (!r2d_ai_embed(buf, vec + k * R2D_AI_DIM)) memset(vec + k * R2D_AI_DIM, 0, R2D_AI_DIM * sizeof(float));
+        if (!quiet && (k + 1) % 1000 == 0) fprintf(stderr, "  %zu/%zu\n", k + 1, count);
+    }
+    if (path[0]) {
+        char tmp[1120];
+        snprintf(tmp, sizeof tmp, "%s.tmp", path);
+        FILE *f = fopen(tmp, "wb");
+        if (f) {
+            const bool ok = fwrite(&want, sizeof want, 1, f) == 1 && fwrite(vec, 1, bytes, f) == bytes;
+            fclose(f);
+            if (ok) SDL_RenamePath(tmp, path); else remove(tmp);
+        }
+    }
+    return vec;
+}
+
+static int ctx_cmp_cos(const void *x, const void *y)
+{
+    const double a = (*(const CtxChunk *const *)x)->cos, b = (*(const CtxChunk *const *)y)->cos;
+    return a < b ? 1 : a > b ? -1 : 0;
+}
+
+static int ctx_cmp_bm25(const void *x, const void *y)
+{
+    const double a = (*(const CtxChunk *const *)x)->score, b = (*(const CtxChunk *const *)y)->score;
     return a < b ? 1 : a > b ? -1 : 0;
 }
 
@@ -461,12 +540,46 @@ static int docs_context(const SdkArgs *a)
         }
         c->score *= c->weight;
     }
+    // Гибрид: BM25 + косинус встроенной модели, слияние RRF (k=60). Нет модели/индекса — чистый BM25.
+    const char *mode = "bm25";
+    const bool want_ai = !sdk_arg_flag(a, "--no-ai");
+    float *vec = want_ai ? ctx_vectors(chunks, count, sdk_arg_flag(a, "--quiet")) : NULL;
+    if (vec) {
+        float qv[R2D_AI_DIM];
+        char qbuf[1100];
+        snprintf(qbuf, sizeof qbuf, "query: %.1000s", query);
+        if (r2d_ai_embed(qbuf, qv)) {
+            CtxChunk **by_bm = (CtxChunk **)malloc(count * sizeof *by_bm);
+            CtxChunk **by_cos = (CtxChunk **)malloc(count * sizeof *by_cos);
+            if (by_bm && by_cos) {
+                for (size_t k = 0; k < count; ++k) {
+                    double dot = 0;
+                    const float *v = vec + k * R2D_AI_DIM;
+                    for (int i = 0; i < R2D_AI_DIM; ++i) dot += (double)v[i] * qv[i];
+                    chunks[k].cos = dot;
+                    by_bm[k] = by_cos[k] = &chunks[k];
+                }
+                qsort(by_bm, count, sizeof *by_bm, ctx_cmp_bm25);
+                qsort(by_cos, count, sizeof *by_cos, ctx_cmp_cos);
+                double *fused = (double *)calloc(count, sizeof *fused);
+                if (fused) {
+                    for (size_t r = 0; r < count && r < 60 && by_bm[r]->score > 0; ++r) fused[by_bm[r] - chunks] += 1.0 / (60.0 + (double)r);
+                    for (size_t r = 0; r < count && r < 60; ++r) fused[by_cos[r] - chunks] += 1.0 / (60.0 + (double)r);
+                    for (size_t k = 0; k < count; ++k) chunks[k].score = fused[k] * 100.0 * chunks[k].weight;
+                    free(fused);
+                    mode = "hybrid";
+                }
+            }
+            free(by_bm); free(by_cos);
+        }
+        free(vec);
+    }
     qsort(chunks, count, sizeof *chunks, ctx_cmp);
 
     R2dSb out; r2d_sb_init(&out);
     r2d_sb_puts(&out, "{\"ok\":true,\"query\":");
     r2d_sb_put_json_string(&out, query);
-    r2d_sb_puts(&out, ",\"chunks\":[");
+    r2d_sb_printf(&out, ",\"mode\":\"%s\",\"chunks\":[", mode);
     int shown = 0;
     for (size_t k = 0; k < count && shown < limit && chunks[k].score > 0; ++k) {
         const CtxChunk *c = &chunks[k];
@@ -489,6 +602,7 @@ static int docs_context(const SdkArgs *a)
     r2d_sb_free(&out);
     for (size_t k = 0; k < count; ++k) free(chunks[k].own);
     free(chunks);
+    r2d_ai_close();
     return 0;
 }
 
@@ -547,12 +661,14 @@ static int docs_api(const SdkArgs *a)
     r2d_sb_puts(&out, ",\"entries\":[");
     int shown = 0;
     bool exact = false;
+    const bool want_internal = strstr(query, "._") != NULL;
     const int total = (int)r2d_json_size(names);
     for (int rank = 3; rank >= 1 && shown < limit; --rank) {
         for (int i = 0; i < total && shown < limit; ++i) {
             const R2dJson *item = r2d_json_at(names, (size_t)i);
             const char *path = r2d_json_str(r2d_json_get(item, "path"), "");
             if (api_rank(path, query) != rank) continue;
+            if (!want_internal && strstr(path, "._")) continue;   // служебные поля ($.x._state…) агенту не нужны
             if (rank == 3) exact = true;
             if (shown++) r2d_sb_putc(&out, ',');
             r2d_sb_puts(&out, "{\"path\":");

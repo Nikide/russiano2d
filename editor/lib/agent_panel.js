@@ -98,7 +98,16 @@ export function createAgentPanel($, doc, host) {
         render();
     }
 
+    // Первый запрос к встроенной модели строит индекс корпуса (~минута, один раз):
+    // прогреваем при первом показе панели, чтобы первый вопрос не ждал.
+    function warm() {
+        if (st.warmed) return;
+        st.warmed = true;
+        try { Promise.resolve($.sdk.tool(['docs', 'context', 'прогрев', '--limit', '1', '--quiet'])).catch(() => {}); } catch (_) { /* без прогрева */ }
+    }
+
     function render() {
+        warm();
         for (const id of Object.keys(PROVIDERS)) doc.cls('ag-prov-' + id, 'on', st.cfg.provider === id);
         doc.cls('ag-send', 'disabled', st.busy);
         doc.cls('ag-stop', 'hidden', !st.busy);
