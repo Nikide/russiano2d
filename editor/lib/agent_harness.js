@@ -75,7 +75,7 @@ function anthropicBody(cfg, system, messages, tools) {
     const defs = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema }));
     if (cfg.cache !== false && defs.length) defs[defs.length - 1] = { ...defs[defs.length - 1], cache_control: { type: 'ephemeral' } };
     return {
-        model: cfg.model, max_tokens: cfg.maxTokens || 4096,
+        model: cfg.model, max_tokens: cfg.maxTokens || 8192,
         system: cfg.cache !== false ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] : system,
         messages: msgs,
         ...(defs.length ? { tools: defs } : {}),
@@ -115,7 +115,7 @@ function openaiMessages(system, messages) {
 
 function openaiBody(cfg, system, messages, tools) {
     return {
-        model: cfg.model, max_tokens: cfg.maxTokens || 4096, messages: openaiMessages(system, messages),
+        model: cfg.model, max_tokens: cfg.maxTokens || 8192, messages: openaiMessages(system, messages),
         ...(tools.length ? { tools: tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.schema } })) } : {}),
     };
 }
@@ -188,7 +188,7 @@ function gigachatBody(cfg, system, messages, tools) {
         }
     }
     return {
-        model: cfg.model, messages: out, max_tokens: cfg.maxTokens || 4096,
+        model: cfg.model, messages: out, max_tokens: cfg.maxTokens || 8192,
         ...(tools.length ? { functions: tools.map((t) => ({ name: t.name, description: t.description, parameters: gigachatSchema(t.schema) })), function_call: 'auto' } : {}),
     };
 }
@@ -355,6 +355,10 @@ export function createAgent({ config, transport, tools, system, confirm, events,
         const tool = byName.get(block.name);
         if (!tool) return { text: 'нет такого инструмента: ' + block.name, error: true };
         if (block.name === 'skill_load' && block.input) for (const [g, def] of Object.entries(TOOL_GROUPS)) if (def.skills.includes(String(block.input.name || block.input.skill || ''))) unlock(g);
+        // Оборванные аргументы (ответ упёрся в лимит токенов) и пустая запись — ошибка модели, а не вопрос пользователю.
+        if (block.input && block.input._raw !== undefined) return { text: 'аргументы вызова оборваны (ответ не поместился в лимит токенов) — ничего не выполнено. Повтори вызов короче: для большого файла сначала запиши основу, затем дополняй через edit_file.', error: true };
+        const bad = typeof tool.check === 'function' ? tool.check(block.input || {}) : '';
+        if (bad) return { text: bad, error: true };
         const mut = typeof tool.mutating === 'function' ? tool.mutating(block.input || {}) : tool.mutating;
         if (mut && confirm && !(await confirm(tool.name, block.input))) {
             return { text: 'пользователь отклонил действие', error: true };
@@ -886,6 +890,7 @@ export function editorTools(host) {
           } },
         { name: 'write_file', description: 'Создать файл или полностью заменить (требует подтверждения). Большой файл пиши ЦЕЛИКОМ одним вызовом, а не кусками. Для небольших правок используй edit_file. После записи .js автоматически запускается lint.', mutating: true,
           schema: obj({ path: str('относительный путь'), content: str('полное содержимое') }),
+          check: (a) => (typeof a.content !== 'string' || !a.content.length ? 'write_file: content пуст — передай полный текст файла в поле content (файл не тронут).' : ''),
           run: async (a) => { const p = safeRel(a.path); remember(p); host.writeText(p, String(a.content)); return 'записано ' + p + await autoLint(p); } },
         { name: 'edit_file', description: 'Заменить фрагмент в файле (требует подтверждения): old_string должен встретиться ровно один раз. Дёшево по токенам. После правки .js запускается lint.', mutating: true,
           schema: obj({ path: str('относительный путь'), old_string: str('точный фрагмент'), new_string: str('замена') }),

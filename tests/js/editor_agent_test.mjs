@@ -401,6 +401,20 @@ await atest('хранилище моделей: профили, свои про�
     eq(m4.state.active, 'anthropic'); truthy(!PROVIDERS['my-gw']);
 });
 
+await atest('write_file: пустое содержимое и оборванные аргументы не доходят до подтверждения и записи', async () => {
+    const writes = [], asked = [];
+    const host = { tool: async () => ({}), abs: (p) => p, exists: () => false, readText: () => '', writeText: (p, c) => writes.push([p, c]), list: () => [], history: [] };
+    const tools = editorTools(host);
+    const transport = async () => ({ ok: true, status: 200, json: { content: [{ type: 'tool_use', id: 'a', name: 'write_file', input: { path: 'main.js', content: '' } }], stop_reason: 'tool_use' } });
+    let calls = 0;
+    const t2 = async () => { calls++; return calls === 1 ? { ok: true, status: 200, json: { content: [{ type: 'tool_use', id: 'a', name: 'write_file', input: { path: 'main.js', content: '' } }] } } : calls === 2 ? { ok: true, status: 200, json: { content: [{ type: 'tool_use', id: 'b', name: 'write_file', input: { _raw: '{"path":"main.js","content":"abc' } }] } } : { ok: true, status: 200, json: { content: [{ type: 'text', text: 'ок' }] } }; };
+    const agent = createAgent({ config: { provider: 'anthropic', base: 'x', model: 'm', key: 'k', maxSteps: 6 }, transport: t2, tools, confirm: async (n) => { asked.push(n); return true; } });
+    await agent.send('запиши');
+    eq(writes, []); eq(asked, []);
+    const results = agent.state.messages.filter((m) => Array.isArray(m.content)).flatMap((m) => m.content).filter((b) => b.type === 'tool_result').map((b) => b.content);
+    truthy(results[0].includes('content пуст') && results[1].includes('оборваны'));
+});
+
 await atest('r2d_cli: чтение без подтверждения, запись — с подтверждением; editor_op', async () => {
     const calls = [];
     const host = { tool: async (a) => { calls.push(a); return { output: 'ok' }; }, abs: (p) => p, exists: () => false, readText: () => '', writeText: () => {}, list: () => [] };
