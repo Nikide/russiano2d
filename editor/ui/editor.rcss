@@ -628,7 +628,7 @@ scrollbarcorner { background-color: transparent; }
 #ag-body { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0px; }
 #ag-col { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0px; min-height: 0px; }
 #ag-side { display: block; width: 230px; flex: 0 0 230px; padding: 6px 12px 0px 0px; text-align: center; overflow-y: auto; }
-#mc { display: block; width: 200px; height: 200px; margin: 0px auto; cursor: pointer; }
+#mc { display: block; width: 128px; height: 128px; max-width: 128px; margin: 0px auto; cursor: pointer; }
 #mc.off { display: none; }
 #ag-side.off { display: none; }
 #mc-bubble { display: block; margin: 8px 6px 4px 6px; padding: 6px 10px; font-size: 12px; color: #1b1e24; background-color: #eef1f7; border-radius: 10px; }
