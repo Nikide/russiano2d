@@ -31,12 +31,14 @@ export const PROVIDERS = {
 export const SYSTEM_PROMPT = [
     'Ты — агент внутри Editor движка Russiano2D (2D/2.5D, один бинарник r2d, игровой API — `$`). Отвечай по-русски, коротко. Действуй, а не исследуй: 3–5 вызовов инструментов на простую задачу.',
     'Правила: только публичный `$` API; не пиши второй движок, ECS, свой scene graph/event bus/менеджеры. Имя `$.…`, в котором не уверен, проверь api_lookup один раз (не гадай именами).',
-    'ГОТОВОЕ ПОВЕДЕНИЕ (движение, прыжок, AI, способности, камера, UI) НЕ ПИШИ КОДОМ: snippet_find → snippet_apply. Не вызывай `r2d_cli snippet catalog` — это 500 кирпичиков, используй snippet_find с одним словом.',
+    'ГОТОВОЕ ПОВЕДЕНИЕ (движение, прыжок, AI, способности, камера, UI) НЕ ПИШИ КОДОМ: snippet_find → snippet_apply. Наборы `kit.*` (например kit.platformer-core: движение+здоровье+камера) подключают сразу несколько кирпичиков — предпочитай их; искать достаточно 2–3 раза, потом действуй. Не вызывай `r2d_cli snippet catalog` — это 500 кирпичиков, используй snippet_find с одним словом.',
     'Объект, к которому цепляется кирпичик, создай в коде с `id`, затем snippet_apply с owner "object:<id>".',
-    'Шпаргалка (проверенные идиомы): `$.ready(($) => { $.gfx.color("#141824"); $.world.gravity(0, 1800); $("<player>", { id: "hero" }).at(200, 300).appendTo($.world); $.camera.follow("#hero"); });` — ',
-    'текст: `$("<text>", { text: "Очки", size: 32 }).at(640, 40).appendTo($.world)`; картинка: `$("<sprite>", { src: "assets/a.png", w: 64, h: 64 })`; сцены: `$.scene.add("level", ($) => { … })` и запуск `$.scene.load("level")` (внутри `$.ready`). Строку `import "./generated/snippets/index.js"` добавляет генератор кирпичиков — сам её не пиши.',
+    'Шпаргалка (проверенные идиомы): `$.ready(($) => { $.gfx.color("#141824"); $.world.gravity(0, 1800); … });` (в `$.ready`: сцены `$.scene.add("level", ($) => { … })` и запуск `$.scene.load("level")`).',
+    'Объекты для кирпичиков создавай с ЛИТЕРАЛЬНЫМ id (`id: "coin1"`), не в цикле с id из строки — граф их иначе не увидит. ФИЗИКА ЕСТЬ ТОЛЬКО У ВИДОВ УЗЛОВ: герой — `$("<player>", { id: "hero" }).at(200, 300).size(26, 30).color("#e07040").controls({ axis: "both", coyote: 100, jumpBuffer: 120 }).collision(26, 30).appendTo($.world)`;',
+    'земля и платформы — ТВЁРДЫЕ `$("<wall>", { id: "p1" }).at(x, y).size(200, 24).color("#5a6a5a").appendTo($.world)` (голый `<sprite>` — просто картинка: без гравитации и столкновений, герой пройдёт сквозь); монета — `$("<sprite>", { id: "coin1" }).at(x, y).size(18, 18).color("#ffd040")` + кирпичик interact.pickup;',
+    'текст: `$("<text>", { text: "Счёт: 0", size: 32 }).at(40, 40).appendTo($.world)`; картинка: `$("<sprite>", { src: "assets/a.png", w: 64, h: 64 })`. Строку `import "./generated/snippets/index.js"` добавляет генератор кирпичиков — сам её не пиши.',
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
-    'Игра целиком: editor_op new_project (шаблон blank) → код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
+    'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
     'Пути — относительно корня проекта. Сначала list_files/read_file, потом пиши.',
 ].join('\n');
 
@@ -244,7 +246,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
         }
         state.messages.push({ role: 'user', content });
         const limit = config.maxSteps || 12;
-        let idle = 0;
+        let idle = 0, announced = 0;
         try {
             for (let step = 0; step < limit; step++) {
                 if (state.stop) { if (ev.error) ev.error('остановлено'); return; }
@@ -254,7 +256,16 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 state.messages.push({ role: 'assistant', content: reply.blocks });
                 for (const b of reply.blocks) if (b.type === 'text' && ev.text) ev.text(b.text);
                 const calls = reply.blocks.filter((b) => b.type === 'tool_use');
-                if (!calls.length) return;
+                if (!calls.length) {
+                    // Слабые модели пишут «теперь применю…» и останавливаются: просим вызвать инструмент.
+                    const said = reply.blocks.filter((b) => b.type === 'text').map((b) => b.text).join(' ');
+                    if (announced < 2 && !/\?\s*$/.test(said.trim()) && /(теперь|сейчас|далее|приступаю|применю|применяю|запишу|создам|сделаю|добавлю|напишу|следующ)/i.test(said.slice(-200))) {
+                        announced++;
+                        state.messages.push({ role: 'user', content: 'Ты описал действие, но не вызвал инструмент — ничего не изменилось. Вызови нужный инструмент сейчас (snippet_apply, write_file или edit_file).' });
+                        continue;
+                    }
+                    return;
+                }
                 const results = [];
                 let acted = false;
                 for (const call of calls) {
@@ -268,7 +279,9 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 // Слабые модели застревают в разведке: после нескольких шагов без единой правки подталкиваем к действию.
                 idle = acted ? 0 : idle + 1;
                 if (idle >= (config.nudgeAfter || 4) && idle % (config.nudgeAfter || 4) === 0) {
-                    results.push({ type: 'text', text: 'Хватит исследовать: ты уже ' + idle + ' шагов ничего не меняешь. Действуй сейчас: найди кирпичик (snippet_find) или напиши код (write_file/edit_file), затем r2d_validate. Не вызывай больше docs_search/api_lookup подряд.' });
+                    results.push({ type: 'text', text: idle >= 2 * (config.nudgeAfter || 4)
+                        ? 'СТОП ПОИСКУ. В следующем ответе обязательно вызови snippet_apply (подходящий найденный кирпичик/набор) или write_file/edit_file. Больше никаких snippet_find, docs_search, api_lookup.'
+                        : 'Хватит исследовать: ты уже ' + idle + ' шагов ничего не меняешь. Действуй сейчас: примени найденный кирпичик (snippet_apply) или напиши код (write_file/edit_file), затем r2d_validate.' });
                 }
                 state.messages.push({ role: 'user', content: results });
             }
@@ -461,10 +474,22 @@ export function snippetTools(host) {
           schema: { type: 'object', properties: { query: str('слово/часть id'), limit: { type: 'number', description: 'сколько вернуть, по умолчанию 6' } }, required: ['query'] },
           run: async (a) => {
               const limit = Math.min(15, Math.max(1, Number(a.limit) || 6));
-              const r = (await host.tool(['snippet', 'catalog', '--project', host.abs(''), '--query', String(a.query), '--fields'])).json;
-              if (!r || !r.ok) return JSON.stringify(r);
-              const pk = (r.packages || []).filter((x) => x.valid !== false);
-              if (!pk.length) return 'ничего не найдено по «' + a.query + '» (всего кирпичиков: ' + r.total + '). Попробуйте другое слово, часть id (movement, ai, ability, ui) или тег.';
+              const query = String(a.query);
+              const find = async (q) => {
+                  const r = (await host.tool(['snippet', 'catalog', '--project', host.abs(''), '--query', q, '--fields'])).json;
+                  return r && r.ok ? { total: r.total, list: (r.packages || []).filter((x) => x.valid !== false) } : { error: r };
+              };
+              const first = await find(query);
+              if (first.error) return JSON.stringify(first.error);
+              const hits = new Map();
+              for (const p of first.list) hits.set(p.id, { p, n: 2 });
+              if (!first.list.length) {
+                  // «ui.score», «platformer movement»: ищем по словам и сводим совпадения
+                  const tokens = [...new Set(query.split(/[\s._\-\/,]+/).filter((t) => t.length >= 3))].slice(0, 4);
+                  for (const t of tokens) for (const p of (await find(t)).list || []) { const h = hits.get(p.id) || { p, n: 0 }; h.n++; hits.set(p.id, h); }
+              }
+              const pk = [...hits.values()].sort((x, y) => y.n - x.n || (y.p.id.startsWith('kit.') ? 1 : 0) - (x.p.id.startsWith('kit.') ? 1 : 0)).map((h) => h.p);
+              if (!pk.length) return 'ничего не найдено по «' + query + '» (всего кирпичиков: ' + first.total + '). Попробуйте другое слово, часть id (movement, ai, ability, ui, camera, kit) или тег.';
               return pk.slice(0, limit).map(snippetLine).join('\n') + (pk.length > limit ? '\n… ещё ' + (pk.length - limit) + ' — уточните запрос' : '');
           } },
         { name: 'snippet_apply', mutating: true,
@@ -477,7 +502,10 @@ export function snippetTools(host) {
               const brief = (r) => (r.diagnostics || []).filter((d) => d.severity !== 'info').slice(0, 6).map((d) => d.code + ': ' + d.message);
               await run(['project-index', proj, '--write']);
               const add = await run(['snippet', 'add', proj, pkg, '--owner', owner]);
-              if (!add.ok && !(add.diagnostics || []).some((d) => d.code === 'SNIP145' || /уже/.test(d.message || ''))) return 'не добавлено:\n' + brief(add).join('\n');
+              if (!add.ok && !(add.diagnostics || []).some((d) => d.code === 'SNIP145' || /уже/.test(d.message || ''))) {
+                  const notFound = (add.diagnostics || []).some((d) => d.code === 'SNIP060');
+                  return 'не добавлено:\n' + brief(add).join('\n') + (notFound ? '\nГраф видит только объекты с ЛИТЕРАЛЬНЫМ id в коде (`id: "coin1"`); id из цикла или шаблонной строки ("coin"+i) он не находит. Создай объект с литеральным id или не используй кирпичик для него (логика в коде, например в $.onUpdate). Не пытайся чинить индекс вручную.' : '');
+              }
               const ownerName = owner.replace(/^object:/, '').replace(/^project$/, 'project');
               const inst = ((add.added || []).find((id) => id.endsWith(':' + pkg))) || 'snippet:' + ownerName + ':' + pkg;
               const pairs = [];

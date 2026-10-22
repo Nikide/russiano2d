@@ -11,7 +11,7 @@ const esc = (t) => escRml(t).replace(/\{(?=\{)/g, '{\u200b').replace(/\}(?=\})/g
 
 export function createAgentPanel($, doc, host) {
     const st = {
-        cfg: { provider: 'anthropic', base: PROVIDERS.anthropic.base, model: PROVIDERS.anthropic.model, key: '', folder: '' },
+        cfg: { provider: 'anthropic', base: PROVIDERS.anthropic.base, model: PROVIDERS.anthropic.model, key: '', folder: '', maxSteps: 24 },
         log: [], agent: null, pending: null, busy: false,
     };
 

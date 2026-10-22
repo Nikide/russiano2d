@@ -347,7 +347,8 @@ await atest('snippet_find/snippet_apply: поиск, добавление, зн�
     eq(tools.snippet_apply.mutating, true);
     eq(tools.snippet_find.mutating, undefined);
     const bad = snippetTools({ abs: (p) => p, tool: async (a) => ({ json: a[1] === 'add' ? { ok: false, diagnostics: [{ code: 'SNIP060', severity: 'error', message: 'owner не найден' }] } : { ok: true } }) });
-    truthy((await bad[1].run({ owner: 'object:x', package: 'p' })).includes('SNIP060: owner не найден'));
+    const badText = await bad[1].run({ owner: 'object:x', package: 'p' });
+    truthy(badText.includes('SNIP060: owner не найден') && badText.includes('ЛИТЕРАЛЬНЫМ id'));
     const none = snippetTools({ abs: (p) => p, tool: async () => ({ json: { ok: true, total: 500, packages: [] } }) });
     truthy((await none[0].run({ query: 'zzz' })).includes('ничего не найдено'));
 });
@@ -378,6 +379,23 @@ await atest('подталкивание: после серии шагов без
     eq(lastUser(2).some((b) => b.type === 'text'), false);
     eq(lastUser(3).some((b) => b.type === 'text' && b.text.includes('Хватит исследовать')), true);
     eq(lastUser(4).some((b) => b.type === 'text'), false, 'после правки напоминания нет');
+});
+
+await atest('объявил действие без вызова инструмента — агента просят вызвать; итоговый ответ не трогается', async () => {
+    const seen = [], log = [];
+    const agent = createAgent({
+        config: { provider: 'anthropic', base: 'https://x', model: 'm' },
+        transport: scripted([anth({ type: 'text', text: 'Код написан. Теперь применю кирпичики.' }),
+            anth({ type: 'tool_use', id: 'e1', name: 'echo', input: { x: 1 } }), anth({ type: 'text', text: 'Готово, всё применено.' })], seen),
+        tools: toolsOf(log),
+    });
+    await agent.send('сделай');
+    eq(log, [{ x: 1 }]);
+    truthy(String(seen[1].body.messages.at(-1).content).includes('не вызвал инструмент'));
+    const plain = [];
+    const a2 = createAgent({ config: { provider: 'anthropic', base: 'https://x', model: 'm' }, transport: scripted([anth({ type: 'text', text: 'Это объект сцены.' })], plain), tools: toolsOf([]) });
+    await a2.send('что такое узел?');
+    eq(plain.length, 1, 'обычный ответ без лишних запросов');
 });
 
 finish();
