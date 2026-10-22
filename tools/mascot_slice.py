@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Нарезка листа маскота «Руси-чан» в атлас для Editor.
 
-    mascot_slice.py assets/mascot/sheet.png [--out editor/ui] [--debug dir]
+    mascot_slice.py assets/mascot/sheet_alpha.png [--out editor/ui] [--debug dir]
 
-Лист — сгенерированная картинка (1536x1024) с рядами кадров на размытом фоне. Скрипт:
-  1. находит кадры в каждом ряду по проекции «переднего плана» (насыщенные/тёмные/светлые
-     пиксели против серо-зелёного фона);
-  2. вырезает фон grabCut'ом и сглаживает альфу;
-  3. кладёт кадры в ячейки 144x144 (по центру, ноги внизу) в один PNG-атлас;
-  4. пишет mascot.rcss (@spritesheet с именами кадров) и mascot.json (ряды → кадры).
-Результат детерминирован (grabCut с фиксированным seed). Нужны pillow, opencv, numpy.
+Лист — сетка 8x8: либо картинка на тёмном фоне с шахматкой (grabCut), либо уже с прозрачностью
+(sheet_alpha.png: границы строк неравномерны, ищутся по проекции альфы). Ряды по порядку:
+  idle (стоит), walk (ходьба), run (бег), crab (ползёт «крабиком»), act (работа: ноутбук, ключ, коробка),
+  emo (эмоции), fx (идея, карта, галочка, предупреждение…), misc (разное).
+Скрипт режет сетку, вырезает фон (grabCut + пиксели, далёкие от цвета фона по краю ячейки),
+кладёт кадры в ячейки 156x156 (по центру, ноги внизу) в один PNG-атлас и пишет
+mascot.rcss (@spritesheet, имена вида idle_0), mascot.json. Результат детерминирован.
+Нужны pillow-совместимый opencv и numpy.
 """
 import argparse
 import json
@@ -18,32 +19,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-CELL = 144
-# (имя ряда, y0, y1, префикс кадров). Границы подобраны по листу; число кадров находится само.
-ROWS = [
-    ("idle", 95, 230, "idle"), ("walk", 255, 390, "walk"), ("run", 400, 520, "run"),
-    ("crab", 545, 665, "crab"), ("act", 680, 810, "act"), ("emo", 835, 920, "emo"),
-    ("ico", 948, 1012, "ico"),
-]
-X0, X1 = 15, 1130
-
-
-def find_runs(rgb, y0, y1, min_w):
-    hsv = cv2.cvtColor(rgb[y0:y1, X0:X1], cv2.COLOR_BGR2HSV)
-    mask = ((hsv[:, :, 1] > 110) | (hsv[:, :, 2] < 45) | (hsv[:, :, 2] > 200)).astype(np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
-    on = mask.sum(axis=0) > 3
-    runs, start = [], None
-    for x, v in enumerate(on):
-        if v and start is None:
-            start = x
-        if not v and start is not None:
-            if x - start >= min_w:
-                runs.append((start + X0, x + X0))
-            start = None
-    if start is not None and len(on) - start >= min_w:
-        runs.append((start + X0, len(on) + X0))
-    return runs
+ROWS = ["idle", "walk", "run", "crab", "act", "emo", "fx", "misc"]
+CELL = 156
+INSET = 4          # отступ от линий сетки
 
 
 def cut(rgb, box):
@@ -53,13 +31,12 @@ def cut(rgb, box):
     mask = np.zeros((h, w), np.uint8)
     cv2.setRNGSeed(7)
     bgd, fgd = np.zeros((1, 65), np.float64), np.zeros((1, 65), np.float64)
-    cv2.grabCut(crop, mask, (3, 3, w - 6, h - 6), bgd, fgd, 6, cv2.GC_INIT_WITH_RECT)
+    cv2.grabCut(crop, mask, (2, 2, w - 4, h - 4), bgd, fgd, 6, cv2.GC_INIT_WITH_RECT)
     alpha = np.where((mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD), 255, 0).astype(np.uint8)
-    # второй проход: серые предметы (ноутбук, ключ) — пиксели, далёкие от цвета фона по краю кадра,
-    # если они касаются найденного силуэта
+    # серые предметы (ноутбук, ключ, коробка): пиксели, далёкие от цвета фона по краю ячейки
     border = np.concatenate([crop[0, :], crop[-1, :], crop[:, 0], crop[:, -1]]).astype(np.float32)
     bg0 = np.median(border, axis=0)
-    far = (np.abs(crop.astype(np.float32) - bg0).max(axis=2) > 46).astype(np.uint8) * 255
+    far = (np.abs(crop.astype(np.float32) - bg0).max(axis=2) > 40).astype(np.uint8) * 255
     far = cv2.morphologyEx(far, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
     near = cv2.dilate(alpha, np.ones((9, 9), np.uint8))
     cnt, lab2, st2, _ = cv2.connectedComponentsWithStats(far)
@@ -67,7 +44,7 @@ def cut(rgb, box):
         comp = lab2 == i
         if st2[i, cv2.CC_STAT_AREA] >= 30 and (near[comp] > 0).any():
             alpha[comp] = 255
-    # оставляем крупнейшую связную область и мелкие рядом лежащие (искры, «!», сердечки)
+    # мелкий мусор (шахматка) убираем; значки рядом с персонажем остаются
     n, lab, stats, _ = cv2.connectedComponentsWithStats(alpha)
     keep = np.zeros_like(alpha)
     for i in range(1, n):
@@ -78,36 +55,77 @@ def cut(rgb, box):
     return np.dstack([crop, keep])
 
 
+def row_bounds(alpha, rows=8):
+    """Границы строк неравномерной сетки: минимумы проекции альфы около k*H/rows."""
+    h = alpha.shape[0]
+    proj = cv2.GaussianBlur((alpha > 60).sum(axis=1).astype(np.float32).reshape(-1, 1), (1, 0), 3).ravel()
+    bounds = [0]
+    for k in range(1, rows):
+        c = int(k * h / rows)
+        lo, hi = max(bounds[-1] + 40, c - 48), min(h - 40, c + 48)
+        bounds.append(int(lo + np.argmin(proj[lo:hi])))
+    bounds.append(h)
+    return bounds
+
+
+def clean_alpha_cell(rgba):
+    """Лист уже с альфой: срезаем слабую альфу, чужие обрывки на краях ячейки, фиксируем бахрому."""
+    a = rgba[:, :, 3].astype(np.float32)
+    a = np.clip((a - 40.0) * (255.0 / 175.0), 0, 255).astype(np.uint8)
+    h, w = a.shape
+    n, lab, st, _ = cv2.connectedComponentsWithStats((a > 20).astype(np.uint8))
+    keep = np.zeros_like(a)
+    for i in range(1, n):
+        x, y, cw, ch, area = st[i]
+        touches_side = x <= 1 or x + cw >= w - 1
+        if area >= 400 or (area >= 14 and not touches_side):
+            keep[lab == i] = 255
+    a = np.where(keep > 0, a, 0).astype(np.uint8)
+    a = cv2.erode(a, np.ones((2, 2), np.uint8))
+    out = rgba.copy()
+    out[:, :, 3] = a
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("sheet")
     ap.add_argument("--out", default="editor/ui")
     ap.add_argument("--debug")
     args = ap.parse_args()
-    rgb = cv2.imread(args.sheet, cv2.IMREAD_COLOR)
-    frames = []   # (имя, rgba)
-    anims = {}
-    for name, y0, y1, prefix in ROWS:
-        runs = find_runs(rgb, y0, y1, 22 if name != "ico" else 14)
+    raw = cv2.imread(args.sheet, cv2.IMREAD_UNCHANGED)
+    has_alpha = raw.ndim == 3 and raw.shape[2] == 4 and (raw[:, :, 3] < 5).mean() > 0.2
+    rgb = raw[:, :, :3] if raw.ndim == 3 else cv2.cvtColor(raw, cv2.COLOR_GRAY2BGR)
+    H, W = rgb.shape[:2]
+    cw, ch = W / 8.0, H / 8.0
+    rb = row_bounds(raw[:, :, 3]) if has_alpha else [int(r * ch) for r in range(9)]
+    frames, anims = [], {}
+    for r, row in enumerate(ROWS):
         names = []
-        for i, (a, b) in enumerate(runs):
-            box = (max(0, a - 6), max(0, y0 - 4), min(rgb.shape[1], b + 6), min(rgb.shape[0], y1 + 4))
-            frames.append((f"{prefix}_{i}", cut(rgb, box)))
-            names.append(f"{prefix}_{i}")
-        anims[name] = names
-    cols = 10
-    rows_n = (len(frames) + cols - 1) // cols
-    atlas = np.zeros((rows_n * CELL, cols * CELL, 4), np.uint8)
+        for c in range(8):
+            name = f"{row}_{c}"
+            if has_alpha:
+                cell = raw[rb[r]:rb[r + 1], int(c * cw):int((c + 1) * cw)]
+                rgba = clean_alpha_cell(cell)
+                ys, xs = np.where(rgba[:, :, 3] > 0)
+                if len(ys):
+                    rgba = rgba[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+                frames.append((name, rgba))
+            else:
+                box = (int(c * cw) + INSET, rb[r] + INSET, int((c + 1) * cw) - INSET, rb[r + 1] - INSET)
+                frames.append((name, cut(rgb, box)))
+            names.append(name)
+        anims[row] = names
+    atlas = np.zeros((8 * CELL, 8 * CELL, 4), np.uint8)
     index = {}
     for k, (fname, rgba) in enumerate(frames):
         h, w = rgba.shape[:2]
-        s = min(1.0, (CELL - 4) / max(h, w))
+        s = min(1.0, CELL / max(h, w))
         if s < 1.0:
             rgba = cv2.resize(rgba, (max(1, int(w * s)), max(1, int(h * s))), interpolation=cv2.INTER_AREA)
             h, w = rgba.shape[:2]
-        cx, cy = (k % cols) * CELL, (k // cols) * CELL
-        ox, oy = cx + (CELL - w) // 2, cy + CELL - h - 2
-        atlas[oy:oy + h, ox:ox + w] = rgba
+        cx, cy = (k % 8) * CELL, (k // 8) * CELL
+        atlas[cy + CELL - h:cy + CELL, cx + (CELL - w) // 2:cx + (CELL - w) // 2 + w] = rgba
         index[fname] = (cx, cy)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -124,13 +142,13 @@ def main():
     if args.debug:
         d = Path(args.debug)
         d.mkdir(parents=True, exist_ok=True)
-        bg = np.zeros_like(atlas[:, :, :3]); bg[:] = (27, 22, 20)   # цвет панели Editor (BGR)
+        bg = np.zeros_like(atlas[:, :, :3]); bg[:] = (27, 22, 20)
         a = atlas[:, :, 3:4].astype(np.float32) / 255.0
         comp = (atlas[:, :, :3] * a + bg * (1 - a)).astype(np.uint8)
         for fname, (x, y) in index.items():
             cv2.putText(comp, fname, (x + 3, y + 12), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (200, 200, 200), 1)
         cv2.imwrite(str(d / "contact.png"), comp)
-    print({k: len(v) for k, v in anims.items()}, "кадров:", len(frames), "атлас:", atlas.shape[1], "x", atlas.shape[0])
+    print("кадров:", len(frames), "атлас:", atlas.shape[1], "x", atlas.shape[0])
 
 
 if __name__ == "__main__":

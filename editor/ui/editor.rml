@@ -121,7 +121,7 @@
             <span id="bt-output" class="btab">Вывод</span>
             <span id="bt-console" class="btab">Консоль</span>
             <span id="bt-graph" class="btab">Граф</span>
-            <span id="bt-agent" class="btab"><span id="bt-agent-mc" class="mc-emo-0"></span>Агент</span>
+            <span id="bt-agent" class="btab"><span id="bt-agent-mc" class="mc-idle-0"></span>Агент</span>
             <span id="bt-agentcfg" class="btab">Настройки агента</span>
             <span class="grow"></span>
             <span id="bt-toggle" class="tb-btn icon"></span>

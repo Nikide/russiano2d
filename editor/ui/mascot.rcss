@@ -2,77 +2,70 @@
 @spritesheet mascot {
     src: mascot.png;
     resolution: 1x;
-    idle_0: 0px 0px 144px 144px;
-    idle_1: 144px 0px 144px 144px;
-    idle_2: 288px 0px 144px 144px;
-    idle_3: 432px 0px 144px 144px;
-    idle_4: 576px 0px 144px 144px;
-    idle_5: 720px 0px 144px 144px;
-    idle_6: 864px 0px 144px 144px;
-    idle_7: 1008px 0px 144px 144px;
-    idle_8: 1152px 0px 144px 144px;
-    walk_0: 1296px 0px 144px 144px;
-    walk_1: 0px 144px 144px 144px;
-    walk_2: 144px 144px 144px 144px;
-    walk_3: 288px 144px 144px 144px;
-    walk_4: 432px 144px 144px 144px;
-    walk_5: 576px 144px 144px 144px;
-    walk_6: 720px 144px 144px 144px;
-    walk_7: 864px 144px 144px 144px;
-    walk_8: 1008px 144px 144px 144px;
-    walk_9: 1152px 144px 144px 144px;
-    run_0: 1296px 144px 144px 144px;
-    run_1: 0px 288px 144px 144px;
-    run_2: 144px 288px 144px 144px;
-    run_3: 288px 288px 144px 144px;
-    run_4: 432px 288px 144px 144px;
-    run_5: 576px 288px 144px 144px;
-    run_6: 720px 288px 144px 144px;
-    run_7: 864px 288px 144px 144px;
-    crab_0: 1008px 288px 144px 144px;
-    crab_1: 1152px 288px 144px 144px;
-    crab_2: 1296px 288px 144px 144px;
-    crab_3: 0px 432px 144px 144px;
-    crab_4: 144px 432px 144px 144px;
-    crab_5: 288px 432px 144px 144px;
-    crab_6: 432px 432px 144px 144px;
-    crab_7: 576px 432px 144px 144px;
-    act_0: 720px 432px 144px 144px;
-    act_1: 864px 432px 144px 144px;
-    act_2: 1008px 432px 144px 144px;
-    act_3: 1152px 432px 144px 144px;
-    act_4: 1296px 432px 144px 144px;
-    act_5: 0px 576px 144px 144px;
-    act_6: 144px 576px 144px 144px;
-    act_7: 288px 576px 144px 144px;
-    emo_0: 432px 576px 144px 144px;
-    emo_1: 576px 576px 144px 144px;
-    emo_2: 720px 576px 144px 144px;
-    emo_3: 864px 576px 144px 144px;
-    emo_4: 1008px 576px 144px 144px;
-    emo_5: 1152px 576px 144px 144px;
-    emo_6: 1296px 576px 144px 144px;
-    emo_7: 0px 720px 144px 144px;
-    emo_8: 144px 720px 144px 144px;
-    emo_9: 288px 720px 144px 144px;
-    ico_0: 432px 720px 144px 144px;
-    ico_1: 576px 720px 144px 144px;
-    ico_2: 720px 720px 144px 144px;
-    ico_3: 864px 720px 144px 144px;
-    ico_4: 1008px 720px 144px 144px;
-    ico_5: 1152px 720px 144px 144px;
-    ico_6: 1296px 720px 144px 144px;
-    ico_7: 0px 864px 144px 144px;
-    ico_8: 144px 864px 144px 144px;
-    ico_9: 288px 864px 144px 144px;
-    ico_10: 432px 864px 144px 144px;
-    ico_11: 576px 864px 144px 144px;
-    ico_12: 720px 864px 144px 144px;
-    ico_13: 864px 864px 144px 144px;
-    ico_14: 1008px 864px 144px 144px;
-    ico_15: 1152px 864px 144px 144px;
-    ico_16: 1296px 864px 144px 144px;
-    ico_17: 0px 1008px 144px 144px;
+    idle_0: 0px 0px 156px 156px;
+    idle_1: 156px 0px 156px 156px;
+    idle_2: 312px 0px 156px 156px;
+    idle_3: 468px 0px 156px 156px;
+    idle_4: 624px 0px 156px 156px;
+    idle_5: 780px 0px 156px 156px;
+    idle_6: 936px 0px 156px 156px;
+    idle_7: 1092px 0px 156px 156px;
+    walk_0: 0px 156px 156px 156px;
+    walk_1: 156px 156px 156px 156px;
+    walk_2: 312px 156px 156px 156px;
+    walk_3: 468px 156px 156px 156px;
+    walk_4: 624px 156px 156px 156px;
+    walk_5: 780px 156px 156px 156px;
+    walk_6: 936px 156px 156px 156px;
+    walk_7: 1092px 156px 156px 156px;
+    run_0: 0px 312px 156px 156px;
+    run_1: 156px 312px 156px 156px;
+    run_2: 312px 312px 156px 156px;
+    run_3: 468px 312px 156px 156px;
+    run_4: 624px 312px 156px 156px;
+    run_5: 780px 312px 156px 156px;
+    run_6: 936px 312px 156px 156px;
+    run_7: 1092px 312px 156px 156px;
+    crab_0: 0px 468px 156px 156px;
+    crab_1: 156px 468px 156px 156px;
+    crab_2: 312px 468px 156px 156px;
+    crab_3: 468px 468px 156px 156px;
+    crab_4: 624px 468px 156px 156px;
+    crab_5: 780px 468px 156px 156px;
+    crab_6: 936px 468px 156px 156px;
+    crab_7: 1092px 468px 156px 156px;
+    act_0: 0px 624px 156px 156px;
+    act_1: 156px 624px 156px 156px;
+    act_2: 312px 624px 156px 156px;
+    act_3: 468px 624px 156px 156px;
+    act_4: 624px 624px 156px 156px;
+    act_5: 780px 624px 156px 156px;
+    act_6: 936px 624px 156px 156px;
+    act_7: 1092px 624px 156px 156px;
+    emo_0: 0px 780px 156px 156px;
+    emo_1: 156px 780px 156px 156px;
+    emo_2: 312px 780px 156px 156px;
+    emo_3: 468px 780px 156px 156px;
+    emo_4: 624px 780px 156px 156px;
+    emo_5: 780px 780px 156px 156px;
+    emo_6: 936px 780px 156px 156px;
+    emo_7: 1092px 780px 156px 156px;
+    fx_0: 0px 936px 156px 156px;
+    fx_1: 156px 936px 156px 156px;
+    fx_2: 312px 936px 156px 156px;
+    fx_3: 468px 936px 156px 156px;
+    fx_4: 624px 936px 156px 156px;
+    fx_5: 780px 936px 156px 156px;
+    fx_6: 936px 936px 156px 156px;
+    fx_7: 1092px 936px 156px 156px;
+    misc_0: 0px 1092px 156px 156px;
+    misc_1: 156px 1092px 156px 156px;
+    misc_2: 312px 1092px 156px 156px;
+    misc_3: 468px 1092px 156px 156px;
+    misc_4: 624px 1092px 156px 156px;
+    misc_5: 780px 1092px 156px 156px;
+    misc_6: 936px 1092px 156px 156px;
+    misc_7: 1092px 1092px 156px 156px;
 }
 
 .mc-idle-0 { decorator: image(idle_0); }
@@ -83,7 +76,6 @@
 .mc-idle-5 { decorator: image(idle_5); }
 .mc-idle-6 { decorator: image(idle_6); }
 .mc-idle-7 { decorator: image(idle_7); }
-.mc-idle-8 { decorator: image(idle_8); }
 .mc-walk-0 { decorator: image(walk_0); }
 .mc-walk-1 { decorator: image(walk_1); }
 .mc-walk-2 { decorator: image(walk_2); }
@@ -92,8 +84,6 @@
 .mc-walk-5 { decorator: image(walk_5); }
 .mc-walk-6 { decorator: image(walk_6); }
 .mc-walk-7 { decorator: image(walk_7); }
-.mc-walk-8 { decorator: image(walk_8); }
-.mc-walk-9 { decorator: image(walk_9); }
 .mc-run-0 { decorator: image(run_0); }
 .mc-run-1 { decorator: image(run_1); }
 .mc-run-2 { decorator: image(run_2); }
@@ -126,23 +116,19 @@
 .mc-emo-5 { decorator: image(emo_5); }
 .mc-emo-6 { decorator: image(emo_6); }
 .mc-emo-7 { decorator: image(emo_7); }
-.mc-emo-8 { decorator: image(emo_8); }
-.mc-emo-9 { decorator: image(emo_9); }
-.mc-ico-0 { decorator: image(ico_0); }
-.mc-ico-1 { decorator: image(ico_1); }
-.mc-ico-2 { decorator: image(ico_2); }
-.mc-ico-3 { decorator: image(ico_3); }
-.mc-ico-4 { decorator: image(ico_4); }
-.mc-ico-5 { decorator: image(ico_5); }
-.mc-ico-6 { decorator: image(ico_6); }
-.mc-ico-7 { decorator: image(ico_7); }
-.mc-ico-8 { decorator: image(ico_8); }
-.mc-ico-9 { decorator: image(ico_9); }
-.mc-ico-10 { decorator: image(ico_10); }
-.mc-ico-11 { decorator: image(ico_11); }
-.mc-ico-12 { decorator: image(ico_12); }
-.mc-ico-13 { decorator: image(ico_13); }
-.mc-ico-14 { decorator: image(ico_14); }
-.mc-ico-15 { decorator: image(ico_15); }
-.mc-ico-16 { decorator: image(ico_16); }
-.mc-ico-17 { decorator: image(ico_17); }
+.mc-fx-0 { decorator: image(fx_0); }
+.mc-fx-1 { decorator: image(fx_1); }
+.mc-fx-2 { decorator: image(fx_2); }
+.mc-fx-3 { decorator: image(fx_3); }
+.mc-fx-4 { decorator: image(fx_4); }
+.mc-fx-5 { decorator: image(fx_5); }
+.mc-fx-6 { decorator: image(fx_6); }
+.mc-fx-7 { decorator: image(fx_7); }
+.mc-misc-0 { decorator: image(misc_0); }
+.mc-misc-1 { decorator: image(misc_1); }
+.mc-misc-2 { decorator: image(misc_2); }
+.mc-misc-3 { decorator: image(misc_3); }
+.mc-misc-4 { decorator: image(misc_4); }
+.mc-misc-5 { decorator: image(misc_5); }
+.mc-misc-6 { decorator: image(misc_6); }
+.mc-misc-7 { decorator: image(misc_7); }

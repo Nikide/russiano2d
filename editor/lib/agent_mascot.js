@@ -1,19 +1,20 @@
 // Маскот «Руси-чан» рядом с чатом агента: живёт своей жизнью и показывает, что делает агент.
 // Модуль чистый (без движка и RmlUi): состояние → кадр атласа editor/ui/mascot.png и реплика.
-// Кадры (tools/mascot_slice.py): idle_0..8, walk_*, run_*, crab_*, act_0..7, emo_0..9, ico_*.
-//   act_0/1 — ноутбук, act_2 — ключ, act_4 — коробка, act_5 — «?», act_6 — искры, act_7 — ноты;
-//   emo_1 — радость, emo_5 — вопрос, emo_6 — злость, emo_7 — грусть, crab_7 — сердце.
+// Кадры (tools/mascot_slice.py, сетка 8x8): idle_0..7 стоит, walk/run/crab — движение, act — работа
+// (act_0/1/5/6/7 ноутбук, act_2 ключ, act_3 ноутбук и «?», act_4 коробка), emo — эмоции (emo_0 радость,
+// emo_2 «!», emo_3 «?», emo_4 недовольна, emo_5 спит, emo_6 сердечки, emo_7 грустит), fx — идея (fx_2),
+// карта (fx_3), галочка (fx_4), предупреждение (fx_5), сон на ноутбуке (fx_6), праздник (fx_7), misc — разное.
 
 const IDLE = ['idle_0', 'idle_1', 'idle_2', 'idle_3', 'idle_4', 'idle_5', 'idle_6', 'idle_7'];
 
 // Инструмент → [кадры, fps, реплика].
 const BY_TOOL = {
-    search: [['act_5', 'act_6'], 2.5, 'Ищу…'],
-    read: [['act_4', 'act_4', 'act_3'], 2, 'Читаю файлы…'],
-    write: [['act_0', 'act_1'], 3.5, 'Пишу код…'],
-    check: [['act_2', 'act_2', 'act_1'], 3, 'Проверяю…'],
-    snippet: [['act_7', 'act_6'], 3, 'Подключаю кирпичик…'],
-    studio: [['act_0', 'act_1', 'act_6'], 3, 'Работаю в студии…'],
+    search: [['fx_3', 'fx_3', 'fx_2'], 2, 'Ищу…'],
+    read: [['misc_6', 'act_4'], 2, 'Читаю файлы…'],
+    write: [['act_0', 'act_1', 'act_5', 'act_6'], 3.5, 'Пишу код…'],
+    check: [['act_2', 'fx_1'], 2.5, 'Проверяю…'],
+    snippet: [['fx_2', 'fx_0'], 2.5, 'Подключаю кирпичик…'],
+    studio: [['act_7', 'act_6', 'act_1'], 3, 'Работаю в студии…'],
 };
 const TOOL_KIND = {
     docs_search: 'search', docs_show: 'search', api_lookup: 'search', snippet_find: 'search',
@@ -24,8 +25,8 @@ const TOOL_KIND = {
     open_tab: 'studio', studio_edit: 'studio', studio_op: 'studio', studio_save: 'studio', editor_op: 'studio',
 };
 const POKES = [
-    [['emo_1', 'emo_1', 'emo_8'], 'Мяу!'], [['crab_7', 'crab_7', 'emo_0'], 'Ня~ ♥'], [['emo_2', 'emo_8'], 'Я тут, помогаю!'],
-    [['emo_1', 'act_6'], 'Давай соберём что-нибудь крутое!'], [['emo_9', 'emo_3'], 'Не отвлекай, я думаю…'],
+    [['emo_0', 'emo_0', 'misc_2'], 'Мяу!'], [['emo_6', 'emo_6', 'emo_0'], 'Ня~ ♥'], [['misc_7', 'emo_0'], 'Смотри, что у меня есть!'],
+    [['fx_7', 'emo_0'], 'Давай соберём что-нибудь крутое!'], [['emo_1', 'emo_4'], 'Не отвлекай, я думаю…'],
 ];
 
 export const mascotFrames = () => ({ idle: IDLE, tools: BY_TOOL, pokes: POKES });
@@ -44,18 +45,18 @@ export function createMascot() {
     return {
         get state() { return { mode: m.mode, frame: m.frames[m.i % m.frames.length], bubble: m.bubble, sleeping: m.sleeping }; },
         // Агент начал думать (запрос к модели).
-        thinking() { enter('thinking', ['act_5', 'emo_5'], 1.6, 'Думаю…'); },
+        thinking() { enter('thinking', ['act_3', 'emo_3'], 1.6, 'Думаю…'); },
         // Агент вызвал инструмент.
         tool(name) {
             const spec = BY_TOOL[TOOL_KIND[name] || 'check'];
             enter('tool:' + (TOOL_KIND[name] || 'check'), spec[0], spec[1], spec[2]);
         },
         // Нужно подтверждение пользователя.
-        waiting() { enter('waiting', ['emo_5', 'emo_0'], 1.2, 'Можно? Нужно твоё подтверждение'); },
+        waiting() { enter('waiting', ['emo_3', 'emo_2'], 1.2, 'Можно? Нужно твоё подтверждение'); },
         // Ответ модели (текст): болтаем.
-        talk() { enter('talk', ['emo_0', 'emo_2', 'emo_0', 'emo_8'], 2.5, ''); },
-        success() { enter('success', ['emo_1', 'crab_7', 'emo_1'], 2, 'Готово!', 4.5); },
-        failure(text) { enter('failure', ['emo_6', 'emo_7'], 1.5, text || 'Что-то пошло не так…', 5); },
+        talk() { enter('talk', ['emo_0', 'misc_2', 'emo_0', 'idle_0'], 2.5, ''); },
+        success() { enter('success', ['fx_4', 'emo_6', 'fx_7'], 2, 'Готово!', 4.5); },
+        failure(text) { enter('failure', ['fx_5', 'emo_7', 'emo_4'], 1.5, text || 'Что-то пошло не так…', 5); },
         // Клик по персонажу.
         poke() {
             const p = POKES[m.pokeIdx++ % POKES.length];
@@ -70,7 +71,7 @@ export function createMascot() {
             if (m.hold > 0) { m.hold -= dt; if (m.hold <= 0) backToIdle(); }
             else if (m.mode === 'idle') {
                 m.quiet += dt;
-                if (m.quiet > 45 && !m.sleeping) { m.sleeping = true; m.frames = ['idle_8']; m.i = 0; m.bubble = 'zZz…'; m.fps = 0.5; }
+                if (m.quiet > 45 && !m.sleeping) { m.sleeping = true; m.frames = ['fx_6']; m.i = 0; m.bubble = 'zZz…'; m.fps = 0.5; }
             } else if (!busy && (m.mode === 'thinking' || m.mode.startsWith('tool:') || m.mode === 'talk' || m.mode === 'waiting')) {
                 backToIdle();
             }

@@ -1,5 +1,5 @@
 {
- "cell": 144,
+ "cell": 156,
  "anims": {
   "idle": [
    "idle_0",
@@ -9,8 +9,7 @@
    "idle_4",
    "idle_5",
    "idle_6",
-   "idle_7",
-   "idle_8"
+   "idle_7"
   ],
   "walk": [
    "walk_0",
@@ -20,9 +19,7 @@
    "walk_4",
    "walk_5",
    "walk_6",
-   "walk_7",
-   "walk_8",
-   "walk_9"
+   "walk_7"
   ],
   "run": [
    "run_0",
@@ -62,29 +59,27 @@
    "emo_4",
    "emo_5",
    "emo_6",
-   "emo_7",
-   "emo_8",
-   "emo_9"
+   "emo_7"
   ],
-  "ico": [
-   "ico_0",
-   "ico_1",
-   "ico_2",
-   "ico_3",
-   "ico_4",
-   "ico_5",
-   "ico_6",
-   "ico_7",
-   "ico_8",
-   "ico_9",
-   "ico_10",
-   "ico_11",
-   "ico_12",
-   "ico_13",
-   "ico_14",
-   "ico_15",
-   "ico_16",
-   "ico_17"
+  "fx": [
+   "fx_0",
+   "fx_1",
+   "fx_2",
+   "fx_3",
+   "fx_4",
+   "fx_5",
+   "fx_6",
+   "fx_7"
+  ],
+  "misc": [
+   "misc_0",
+   "misc_1",
+   "misc_2",
+   "misc_3",
+   "misc_4",
+   "misc_5",
+   "misc_6",
+   "misc_7"
   ]
  }
 }

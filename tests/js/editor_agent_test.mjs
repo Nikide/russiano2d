@@ -443,7 +443,7 @@ test('маскот: инструмент → кадры и реплика, ус�
     m.tick(6, false);
     eq(m.state.mode, 'idle');
     m.tick(50, false);
-    truthy(m.state.sleeping && m.state.frame === 'idle_8', 'после долгого покоя засыпает');
+    truthy(m.state.sleeping && m.state.frame === 'fx_6', 'после долгого покоя засыпает');
     m.wake();
     eq(m.state.sleeping, false);
     m.poke();
@@ -451,7 +451,7 @@ test('маскот: инструмент → кадры и реплика, ус�
     truthy(m.state.bubble.length > 0);
     const known = new Set(['idle', 'walk', 'run', 'crab', 'act', 'emo', 'ico'].flatMap((k) => []));
     const f = mascotFrames();
-    for (const spec of Object.values(f.tools)) truthy(spec[0].every((n) => /^(act|emo|crab|idle)_\d+$/.test(n)));
+    for (const spec of Object.values(f.tools)) truthy(spec[0].every((n) => /^(act|emo|crab|idle|fx|misc)_\d+$/.test(n)));
     void known;
 });
 

@@ -636,7 +636,7 @@ scrollbarcorner { background-color: transparent; }
 .agm { display: block; margin-bottom: 12px; }
 .ag-ub { display: block; margin-left: 30%; padding: 9px 12px; font-size: 13px; color: #e8f0ff; background-color: #1f3a5f; border-radius: 10px; white-space: pre-wrap; }
 .agm-bot { display: flex; flex-direction: row; }
-.ag-av { display: block; width: 28px; height: 28px; flex: 0 0 28px; margin-right: 8px; decorator: image(emo_0); }
+.ag-av { display: block; width: 28px; height: 28px; flex: 0 0 28px; margin-right: 8px; decorator: image(idle_0); }
 .ag-bt { display: block; flex: 1 1 0; padding-top: 2px; font-size: 13px; line-height: 1.5; color: #d6dbe5; white-space: pre-wrap; }
 .ag-tools { display: block; margin: 0px 0px 10px 32px; }
 .agt { display: flex; flex-direction: row; align-items: center; padding: 6px 9px; margin-bottom: 3px; border-radius: 7px; background-color: #1a1d23; cursor: pointer; }
