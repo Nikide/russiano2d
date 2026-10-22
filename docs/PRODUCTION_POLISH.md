@@ -2740,7 +2740,7 @@ job CI), у каждого незакрытого пункта — причин�
 ## Tooling
 
 - [x] SDK CLI — `tests/agent/sdk_cli_test.py`
-- [x] SDK GUI — `tests/agent/sdk_studios_test.py`
+- [x] SDK GUI — студии живут в Editor: `tests/agent/editor_project_manager_test.py`, `tests/agent/editor_rmlui_test.py`
 - [x] validate parity — `tests/agent/sdk_data_parity_test.py`
 - [x] package — `tests/agent/sdk_package_test.py`
 - [x] headless — `tests/agent/build_test.py`

@@ -164,3 +164,6 @@ sfxgen_cache/
 agent.local.json
 editor/agent.local.json
 .r2d-agent.json
+
+# Spriteforge (libs/spriteforge) — библиотека в разработке, пока не публикуется; цели для xmake: libs/spriteforge/xmake-targets.patch
+libs/spriteforge/

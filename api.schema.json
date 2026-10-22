@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated_by": "r2d",
-  "engine_version": "2.0.0",
+  "engine_version": "2.0.1",
   "names": [
     {"path": "$.Re2D", "kind": "string", "description": "константа 're2d'", "value": "re2d"},
     {"path": "$._dispatchGlobal", "kind": "function", "arity": 3, "args": [{"name": "arg0", "type": "any"}, {"name": "arg1", "type": "any"}, {"name": "arg2", "type": "any"}], "returns": "any"},

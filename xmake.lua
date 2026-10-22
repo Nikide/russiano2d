@@ -6,7 +6,7 @@
 -- ===========================================================================
 set_project("russiano2d")
 -- Keep in sync with VERSION; tools/release.py validates both values.
-local version = "2.0.0"
+local version = "2.0.1"
 set_version(version)
 set_license("MIT")
 add_rules("mode.release")
@@ -359,6 +359,15 @@ package("llama.cpp-r2d")
             table.insert(configs, "-DGGML_ACCELERATE=ON")
         end
         import("package.tools.cmake").install(package, configs, {cmake_generator = "Ninja"})
+        -- MinGW: CMake кладёт ggml, ggml-base и ggml-cpu как ggml.a и т.д. БЕЗ префикса lib (libllama.a — с
+        -- префиксом), а `-lggml` ищет libggml.a: на линковке r2d.exe остаются undefined reference на ggml_*.
+        if package:is_plat("mingw", "windows") then
+            local libdir = package:installdir("lib")
+            for _, name in ipairs({"ggml", "ggml-base", "ggml-cpu"}) do
+                local plain, prefixed = path.join(libdir, name .. ".a"), path.join(libdir, "lib" .. name .. ".a")
+                if os.isfile(plain) and not os.isfile(prefixed) then os.cp(plain, prefixed) end
+            end
+        end
     end)
     on_load(function (package)
         package:add("includedirs", "include")
