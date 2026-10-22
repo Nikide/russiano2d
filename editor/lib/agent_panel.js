@@ -22,6 +22,7 @@ const TOOL_UI = {
     snippet_apply: ['extension', 'Кирпичик'], search_project: ['manage_search', 'Поиск по проекту'], delete_file: ['delete', 'Удаление файла'],
     move_file: ['drive_file_move', 'Перемещение файла'], undo_edit: ['undo', 'Откат правок'], playtest: ['sports_esports', 'Плейтест игры'],
     plan: ['checklist', 'План'], ask_user: ['help', 'Вопрос'],
+    pixel_art: ['brush', 'Рисую спрайт'], pixel_preview: ['image', 'Просмотр спрайта'], skill_list: ['school', 'Навыки'], skill_load: ['school', 'Навык'],
 };
 
 const SUGGESTIONS = [
@@ -240,7 +241,9 @@ export function createAgentPanel($, doc, host) {
                 const stIcon = e.status === 'ok' ? icon('check_circle') : e.status === 'err' ? icon('error') : icon('more_horiz');
                 tools += '<div class="agt" data-key="tool:' + idx + '"><span class="agt-ic">' + icon(ui[0]) + '</span><span class="agt-name">' + esc(ui[1]) + '</span>' +
                     '<span class="agt-arg">' + esc(argSummary(e.name, e.input)) + '</span><span class="agt-st ' + e.status + '">' + stIcon + '</span></div>';
-                if (st.expanded.has(idx) && e.result !== undefined) tools += '<span class="agt-res">' + esc(short(e.result, 900)) + '</span>';
+                const pv = e.result !== undefined && /\[preview: ([^\]]+)\]/.exec(String(e.result));
+                if (pv) tools += '<div class="agt-img"><img src="' + esc(pv[1]) + '"/></div>';
+                if (st.expanded.has(idx) && e.result !== undefined) tools += '<span class="agt-res">' + esc(short(String(e.result).replace(/\[preview: [^\]]+\]/, ''), 900)) + '</span>';
                 return;
             }
             flush();

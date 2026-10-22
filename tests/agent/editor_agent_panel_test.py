@@ -151,6 +151,32 @@ def _interact(directory):
         check(agent, D + '.content("ag-log").includes("Откат")', 'откат отмечен в журнале')
 
 
+def _pixel(directory):
+    project = Path(directory) / 'pxproject'
+    project.mkdir()
+    (project / 'project.json').write_text(json.dumps({'format': 2, 'title': 'Pixel', 'entry': 'main.js'}))
+    (project / 'main.js').write_text('$.ready(() => {});\n')
+    steps = [
+        tool_call(1, 'pixel_art', {'path': 'assets/coin.png', 'palette': {'k': '#1a1020', 'y': '#ffd040'}, 'scale': 8,
+                                   'rows': ['..kkkk..', '.kyyyyk.', 'kyyyyyyk', 'kyyyyyyk', 'kyyyyyyk', 'kyyyyyyk', '.kyyyyk.', '..kkkk..']}),
+        reply({'type': 'text', 'text': 'Монета нарисована.'}),
+    ]
+    with Agent(game='editor', scene=str(project), seed=17) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval('globalThis.__q=' + json.dumps(steps) + ';globalThis.__seen=[];$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
+        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","нарисуй монету");' + D + '.click("ag-send");1')
+        settle(agent, E + '.agent.state.pending!==null', seconds=30)
+        check(agent, D + '.content("ag-ask").includes("coin.png")', 'pixel_art: карточка подтверждения называет файл')
+        agent.eval(D + '.click("ag-yes");1')
+        settle(agent, '!' + E + '.agent.state.busy', seconds=30)
+        check(agent, 'String(globalThis.__seen[1].body).includes("8×8")', 'pixel_art: агент получил размер и ASCII-срез')
+        check(agent, '$.fs.exists(' + json.dumps(str(project / 'assets/coin.png')) + ')', 'pixel_art: PNG записан в проект')
+        check(agent, D + '.content("ag-log").includes("Монета нарисована.")', 'pixel_art: итоговый ответ показан')
+        check(agent, D + '.rect("ag-log").h>50 && JSON.stringify(' + E + '.agent.state.log).includes("[preview:")', 'pixel_art: результат содержит превью, журнал отрисован')
+        agent.eval(D + '.click("ag-undo");1'); agent.step(6)
+        check(agent, '!$.fs.exists(' + json.dumps(str(project / 'assets/coin.png')) + ')', 'pixel_art: кнопка отката удаляет спрайт')
+
+
 def _limit(directory):
     project = Path(directory) / 'lproject'
     project.mkdir()
@@ -216,6 +242,7 @@ def _run():
         _game(directory)
         _interact(directory)
         _limit(directory)
+        _pixel(directory)
     print(f'editor_agent_panel_test: {checks} checks', flush=True)
     return 0
 
