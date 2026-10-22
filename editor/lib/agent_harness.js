@@ -38,11 +38,7 @@ export const SYSTEM_PROMPT = [
     'Правила: только публичный `$` API; не пиши второй движок, ECS, свой scene graph/event bus/менеджеры. Имя `$.…`, в котором не уверен, проверь api_lookup один раз (не гадай именами).',
     'ГОТОВОЕ ПОВЕДЕНИЕ (движение, прыжок, AI, способности, камера, UI) НЕ ПИШИ КОДОМ: snippet_find → snippet_apply. Наборы `kit.*` (например kit.platformer-core: движение+здоровье+камера) подключают сразу несколько кирпичиков — предпочитай их; искать достаточно 2–3 раза, потом действуй. Не вызывай `r2d_cli snippet catalog` — это 500 кирпичиков, используй snippet_find с одним словом.',
     'Объект, к которому цепляется кирпичик, создай в коде с `id`, затем snippet_apply с owner "object:<id>".',
-    'Шпаргалка (проверенные идиомы): `$.ready(($) => { $.gfx.color("#141824"); $.world.gravity(0, 1800).bounds(0, 0, 1280, 720); … });` (bounds ставит невидимые стены по краям — без них герой улетает за уровень) (в `$.ready`: сцены `$.scene.add("level", ($) => { … })` и запуск `$.scene.load("level")`).',
-    'Объекты для кирпичиков создавай с ЛИТЕРАЛЬНЫМ id (`id: "coin1"`), не в цикле с id из строки — граф их иначе не увидит. ФИЗИКА ЕСТЬ ТОЛЬКО У ВИДОВ УЗЛОВ: герой — `$("<player>", { id: "hero" }).at(200, 300).size(26, 30).color("#e07040").controls({ axis: "both", coyote: 100, jumpBuffer: 120 }).collision(26, 30).appendTo($.world)`;',
-    'земля и платформы — ТВЁРДЫЕ `$("<wall>", { id: "p1" }).at(x, y).size(200, 24).color("#5a6a5a").appendTo($.world)` (голый `<sprite>` — просто картинка: без гравитации и столкновений, герой пройдёт сквозь); монета — `$("<sprite>", { id: "coin1" }).at(x, y).size(18, 18).color("#ffd040")` + кирпичик interact.pickup;',
-    'текст: `const label = $("<text>", { text: "Счёт: 0", size: 32 }).at(40, 40).appendTo($.world); label.text("Счёт: 1")` (так обновляется); кирпичик interact.pickup шлёт на герое событие `collect` с `{ value }`: `hero.on("collect", (e) => { score += e.value || 1; label.text("Счёт: " + score); })`; картинка: создай `<sprite>` и передай в `src` путь к существующему PNG. Импорт сгенерированных кирпичиков добавляет их генератор — сам его не пиши.',
-    'Вид от первого лица / 2.5D (бумер-шутер): НОВЫЙ API `$.re2dWorld` — `docs_show highlevel/re2d` (карта Hammer .re2dmap → `r2d world-compile <карта> --renderer` → собранный .re2dworld; `const world = $.re2dWorld.load(worldPath).backend("gpu"); const ctrl = world.controller({ radius: 14, height: 56, eye: 48, step: 9 }); ctrl.place(x, y, 0); $.render(() => world.render(view, 640, 360));`, где `view = { x, y, h, yaw, pitch, fov, near }` обновляется из ctrl и мыши). НЕ используй `.kind(Re2D)`/`$.camera.kind` — это legacy. Не оборачивай вызовы в try/catch (ошибки должны быть видны). После изменения сцены вызови screenshot_check: `КАДР ПУСТОЙ` — игра не работает, найди причину.',
+    'ПЕРЕД КОДОМ ИГРЫ (main.js, сцены, герой, платформы, текст/счёт, камера, вид от первого лица) вызови skill_load engine-basics: там проверенные идиомы `$` и ловушки (твёрдые `<wall>`, литеральные id, `$.world.bounds`, `$.re2dWorld`). Не пиши по памяти. После изменения сцены вызови screenshot_check: `КАДР ПУСТОЙ` — игра не работает, найди причину.',
     'Инструменты: search_project (grep по файлам) и read_file со start/end вместо чтения целиком; для длинных задач начни с plan и обновляй его; при неоднозначной задаче спроси ask_user (кнопки вариантов); для проверки игры playtest (ввод + eval состояния: позиция героя, счёт, подбор предметов; grid:true — ASCII-карта кадра); ошибочную правку откати undo_edit.',
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
     'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
@@ -255,6 +251,18 @@ export async function callModel(cfg, transport, system, messages, tools) {
 // Старые результаты инструментов (кроме последних keep) заменяются кратким следом:
 // длинные чтения файлов не оплачиваются токенами на каждом следующем шаге.
 export function compact(messages, keep) {
+    // Тексты, которые агент сам записал (write_file/edit_file/pixel_art…), тоже не нужно пересылать на каждом шаге:
+    // файл можно перечитать, а в истории остаётся имя и размер.
+    const uses = [];
+    for (const m of messages) if (m.role === 'assistant' && Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_use') uses.push(b);
+    for (const b of uses.slice(0, Math.max(0, uses.length - keep))) {
+        if (b._compact || !b.input || typeof b.input !== 'object') continue;
+        for (const k of Object.keys(b.input)) {
+            const v = b.input[k];
+            if (typeof v === 'string' && v.length > 400) b.input[k] = v.slice(0, 120) + '… [' + v.length + ' симв. записано, перечитайте файл при необходимости]';
+        }
+        b._compact = true;
+    }
     const slots = [];
     for (const m of messages) if (Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_result') slots.push(b);
     for (const b of slots.slice(0, Math.max(0, slots.length - keep))) {
@@ -348,7 +356,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
         try {
             for (let step = 0; step < limit; step++) {
                 if (state.stop) { if (ev.error) ev.error('остановлено'); return; }
-                compact(state.messages, config.keepResults || 6);
+                compact(state.messages, config.keepResults || 4);
                 trimHistory(state.messages, config.maxContextChars || 150000);
                 const reply = await callModel(config, transport, system || ((PROVIDERS[config.provider] || {}).compactPrompt ? SYSTEM_PROMPT_COMPACT : SYSTEM_PROMPT), state.messages, offered);
                 state.usage.calls++;
@@ -901,7 +909,7 @@ export function editorTools(host) {
               return r.json.text.length > 14000 ? r.json.text.slice(0, 14000) + '\n… [обрезано]' : r.json.text;
           } },
         { name: 'pixel_art', mutating: true,
-          description: 'Нарисовать или поправить пиксель-арт (спрайт, тайл, лист анимации) и записать PNG в проект (требует подтверждения). Спрайт описывается текстом: palette — {"k":"#1a1020"} (ключ — один символ), rows — строки-пиксели ("..kk.."), frames — кадры анимации, size — пустой холст, ops — операции (set, rect, line, ellipse, fill, replace, flip, mirror, shift, outline, clear), base — править существующий PNG, scale — целое увеличение. Вернёт ASCII-срез результата (видно, что нарисовано) и превью для пользователя. Правила, палитры и примеры — skill_load pixel-art.',
+          description: 'Пиксель-арт → PNG в проекте (подтверждение): palette {"k":"#1a1020"}, rows ("..kk.."), frames, size, ops, base (правка), scale. Вернёт ASCII-срез и превью. Правила и примеры — skill_load pixel-art.',
           schema: { type: 'object', properties: {
               path: str('куда записать, например assets/hero.png'), palette: { type: 'object', description: 'символ → "#rrggbb" | null' },
               rows: { type: 'array', items: { type: 'string' }, description: 'строки-пиксели' }, frames: { type: 'array', description: 'кадры анимации: [{rows:[…]}, …]' },
@@ -949,11 +957,11 @@ export function editorTools(host) {
               return pixelReport(p, r, false) + '\n[preview: ' + host.abs(prev) + ']';
           } },
         { name: 'generate_sound', mutating: true,
-          description: 'Сгенерировать звуковой эффект и записать WAV в проект (требует подтверждения): описание словами или пресет → дескриптор R2D SFX → процедурный синтез. text — словами («короткий высокий прыжок», «big explosion»; распознаёт монету, выстрел/лазер, взрыв, бонус, удар/урон, прыжок, клик) или preset: coin, laser, explosion, powerup, hurt, jump, blip, random. seed — другой вариант того же звука; mutate 0..1 — вариация; params — точная подстройка полей (wave: square|saw|sine|noise, freq, decay, slide…; skill_load generate-sound). Вернёт длительность, пик, высоту тона и ASCII-огибающую: по ним видно, что получилось, без слуха. Играть: `$.sound.play("assets/sfx/x.wav")`.',
+          description: 'Звуковой эффект → WAV в проекте (подтверждение). text — словами («короткий высокий прыжок», «big explosion») или preset: coin, laser, explosion, powerup, hurt, jump, blip, random; seed — другой вариант, mutate 0..1 — вариация, params — тонкая подстройка (skill_load generate-sound). Вернёт длительность, пик, тон и ASCII-огибающую. Играть: `$.sound.play("assets/sfx/x.wav")`.',
           schema: { type: 'object', properties: {
               path: str('куда записать, например assets/sfx/jump.wav'), text: str('описание звука словами'), preset: str('coin | laser | explosion | powerup | hurt | jump | blip | random'),
               seed: { type: 'number', description: 'вариант звука' }, mutate: { type: 'number', description: 'случайная вариация 0..1' },
-              params: { type: 'object', description: 'поля дескриптора поверх пресета: wave, attack, sustain, punch, decay, freq, minFreq, slide, deltaSlide, vibratoDepth, vibratoSpeed, changeAmount, changeSpeed, duty, dutySweep, repeat, phaserOffset, phaserSweep, lpf, lpfSweep, lpfResonance, hpf, hpfSweep, volume' },
+              params: { type: 'object', description: 'поля дескриптора поверх пресета (wave, freq, decay, slide… — skill_load generate-sound)' },
               overwrite: { type: 'boolean', description: 'заменить существующий файл (откат невозможен)' } }, required: ['path'] },
           run: async (a) => {
               const p = safeRel(a.path);
@@ -987,7 +995,7 @@ export function editorTools(host) {
               return (r.exact ? '' : 'точного совпадения нет, похожие:\n') + r.entries.map((e) =>
                   e.path + ' [' + e.kind + ']' + (e.args ? '(' + e.args.join(', ') + ')' : '') + ' — ' + String(e.description).slice(0, 200)).join('\n');
           } },
-        { name: 'playtest', serial: true, description: 'Сыграть в игру headless по сценарию и проверить состояние: steps — список шагов, выполняются по порядку; в шаге: hold:["D"] — зажать клавиши (hold:[] — отпустить), tap:"Space" — нажать, frames:N — прокрутить кадры, eval:"JS" — вычислить выражение в игре (например `JSON.stringify($("#hero").pos())`, `$("text").text()`). В конце снимок кадра (grid:true — ASCII-карта). Так проверяют управление, подбор предметов, счёт, границы мира.',
+        { name: 'playtest', serial: true, description: 'Сыграть headless по сценарию: steps по порядку — hold:["D"] (зажать; [] отпустить), tap:"Space", frames:N, eval:"JS" (например `JSON.stringify($("#hero").pos())`). В конце снимок кадра (grid:true — ASCII-карта). Проверка управления, счёта, границ.',
           schema: { type: 'object', properties: { steps: { type: 'array', items: { type: 'object', properties: { hold: { type: 'array', items: { type: 'string' } }, tap: str('клавиша'), frames: { type: 'number' }, eval: str('JS-выражение') } }, description: 'шаги сценария' }, scene: str('сцена (необязательно)'), grid: { type: 'boolean', description: 'ASCII-карта итогового кадра' } }, required: ['steps'] },
           run: async (a) => {
               if (!Array.isArray(a.steps) || !a.steps.length) throw new Error('steps — непустой массив');
@@ -1014,7 +1022,7 @@ export function editorTools(host) {
               if (stats && stats.ok) { const { grid, ...rest } = stats; out.frame = rest.blank ? 'КАДР ПУСТОЙ' : 'кадр не пустой'; out.stats = { meanLuma: rest.meanLuma, distinctColors: rest.distinctColors, nonBackgroundFraction: rest.nonBackgroundFraction }; if (grid) out.ascii = grid; }
               return JSON.stringify(out);
           } },
-        { name: 'screenshot_check', serial: true, description: 'Запустить игру headless на N кадров (можно с зажатыми клавишами), снять кадр и проверить его статистикой: blank:true — кадр пустой/одноцветный (чёрный экран!), иначе яркость, число цветов, доля не-фона. Вызывай после изменения сцены/графики; blank — значит искать причину (ошибка, не вызван render, камера, нет объектов).',
+        { name: 'screenshot_check', serial: true, description: 'Headless-прогон N кадров (можно с зажатыми клавишами), снимок и статистика: blank:true — кадр пустой (ищи причину: ошибка, нет render, камера, нет объектов). Вызывай после изменения сцены/графики.',
           schema: { type: 'object', properties: { frames: { type: 'number', description: 'кадров до снимка, по умолчанию 120' }, hold: { type: 'array', items: { type: 'string' }, description: 'клавиши, зажатые всё время, например ["D"] или ["W"]' }, scene: str('сцена (необязательно)'), grid: { type: 'boolean', description: 'добавить ASCII-карту кадра (48×18): видно, где на экране что нарисовано' } }, required: [] },
           run: async (a) => {
               const dir = '.r2d-check', shot = host.abs(dir + '/frame.png');

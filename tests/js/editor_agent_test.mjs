@@ -319,6 +319,21 @@ await atest('откат агента отменяет правки студии:
     eq(data.note, undefined);
 });
 
+await atest('compact: старые записанные тексты в вызовах инструментов сворачиваются, свежие остаются', async () => {
+    const big = 'x'.repeat(2000);
+    const msgs = [{ role: 'user', content: 'задача' }];
+    for (let i = 0; i < 5; i++) {
+        msgs.push({ role: 'assistant', content: [{ type: 'tool_use', id: 'u' + i, name: 'write_file', input: { path: 'f' + i, content: big } }] });
+        msgs.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'u' + i, content: 'ok' }] });
+    }
+    compact(msgs, 2);
+    const uses = msgs.filter((m) => m.role === 'assistant').map((m) => m.content[0].input);
+    truthy(uses[0].content.length < 300 && uses[0].content.includes('2000 симв.'));
+    eq(uses[0].path, 'f0');
+    eq(uses[4].content.length, 2000);
+    eq(uses[3].content.length, 2000);
+});
+
 await atest('r2d_cli: чтение без подтверждения, запись — с подтверждением; editor_op', async () => {
     const calls = [];
     const host = { tool: async (a) => { calls.push(a); return { output: 'ok' }; }, abs: (p) => p, exists: () => false, readText: () => '', writeText: () => {}, list: () => [] };
@@ -805,7 +820,7 @@ await atest('GigaChat: схемы без properties/items и type-union норм
 });
 
 await atest('GigaChat получает компактный системный промпт, остальные провайдеры — полный', async () => {
-    truthy(SYSTEM_PROMPT_COMPACT.length < 900 && SYSTEM_PROMPT.length > 3000 && SYSTEM_PROMPT_COMPACT.includes('engine-basics'));
+    truthy(SYSTEM_PROMPT_COMPACT.length < 900 && SYSTEM_PROMPT.length > 2000 && SYSTEM_PROMPT_COMPACT.includes('engine-basics'));
     const systems = [];
     const transport = async (url, opts) => {
         if (url.includes('oauth')) return { ok: true, status: 200, json: { access_token: 't', expires_at: Date.now() + 1800000 } };

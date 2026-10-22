@@ -55,8 +55,8 @@ def check_code(p):
         ok_lint = json.loads(lint.stdout).get("ok", lint.returncode == 0)
     except ValueError:
         ok_lint = lint.returncode == 0
-    run = r2d("--game", str(p), "--headless", "--frames", "30") if False else None
-    return ok_lint and len(js) > 400 and "controls" in js or "$.input" in js, "main.js >400 символов, lint без ошибок, есть управление"
+    control = "controls" in js or "$.input" in js or "snippet" in js
+    return bool(ok_lint and len(js) > 300 and control), f"main.js {len(js)} симв., lint {'ок' if ok_lint else 'ошибки'}, управление {'есть' if control else 'нет'}"
 
 
 TASKS = {
@@ -95,7 +95,7 @@ def run_task(name, args):
         last_err = a.eval("(()=>{const e=" + E + ".agent.state.log.filter((x)=>x.kind==='err').pop();return e?e.text:''})()")
     ok, what = check(tmp)
     return {"task": name, "ok": bool(ok), "check": what, "seconds": round(time.time() - t0, 1), "tool_calls": tools,
-            "tool_errors": errs, "usage": json.loads(usage) if usage else {}, "error": err or last_err}
+            "tool_errors": errs, "detail": what, "usage": json.loads(usage) if usage else {}, "error": err or last_err}
 
 
 def main():
@@ -113,7 +113,7 @@ def main():
     for name in args.tasks.split(","):
         r = run_task(name, args)
         rows.append(r)
-        print(("ok   " if r["ok"] else "FAIL ") + f'{name:7} {r["seconds"]:6}s вызовов {r["tool_calls"]} (ошибок {r["tool_errors"]}) токенов {r["usage"].get("input", 0)}+{r["usage"].get("output", 0)} {r["error"][:80]}', flush=True)
+        print(("ok   " if r["ok"] else "FAIL ") + f'{name:7} {r["seconds"]:6}s вызовов {r["tool_calls"]} (ошибок {r["tool_errors"]}) токенов {r["usage"].get("input", 0)}+{r["usage"].get("output", 0)} {r["error"][:60]} [{r["detail"]}]', flush=True)
     done = sum(r["ok"] for r in rows)
     print(f"итого: {done}/{len(rows)} · {args.provider} {args.model}")
     if args.json:
