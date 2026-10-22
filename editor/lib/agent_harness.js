@@ -38,6 +38,7 @@ export const SYSTEM_PROMPT = [
     'земля и платформы — ТВЁРДЫЕ `$("<wall>", { id: "p1" }).at(x, y).size(200, 24).color("#5a6a5a").appendTo($.world)` (голый `<sprite>` — просто картинка: без гравитации и столкновений, герой пройдёт сквозь); монета — `$("<sprite>", { id: "coin1" }).at(x, y).size(18, 18).color("#ffd040")` + кирпичик interact.pickup;',
     'текст: `const label = $("<text>", { text: "Счёт: 0", size: 32 }).at(40, 40).appendTo($.world); label.text("Счёт: 1")` (так обновляется); кирпичик interact.pickup шлёт на герое событие `collect` с `{ value }`: `hero.on("collect", (e) => { score += e.value || 1; label.text("Счёт: " + score); })`; картинка: `$("<sprite>", { src: "assets/a.png", w: 64, h: 64 })`. Строку `import "./generated/snippets/index.js"` добавляет генератор кирпичиков — сам её не пиши.',
     'Вид от первого лица / 2.5D (бумер-шутер): НОВЫЙ API `$.re2dWorld` — `docs_show highlevel/re2d` (карта Hammer .re2dmap → `r2d world-compile <карта> --renderer` → .re2dworld; `const world = $.re2dWorld.load("maps/level.re2dworld").backend("gpu"); const ctrl = world.controller({ radius: 14, height: 56, eye: 48, step: 9 }); ctrl.place(x, y, 0); $.render(() => world.render(view, 640, 360));`, где `view = { x, y, h, yaw, pitch, fov, near }` обновляется из ctrl и мыши). НЕ используй `.kind(Re2D)`/`$.camera.kind` — это legacy. Не оборачивай вызовы в try/catch (ошибки должны быть видны). После изменения сцены вызови screenshot_check: `КАДР ПУСТОЙ` — игра не работает, найди причину.',
+    'Инструменты: search_project (grep по файлам) и read_file со start/end вместо чтения целиком; для длинных задач начни с plan и обновляй его; при неоднозначной задаче спроси ask_user (кнопки вариантов); для проверки игры playtest (ввод + eval состояния: позиция героя, счёт, подбор предметов; grid:true — ASCII-карта кадра); ошибочную правку откати undo_edit.',
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
     'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
     'Пути — относительно корня проекта. Сначала list_files/read_file, потом пиши.',
@@ -537,6 +538,30 @@ export function snippetTools(host) {
     ];
 }
 
+// Диалог с пользователем и план задач (интерфейс даёт панель): ask_user ждёт ответ кнопкой, plan рисует чеклист.
+export function interactTools(host) {
+    const str = (description) => ({ type: 'string', description });
+    return [
+        { name: 'plan', description: 'Показать пользователю план работы и ход выполнения (чеклист в панели). items — все шаги целиком: [{text, status}], status: pending | doing | done. Обновляй по мере работы; для длинных задач (игра, карта, несколько файлов) начни с плана.',
+          schema: { type: 'object', properties: { items: { type: 'array', items: { type: 'object', properties: { text: str('шаг'), status: { type: 'string', enum: ['pending', 'doing', 'done'] } }, required: ['text'] } } }, required: ['items'] },
+          run: async (a) => {
+              if (!Array.isArray(a.items)) throw new Error('items — массив шагов');
+              const items = a.items.slice(0, 20).map((x) => ({ text: String(x.text || '').slice(0, 120), status: ['pending', 'doing', 'done'].includes(x.status) ? x.status : 'pending' }));
+              if (host.setPlan) host.setPlan(items);
+              const done = items.filter((x) => x.status === 'done').length;
+              return 'план обновлён: ' + done + '/' + items.length + ' выполнено';
+          } },
+        { name: 'ask_user', description: 'Задать пользователю уточняющий вопрос с вариантами ответа (кнопки) и дождаться ответа. Используй, когда задача неоднозначна (жанр, стиль, размер), вместо догадок. options — 2–5 коротких вариантов.',
+          schema: { type: 'object', properties: { question: str('вопрос'), options: { type: 'array', items: { type: 'string' }, description: 'варианты ответа' } }, required: ['question'] },
+          run: async (a) => {
+              if (!host.ask) throw new Error('вопросы пользователю недоступны');
+              const options = Array.isArray(a.options) && a.options.length ? a.options.slice(0, 5).map((x) => String(x).slice(0, 60)) : ['Да', 'Нет'];
+              const answer = await host.ask(String(a.question).slice(0, 300), options);
+              return answer === null || answer === undefined ? 'пользователь не ответил' : 'ответ пользователя: ' + answer;
+          } },
+    ];
+}
+
 // Команды r2d, не меняющие файлы: их агент вызывает без подтверждения.
 const CLI_READONLY = new Set(['version', 'commands', 'help', 'tools', 'assets', 'project', 'projects', 'validate', 'lint', 'docs', 'api', 'doctor',
     'atlas-info', 'world-info', 'deps', 'story', 'dialog', 'templates', 'engines', 'extension', 'snippet']);
@@ -551,6 +576,58 @@ export function safeRel(p) {
 }
 
 // Набор инструментов Editor. host: { tool(args)→{json,output}, readText, writeText, exists, list() }.
+
+// ---- утилиты файловых инструментов (экспортируются для тестов) -------------------------------------
+export function numberLines(text, start, end) {
+    const lines = String(text).split('\n');
+    const a = Math.max(1, Math.floor(Number(start) || 1)), b = Math.min(lines.length, Math.floor(Number(end) || lines.length));
+    const w = String(b).length;
+    const out = [];
+    for (let i = a; i <= b; i++) out.push(String(i).padStart(w, ' ') + '│' + lines[i - 1]);
+    return { text: out.join('\n'), total: lines.length, from: a, to: b };
+}
+
+const TEXT_EXT = /\.(m?js|json|md|rml|rcss|txt|glsl|frag|vert|html|css|csv|yml|yaml|re2dmap|tilemap\.json|ts)$/i;
+
+export function grepProject(host, { query, regex, prefix, ext, max }) {
+    let re;
+    if (regex) re = new RegExp(String(query), 'i');
+    else { const q = String(query).toLowerCase(); re = { test: (line) => line.toLowerCase().includes(q) }; }
+    const limit = Math.min(200, Math.max(1, Number(max) || 40));
+    const hits = [];
+    let scanned = 0;
+    for (const f of host.list()) {
+        if (prefix && !f.startsWith(prefix)) continue;
+        if (ext && !f.endsWith(ext)) continue;
+        if (!TEXT_EXT.test(f)) continue;
+        let text;
+        try { text = host.readText(f); } catch (_) { continue; }
+        if (typeof text !== 'string' || text.length > 400000) continue;
+        scanned++;
+        const lines = text.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+            if (re.test(lines[i])) {
+                hits.push(f + ':' + (i + 1) + ': ' + lines[i].trim().slice(0, 160));
+                if (hits.length >= limit) return { hits, scanned, truncated: true };
+            }
+        }
+    }
+    return { hits, scanned, truncated: false };
+}
+
+// Откат правок агента: history = [{ path, before }] (before === null — файл создан агентом).
+export function undoEdits(history, host, count) {
+    const done = [];
+    for (let k = 0; k < Math.max(1, count || 1) && history.length; k++) {
+        const h = history.pop();
+        if (h.before === null) { if (host.remove && host.exists(h.path)) host.remove(h.path); else host.writeText(h.path, ''); }
+        else host.writeText(h.path, h.before);
+        done.push((h.before === null ? 'удалён ' : 'восстановлен ') + h.path);
+        if (host.afterUndo) host.afterUndo(h.path);
+    }
+    return done;
+}
+
 export function editorTools(host) {
     const str = (description) => ({ type: 'string', description });
     // lint после записи .js: диагностика сразу в результате — экономит отдельный шаг.
@@ -565,20 +642,52 @@ export function editorTools(host) {
         } catch (e) { return '\nlint: не запустился (' + (e && e.message || e) + ')'; }
     };
     const obj = (props, required) => ({ type: 'object', properties: props, required: required || Object.keys(props) });
-    return [
+    const history = [];
+    const remember = (p) => { history.push({ path: p, before: host.exists(p) ? host.readText(p) : null }); if (history.length > 100) history.shift(); };
+    const tools = [
         { name: 'docs_search', description: 'Поиск по встроенной документации движка (строки, содержащие запрос).',
           schema: obj({ query: str('слово или фраза') }),
           run: async (a) => JSON.stringify((await host.tool(['docs', 'search', String(a.query), '--limit', '15'])).json) },
-        { name: 'docs_show', description: 'Текст страницы документации, например highlevel/ui.',
-          schema: obj({ page: str('имя страницы') }),
-          run: async (a) => { const r = await host.tool(['docs', 'show', String(a.page)]); return r.json && r.json.ok ? r.json.text : JSON.stringify(r.json); } },
-        { name: 'list_files', description: 'Файлы проекта (относительные пути).', schema: obj({}),
-          run: async () => host.list().join('\n') },
-        { name: 'read_file', description: 'Прочитать файл проекта.', schema: obj({ path: str('относительный путь') }),
-          run: async (a) => { const p = safeRel(a.path); if (!host.exists(p)) throw new Error('нет файла ' + p); return host.readText(p); } },
+        { name: 'docs_show', description: 'Текст страницы документации, например highlevel/ui. Длинные страницы читай частями: start — с какой строки, lines — сколько строк (по умолчанию до ~12000 символов).',
+          schema: obj({ page: str('имя страницы'), start: { type: 'number', description: 'первая строка (с 1)' }, lines: { type: 'number', description: 'сколько строк' } }, ['page']),
+          run: async (a) => {
+              const r = await host.tool(['docs', 'show', String(a.page)]);
+              if (!(r.json && r.json.ok)) return JSON.stringify(r.json);
+              const all = r.json.text.split('\n');
+              const from = Math.max(1, Math.floor(Number(a.start) || 1));
+              let to = a.lines ? from + Math.floor(Number(a.lines)) - 1 : all.length;
+              let out = all.slice(from - 1, to).join('\n');
+              if (!a.lines && out.length > 12000) { out = out.slice(0, 12000); to = from - 1 + out.split('\n').length; out += '\n… [обрезано; продолжение: start=' + (to + 1) + ', всего строк ' + all.length + ']'; }
+              return out;
+          } },
+        { name: 'list_files', description: 'Файлы проекта (относительные пути). prefix — каталог/начало пути, ext — окончание (например .js), limit — сколько вернуть (по умолчанию 200).',
+          schema: obj({ prefix: str('начало пути'), ext: str('окончание, например .js'), limit: { type: 'number', description: 'максимум' } }, []),
+          run: async (a) => {
+              let list = host.list();
+              if (a.prefix) list = list.filter((f) => f.startsWith(String(a.prefix)));
+              if (a.ext) list = list.filter((f) => f.endsWith(String(a.ext)));
+              const limit = Math.min(1000, Math.max(1, Number(a.limit) || 200));
+              return list.slice(0, limit).join('\n') + (list.length > limit ? '\n… ещё ' + (list.length - limit) + ' файлов (уточните prefix/ext)' : '') || '(пусто)';
+          } },
+        { name: 'read_file', description: 'Прочитать файл проекта. Для больших файлов укажи start/end (номера строк с 1) — вернутся строки с номерами; без диапазона файл читается целиком (до ~20000 символов).',
+          schema: obj({ path: str('относительный путь'), start: { type: 'number', description: 'первая строка' }, end: { type: 'number', description: 'последняя строка' } }, ['path']),
+          run: async (a) => {
+              const p = safeRel(a.path);
+              if (!host.exists(p)) throw new Error('нет файла ' + p);
+              const text = host.readText(p);
+              if (a.start || a.end) { const n = numberLines(text, a.start, a.end); return p + ' [' + n.from + '–' + n.to + ' из ' + n.total + ']\n' + n.text; }
+              return text.length > 20000 ? text.slice(0, 20000) + '\n… [обрезано, файл ' + text.length + ' симв.; читай по start/end или ищи через search_project]' : text;
+          } },
+        { name: 'search_project', description: 'Поиск текста по файлам проекта (как grep): строки path:line: текст. query — подстрока (без учёта регистра) или регулярка при regex:true; prefix/ext сужают область. Дешевле, чем читать файлы целиком.',
+          schema: obj({ query: str('что искать'), regex: { type: 'boolean', description: 'query — регулярное выражение' }, prefix: str('начало пути'), ext: str('окончание пути'), max: { type: 'number', description: 'максимум совпадений (40)' } }, ['query']),
+          run: async (a) => {
+              const r = grepProject(host, { query: a.query, regex: a.regex, prefix: a.prefix, ext: a.ext, max: a.max });
+              if (!r.hits.length) return 'совпадений нет (просмотрено файлов: ' + r.scanned + ')';
+              return r.hits.join('\n') + (r.truncated ? '\n… достигнут лимит, уточните запрос' : '') + '\n[файлов просмотрено: ' + r.scanned + ']';
+          } },
         { name: 'write_file', description: 'Создать файл или полностью заменить (требует подтверждения). Для правок существующих файлов используй edit_file. После записи .js автоматически запускается lint.', mutating: true,
           schema: obj({ path: str('относительный путь'), content: str('полное содержимое') }),
-          run: async (a) => { const p = safeRel(a.path); host.writeText(p, String(a.content)); return 'записано ' + p + await autoLint(p); } },
+          run: async (a) => { const p = safeRel(a.path); remember(p); host.writeText(p, String(a.content)); return 'записано ' + p + await autoLint(p); } },
         { name: 'edit_file', description: 'Заменить фрагмент в файле (требует подтверждения): old_string должен встретиться ровно один раз. Дёшево по токенам. После правки .js запускается lint.', mutating: true,
           schema: obj({ path: str('относительный путь'), old_string: str('точный фрагмент'), new_string: str('замена') }),
           run: async (a) => {
@@ -589,9 +698,28 @@ export function editorTools(host) {
               const first = text.indexOf(old);
               if (first < 0) throw new Error('old_string не найден в ' + p + ' (перечитайте файл)');
               if (text.indexOf(old, first + 1) >= 0) throw new Error('old_string встречается несколько раз — добавьте контекст');
+              remember(p);
               host.writeText(p, text.slice(0, first) + String(a.new_string) + text.slice(first + old.length));
               return 'изменено ' + p + await autoLint(p);
           } },
+        { name: 'delete_file', description: 'Удалить файл проекта (требует подтверждения; откатывается через undo_edit).', mutating: true,
+          schema: obj({ path: str('относительный путь') }),
+          run: async (a) => { const p = safeRel(a.path); if (!host.remove) throw new Error('удаление недоступно в этом Editor'); if (!host.exists(p)) throw new Error('нет файла ' + p); remember(p); host.remove(p); return 'удалён ' + p; } },
+        { name: 'move_file', description: 'Переместить/переименовать файл проекта (требует подтверждения; откатывается через undo_edit).', mutating: true,
+          schema: obj({ from: str('откуда'), to: str('куда') }),
+          run: async (a) => {
+              const f = safeRel(a.from), t = safeRel(a.to);
+              if (!host.remove) throw new Error('перемещение недоступно в этом Editor');
+              if (!host.exists(f)) throw new Error('нет файла ' + f);
+              if (host.exists(t)) throw new Error('файл уже есть: ' + t);
+              const text = host.readText(f);
+              remember(t); remember(f);
+              host.writeText(t, text); host.remove(f);
+              return 'перемещён ' + f + ' → ' + t;
+          } },
+        { name: 'undo_edit', description: 'Откатить последние изменения файлов, сделанные агентом (write_file/edit_file/delete_file/move_file); count — сколько шагов (по умолчанию 1).', mutating: true,
+          schema: obj({ count: { type: 'number', description: 'сколько шагов откатить' } }, []),
+          run: async (a) => { const done = undoEdits(history, host, a.count); return done.length ? done.join('\n') : 'откатывать нечего'; } },
         { name: 'api_lookup', description: 'Проверить имя `$`-API по схеме движка: есть ли метод и какие у него аргументы (точное имя, префикс или часть, например `$.scene.add` или `tween`).',
           schema: obj({ name: str('путь или его часть') }),
           run: async (a) => {
@@ -601,8 +729,35 @@ export function editorTools(host) {
               return (r.exact ? '' : 'точного совпадения нет, похожие:\n') + r.entries.map((e) =>
                   e.path + ' [' + e.kind + ']' + (e.args ? '(' + e.args.join(', ') + ')' : '') + ' — ' + String(e.description).slice(0, 200)).join('\n');
           } },
+        { name: 'playtest', description: 'Сыграть в игру headless по сценарию и проверить состояние: steps — список шагов, выполняются по порядку; в шаге: hold:["D"] — зажать клавиши (hold:[] — отпустить), tap:"Space" — нажать, frames:N — прокрутить кадры, eval:"JS" — вычислить выражение в игре (например `JSON.stringify($("#hero").pos())`, `$("text").text()`). В конце снимок кадра (grid:true — ASCII-карта). Так проверяют управление, подбор предметов, счёт, границы мира.',
+          schema: { type: 'object', properties: { steps: { type: 'array', items: { type: 'object', properties: { hold: { type: 'array', items: { type: 'string' } }, tap: str('клавиша'), frames: { type: 'number' }, eval: str('JS-выражение') } }, description: 'шаги сценария' }, scene: str('сцена (необязательно)'), grid: { type: 'boolean', description: 'ASCII-карта итогового кадра' } }, required: ['steps'] },
+          run: async (a) => {
+              if (!Array.isArray(a.steps) || !a.steps.length) throw new Error('steps — непустой массив');
+              const dir = '.r2d-check', shot = host.abs(dir + '/frame.png');
+              const reqs = [], evals = [];
+              let frames = 0;
+              a.steps.slice(0, 60).forEach((st, i) => {
+                  if (Array.isArray(st.hold)) reqs.push({ cmd: 'keys', hold: st.hold.map(String) });
+                  if (st.tap) reqs.push({ cmd: 'key', key: String(st.tap), action: 'tap' });
+                  if (st.frames) { const n = Math.min(600, Math.max(1, Math.floor(Number(st.frames)))); frames += n; reqs.push({ cmd: 'step', frames: n }); }
+                  if (st.eval) { evals.push({ step: i, code: String(st.eval), req: reqs.length }); reqs.push({ cmd: 'eval', code: String(st.eval) }); }
+              });
+              if (frames > 3000) throw new Error('слишком длинный сценарий: ' + frames + ' кадров (максимум 3000)');
+              reqs.push({ cmd: 'screenshot', path: shot }, { cmd: 'quit' });
+              const session = { version: 1, game: host.abs(''), seed: 1, timeoutMs: 120000, requests: reqs };
+              if (a.scene) session.scene = String(a.scene);
+              host.writeText(dir + '/playtest.json', JSON.stringify(session));
+              const run = await host.tool(['agent', host.abs(dir + '/playtest.json')]);
+              const rep = run.json || {};
+              const resp = Array.isArray(rep.responses) ? rep.responses : [];
+              const out = { evals: evals.map((e) => { const r = resp[e.req]; return { step: e.step, code: e.code.slice(0, 80), result: r && r.ok ? r.result : undefined, error: r && !r.ok ? String(r.error || 'ошибка').slice(0, 160) : undefined }; }), completed: rep.completed, failed: rep.failed, frames };
+              if (!rep.ok && rep.diagnostics) out.diagnostics = rep.diagnostics.slice(0, 3).map((d) => d.message).join('; ').slice(0, 300);
+              const stats = (await host.tool(['image-stats', shot, ...(a.grid ? ['--grid', '48x18'] : [])])).json;
+              if (stats && stats.ok) { const { grid, ...rest } = stats; out.frame = rest.blank ? 'КАДР ПУСТОЙ' : 'кадр не пустой'; out.stats = { meanLuma: rest.meanLuma, distinctColors: rest.distinctColors, nonBackgroundFraction: rest.nonBackgroundFraction }; if (grid) out.ascii = grid; }
+              return JSON.stringify(out);
+          } },
         { name: 'screenshot_check', description: 'Запустить игру headless на N кадров (можно с зажатыми клавишами), снять кадр и проверить его статистикой: blank:true — кадр пустой/одноцветный (чёрный экран!), иначе яркость, число цветов, доля не-фона. Вызывай после изменения сцены/графики; blank — значит искать причину (ошибка, не вызван render, камера, нет объектов).',
-          schema: { type: 'object', properties: { frames: { type: 'number', description: 'кадров до снимка, по умолчанию 120' }, hold: { type: 'array', items: { type: 'string' }, description: 'клавиши, зажатые всё время, например ["D"] или ["W"]' }, scene: str('сцена (необязательно)') }, required: [] },
+          schema: { type: 'object', properties: { frames: { type: 'number', description: 'кадров до снимка, по умолчанию 120' }, hold: { type: 'array', items: { type: 'string' }, description: 'клавиши, зажатые всё время, например ["D"] или ["W"]' }, scene: str('сцена (необязательно)'), grid: { type: 'boolean', description: 'добавить ASCII-карту кадра (48×18): видно, где на экране что нарисовано' } }, required: [] },
           run: async (a) => {
               const dir = '.r2d-check', shot = host.abs(dir + '/frame.png');
               const frames = Math.min(600, Math.max(10, Number(a.frames) || 120));
@@ -613,9 +768,10 @@ export function editorTools(host) {
               if (a.scene) session.scene = String(a.scene);
               host.writeText(dir + '/session.json', JSON.stringify(session));
               const run = await host.tool(['agent', host.abs(dir + '/session.json')]);
-              const stats = (await host.tool(['image-stats', shot])).json;
+              const stats = (await host.tool(['image-stats', shot, ...(a.grid ? ['--grid', '48x18'] : [])])).json;
               if (!stats || !stats.ok) return 'снимок не получен: ' + String((run.json && JSON.stringify(run.json.diagnostics || run.json).slice(0, 400)) || run.error || 'нет ответа');
-              return (stats.blank ? 'КАДР ПУСТОЙ (одноцветный ' + stats.background + ')' : 'кадр не пустой') + ': ' + JSON.stringify(stats);
+              const { grid, ...rest } = stats;
+              return (stats.blank ? 'КАДР ПУСТОЙ (одноцветный ' + stats.background + ')' : 'кадр не пустой') + ': ' + JSON.stringify(rest) + (grid ? '\nASCII-карта кадра (. пусто → @ плотно):\n' + grid.join('\n') : '');
           } },
         { name: 'project_info', description: 'Сведения о проекте: project.json, точка входа, сцены.', schema: obj({}),
           run: async () => JSON.stringify((await host.tool(['project', host.abs('')])).json).slice(0, 4000) },
@@ -646,4 +802,6 @@ export function editorTools(host) {
         { name: 'r2d_validate', description: 'r2d validate по проекту; вернёт диагностики.', schema: obj({}),
           run: async () => JSON.stringify((await host.tool(['validate', host.abs('')])).json) },
     ];
+    tools.history = history;
+    return tools;
 }

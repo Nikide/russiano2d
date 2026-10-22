@@ -132,10 +132,12 @@
                 <span id="ag-state" class="ag-pill">Готов</span>
                 <span id="ag-model-chip" class="ag-modelchip"></span>
                 <span class="grow"></span>
+                <span id="ag-undo" class="tb-btn icon" title="Откатить последнюю правку агента"></span>
                 <span id="ag-clear" class="tb-btn icon" title="Новый диалог"></span>
             </div>
             <div id="ag-body">
                 <div id="ag-col">
+                    <div id="ag-plan" class="hidden"></div>
                     <div id="ag-log"></div>
                     <div id="ag-ask" class="hidden"></div>
                 </div>

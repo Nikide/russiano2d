@@ -112,6 +112,37 @@ def _game(directory):
         check(agent, 'false' if '"err"' in log else 'true', 'игра: ни один шаг сценария не вернул ошибку (' + log[-300:] + ')')
 
 
+def _interact(directory):
+    project = Path(directory) / 'iproject'
+    project.mkdir()
+    (project / 'project.json').write_text(json.dumps({'format': 2, 'title': 'Interact', 'entry': 'main.js'}))
+    (project / 'main.js').write_text('$.ready(() => {});\n')
+    steps = [
+        tool_call(1, 'plan', {'items': [{'text': 'Спросить жанр', 'status': 'doing'}, {'text': 'Записать заметку', 'status': 'pending'}]}),
+        tool_call(2, 'ask_user', {'question': 'Какой жанр?', 'options': ['Платформер', 'Шутер']}),
+        tool_call(3, 'search_project', {'query': 'ready'}),
+        tool_call(4, 'write_file', {'path': 'notes.txt', 'content': 'жанр выбран'}),
+        reply({'type': 'text', 'text': 'Готово, записал.'}),
+    ]
+    with Agent(game='editor', scene=str(project), seed=15) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval('globalThis.__q=' + json.dumps(steps) + ';globalThis.__seen=[];$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
+        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","сделай игру");' + D + '.click("ag-send");1')
+        settle(agent, E + '.agent.state.asking!==null', seconds=30)
+        check(agent, D + '.content("ag-plan").includes("Спросить жанр")', 'чеклист плана показан в панели')
+        check(agent, D + '.content("ag-ask").includes("Какой жанр?") && ' + D + '.content("ag-ask").includes("Шутер")', 'вопрос агента показан кнопками вариантов')
+        agent.eval(D + '.click("ag-opt-0");1')
+        settle(agent, E + '.agent.state.pending!==null', seconds=30)
+        agent.eval(D + '.click("ag-yes");1')
+        settle(agent, '!' + E + '.agent.state.busy', seconds=30)
+        check(agent, 'String(globalThis.__seen[2].body).includes("ответ пользователя: Платформер")', 'ответ пользователя вернулся агенту')
+        check(agent, 'String(globalThis.__seen[3].body).includes("main.js:1:")', 'search_project нашёл строку в файле')
+        check(agent, '$.fs.exists(' + json.dumps(str(project / 'notes.txt')) + ')', 'файл создан агентом')
+        agent.eval(D + '.click("ag-undo");1'); agent.step(6)
+        check(agent, '!$.fs.exists(' + json.dumps(str(project / 'notes.txt')) + ')', 'кнопка отката удаляет созданный агентом файл')
+        check(agent, D + '.content("ag-log").includes("Откат")', 'откат отмечен в журнале')
+
+
 def _run():
     with tempfile.TemporaryDirectory(prefix='r2d-agentpanel-') as directory:
         project = Path(directory) / 'project'
@@ -156,11 +187,21 @@ def _run():
             check(agent, '!JSON.stringify($.fs.readText(' + json.dumps(str(project / 'project.json')) + ')).includes("test-key")', 'ключ не записан в project.json')
         _hammer(directory)
         _game(directory)
+        _interact(directory)
     print(f'editor_agent_panel_test: {checks} checks', flush=True)
     return 0
 
 
+def warm_index():
+    # Индекс эмбеддингов привязан к хешу текстов документации: после правки доков первый запрос
+    # строит его заново (~минута) — прогреваем заранее, чтобы не упираться в таймауты сценариев.
+    import os, subprocess
+    binary = os.environ.get('R2D_BINARY') or str(ROOT / 'build-xmake/macos-arm64/macosx/arm64/release/r2d')
+    subprocess.run([binary, 'docs', 'context', 'прогрев', '--limit', '1', '--quiet'], capture_output=True, timeout=600, cwd=ROOT)
+
+
 def main():
+    warm_index()
     state = ROOT / 'state.local.json'
     previous = state.read_bytes() if state.exists() else None
     try:

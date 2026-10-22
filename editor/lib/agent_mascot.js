@@ -17,10 +17,10 @@ const BY_TOOL = {
     studio: [['act_7', 'act_6', 'act_1'], 3, 'Работаю в студии…'],
 };
 const TOOL_KIND = {
-    docs_search: 'search', docs_show: 'search', api_lookup: 'search', snippet_find: 'search',
+    docs_search: 'search', docs_show: 'search', api_lookup: 'search', snippet_find: 'search', search_project: 'search',
     list_files: 'read', read_file: 'read', project_info: 'read', tabs: 'read', studio_state: 'read', studio_ops: 'read',
-    write_file: 'write', edit_file: 'write',
-    r2d_validate: 'check', r2d_lint: 'check', run_check: 'check', screenshot_check: 'check', r2d_cli: 'check',
+    write_file: 'write', edit_file: 'write', delete_file: 'write', move_file: 'write', undo_edit: 'write', plan: 'write',
+    r2d_validate: 'check', r2d_lint: 'check', run_check: 'check', screenshot_check: 'check', playtest: 'check', r2d_cli: 'check',
     snippet_apply: 'snippet',
     open_tab: 'studio', studio_edit: 'studio', studio_op: 'studio', studio_save: 'studio', editor_op: 'studio',
 };
@@ -53,6 +53,8 @@ export function createMascot() {
         },
         // Нужно подтверждение пользователя.
         waiting() { enter('waiting', ['emo_3', 'emo_2'], 1.2, 'Можно? Нужно твоё подтверждение'); },
+        // Агент задаёт вопрос пользователю.
+        asking() { enter('waiting', ['emo_3', 'emo_2'], 1.2, 'Хочу кое-что уточнить…'); },
         // Ответ модели (текст): болтаем.
         talk() { enter('talk', ['emo_0', 'misc_2', 'emo_0', 'idle_0'], 2.5, ''); },
         success() { enter('success', ['fx_4', 'emo_6', 'fx_7'], 2, 'Готово!', 4.5); },

@@ -582,7 +582,7 @@ scrollbarcorner { background-color: transparent; }
 
 /* --- Агент: вкладка нижней панели --- */
 #ag { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0px; background-color: #14161b; }
-#ag.hidden, #agcfg.hidden, #mc-bubble.hidden, #ag-ask.hidden, #ag-stop.hidden, #ag-send.hidden { display: none; }
+#ag.hidden, #agcfg.hidden, #mc-bubble.hidden, #ag-plan.hidden, #ag-ask.hidden, #ag-stop.hidden, #ag-send.hidden { display: none; }
 #bottom.collapsed #ag { display: none; }
 #bottom.agent { height: 420px; flex: 0 0 420px; }
 #bottom.agent #bottom-body { display: none; }
@@ -686,3 +686,19 @@ scrollbarcorner { background-color: transparent; }
 .ag-send.disabled { color: #8b93a3; background-color: #2a2f39; }
 .ag-stop { display: block; padding: 7px 16px; font-size: 12px; color: #ffffff; background-color: #b42318; border-radius: 6px; cursor: pointer; }
 .ag-stop:hover { background-color: #d92d20; }
+
+/* план задач */
+#ag-plan { display: block; flex: 0 0 auto; margin: 8px 12px 0px 24px; padding: 8px 12px; background-color: #181b21; border-width: 1px; border-color: #262b35; border-radius: 9px; }
+.plan-head { display: block; margin-bottom: 4px; font-size: 11px; color: #8b93a3; }
+.plan-row { display: flex; flex-direction: row; align-items: center; padding: 2px 0px; font-size: 12px; color: #9aa2b1; }
+.plan-ic { display: block; width: 18px; font-size: 14px; color: #5d6575; }
+.plan-row.doing { color: #e6e9ef; }
+.plan-row.doing .plan-ic { color: #9cc2ff; }
+.plan-row.done { color: #6f7a8f; }
+.plan-row.done .plan-ic { color: #3fb950; }
+.ag-note { display: block; margin: 0px 0px 10px 0px; padding: 4px 10px; font-size: 11px; color: #7d8594; text-align: center; }
+.ask-opt { display: block; padding: 6px 14px; margin: 0px 8px 6px 0px; font-size: 12px; color: #e6e9ef; background-color: #2a3550; border-radius: 6px; cursor: pointer; }
+.ask-opt:hover { background-color: #36466b; }
+.ask-opts { display: flex; flex-direction: row; flex-wrap: wrap; }
+.ask-q { display: block; font-size: 13px; color: #e6e9ef; margin-bottom: 9px; }
+#ag-undo.disabled { color: #4f5664; }

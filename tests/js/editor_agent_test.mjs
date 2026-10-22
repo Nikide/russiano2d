@@ -7,6 +7,7 @@ async function atest(name, fn) {
     try { await fn(); } catch (e) { err = e; }
     test(name, () => { if (err) throw err; });
 }
+import { numberLines, grepProject, undoEdits, interactTools } from '../../editor/lib/agent_harness.js';
 import { createMascot, mascotFrames } from '../../editor/lib/agent_mascot.js';
 import { testConnection, snippetTools, fieldLine, snippetLine, studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
 
@@ -103,7 +104,7 @@ await atest('editorTools: write_file/read_file через host, mutating тол�
     eq(await by.read_file.run({ path: 'a.js' }), 'x');
     eq(await by.list_files.run({}), 'a.js');
     eq(await by.docs_show.run({ page: 'ui' }), 'T');
-    eq(tools.filter((t) => t.mutating === true).map((t) => t.name), ['write_file', 'edit_file']);
+    eq(tools.filter((t) => t.mutating === true).map((t) => t.name), ['write_file', 'edit_file', 'delete_file', 'move_file', 'undo_edit']);
 });
 
 await atest('контекст из доков подкладывается к вопросу, сбой поиска не мешает', async () => {
@@ -468,6 +469,88 @@ await atest('testConnection: успех со временем ответа и п
         async () => ({ ok: false, status: 401, json: { error: { message: 'invalid x-api-key' } } }));
     eq(bad.ok, false);
     truthy(bad.error.includes('invalid x-api-key'));
+});
+
+const memHost = (files, extra) => ({
+    tool: async () => ({ json: { ok: true } }), abs: (p) => '/p' + (p ? '/' + p : ''), exists: (p) => files.has(p), readText: (p) => files.get(p),
+    writeText: (p, c) => files.set(p, c), remove: (p) => files.delete(p), list: () => [...files.keys()], ...(extra || {}),
+});
+
+await atest('файловые инструменты: диапазоны строк, список с фильтрами, grep, документация по частям', async () => {
+    const files = new Map([['main.js', 'a\nb\nneedle here\nd\ne'], ['maps/l.re2dmap', '{"needle":1}'], ['assets/x.png', 'бинарь needle'], ['readme.md', 'Needle в докe']]);
+    const T = Object.fromEntries(editorTools(memHost(files, { tool: async (a) => a[0] === 'docs' ? { json: { ok: true, text: Array.from({ length: 50 }, (_, i) => 'строка ' + (i + 1)).join('\n') } } : { json: {} } })).map((t) => [t.name, t]));
+    const n = numberLines('a\nb\nc\nd', 2, 3);
+    eq([n.from, n.to, n.total], [2, 3, 4]);
+    truthy(n.text.startsWith('2│b'));
+    truthy((await T.read_file.run({ path: 'main.js', start: 2, end: 3 })).includes('3│needle here'));
+    eq(await T.read_file.run({ path: 'main.js' }), 'a\nb\nneedle here\nd\ne');
+    eq((await T.list_files.run({ ext: '.js' })), 'main.js');
+    eq((await T.list_files.run({ prefix: 'maps/' })), 'maps/l.re2dmap');
+    const g = await T.search_project.run({ query: 'NEEDLE' });
+    truthy(g.includes('main.js:3: needle here') && g.includes('maps/l.re2dmap:1:') && g.includes('readme.md:1:') && !g.includes('x.png'), 'двоичное пропускается, регистр не важен');
+    truthy((await T.search_project.run({ query: 'need\\w+', regex: true, prefix: 'main' })).includes('main.js:3'));
+    truthy((await T.search_project.run({ query: 'zzz' })).startsWith('совпадений нет'));
+    const part = await T.docs_show.run({ page: 'x', start: 10, lines: 3 });
+    eq(part, 'строка 10\nстрока 11\nстрока 12');
+    eq(grepProject(memHost(files), { query: 'needle', max: 1 }).truncated, true);
+});
+
+await atest('правки откатываются: write/edit/delete/move и undo_edit; без remove перемещение недоступно', async () => {
+    const files = new Map([['a.js', 'один'], ['b.js', 'два']]);
+    const tools = editorTools(memHost(files));
+    const T = Object.fromEntries(tools.map((t) => [t.name, t]));
+    await T.write_file.run({ path: 'new.js', content: 'x' });
+    await T.edit_file.run({ path: 'a.js', old_string: 'один', new_string: 'ОДИН' });
+    await T.delete_file.run({ path: 'b.js' });
+    await T.move_file.run({ from: 'a.js', to: 'c.js' });
+    eq([...files.keys()].sort(), ['c.js', 'new.js']);
+    eq(files.get('c.js'), 'ОДИН');
+    eq(tools.history.length, 5, 'move пишет два шага');
+    truthy((await T.undo_edit.run({ count: 5 })).includes('восстановлен a.js'));
+    eq([...files.keys()].sort(), ['a.js', 'b.js']);
+    eq(files.get('a.js'), 'один');
+    eq(files.get('b.js'), 'два');
+    eq(await T.undo_edit.run({}), 'откатывать нечего');
+    let blocked = '';
+    const noRemove = Object.fromEntries(editorTools({ ...memHost(new Map([['a.js', 'x']])), remove: undefined }).map((t) => [t.name, t]));
+    try { await noRemove.delete_file.run({ path: 'a.js' }); } catch (e) { blocked = e.message; }
+    truthy(blocked.includes('недоступно'));
+    eq(undoEdits([], memHost(new Map()), 1), []);
+});
+
+await atest('plan и ask_user: чеклист уходит в панель, вопрос ждёт ответ и возвращает его', async () => {
+    let plan = null;
+    const T = Object.fromEntries(interactTools({ setPlan: (p) => { plan = p; }, ask: async (q, o) => (o.includes('Платформер') ? 'Платформер' : null) }).map((t) => [t.name, t]));
+    const r = await T.plan.run({ items: [{ text: 'Сцена', status: 'done' }, { text: 'Враги', status: 'doing' }, { text: 'HUD', status: 'мусор' }] });
+    truthy(r.includes('1/3'));
+    eq(plan.map((x) => x.status), ['done', 'doing', 'pending']);
+    eq(await T.ask_user.run({ question: 'Какой жанр?', options: ['Платформер', 'Шутер'] }), 'ответ пользователя: Платформер');
+    eq(await T.ask_user.run({ question: 'Точно?' }), 'пользователь не ответил', 'без совпавших вариантов отвечает null → не ответил');
+    let none = '';
+    try { await Object.fromEntries(interactTools({}).map((t) => [t.name, t])).ask_user.run({ question: 'x' }); } catch (e) { none = e.message; }
+    truthy(none.includes('недоступны'));
+});
+
+await atest('playtest: сценарий превращается в сессию r2d agent, eval-результаты сопоставляются по шагам', async () => {
+    const files = new Map(), calls = [];
+    const T = Object.fromEntries(editorTools(memHost(files, {
+        tool: async (a) => {
+            calls.push(a);
+            if (a[0] === 'agent') return { json: { ok: true, completed: 7, failed: 0, responses: [{ ok: true }, { ok: true }, { ok: true }, { ok: true, result: '{"x":5}' }, { ok: true }, { ok: false, error: 'boom' }, { ok: true }, { ok: true }] } };
+            if (a[0] === 'image-stats') return { json: { ok: true, blank: false, meanLuma: 30, distinctColors: 50, nonBackgroundFraction: 0.4, grid: ['..##', '....'] } };
+            return { json: { ok: true } };
+        } })).map((t) => [t.name, t]));
+    const out = JSON.parse(await T.playtest.run({ grid: true, steps: [{ hold: ['D'], frames: 30 }, { eval: '1+1' }, { tap: 'Space', frames: 5 }, { eval: 'x.y' }] }));
+    const session = JSON.parse(files.get('.r2d-check/playtest.json'));
+    eq(session.requests.map((r) => r.cmd), ['keys', 'step', 'eval', 'key', 'step', 'eval', 'screenshot', 'quit']);
+    eq(out.evals[0].result, undefined, 'ответ на соседний запрос не подставляется');
+    eq(out.frames, 35);
+    eq(out.frame, 'кадр не пустой');
+    eq(out.ascii, ['..##', '....']);
+    eq(calls.find((c) => c[0] === 'image-stats').slice(2), ['--grid', '48x18']);
+    let long = '';
+    try { await T.playtest.run({ steps: [{ frames: 600 }, { frames: 600 }, { frames: 600 }, { frames: 600 }, { frames: 600 }, { frames: 600 }] }); } catch (e) { long = e.message; }
+    truthy(long.includes('слишком длинный'));
 });
 
 finish();

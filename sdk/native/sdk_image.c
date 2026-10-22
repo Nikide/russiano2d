@@ -93,6 +93,13 @@ int sdk_cmd_image_stats(const SdkArgs *a)
     uint32_t *seen = (uint32_t *)calloc(SLOTS, sizeof *seen);
     bool *used = (bool *)calloc(SLOTS, sizeof *used);
     const int step = (w * h > 400000) ? 3 : 1;
+    // --grid WxH: ASCII-карта кадра (доля не-фона в каждой ячейке) — текстовым моделям, которые не видят картинку
+    int gw = 0, gh = 0;
+    const char *gspec = sdk_arg_value(a, "--grid");
+    if (gspec && sscanf(gspec, "%dx%d", &gw, &gh) == 2 && gw >= 4 && gw <= 120 && gh >= 2 && gh <= 60) {
+        /* ok */
+    } else { gw = gh = 0; }
+    size_t *gcount = gw ? (size_t *)calloc((size_t)gw * gh * 2, sizeof(size_t)) : NULL;
     for (int y = 0; y < h; y += step) {
         for (int x = 0; x < w; x += step) {
             const uint8_t *p = px + ((size_t)y * w + x) * 4;
@@ -100,6 +107,11 @@ int sdk_cmd_image_stats(const SdkArgs *a)
             luma += 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
             if (c != bg) ++diff;
             ++n;
+            if (gcount) {
+                const size_t cell = (size_t)(y * gh / h) * gw + (size_t)(x * gw / w);
+                gcount[cell * 2 + 1]++;
+                if (c != bg) gcount[cell * 2]++;
+            }
             if (seen && used) {
                 size_t s = (c * 2654435761u) % SLOTS;
                 for (int probe = 0; probe < 32; ++probe, s = (s + 1) % SLOTS) {
@@ -110,9 +122,27 @@ int sdk_cmd_image_stats(const SdkArgs *a)
         }
     }
     printf("{\"ok\":true,\"width\":%d,\"height\":%d,\"meanLuma\":%.2f,\"distinctColors\":%zu,\"nonBackgroundFraction\":%.4f,"
-           "\"background\":\"#%06x\",\"blank\":%s}\n",
+           "\"background\":\"#%06x\",\"blank\":%s",
            w, h, n ? luma / (double)n : 0.0, distinct, n ? (double)diff / (double)n : 0.0, bg,
            (n && (double)diff / (double)n < 0.002) ? "true" : "false");
+    if (gcount) {
+        static const char ramp[] = ".:-=+*#%@";
+        printf(",\"grid\":[");
+        for (int gy = 0; gy < gh; ++gy) {
+            printf("%s\"", gy ? "," : "");
+            for (int gx = 0; gx < gw; ++gx) {
+                const size_t cell = (size_t)gy * gw + gx;
+                const double fr = gcount[cell * 2 + 1] ? (double)gcount[cell * 2] / (double)gcount[cell * 2 + 1] : 0.0;
+                int idx = (int)(fr * 9.0 + 0.5);
+                if (idx > 8) idx = 8;
+                putchar(ramp[idx]);
+            }
+            putchar('"');
+        }
+        printf("]");
+    }
+    printf("}\n");
+    free(gcount);
     free(seen); free(used); free(px);
     return 0;
 }
