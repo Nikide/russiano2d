@@ -104,7 +104,7 @@ await atest('editorTools: write_file/read_file через host, mutating тол�
     eq(await by.read_file.run({ path: 'a.js' }), 'x');
     eq(await by.list_files.run({}), 'a.js');
     eq(await by.docs_show.run({ page: 'ui' }), 'T');
-    eq(tools.filter((t) => t.mutating === true).map((t) => t.name), ['write_file', 'edit_file', 'delete_file', 'move_file', 'undo_edit']);
+    eq(tools.filter((t) => t.mutating === true).map((t) => t.name), ['write_file', 'edit_file', 'delete_file', 'move_file', 'undo_edit', 'pixel_art']);
 });
 
 await atest('контекст из доков подкладывается к вопросу, сбой поиска не мешает', async () => {
@@ -668,6 +668,52 @@ await atest('откат snippet_apply и studio_save: один шаг возвр
     const studio = studioTools({ tabs: () => [{ path: 'a.re2dmap', active: true }], openTab: async () => {}, studioApi: () => ({ id: 'hammer', save: async () => ({ ok: true }) }), remember: (p) => saved.push(p) });
     await studio.find((x) => x.name === 'studio_save').run({});
     eq(saved, ['a.re2dmap'], 'перед сохранением документа студии снимается файл');
+});
+
+await atest('навыки и пиксель-арт: skill_list/skill_load, pixel_art (спека, защита от перезаписи, откат, атлас), pixel_preview', async () => {
+    const files = new Map(), calls = [];
+    const report = { ok: true, width: 12, height: 13, outWidth: 12, outHeight: 13, opaque: 124, legend: { k: '#1a1020', g: '#3fae5a' }, ascii: ['..kk..', '.kggk.'] };
+    const tools = editorTools(memHost(files, { tool: async (a) => {
+        calls.push(a);
+        if (a[0] === 'docs' && a[1] === 'list') return { json: { ok: true, docs: [{ path: 'docs/skills/pixel-art.md', title: 'Навык: пиксель-арт' }, { path: 'docs/skills/sub/x.md', title: 'x' }] } };
+        if (a[0] === 'docs' && a[1] === 'show') return { json: { ok: true, text: '# Навык\nтекст' } };
+        if (a[0] === 'pixel-art') { if (files.get('.r2d-check/pixel.json').includes('"bad"')) return { json: { ok: false, message: 'ops[0]: плохо' } }; { const o = JSON.parse(files.get('.r2d-check/pixel.json')).out; if (o) files.set(o.replace('/p/', ''), 'PNG'); } return { json: { ...report, frames: JSON.parse(files.get('.r2d-check/pixel.json')).frames ? 2 : undefined } }; }
+        if (a[0] === 'atlas-grid') { files.set('assets/slime.atlas.json', '{}'); return { json: { ok: true } }; }
+        return { json: { ok: true } };
+    } }));
+    const T = Object.fromEntries(tools.map((x) => [x.name, x]));
+    eq(await T.skill_list.run({}), 'pixel-art — Навык: пиксель-арт');
+    eq(await T.skill_load.run({ name: 'Pixel-Art' }), '# Навык\nтекст');
+    eq(calls.find((c) => c[0] === 'docs' && c[1] === 'show')[2], 'skills/pixel-art');
+    let bad = '';
+    try { await T.skill_load.run({ name: '../etc' }); } catch (e) { bad = e.message; }
+    truthy(bad.includes('имя навыка'));
+    const out = await T.pixel_art.run({ path: 'assets/hero.png', palette: { k: '#1a1020' }, rows: ['kk'] });
+    console.log(out);
+    truthy(out.includes('спрайт assets/hero.png 12×13') && out.includes('k=#1a1020') && out.includes('.kggk.') && /\[preview: \/p\/\.r2d-check\/preview-\d+\.png\]/.test(out));
+    const spec = JSON.parse(files.get('.r2d-check/pixel.json'));
+    eq(spec.out, '/p/assets/hero.png');
+    truthy(spec.preview.includes('.r2d-check/preview-'));
+    eq(tools.history.length, 1, 'новый файл попал в историю отката');
+    let exists = '';
+    try { await T.pixel_art.run({ path: 'assets/hero.png', rows: ['k'] }); } catch (e) { exists = e.message; }
+    truthy(exists.includes('overwrite') && exists.includes('base'), 'существующий файл без base/overwrite не трогаем');
+    const edited = await T.pixel_art.run({ path: 'assets/hero.png', base: 'assets/hero.png', ops: [{ op: 'set', x: 0, y: 0, c: 'k' }] });
+    truthy(!edited.includes('откат недоступен'), 'правка через base — не перезапись');
+    const over = await T.pixel_art.run({ path: 'assets/hero.png', overwrite: true, rows: ['k'] });
+    truthy(over.includes('откат недоступен'), 'перезапись честно предупреждает, что откат невозможен');
+    let notPng = '';
+    try { await T.pixel_art.run({ path: 'assets/hero.jpg', rows: ['k'] }); } catch (e) { notPng = e.message; }
+    truthy(notPng.includes('.png'));
+    let err = '';
+    try { await T.pixel_art.run({ path: 'assets/x.png', ops: [{ op: 'bad' }] }); } catch (e) { err = e.message; }
+    truthy(err.includes('ops[0]: плохо'), 'ошибка рисования возвращается агенту как есть');
+    const sheet = await T.pixel_art.run({ path: 'assets/slime.png', frames: [{ rows: ['k'] }, { rows: ['k'] }], atlas: { tags: 'idle:0-1' } });
+    truthy(sheet.includes('атлас: assets/slime.atlas.json'));
+    eq(calls.find((c) => c[0] === 'atlas-grid').slice(2), ['--out', '/p/assets/slime.atlas.json', '--cols', '2', '--rows', '1', '--tags', 'idle:0-1']);
+    const pv = await T.pixel_preview.run({ path: 'assets/hero.png' });
+    truthy(pv.includes('спрайт assets/hero.png') && pv.includes('[preview:'));
+    eq(JSON.parse(files.get('.r2d-check/pixel.json')).base, '/p/assets/hero.png');
 });
 
 finish();

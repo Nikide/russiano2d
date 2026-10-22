@@ -37,6 +37,7 @@ static const Command k_commands[] = {
     { "api",      sdk_cmd_api,      "machine-readable $ API: dump/check/generate" },
     { "lint",     sdk_cmd_lint,     "API-aware линтер JS: $ API, коды R2D001…" },
     { "docs",     sdk_cmd_docs,      "документация из бинарника: docs list|show|search; docs generate — generated $ API reference" },
+    { "pixel-art", sdk_cmd_pixel_art, "рисование пиксель-арта: pixel-art <spec.json> (палитра, rows/frames, ops, scale, ASCII-срез)" },
     { "image-stats", sdk_cmd_image_stats, "пустой ли скриншот: яркость, число цветов, доля не-фона (image-stats <png>)" },
     { "doctor",   sdk_cmd_doctor,   "health check: runtime/API/schema/typings/docs/project/lint" },
     { "atlas-grid",   sdk_cmd_atlas_grid,   "создать атлас спрайтов сеткой из картинки" },

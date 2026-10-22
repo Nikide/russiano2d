@@ -390,6 +390,7 @@ int sdk_lint_run(const char *schema_path,const char *target,SdkReport *rep,int *
 bool sdk_schema_resolve(const char *explicit_path, const char *preferred_dir,
                         char *out, size_t cap);
 int cmd_docs_generate(const SdkArgs *a);
+int sdk_cmd_pixel_art(const SdkArgs *a);     // pixel-art <spec.json>: холст, палитра, ops, ASCII-срез (sdk_pixelart.c)
 int sdk_cmd_image_stats(const SdkArgs *a);   // image-stats <png>: пустой ли кадр (sdk_image.c)
 int sdk_cmd_docs(const SdkArgs *a);   // docs list|show|search|generate (sdk_docs.c)
 // project_validate берёт schema_path из --schema (NULL — искать самим).

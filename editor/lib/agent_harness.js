@@ -41,6 +41,7 @@ export const SYSTEM_PROMPT = [
     'Инструменты: search_project (grep по файлам) и read_file со start/end вместо чтения целиком; для длинных задач начни с plan и обновляй его; при неоднозначной задаче спроси ask_user (кнопки вариантов); для проверки игры playtest (ввод + eval состояния: позиция героя, счёт, подбор предметов; grid:true — ASCII-карта кадра); ошибочную правку откати undo_edit.',
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
     'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
+    'НАВЫКИ — справочники «как делать»: skill_list, затем skill_load перед незнакомой работой: game-workflow (игра целиком), genre-kits (жанр → набор kit.*), platformer, top-down-action, fps-2-5d, rpg-systems, story-dialogue, enemy-ai, level-design, game-feel, audio, ui-hud, save-progress, playtest-qa, pixel-art. Нужен спрайт/тайл, а готовой картинки нет — загрузи pixel-art и нарисуй pixel_art (ASCII-срез покажет результат), затем `.sprite("assets/x.png")`. Звуков создать нельзя: используй только существующие файлы.',
     'Пути — относительно корня проекта. Сначала list_files/read_file, потом пиши.',
 ].join('\n');
 
@@ -724,6 +725,16 @@ export function undoEdits(history, host, count) {
 // Снимок файла «до» для истории.
 export const snapshotFile = (host, p) => ({ path: p, before: host.exists(p) ? host.readText(p) : null });
 
+let previewSeq = 0;
+
+// Текстовый отчёт о рисунке: размер, легенда палитры и ASCII-срез.
+export function pixelReport(path, r, overwritten) {
+    const legend = Object.entries(r.legend || {}).map(([k, v]) => k + '=' + v).join(' ');
+    return 'спрайт ' + path + ' ' + r.width + '×' + r.height + (r.frames ? ' (кадров: ' + r.frames + ', кадр ' + r.frameWidth + '×' + r.frameHeight + ')' : '') +
+        ', непрозрачных пикселей: ' + r.opaque + (r.outWidth !== r.width ? ', в файле ' + r.outWidth + '×' + r.outHeight : '') + (overwritten ? ' (файл перезаписан, откат недоступен)' : '') +
+        '\nпалитра: ' + (legend || '—') + (r.ascii ? '\nASCII (. — прозрачно):\n' + r.ascii.join('\n') : '\n(холст большой — ASCII опущен)');
+}
+
 export function editorTools(host) {
     const str = (description) => ({ type: 'string', description });
     // lint после записи .js: диагностика сразу в результате — экономит отдельный шаг.
@@ -816,6 +827,70 @@ export function editorTools(host) {
         { name: 'undo_edit', description: 'Откатить последние изменения файлов, сделанные агентом (write_file/edit_file/delete_file/move_file); count — сколько шагов (по умолчанию 1).', mutating: true,
           schema: obj({ count: { type: 'number', description: 'сколько шагов откатить' } }, []),
           run: async (a) => { const done = undoEdits(history, host, a.count); return done.length ? done.join('\n') : 'откатывать нечего'; } },
+        { name: 'skill_list', description: 'Список навыков — справочников «как делать» (пиксель-арт и др.), которые можно загрузить через skill_load.',
+          schema: obj({}),
+          run: async () => {
+              const r = (await host.tool(['docs', 'list', '--filter', 'skills/'])).json;
+              const docs = r && r.ok ? r.docs.filter((d) => /^docs\/skills\/[\w-]+\.md$/.test(d.path)) : [];
+              return docs.length ? docs.map((d) => d.path.replace(/^docs\/skills\/|\.md$/g, '') + ' — ' + d.title).join('\n') : 'навыков нет';
+          } },
+        { name: 'skill_load', description: 'Загрузить навык (справочник с правилами, примерами и рабочим циклом), например `pixel-art` — как рисовать спрайты и тайлы инструментом pixel_art. Загружай, прежде чем браться за незнакомую работу.',
+          schema: obj({ name: str('имя навыка из skill_list') }),
+          run: async (a) => {
+              const name = String(a.name || '').toLowerCase();
+              if (!/^[\w-]+$/.test(name)) throw new Error('имя навыка — латиница, цифры, дефис');
+              const r = await host.tool(['docs', 'show', 'skills/' + name]);
+              if (!(r.json && r.json.ok)) throw new Error('нет навыка «' + name + '» (список — skill_list)');
+              return r.json.text.length > 14000 ? r.json.text.slice(0, 14000) + '\n… [обрезано]' : r.json.text;
+          } },
+        { name: 'pixel_art', mutating: true,
+          description: 'Нарисовать или поправить пиксель-арт (спрайт, тайл, лист анимации) и записать PNG в проект (требует подтверждения). Спрайт описывается текстом: palette — {"k":"#1a1020"} (ключ — один символ), rows — строки-пиксели ("..kk.."), frames — кадры анимации, size — пустой холст, ops — операции (set, rect, line, ellipse, fill, replace, flip, mirror, shift, outline, clear), base — править существующий PNG, scale — целое увеличение. Вернёт ASCII-срез результата (видно, что нарисовано) и превью для пользователя. Правила, палитры и примеры — skill_load pixel-art.',
+          schema: { type: 'object', properties: {
+              path: str('куда записать, например assets/hero.png'), palette: { type: 'object', description: 'символ → "#rrggbb" | null' },
+              rows: { type: 'array', items: { type: 'string' }, description: 'строки-пиксели' }, frames: { type: 'array', description: 'кадры анимации: [{rows:[…]}, …]' },
+              size: { type: 'array', items: { type: 'number' }, description: '[w, h] пустого холста' }, ops: { type: 'array', items: { type: 'object' }, description: 'операции рисования' },
+              base: str('PNG проекта для правки (обычно тот же path)'), scale: { type: 'number', description: 'целое 1–16' },
+              overwrite: { type: 'boolean', description: 'перезаписать существующий файл (откат невозможен)' },
+              atlas: { type: 'object', description: 'для листа frames: создать .atlas.json, например {"tags":"idle:0-1"}' } }, required: ['path'] },
+          run: async (a) => {
+              const p = safeRel(a.path);
+              if (!/\.png$/i.test(p)) throw new Error('path должен оканчиваться на .png');
+              const existed = host.exists(p);
+              if (existed && !a.overwrite && a.base !== a.path) throw new Error('файл уже есть: чтобы поправить его, укажите base:"' + p + '", чтобы заменить — overwrite:true');
+              const spec = { out: host.abs(p) };
+              for (const k of ['palette', 'rows', 'frames', 'size', 'ops', 'scale']) if (a[k] !== undefined) spec[k] = a[k];
+              if (a.base) spec.base = host.abs(safeRel(a.base));
+              const prev = '.r2d-check/preview-' + (++previewSeq) + '.png';
+              spec.preview = host.abs(prev);
+              const old = '.r2d-check/preview-' + (previewSeq - 3) + '.png';
+              if (host.remove && host.exists(old)) { try { host.remove(old); } catch (_) { /* не критично */ } }
+              host.writeText('.r2d-check/pixel.json', JSON.stringify(spec));
+              const r = (await host.tool(['pixel-art', host.abs('.r2d-check/pixel.json')])).json;
+              if (!r || !r.ok) throw new Error(r ? (r.message || r.code) : 'pixel-art не ответил');
+              if (!existed) history.push({ items: [{ path: p, before: null }] });
+              let atlasNote = '';
+              if (a.atlas && r.frames) {
+                  const atlasPath = p.replace(/\.png$/i, '.atlas.json');
+                  const args = ['atlas-grid', host.abs(p), '--out', host.abs(atlasPath), '--cols', String(r.frames), '--rows', '1'];
+                  if (a.atlas.tags) args.push('--tags', String(a.atlas.tags));
+                  const ar = (await host.tool(args)).json;
+                  if (ar && ar.ok !== false) { atlasNote = '\nатлас: ' + atlasPath; if (host.exists(atlasPath)) history.push({ items: [{ path: atlasPath, before: null }] }); } else atlasNote = '\nатлас не создан: ' + String(ar && ar.error || '').slice(0, 120);
+              }
+              return pixelReport(p, r, existed && !a.base) + atlasNote + '\n[preview: ' + host.abs(prev) + ']';
+          } },
+        { name: 'pixel_preview', description: 'Посмотреть существующий PNG-спрайт проекта: ASCII-срез (какие цвета где) и крупное превью. Нужен перед правкой чужого или прошлого спрайта.',
+          schema: obj({ path: str('PNG проекта, например assets/hero.png') }),
+          run: async (a) => {
+              const p = safeRel(a.path);
+              if (!host.exists(p)) throw new Error('нет файла ' + p);
+              const prev = '.r2d-check/preview-' + (++previewSeq) + '.png';
+              const old = '.r2d-check/preview-' + (previewSeq - 3) + '.png';
+              if (host.remove && host.exists(old)) { try { host.remove(old); } catch (_) { /* не критично */ } }
+              host.writeText('.r2d-check/pixel.json', JSON.stringify({ base: host.abs(p), preview: host.abs(prev) }));
+              const r = (await host.tool(['pixel-art', host.abs('.r2d-check/pixel.json')])).json;
+              if (!r || !r.ok) throw new Error(r ? (r.message || r.code) : 'pixel-art не ответил');
+              return pixelReport(p, r, false) + '\n[preview: ' + host.abs(prev) + ']';
+          } },
         { name: 'api_lookup', description: 'Проверить имя `$`-API по схеме движка: есть ли метод и какие у него аргументы (точное имя, префикс или часть, например `$.scene.add` или `tween`).',
           schema: obj({ name: str('путь или его часть') }),
           run: async (a) => {
