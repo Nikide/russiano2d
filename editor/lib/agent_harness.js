@@ -50,7 +50,7 @@ export function toolSpecs(tools) {
 function anthropicBody(cfg, system, messages, tools) {
     return {
         model: cfg.model, max_tokens: cfg.maxTokens || 4096, system, messages,
-        tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema })),
+        ...(tools.length ? { tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema })) } : {}),
     };
 }
 
@@ -79,7 +79,7 @@ function openaiMessages(system, messages) {
 function openaiBody(cfg, system, messages, tools) {
     return {
         model: cfg.model, max_tokens: cfg.maxTokens || 4096, messages: openaiMessages(system, messages),
-        tools: tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.schema } })),
+        ...(tools.length ? { tools: tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.schema } })) } : {}),
     };
 }
 
@@ -132,7 +132,7 @@ function gigachatBody(cfg, system, messages, tools) {
     }
     return {
         model: cfg.model, messages: out, max_tokens: cfg.maxTokens || 4096,
-        functions: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.schema })), function_call: 'auto',
+        ...(tools.length ? { functions: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.schema })), function_call: 'auto' } : {}),
     };
 }
 
@@ -203,6 +203,20 @@ export function compact(messages, keep) {
             b.content = String(b.content).slice(0, 200) + '\n… [результат свёрнут, ' + String(b.content).length + ' симв.; перечитайте при необходимости]';
             b._compact = true;
         }
+    }
+}
+
+// Проверка подключения: один короткий запрос без инструментов. → { ok, ms, text } | { ok:false, error }.
+export async function testConnection(config, transport, now) {
+    const clock = now || (() => Date.now());
+    const t0 = clock();
+    const cfg = { ...config, maxTokens: 16, timeout: 30000 };
+    try {
+        const r = await callModel(cfg, transport, 'Отвечай одним словом.', [{ role: 'user', content: 'Скажи: ок' }], []);
+        const text = r.blocks.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+        return { ok: true, ms: clock() - t0, text: text.slice(0, 60) };
+    } catch (e) {
+        return { ok: false, error: String(e && e.message || e).slice(0, 240) };
     }
 }
 

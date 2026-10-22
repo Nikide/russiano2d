@@ -2,7 +2,8 @@
 // Логика цикла — agent_harness.js; здесь только RmlUi-обвязка. Ключ API живёт
 // только в памяти процесса: на диск и в project.json он не попадает.
 
-import { PROVIDERS, createAgent, editorTools, studioTools, snippetTools, docContext } from './agent_harness.js';
+import { PROVIDERS, createAgent, editorTools, studioTools, snippetTools, docContext, testConnection } from './agent_harness.js';
+import { createMascot } from './agent_mascot.js';
 import { esc as escRml } from './studio_kit.js';
 
 // RmlUi считает `{{`/`}}` в тексте выражением привязки данных (JSON с вложенными
@@ -43,7 +44,8 @@ export function createAgentPanel($, doc, host) {
     const icon = (n) => $.ui.icon(n) || '';
     const st = {
         cfg: { provider: 'anthropic', base: PROVIDERS.anthropic.base, model: PROVIDERS.anthropic.model, key: '', folder: '', maxSteps: 24 },
-        log: [], agent: null, pending: null, busy: false, open: false, settings: true, expanded: new Set(), scrollPending: 0, warmed: false,
+        log: [], agent: null, pending: null, busy: false, open: false, cfgOpen: false, expanded: new Set(), scrollPending: 0, warmed: false,
+        mascot: createMascot(), mascotOn: true, mcKey: '', testing: false,
     };
 
     function transport(url, opts) {
@@ -65,6 +67,7 @@ export function createAgentPanel($, doc, host) {
         return new Promise((resolve) => {
             st.pending = { name, input, resolve };
             st.scrollPending = 3;
+            st.mascot.waiting(); applyMascot();
             render();
         });
     }
@@ -84,8 +87,8 @@ export function createAgentPanel($, doc, host) {
             config: st.cfg, transport, tools: tools.concat(studioTools(host), snippetTools({ tool: host.tool, abs })), confirm,
             context: (q) => docContext(host, q, 4),
             events: {
-                text: (t) => push({ kind: 'bot', text: t }),
-                tool: (name, input) => push({ kind: 'tool', name, input, status: 'run' }),
+                text: (t) => { st.mascot.talk(); applyMascot(); push({ kind: 'bot', text: t }); },
+                tool: (name, input) => { st.mascot.tool(name); applyMascot(); push({ kind: 'tool', name, input, status: 'run' }); },
                 result: (name, out, isErr) => {
                     for (let i = st.log.length - 1; i >= 0; i--) {
                         const e = st.log[i];
@@ -93,7 +96,7 @@ export function createAgentPanel($, doc, host) {
                     }
                     render();
                 },
-                error: (m) => push({ kind: 'err', text: m }),
+                error: (m) => { st.mascot.failure('Не получилось…'); applyMascot(); push({ kind: 'err', text: m }); },
             },
         });
     }
@@ -104,6 +107,8 @@ export function createAgentPanel($, doc, host) {
         const key = String(doc.value('ag-key') || '').trim();
         if (key !== st.cfg.key) st.cfg._token = null;   // новый ключ — новый токен
         st.cfg.key = key;
+        const steps = parseInt(String(doc.value('ag-steps') || ''), 10);
+        if (steps >= 1 && steps <= 100) st.cfg.maxSteps = steps;
     }
 
     async function send() {
@@ -112,15 +117,22 @@ export function createAgentPanel($, doc, host) {
         readFields();
         if (!host.project()) { push({ kind: 'err', text: 'Сначала откройте проект.' }); return; }
         if (PROVIDERS[st.cfg.provider].auth !== 'bearer' && !st.cfg.key) {
-            st.settings = true; push({ kind: 'err', text: 'Нужен API-ключ: укажите его в настройках подключения.' }); return;
+            push({ kind: 'err', text: 'Нужен API-ключ: он вводится на вкладке «Настройки агента».' }); host.showSettings(); return;
         }
         if (!st.agent) build();
         doc.setValue('ag-input', '');
         push({ kind: 'user', text });
-        st.busy = true; st.settings = false; render();
+        st.busy = true; st.mascot.wake(); st.mascot.thinking(); applyMascot(); render();
+        let failed = false;
         try { await st.agent.send(text); }
-        catch (e) { push({ kind: 'err', text: e && e.message || String(e) }); }
-        finally { st.busy = false; st.pending = null; for (const e of st.log) if (e.status === 'run') e.status = 'err'; st.scrollPending = 3; render(); }
+        catch (e) { failed = true; push({ kind: 'err', text: e && e.message || String(e) }); }
+        finally {
+            st.busy = false; st.pending = null;
+            for (const e of st.log) if (e.status === 'run') e.status = 'err';
+            const lastErr = st.log.length && st.log[st.log.length - 1].kind === 'err';
+            if (failed || lastErr) st.mascot.failure('Что-то пошло не так…'); else st.mascot.success();
+            applyMascot(); st.scrollPending = 3; render();
+        }
     }
 
     function answer(ok) {
@@ -128,6 +140,7 @@ export function createAgentPanel($, doc, host) {
         if (!p) return;
         st.pending = null;
         p.resolve(ok);
+        if (ok) { st.mascot.thinking(); applyMascot(); }
         render();
     }
 
@@ -188,7 +201,7 @@ export function createAgentPanel($, doc, host) {
             }
             flush();
             if (e.kind === 'user') out += '<div class="agm"><span class="ag-ub">' + esc(e.text) + '</span></div>';
-            else if (e.kind === 'bot') out += '<div class="agm agm-bot"><span class="ag-av">' + icon('smart_toy') + '</span><span class="ag-bt">' + esc(e.text) + '</span></div>';
+            else if (e.kind === 'bot') out += '<div class="agm agm-bot"><span class="ag-av"></span><span class="ag-bt">' + esc(e.text) + '</span></div>';
             else out += '<span class="ag-errbox">' + esc(e.text) + '</span>';
         });
         flush();
@@ -196,55 +209,92 @@ export function createAgentPanel($, doc, host) {
         return out;
     }
 
+    // Применить состояние маскота к DOM: большой персонаж, реплика и иконка на вкладке «Агент».
+    function applyMascot() {
+        const m = st.mascot.state;
+        const cls = 'mc-' + m.frame.replace(/_/g, '-');
+        const key = cls + '|' + m.bubble + '|' + st.mascotOn;
+        if (key === st.mcKey) return;
+        st.mcKey = key;
+        doc.attr('mc', 'class', cls);
+        doc.text('mc-bubble', esc(m.bubble));
+        doc.cls('mc-bubble', 'hidden', !m.bubble || !st.mascotOn);
+        doc.cls('ag-side', 'off', !st.mascotOn);
+        // на вкладке — маленький «крабик»: во время работы показывает текущий кадр, в покое — улыбка
+        doc.attr('bt-agent-mc', 'class', st.busy || st.pending || m.mode === 'success' || m.mode === 'failure' ? cls : 'mc-emo-0');
+    }
+
     function render() {
+        const provider = PROVIDERS[st.cfg.provider];
+        if (st.cfgOpen) {
+            for (const id of Object.keys(PROVIDERS)) doc.cls('ag-prov-' + id, 'on', st.cfg.provider === id);
+            doc.text('cfg-mascot', st.mascotOn ? 'Маскот: вкл' : 'Маскот: выкл');
+            doc.cls('cfg-mascot', 'on', st.mascotOn);
+        }
         if (!st.open) return;
         warm();
-        const provider = PROVIDERS[st.cfg.provider];
-        for (const id of Object.keys(PROVIDERS)) doc.cls('ag-prov-' + id, 'on', st.cfg.provider === id);
-        doc.cls('ag-settings', 'hidden', !st.settings);
         const needKey = provider.auth !== 'bearer' && !String(doc.value('ag-key') || st.cfg.key).trim();
         const pill = st.pending ? ['wait', 'Ждёт подтверждения'] : st.busy ? ['busy', 'Работает'] : needKey ? ['need', 'Нужен ключ'] : ['', 'Готов'];
         doc.text('ag-state', pill[1]);
         for (const c of ['busy', 'wait', 'need']) doc.cls('ag-state', c, pill[0] === c);
-        doc.text('ag-model-chip', esc(provider.label + ' · ' + (st.cfg.model || provider.model)));
-        doc.cls('ag-send', 'disabled', st.busy);
+        doc.text('ag-model-chip', esc(provider.label + ' · ' + (st.cfg.model || provider.model) + '  ›'));
         doc.cls('ag-send', 'hidden', st.busy);
         doc.cls('ag-stop', 'hidden', !st.busy);
         doc.html('ag-log', logHtml());
         doc.cls('ag-ask', 'hidden', !st.pending);
         doc.html('ag-ask', askCard());
         if (st.pending) { doc.on('ag-yes', 'click', () => answer(true)); doc.on('ag-no', 'click', () => answer(false)); }
+        applyMascot();
+    }
+
+    async function runTest() {
+        if (st.testing) return;
+        readFields();
+        st.testing = true;
+        doc.cls('cfg-result', 'ok', false); doc.cls('cfg-result', 'err', false);
+        doc.text('cfg-result', 'Проверяю…');
+        const r = await testConnection(st.cfg, transport);
+        st.testing = false;
+        doc.cls('cfg-result', 'ok', r.ok); doc.cls('cfg-result', 'err', !r.ok);
+        doc.text('cfg-result', esc(r.ok ? 'Подключение работает · ' + r.ms + ' мс · ответ: «' + r.text + '»' : r.error));
+        if (r.ok) { st.mascot.success(); } else { st.mascot.failure('Не подключилась…'); }
+        applyMascot();
     }
 
     function wire() {
-        doc.text('ag-settings-btn', icon('tune')); doc.text('ag-clear', icon('add_comment'));
+        doc.text('ag-clear', icon('add_comment'));
         for (const id of Object.keys(PROVIDERS)) doc.on('ag-prov-' + id, 'click', () => setProvider(id));
-        doc.on('ag-send', 'click', () => { send(); });
+        doc.on('ag-send', 'click', () => { st.mascot.wake(); send(); });
         doc.on('ag-stop', 'click', () => { if (st.agent) st.agent.stop(); answer(false); });
         doc.on('ag-clear', 'click', () => { st.log.length = 0; st.expanded.clear(); st.agent = null; st.pending = null; render(); });
-        doc.on('ag-settings-btn', 'click', () => { st.settings = !st.settings; render(); });
-        doc.on('ag-model-chip', 'click', () => { st.settings = !st.settings; render(); });
-        doc.on('ag-settings-done', 'click', () => { readFields(); st.settings = false; render(); });
+        doc.on('ag-model-chip', 'click', () => host.showSettings());
+        doc.on('cfg-test', 'click', () => { runTest(); });
+        doc.on('cfg-done', 'click', () => { readFields(); host.showChat(); });
+        doc.on('cfg-mascot', 'click', () => { st.mascotOn = !st.mascotOn; st.mcKey = ''; render(); applyMascot(); });
+        doc.on('mc', 'click', () => { st.mascot.poke(); applyMascot(); });
         doc.on('ag-log', 'click', (_id, _ev, key) => {
             if (!key) return;
             if (key.startsWith('tool:')) { const n = Number(key.slice(5)); if (st.expanded.has(n)) st.expanded.delete(n); else st.expanded.add(n); render(); }
             else if (key.startsWith('sug:')) { doc.setValue('ag-input', SUGGESTIONS[Number(key.slice(4))] || ''); doc.focus('ag-input'); }
         });
-        doc.setValue('ag-base', st.cfg.base); doc.setValue('ag-model', st.cfg.model);
+        doc.setValue('ag-base', st.cfg.base); doc.setValue('ag-model', st.cfg.model); doc.setValue('ag-steps', String(st.cfg.maxSteps));
+        applyMascot();
     }
 
     const api = {
         render, wire, state: st,
-        // Вызывается Editor при смене вкладки нижней панели.
-        setOpen(on) {
-            if (st.open === !!on) return;
-            st.open = !!on;
-            if (st.open) { st.scrollPending = 3; render(); }
+        // Вызывается Editor при смене вкладки нижней панели: чат и/или настройки видны.
+        setOpen(chat, cfg) {
+            const was = st.open + '|' + st.cfgOpen;
+            st.open = !!chat; st.cfgOpen = !!cfg;
+            if (was === st.open + '|' + st.cfgOpen) return;
+            if (st.open) st.scrollPending = 3;
+            render();
         },
-        // Раз в кадр: автопрокрутка вниз (после раскладки новой разметки) и Ctrl/⌘+Enter в поле ввода.
-        tick(primaryDown) {
+        // Раз в кадр: маскот, автопрокрутка вниз (после раскладки новой разметки) и Ctrl/⌘+Enter в поле ввода.
+        tick(primaryDown, dt) {
+            if (st.mascot.tick(dt || 1 / 60, st.busy || !!st.pending)) applyMascot();
             if (!st.open) return;
-            // прокрутка вниз — через пару кадров: RmlUi сначала должен пересчитать раскладку новой разметки
             if (st.scrollPending > 0 && --st.scrollPending === 0) doc.scroll('ag-log');
             if (primaryDown && $.ui.typing() && $.input.pressed('enter')) send();
         },

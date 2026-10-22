@@ -582,10 +582,11 @@ scrollbarcorner { background-color: transparent; }
 
 /* --- Агент: вкладка нижней панели --- */
 #ag { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0px; background-color: #14161b; }
-#ag.hidden, #ag-settings.hidden, #ag-ask.hidden, #ag-stop.hidden, #ag-send.hidden { display: none; }
+#ag.hidden, #agcfg.hidden, #mc-bubble.hidden, #ag-ask.hidden, #ag-stop.hidden, #ag-send.hidden { display: none; }
 #bottom.collapsed #ag { display: none; }
-#bottom.agent { height: 400px; flex: 0 0 400px; }
+#bottom.agent { height: 420px; flex: 0 0 420px; }
 #bottom.agent #bottom-body { display: none; }
+#bottom.collapsed #agcfg { display: none; }
 #ag-top { display: flex; flex-direction: row; align-items: center; height: 36px; flex: 0 0 36px; padding: 0px 8px 0px 16px; border-bottom: 1px #232730; }
 #ag-top .tb-btn { margin-right: 0px; padding: 3px 7px; font-size: 18px; color: #9aa2b1; }
 #ag-top .tb-btn:hover { color: #ffffff; }
@@ -595,27 +596,47 @@ scrollbarcorner { background-color: transparent; }
 .ag-pill.wait { color: #f2c14e; background-color: #3a2f12; }
 .ag-pill.need { color: #f2c14e; background-color: #3a2f12; }
 
-/* подключение */
-#ag-settings { display: block; padding: 10px 16px 12px 16px; background-color: #181b21; border-bottom: 1px #2a2f39; }
-.ag-label { display: block; margin: 8px 0px 4px 0px; font-size: 11px; color: #8b93a3; }
-.ag-sub { display: block; margin-top: 8px; font-size: 11px; color: #5d6575; }
-#ag-provs { display: flex; flex-direction: row; flex-wrap: wrap; }
-.ag-chip { display: block; padding: 4px 11px; margin: 0px 6px 0px 0px; border-radius: 12px; font-size: 12px; color: #9aa2b1; background-color: #20242c; border-width: 1px; border-color: #2d323d; cursor: pointer; }
+/* вкладка «Настройки агента» */
+#agcfg { display: block; flex: 1 1 0; min-height: 0px; background-color: #14161b; }
+#agcfg-scroll { display: block; height: 100%; overflow-y: auto; padding: 4px 24px 18px 24px; }
+.cfg-h { display: block; margin: 14px 0px 9px 0px; font-size: 12px; color: #8b93a3; }
+#cfg-provs { display: flex; flex-direction: row; flex-wrap: wrap; }
+.cfg-card { display: block; width: 214px; margin: 0px 8px 8px 0px; padding: 9px 11px; background-color: #1b1e24; border-width: 1px; border-color: #2a2f39; border-radius: 9px; cursor: pointer; }
+.cfg-card:hover { border-color: #4a5160; background-color: #20242c; }
+.cfg-card.on { border-color: #2f5a94; background-color: #1c2d47; }
+.cfg-name { display: block; font-size: 13px; color: #e6e9ef; margin-bottom: 3px; }
+.cfg-desc { display: block; font-size: 10px; color: #7d8594; }
+.cfg-row { display: flex; flex-direction: row; align-items: flex-end; margin-top: 4px; }
+.cfg-row.center { align-items: center; margin-top: 10px; }
+.cfg-col { display: block; flex: 1 1 0; margin-right: 12px; }
+.cfg-col.wide { flex: 1.5 1 0; }
+.cfg-label { display: block; margin: 8px 0px 4px 0px; font-size: 11px; color: #8b93a3; }
+#cfg-result { display: block; margin-left: 14px; font-size: 12px; color: #8b93a3; }
+#cfg-result.ok { color: #3fb950; }
+#cfg-result.err { color: #f87171; }
+.cfg-note { display: block; margin-top: 14px; font-size: 11px; color: #5d6575; }
+.ag-chip { display: block; padding: 5px 12px; margin: 0px 6px 0px 0px; border-radius: 12px; font-size: 12px; color: #9aa2b1; background-color: #20242c; border-width: 1px; border-color: #2d323d; cursor: pointer; }
 .ag-chip:hover { color: #e6e9ef; border-color: #4a5160; }
 .ag-chip.on { color: #ffffff; background-color: #1f3a5f; border-color: #2f5a94; }
 .ag-field { display: block; width: 100%; box-sizing: border-box; padding: 7px 10px; color: #e6e9ef; background-color: #101216; border-width: 1px; border-color: #2f3440; border-radius: 6px; font-size: 13px; cursor: text; }
 .ag-field:focus { border-color: #3b82f6; }
-#ag-row { display: flex; flex-direction: row; align-items: flex-end; }
-.ag-col { display: block; flex: 1 1 0; margin-right: 10px; }
-.ag-col.wide { flex: 1.6 1 0; }
-#ag-settings-done { margin-bottom: 0px; }
+
+/* маскот */
+#ag-body { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0px; }
+#ag-col { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0px; min-height: 0px; }
+#ag-side { display: block; width: 230px; flex: 0 0 230px; padding: 6px 12px 0px 0px; text-align: center; }
+#mc { display: block; width: 200px; height: 200px; margin: 0px auto; cursor: pointer; }
+#mc.off { display: none; }
+#ag-side.off { display: none; }
+#mc-bubble { display: block; margin: 8px 6px 4px 6px; padding: 6px 10px; font-size: 12px; color: #1b1e24; background-color: #eef1f7; border-radius: 10px; }
+#bt-agent-mc { display: inline-block; width: 20px; height: 20px; margin-right: 5px; vertical-align: middle; }
 
 /* журнал */
-#ag-log { display: block; flex: 1 1 0; overflow-y: auto; padding: 14px 24px 6px 24px; }
+#ag-log { display: block; flex: 1 1 0; overflow-y: auto; padding: 14px 12px 6px 24px; }
 .agm { display: block; margin-bottom: 12px; }
 .ag-ub { display: block; margin-left: 30%; padding: 9px 12px; font-size: 13px; color: #e8f0ff; background-color: #1f3a5f; border-radius: 10px; white-space: pre-wrap; }
 .agm-bot { display: flex; flex-direction: row; }
-.ag-av { display: block; width: 24px; height: 24px; flex: 0 0 24px; margin-right: 8px; line-height: 24px; text-align: center; font-size: 15px; color: #7aa2f7; background-color: #20242c; border-radius: 12px; }
+.ag-av { display: block; width: 28px; height: 28px; flex: 0 0 28px; margin-right: 8px; decorator: image(emo_0); }
 .ag-bt { display: block; flex: 1 1 0; padding-top: 2px; font-size: 13px; line-height: 1.5; color: #d6dbe5; white-space: pre-wrap; }
 .ag-tools { display: block; margin: 0px 0px 10px 32px; }
 .agt { display: flex; flex-direction: row; align-items: center; padding: 6px 9px; margin-bottom: 3px; border-radius: 7px; background-color: #1a1d23; cursor: pointer; }
@@ -640,7 +661,7 @@ scrollbarcorner { background-color: transparent; }
 .ag-sug:hover { color: #ffffff; background-color: #20242c; border-color: #3b4252; }
 
 /* подтверждение */
-#ag-ask { display: block; margin: 0px 24px 10px 24px; padding: 11px 12px; background-color: #221d10; border-width: 1px; border-color: #5a4713; border-radius: 9px; }
+#ag-ask { display: block; flex: 0 0 auto; margin: 0px 12px 10px 24px; padding: 11px 12px; background-color: #221d10; border-width: 1px; border-color: #5a4713; border-radius: 9px; }
 .ask-head { display: block; font-size: 12px; color: #f2c14e; margin-bottom: 7px; }
 .ask-body { display: block; font-size: 12px; color: #e6e9ef; margin-bottom: 9px; }
 .ask-code { display: block; margin-top: 6px; padding: 7px 9px; font-family: Roboto Mono; font-size: 11px; color: #aeb6c5; background-color: #14161b; border-radius: 6px; white-space: pre-wrap; }

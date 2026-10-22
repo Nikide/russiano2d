@@ -129,9 +129,22 @@ def _run():
                        '$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
             agent.eval(D + '.click("bt-agent");1'); agent.step(2)
             check(agent, E + '.agent.state.open && ' + D + '.rect("ag").h>150', 'вкладка «Агент» в нижней панели открывает чат')
-            agent.eval(D + '.setValue("ag-key","test-key");' + D + '.setValue("ag-input","прочитай main.js и запиши notes.txt");' +
-                       D + '.click("ag-send");1')
+            agent.eval(D + '.click("bt-agentcfg");1'); agent.step(6)
+            check(agent, E + '.agent.state.cfgOpen && ' + D + '.rect("agcfg").h>150 && ' + D + '.rect("cfg-test").w>50', 'настройки агента — отдельная вкладка с кнопкой проверки подключения')
+            agent.eval('$.http._setBackend((r)=>({status:200,body:JSON.stringify({content:[{type:"text",text:"ок"}]}),headers:""}));1')
+            agent.eval(D + '.setValue("ag-key","test-key");' + D + '.click("cfg-test");1')
+            settle(agent, '!' + E + '.agent.state.testing', seconds=15)
+            check(agent, D + '.content("cfg-result").includes("Подключение работает")', 'проверка подключения показывает успех')
+            agent.eval(D + '.click("cfg-done");1'); agent.step(6)
+            check(agent, E + '.agent.state.open && !' + E + '.agent.state.cfgOpen', '«К чату» возвращает на вкладку чата')
+            agent.eval('globalThis.__q=' + json.dumps(scripted) + ';globalThis.__seen=[];'
+                       '$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
+            agent.eval(D + '.setValue("ag-input","прочитай main.js и запиши notes.txt");' + D + '.click("ag-send");1')
+            # маскот: пока агент занят, кадр и иконка на вкладке меняются
+            settle(agent, E + '.agent.state.busy', seconds=10)
+            check(agent, E + '.agent.state.mascot.state.mode!=="idle" && ' + D + '.attr("bt-agent-mc","class")!=="mc-emo-0"', 'маскот играет рабочую анимацию, иконка на вкладке меняется')
             settle(agent, E + '.agent.state.pending!==null')
+            check(agent, E + '.agent.state.mascot.state.mode==="waiting" && ' + D + '.content("mc-bubble").includes("подтверждение")', 'в ожидании подтверждения маскот спрашивает')
             check(agent, 'globalThis.__seen.length===2', 'после чтения файла модель вызвана повторно')
             check(agent, D + '.content("ag-ask").includes("Разрешить") && !$.fs.exists(' + json.dumps(str(project / 'notes.txt')) + ')',
                   'запись ждёт подтверждения и ещё не выполнена')

@@ -1,0 +1,90 @@
+{
+ "cell": 144,
+ "anims": {
+  "idle": [
+   "idle_0",
+   "idle_1",
+   "idle_2",
+   "idle_3",
+   "idle_4",
+   "idle_5",
+   "idle_6",
+   "idle_7",
+   "idle_8"
+  ],
+  "walk": [
+   "walk_0",
+   "walk_1",
+   "walk_2",
+   "walk_3",
+   "walk_4",
+   "walk_5",
+   "walk_6",
+   "walk_7",
+   "walk_8",
+   "walk_9"
+  ],
+  "run": [
+   "run_0",
+   "run_1",
+   "run_2",
+   "run_3",
+   "run_4",
+   "run_5",
+   "run_6",
+   "run_7"
+  ],
+  "crab": [
+   "crab_0",
+   "crab_1",
+   "crab_2",
+   "crab_3",
+   "crab_4",
+   "crab_5",
+   "crab_6",
+   "crab_7"
+  ],
+  "act": [
+   "act_0",
+   "act_1",
+   "act_2",
+   "act_3",
+   "act_4",
+   "act_5",
+   "act_6",
+   "act_7"
+  ],
+  "emo": [
+   "emo_0",
+   "emo_1",
+   "emo_2",
+   "emo_3",
+   "emo_4",
+   "emo_5",
+   "emo_6",
+   "emo_7",
+   "emo_8",
+   "emo_9"
+  ],
+  "ico": [
+   "ico_0",
+   "ico_1",
+   "ico_2",
+   "ico_3",
+   "ico_4",
+   "ico_5",
+   "ico_6",
+   "ico_7",
+   "ico_8",
+   "ico_9",
+   "ico_10",
+   "ico_11",
+   "ico_12",
+   "ico_13",
+   "ico_14",
+   "ico_15",
+   "ico_16",
+   "ico_17"
+  ]
+ }
+}

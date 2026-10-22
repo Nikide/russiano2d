@@ -7,7 +7,8 @@ async function atest(name, fn) {
     try { await fn(); } catch (e) { err = e; }
     test(name, () => { if (err) throw err; });
 }
-import { snippetTools, fieldLine, snippetLine, studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
+import { createMascot, mascotFrames } from '../../editor/lib/agent_mascot.js';
+import { testConnection, snippetTools, fieldLine, snippetLine, studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
 
 const scripted = (replies, seen) => async (url, opts) => {
     seen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
@@ -416,6 +417,57 @@ await atest('screenshot_check: сессия агента, снимок и ста
     truthy(ok.startsWith('кадр не пустой'));
     const none = await mk({ ok: false }).run({});
     truthy(none.startsWith('снимок не получен'));
+});
+
+test('маскот: инструмент → кадры и реплика, успех/ошибка держатся и возвращаются в покой, сон и клик', () => {
+    const m = createMascot();
+    eq(m.state.mode, 'idle');
+    m.tool('write_file');
+    eq(m.state.mode, 'tool:write');
+    eq(m.state.bubble, 'Пишу код…');
+    truthy(['act_0', 'act_1'].includes(m.state.frame));
+    m.tick(0.3, true);
+    eq(m.state.mode, 'tool:write', 'пока агент занят — остаёмся в роли');
+    m.tool('r2d_validate');
+    eq(m.state.bubble, 'Проверяю…');
+    m.waiting();
+    eq(m.state.mode, 'waiting');
+    m.success();
+    eq(m.state.bubble, 'Готово!');
+    m.tick(2, false);
+    eq(m.state.mode, 'success', 'успех держится несколько секунд');
+    m.tick(3, false);
+    eq(m.state.mode, 'idle', 'потом возвращается в покой');
+    m.failure('Ошибка ключа');
+    eq(m.state.bubble, 'Ошибка ключа');
+    m.tick(6, false);
+    eq(m.state.mode, 'idle');
+    m.tick(50, false);
+    truthy(m.state.sleeping && m.state.frame === 'idle_8', 'после долгого покоя засыпает');
+    m.wake();
+    eq(m.state.sleeping, false);
+    m.poke();
+    eq(m.state.mode, 'poke');
+    truthy(m.state.bubble.length > 0);
+    const known = new Set(['idle', 'walk', 'run', 'crab', 'act', 'emo', 'ico'].flatMap((k) => []));
+    const f = mascotFrames();
+    for (const spec of Object.values(f.tools)) truthy(spec[0].every((n) => /^(act|emo|crab|idle)_\d+$/.test(n)));
+    void known;
+});
+
+await atest('testConnection: успех со временем ответа и понятная ошибка', async () => {
+    const ok = await testConnection({ provider: 'anthropic', base: 'https://x', model: 'm', key: 'k' },
+        async () => ({ ok: true, status: 200, json: { content: [{ type: 'text', text: 'ок' }] } }), (() => { let t = 0; return () => (t += 40); })());
+    eq(ok.ok, true);
+    eq(ok.text, 'ок');
+    eq(ok.ms, 40);
+    const seen = [];
+    await testConnection({ provider: 'openai', base: 'http://h/v1', model: 'm' }, async (url, o) => { seen.push(JSON.parse(o.body)); return { ok: true, json: { choices: [{ message: { content: 'ок' } }] } }; });
+    eq('tools' in seen[0], false, 'без инструментов поле tools не отправляется');
+    const bad = await testConnection({ provider: 'anthropic', base: 'https://x', model: 'm', key: 'bad' },
+        async () => ({ ok: false, status: 401, json: { error: { message: 'invalid x-api-key' } } }));
+    eq(bad.ok, false);
+    truthy(bad.error.includes('invalid x-api-key'));
 });
 
 finish();

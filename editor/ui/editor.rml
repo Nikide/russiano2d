@@ -1,6 +1,7 @@
 <rml>
 <head>
     <link type="text/rcss" href="editor.rcss"/>
+    <link type="text/rcss" href="mascot.rcss"/>
     <title>Редактор Russiano2D</title>
 </head>
 <body>
@@ -120,7 +121,8 @@
             <span id="bt-output" class="btab">Вывод</span>
             <span id="bt-console" class="btab">Консоль</span>
             <span id="bt-graph" class="btab">Граф</span>
-            <span id="bt-agent" class="btab">Агент</span>
+            <span id="bt-agent" class="btab"><span id="bt-agent-mc" class="mc-emo-0"></span>Агент</span>
+            <span id="bt-agentcfg" class="btab">Настройки агента</span>
             <span class="grow"></span>
             <span id="bt-toggle" class="tb-btn icon"></span>
         </div>
@@ -130,36 +132,18 @@
                 <span id="ag-state" class="ag-pill">Готов</span>
                 <span id="ag-model-chip" class="ag-modelchip"></span>
                 <span class="grow"></span>
-                <span id="ag-settings-btn" class="tb-btn icon" title="Подключение"></span>
                 <span id="ag-clear" class="tb-btn icon" title="Новый диалог"></span>
             </div>
-            <div id="ag-settings" class="hidden">
-                <div id="ag-provs">
-                    <span id="ag-prov-anthropic" class="ag-chip">Anthropic</span>
-                    <span id="ag-prov-openai" class="ag-chip">OpenAI-совм.</span>
-                    <span id="ag-prov-opencode" class="ag-chip">OpenCode Go</span>
-                    <span id="ag-prov-deepseek" class="ag-chip">DeepSeek</span>
-                    <span id="ag-prov-yandex" class="ag-chip">YandexGPT</span>
-                    <span id="ag-prov-gigachat" class="ag-chip">GigaChat</span>
+            <div id="ag-body">
+                <div id="ag-col">
+                    <div id="ag-log"></div>
+                    <div id="ag-ask" class="hidden"></div>
                 </div>
-                <div id="ag-row">
-                    <div class="ag-col wide">
-                        <div class="ag-label">Адрес API</div>
-                        <input id="ag-base" type="text" class="ag-field" value=""/>
-                    </div>
-                    <div class="ag-col">
-                        <div class="ag-label">Модель</div>
-                        <input id="ag-model" type="text" class="ag-field" value=""/>
-                    </div>
-                    <div class="ag-col">
-                        <div class="ag-label">Ключ API · только в памяти</div>
-                        <input id="ag-key" type="password" class="ag-field" value=""/>
-                    </div>
-                    <span id="ag-settings-done" class="ag-send">Готово</span>
+                <div id="ag-side">
+                    <span id="mc-bubble" class="hidden"></span>
+                    <span id="mc" class="mc-idle-0"></span>
                 </div>
             </div>
-            <div id="ag-log"></div>
-            <div id="ag-ask" class="hidden"></div>
             <div id="ag-compose">
                 <textarea id="ag-input" class="ag-input" value=""></textarea>
                 <div id="ag-compose-side">
@@ -167,6 +151,36 @@
                     <span id="ag-stop" class="ag-stop hidden">Стоп</span>
                     <span id="ag-hint">Ctrl/⌘ + Enter</span>
                 </div>
+            </div>
+        </div>
+        <div id="agcfg" class="hidden">
+            <div id="agcfg-scroll">
+                <div class="cfg-h">Провайдер</div>
+                <div id="cfg-provs">
+                    <div id="ag-prov-anthropic" class="cfg-card"><span class="cfg-name">Anthropic</span><span class="cfg-desc">Claude, Messages API</span></div>
+                    <div id="ag-prov-openai" class="cfg-card"><span class="cfg-name">OpenAI-совместимый</span><span class="cfg-desc">llama-server, Ollama, LM Studio и другие</span></div>
+                    <div id="ag-prov-opencode" class="cfg-card"><span class="cfg-name">OpenCode Go</span><span class="cfg-desc">подписка, много моделей</span></div>
+                    <div id="ag-prov-deepseek" class="cfg-card"><span class="cfg-name">DeepSeek</span><span class="cfg-desc">deepseek-flash, v4-pro</span></div>
+                    <div id="ag-prov-yandex" class="cfg-card"><span class="cfg-name">YandexGPT</span><span class="cfg-desc">Yandex Cloud, ключ Api-Key</span></div>
+                    <div id="ag-prov-gigachat" class="cfg-card"><span class="cfg-name">GigaChat</span><span class="cfg-desc">Сбер, токен по ключу авторизации</span></div>
+                </div>
+                <div class="cfg-row">
+                    <div class="cfg-col wide"><div class="cfg-label">Адрес API</div><input id="ag-base" type="text" class="ag-field" value=""/></div>
+                    <div class="cfg-col"><div class="cfg-label">Модель</div><input id="ag-model" type="text" class="ag-field" value=""/></div>
+                    <div class="cfg-col"><div class="cfg-label">Ключ API</div><input id="ag-key" type="password" class="ag-field" value=""/></div>
+                </div>
+                <div class="cfg-row center">
+                    <span id="cfg-test" class="ag-send">Проверить подключение</span>
+                    <span id="cfg-result"></span>
+                </div>
+                <div class="cfg-h">Поведение</div>
+                <div class="cfg-row center">
+                    <div class="cfg-col"><div class="cfg-label">Лимит шагов на вопрос</div><input id="ag-steps" type="text" class="ag-field" value="24"/></div>
+                    <span id="cfg-mascot" class="ag-chip">Маскот: вкл</span>
+                    <span class="grow"></span>
+                    <span id="cfg-done" class="ag-send">К чату</span>
+                </div>
+                <span class="cfg-note">Ключ хранится только в памяти Editor и уходит лишь на указанный адрес; на диск, в project.json и в журнал он не попадает.</span>
             </div>
         </div>
         <div id="gp" class="hidden">

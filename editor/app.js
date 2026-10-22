@@ -106,6 +106,8 @@ export function createEditor($) {
     const agentPanel = createAgentPanel($, doc, {
         project: () => s.project,
         layout: () => renderLayout(),
+        showSettings: () => { s.bottom = 'agentcfg'; s.bottomCollapsed = false; renderAll(); },
+        showChat: () => { s.bottom = 'agent'; s.bottomCollapsed = false; renderAll(); },
         tool: (args) => tool(args),
         files: () => s.entries.map((e) => e.path).filter(Boolean),
         tabs: () => s.tabs.map((t, i) => ({ index: i, path: t.path, studio: t.api ? t.api.id : (t.kind === 'studio' ? t.studio && t.studio.id : 'code'),
@@ -1671,11 +1673,12 @@ export function createEditor($) {
         const errors = problems.filter((d) => d.severity === 'error').length;
         doc.text('prob-badge', String(problems.length));
         doc.cls('prob-badge', 'zero', problems.length === 0);
-        for (const b of ['problems', 'output', 'console', 'graph', 'agent']) doc.cls('bt-' + b, 'on', s.bottom === b);
+        for (const b of ['problems', 'output', 'console', 'graph', 'agent', 'agentcfg']) doc.cls('bt-' + b, 'on', s.bottom === b);
         doc.cls('gp', 'hidden', s.bottom !== 'graph');
         doc.cls('ag', 'hidden', s.bottom !== 'agent');
-        doc.cls('bottom-body', 'hidden', s.bottom === 'graph' || s.bottom === 'agent');
-        agentPanel.setOpen(s.bottom === 'agent' && !s.bottomCollapsed);
+        doc.cls('agcfg', 'hidden', s.bottom !== 'agentcfg');
+        doc.cls('bottom-body', 'hidden', s.bottom === 'graph' || s.bottom === 'agent' || s.bottom === 'agentcfg');
+        agentPanel.setOpen(s.bottom === 'agent' && !s.bottomCollapsed, s.bottom === 'agentcfg' && !s.bottomCollapsed);
         doc.text('bt-toggle', icon(s.bottomCollapsed ? 'expand_less' : 'expand_more'));
         if (s.bottom === 'problems') {
             doc.html('bottom-body', problems.length
@@ -1728,7 +1731,7 @@ export function createEditor($) {
         doc.cls('side-search', 'hidden', s.side !== 'search');
         doc.cls('bottom', 'collapsed', s.bottomCollapsed);
         doc.cls('bottom', 'graph', s.bottom === 'graph');
-        doc.cls('bottom', 'agent', s.bottom === 'agent');
+        doc.cls('bottom', 'agent', s.bottom === 'agent' || s.bottom === 'agentcfg');
         doc.cls('bottom', 'tall', s.bottom === 'graph' && graphPanel.state.full);
         for (const r of ['project', 'search', 'snippets', 'run', 'tools']) doc.cls('rail-' + r, 'on', s.side === r && !s.sidebarHidden);
         code.invalidate();
@@ -1867,7 +1870,7 @@ export function createEditor($) {
             else if (key.startsWith('line:')) { const t = activeTab(); if (t && t.model) { t.model.goto(parseInt(key.slice(5), 10), 1); code.ensureCaretVisible(); focusCode(); } }
         });
 
-        for (const b of ['problems', 'output', 'console', 'graph', 'agent']) doc.on('bt-' + b, 'click', () => { s.bottom = b; s.bottomCollapsed = false; renderBottom(); renderLayout(); if (b === 'graph') graphPanel.render(); });
+        for (const b of ['problems', 'output', 'console', 'graph', 'agent', 'agentcfg']) doc.on('bt-' + b, 'click', () => { s.bottom = b; s.bottomCollapsed = false; renderBottom(); renderLayout(); if (b === 'graph') graphPanel.render(); });
         agentPanel.wire();
         doc.on('bt-toggle', 'click', () => { s.bottomCollapsed = !s.bottomCollapsed; renderBottom(); renderLayout(); });
         doc.on('bottom-body', 'click', (id, ev, key) => {
@@ -1978,7 +1981,7 @@ export function createEditor($) {
             return;
         }
         shortcuts();
-        agentPanel.tick(primary());
+        agentPanel.tick(primary(), dt);
         if (s.palette) filterPalette();
         if (s.focus === 'search') {
             const query = String(doc.value('search-input') || '');
