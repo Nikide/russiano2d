@@ -120,6 +120,7 @@ def _game(directory):
         agent.eval(D + '.click("ag-undo");1'); agent.step(10)
         tm2 = json.loads((dest / 'level.tilemap.json').read_text(encoding='utf-8'))
         check(agent, 'true' if tm2['layers'][0]['data'][0][0] != 1 else 'false', 'игра: первый откат возвращает файл tilemap до studio_save')
+        agent.eval(D + '.click("ag-undo");1'); agent.step(10)   # правка paint в памяти студии
         agent.eval(D + '.click("ag-undo");1'); agent.step(10)
         proj2 = json.loads((dest / 'project.json').read_text(encoding='utf-8'))
         inst2 = [i for i in proj2.get('editor', {}).get('snippets', {}).get('instances', []) if i['package'] == 'movement.platformer']
