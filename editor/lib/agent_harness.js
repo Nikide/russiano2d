@@ -20,7 +20,7 @@ export const PROVIDERS = {
     // OpenCode Go (подписка): OpenAI-протокол chat/completions; список моделей — GET {base}/models.
     // Часть моделей каталога говорит по /responses или /messages — для них нужны «OpenAI-совм.»/«Anthropic» с другим адресом.
     opencode: { label: 'OpenCode Go', protocol: 'openai', auth: 'bearer', base: 'https://opencode.ai/zen/go/v1', model: 'kimi-k2.7-code', sessionHeader: 'x-opencode-session' },
-    deepseek: { label: 'DeepSeek', protocol: 'openai', auth: 'bearer', base: 'https://api.deepseek.com', model: 'deepseek-chat' },
+    deepseek: { label: 'DeepSeek', protocol: 'openai', auth: 'bearer', base: 'https://api.deepseek.com', model: 'deepseek-flash' },
     // GigaChat/GigaCode (Сбер): «Authorization key» из кабинета обменивается на токен (30 мин).
     gigachat: {
         label: 'GigaChat', protocol: 'gigachat', auth: 'oauth', base: 'https://gigachat.devices.sberbank.ru/api/v1', model: 'GigaChat-2',
@@ -33,10 +33,10 @@ export const SYSTEM_PROMPT = [
     'Правила: только публичный `$` API; не пиши второй движок, ECS, свой scene graph/event bus/менеджеры. Имя `$.…`, в котором не уверен, проверь api_lookup один раз (не гадай именами).',
     'ГОТОВОЕ ПОВЕДЕНИЕ (движение, прыжок, AI, способности, камера, UI) НЕ ПИШИ КОДОМ: snippet_find → snippet_apply. Наборы `kit.*` (например kit.platformer-core: движение+здоровье+камера) подключают сразу несколько кирпичиков — предпочитай их; искать достаточно 2–3 раза, потом действуй. Не вызывай `r2d_cli snippet catalog` — это 500 кирпичиков, используй snippet_find с одним словом.',
     'Объект, к которому цепляется кирпичик, создай в коде с `id`, затем snippet_apply с owner "object:<id>".',
-    'Шпаргалка (проверенные идиомы): `$.ready(($) => { $.gfx.color("#141824"); $.world.gravity(0, 1800); … });` (в `$.ready`: сцены `$.scene.add("level", ($) => { … })` и запуск `$.scene.load("level")`).',
+    'Шпаргалка (проверенные идиомы): `$.ready(($) => { $.gfx.color("#141824"); $.world.gravity(0, 1800).bounds(0, 0, 1280, 720); … });` (bounds ставит невидимые стены по краям — без них герой улетает за уровень) (в `$.ready`: сцены `$.scene.add("level", ($) => { … })` и запуск `$.scene.load("level")`).',
     'Объекты для кирпичиков создавай с ЛИТЕРАЛЬНЫМ id (`id: "coin1"`), не в цикле с id из строки — граф их иначе не увидит. ФИЗИКА ЕСТЬ ТОЛЬКО У ВИДОВ УЗЛОВ: герой — `$("<player>", { id: "hero" }).at(200, 300).size(26, 30).color("#e07040").controls({ axis: "both", coyote: 100, jumpBuffer: 120 }).collision(26, 30).appendTo($.world)`;',
     'земля и платформы — ТВЁРДЫЕ `$("<wall>", { id: "p1" }).at(x, y).size(200, 24).color("#5a6a5a").appendTo($.world)` (голый `<sprite>` — просто картинка: без гравитации и столкновений, герой пройдёт сквозь); монета — `$("<sprite>", { id: "coin1" }).at(x, y).size(18, 18).color("#ffd040")` + кирпичик interact.pickup;',
-    'текст: `$("<text>", { text: "Счёт: 0", size: 32 }).at(40, 40).appendTo($.world)`; картинка: `$("<sprite>", { src: "assets/a.png", w: 64, h: 64 })`. Строку `import "./generated/snippets/index.js"` добавляет генератор кирпичиков — сам её не пиши.',
+    'текст: `const label = $("<text>", { text: "Счёт: 0", size: 32 }).at(40, 40).appendTo($.world); label.text("Счёт: 1")` (так обновляется); кирпичик interact.pickup шлёт на герое событие `collect` с `{ value }`: `hero.on("collect", (e) => { score += e.value || 1; label.text("Счёт: " + score); })`; картинка: `$("<sprite>", { src: "assets/a.png", w: 64, h: 64 })`. Строку `import "./generated/snippets/index.js"` добавляет генератор кирпичиков — сам её не пиши.',
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
     'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
     'Пути — относительно корня проекта. Сначала list_files/read_file, потом пиши.',
