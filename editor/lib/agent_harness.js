@@ -17,6 +17,9 @@ export const PROVIDERS = {
     // YandexGPT через OpenAI-совместимый эндпоинт Yandex Cloud: ключ сервисного аккаунта
     // (`Api-Key`) или IAM-токен (`Bearer`: начните ключ с `Bearer `); модель — gpt://<id каталога>/yandexgpt/latest.
     yandex: { label: 'YandexGPT', protocol: 'openai', auth: 'api-key', base: 'https://llm.api.cloud.yandex.net/v1', model: 'gpt://<id-каталога>/yandexgpt/latest' },
+    // OpenCode Go (подписка): OpenAI-протокол chat/completions; список моделей — GET {base}/models.
+    // Часть моделей каталога говорит по /responses или /messages — для них нужны «OpenAI-совм.»/«Anthropic» с другим адресом.
+    opencode: { label: 'OpenCode Go', protocol: 'openai', auth: 'bearer', base: 'https://opencode.ai/zen/go/v1', model: 'kimi-k2.7-code', sessionHeader: 'x-opencode-session' },
     deepseek: { label: 'DeepSeek', protocol: 'openai', auth: 'bearer', base: 'https://api.deepseek.com', model: 'deepseek-chat' },
     // GigaChat/GigaCode (Сбер): «Authorization key» из кабинета обменивается на токен (30 мин).
     gigachat: {
@@ -151,6 +154,8 @@ export async function callModel(cfg, transport, system, messages, tools) {
         headers = { 'content-type': 'application/json' };
         if (cfg.key) headers.authorization = auth === 'api-key' && !/^Bearer\s/i.test(cfg.key) ? 'Api-Key ' + cfg.key : (/^Bearer\s/i.test(cfg.key) ? cfg.key : 'Bearer ' + cfg.key);
         if (cfg.folder) headers['x-folder-id'] = cfg.folder;
+        // Шлюзы с маршрутизацией по сессии (OpenCode Go): один id на всю беседу.
+        if (spec.sessionHeader) headers[spec.sessionHeader] = cfg._session || (cfg._session = uuid4());
         body = openaiBody(cfg, system, messages, tools);
     }
     const res = await transport(url, { headers, body: JSON.stringify(body), timeout: cfg.timeout || 120000 });

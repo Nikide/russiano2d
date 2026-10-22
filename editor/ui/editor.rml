@@ -128,6 +128,7 @@
             <div id="ag-head">
                 <span id="ag-prov-anthropic" class="out-filter">Anthropic</span>
                 <span id="ag-prov-openai" class="out-filter">OpenAI-совм.</span>
+                <span id="ag-prov-opencode" class="out-filter">OpenCode Go</span>
                 <span id="ag-prov-yandex" class="out-filter">YandexGPT</span>
                 <span id="ag-prov-gigachat" class="out-filter">GigaChat</span>
                 <input id="ag-base" type="text" class="field" value=""/>

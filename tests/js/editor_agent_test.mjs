@@ -352,4 +352,17 @@ await atest('snippet_find/snippet_apply: поиск, добавление, зн�
     truthy((await none[0].run({ query: 'zzz' })).includes('ничего не найдено'));
 });
 
+await atest('OpenCode Go: Bearer и один x-opencode-session на всю беседу', async () => {
+    const seen = [];
+    const ok = () => ({ choices: [{ message: { content: 'да' }, finish_reason: 'stop' }] });
+    const cfg = { provider: 'opencode', base: PROVIDERS.opencode.base, model: 'glm-5.2', key: 'oc_test' };
+    const agent = createAgent({ config: cfg, transport: scripted([ok(), ok()], seen), tools: toolsOf([]) });
+    await agent.send('раз');
+    await agent.send('два');
+    eq(seen[0].url, 'https://opencode.ai/zen/go/v1/chat/completions');
+    eq(seen[0].headers.authorization, 'Bearer oc_test');
+    truthy(/^[0-9a-f-]{36}$/.test(seen[0].headers['x-opencode-session']));
+    eq(seen[1].headers['x-opencode-session'], seen[0].headers['x-opencode-session']);
+});
+
 finish();
