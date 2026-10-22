@@ -35,7 +35,7 @@ scrollbarcorner { background-color: transparent; }
 /* Правила с #id специфичнее .hidden — скрываемым блокам нужен свой селектор. */
 #pm.hidden, #app.hidden, #palette.hidden, #findbar.hidden, #code.hidden, #pane.hidden, #welcome.hidden,
 #sidebar.hidden, #side-search.hidden, #caret.hidden, #code-sticky.hidden, #param-hint.hidden, #code-menu.hidden, #replace-row.hidden, #code-switch.hidden, #code-vscroll.hidden, #code-completion.hidden, #api-hover.hidden,
-#close-confirm.hidden, #file-conflict.hidden, #file-conflict-reload.hidden, #gp.hidden, #gp-results.hidden, #gp-warn.hidden, #gp-empty.hidden { display: none; }
+#close-confirm.hidden, #file-conflict.hidden, #file-conflict-reload.hidden, #gp.hidden, #ag.hidden, #ag-stop.hidden, #gp-results.hidden, #gp-warn.hidden, #gp-empty.hidden { display: none; }
 .icon { font-size: 18px; }
 .muted { color: #8b93a3; }
 .grow { flex: 1 1 0; }
@@ -579,3 +579,23 @@ scrollbarcorner { background-color: transparent; }
 
 /* Превью исходника сниппетов до применения native generate. */
 .sn-diff { display: block; max-height: 220px; overflow: auto; white-space: pre; font-family: Roboto Mono; font-size: 11px; color: #c3c9d4; background-color: #10141c; padding: 6px; margin: 4px 8px; }
+
+/* --- Агент --- */
+#ag { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0px; background-color: #14161b; }
+#bottom.collapsed #ag { display: none; }
+#bottom.agent { height: 330px; flex: 0 0 330px; }
+#ag-head { display: flex; flex-direction: row; align-items: center; flex: 0 0 34px; padding: 0px 8px; }
+#ag-head .field { flex: 1 1 0; margin-left: 6px; }
+#ag-head .out-filter { margin-right: 4px; }
+#ag-log { display: block; flex: 1 1 0; overflow-y: auto; padding: 4px 0px; }
+#ag-bar { display: flex; flex-direction: row; align-items: center; flex: 0 0 38px; padding: 0px 8px; }
+#ag-bar .field { flex: 1 1 0; margin-right: 6px; }
+#ag-bar .out-filter { margin-left: 4px; }
+.ag-msg { display: block; padding: 4px 14px; font-size: 13px; color: #c3c9d4; white-space: pre-wrap; }
+.ag-user { color: #ffffff; background-color: #1b1e24; }
+.ag-tool { color: #7aa2f7; font-family: Roboto Mono; font-size: 12px; }
+.ag-result { color: #6b7280; font-family: Roboto Mono; font-size: 12px; }
+.ag-err { color: #f87171; }
+.ag-ask { display: flex; flex-direction: row; align-items: center; padding: 6px 14px; background-color: #1f2a3d; }
+.ag-ask-text { flex: 1 1 0; color: #e6e9ef; font-size: 13px; }
+.ag-ask .out-filter { margin-left: 6px; }

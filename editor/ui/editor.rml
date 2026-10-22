@@ -119,10 +119,27 @@
             <span id="bt-output" class="btab">Вывод</span>
             <span id="bt-console" class="btab">Консоль</span>
             <span id="bt-graph" class="btab">Граф</span>
+            <span id="bt-agent" class="btab">Агент</span>
             <span class="grow"></span>
             <span id="bt-toggle" class="tb-btn icon"></span>
         </div>
         <div id="bottom-body"></div>
+        <div id="ag" class="hidden">
+            <div id="ag-head">
+                <span id="ag-prov-anthropic" class="out-filter">Anthropic</span>
+                <span id="ag-prov-openai" class="out-filter">OpenAI-совместимый</span>
+                <input id="ag-base" type="text" class="field" value=""/>
+                <input id="ag-model" type="text" class="field" value=""/>
+                <input id="ag-key" type="password" class="field" value=""/>
+            </div>
+            <div id="ag-log"></div>
+            <div id="ag-bar">
+                <input id="ag-input" type="text" class="field" value=""/>
+                <span id="ag-send" class="out-filter on">Отправить</span>
+                <span id="ag-stop" class="out-filter hidden">Стоп</span>
+                <span id="ag-clear" class="out-filter">Очистить</span>
+            </div>
+        </div>
         <div id="gp" class="hidden">
             <div id="gp-head">
                 <div id="gp-crumbs"></div>

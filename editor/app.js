@@ -18,6 +18,7 @@ import { pickProjectFile } from './lib/studio_kit.js';
 import { createExtensionHost } from './lib/shared/extensions.js';
 import { createGraphPanel } from './lib/graph_panel.js';
 import { createSnippetsPanel } from './lib/snippets_panel.js';
+import { createAgentPanel } from './lib/agent_panel.js';
 import { normalizeGraph, describe as describeGraph } from './lib/shared/graph_model.js';
 
 const DOC = 'ui/editor.rml';
@@ -100,6 +101,14 @@ export function createEditor($) {
         searchDraft: '', searchDelay: 0,
         graphNorm: null, graphStale: false, graphSelected: null, indexing: false, indexAgain: false,
     };
+
+    // --- агент: чат с моделью и инструментами Editor (editor/lib/agent_harness.js) ---
+    const agentPanel = createAgentPanel($, doc, {
+        project: () => s.project,
+        tool: (args) => tool(args),
+        files: () => s.entries.map((e) => e.path).filter(Boolean),
+        changed: (p) => { refreshTree(); const t = s.tabs.find((x) => x.path === p); if (t && t.model && !t.model.dirty) { const x = $.fs.readText(full(p)); if (typeof x === 'string') { t.model.setText(x); t.diskText = x; } } },
+    });
 
     // --- граф проекта (docs/PROJECT_JSON.md): панель под кодом ------------------------------
     const graphPanel = createGraphPanel($, doc, {
@@ -1315,6 +1324,7 @@ export function createEditor($) {
         { id: 'build-to', label: 'Проект: собрать в папку…', keys: '', run: () => buildToDialog() },
         { id: 'sidebar', label: 'Вид: боковая панель', keys: 'Cmd/Ctrl+B', run: () => { s.sidebarHidden = !s.sidebarHidden; renderLayout(); } },
         { id: 'panel', label: 'Вид: нижняя панель', keys: 'Cmd/Ctrl+J', run: () => { s.bottomCollapsed = !s.bottomCollapsed; renderLayout(); } },
+        { id: 'agent', label: 'Вид: агент', keys: '', run: () => { s.bottom = 'agent'; s.bottomCollapsed = false; renderAll(); } },
         { id: 'problems', label: 'Вид: проблемы', keys: '', run: () => { s.bottom = 'problems'; s.bottomCollapsed = false; renderAll(); } },
         { id: 'output', label: 'Вид: вывод', keys: '', run: () => { s.bottom = 'output'; s.bottomCollapsed = false; renderAll(); } },
     ];
@@ -1635,9 +1645,11 @@ export function createEditor($) {
         const errors = problems.filter((d) => d.severity === 'error').length;
         doc.text('prob-badge', String(problems.length));
         doc.cls('prob-badge', 'zero', problems.length === 0);
-        for (const b of ['problems', 'output', 'console', 'graph']) doc.cls('bt-' + b, 'on', s.bottom === b);
+        for (const b of ['problems', 'output', 'console', 'graph', 'agent']) doc.cls('bt-' + b, 'on', s.bottom === b);
         doc.cls('gp', 'hidden', s.bottom !== 'graph');
-        doc.cls('bottom-body', 'hidden', s.bottom === 'graph');
+        doc.cls('ag', 'hidden', s.bottom !== 'agent');
+        doc.cls('bottom-body', 'hidden', s.bottom === 'graph' || s.bottom === 'agent');
+        if (s.bottom === 'agent') agentPanel.render();
         doc.text('bt-toggle', icon(s.bottomCollapsed ? 'expand_less' : 'expand_more'));
         if (s.bottom === 'problems') {
             doc.html('bottom-body', problems.length
@@ -1690,6 +1702,7 @@ export function createEditor($) {
         doc.cls('side-search', 'hidden', s.side !== 'search');
         doc.cls('bottom', 'collapsed', s.bottomCollapsed);
         doc.cls('bottom', 'graph', s.bottom === 'graph');
+        doc.cls('bottom', 'agent', s.bottom === 'agent');
         doc.cls('bottom', 'tall', s.bottom === 'graph' && graphPanel.state.full);
         for (const r of ['project', 'search', 'snippets', 'run', 'tools']) doc.cls('rail-' + r, 'on', s.side === r && !s.sidebarHidden);
         code.invalidate();
@@ -1828,7 +1841,8 @@ export function createEditor($) {
             else if (key.startsWith('line:')) { const t = activeTab(); if (t && t.model) { t.model.goto(parseInt(key.slice(5), 10), 1); code.ensureCaretVisible(); focusCode(); } }
         });
 
-        for (const b of ['problems', 'output', 'console', 'graph']) doc.on('bt-' + b, 'click', () => { s.bottom = b; s.bottomCollapsed = false; renderBottom(); renderLayout(); if (b === 'graph') graphPanel.render(); });
+        for (const b of ['problems', 'output', 'console', 'graph', 'agent']) doc.on('bt-' + b, 'click', () => { s.bottom = b; s.bottomCollapsed = false; renderBottom(); renderLayout(); if (b === 'graph') graphPanel.render(); });
+        agentPanel.wire();
         doc.on('bt-toggle', 'click', () => { s.bottomCollapsed = !s.bottomCollapsed; renderBottom(); renderLayout(); });
         doc.on('bottom-body', 'click', (id, ev, key) => {
             if (s.bottom === 'output' && key && key.startsWith('output-filter:')) {
@@ -2024,7 +2038,7 @@ export function createEditor($) {
         state: s, showGraph, start, update, openProject, openFile, save, saveAll, run, stop, validateProject, buildPackage,
         searchProject, openSearchResult, showProjectSearch, runAgentSession, snippets, showSnippets,
         manifest, migrateProject, reindex, checkIndex, graphInfo, refreshProjectJson, graph: graphPanel, showPM, createProject, createTilemap, createScript, createNarrativeScene, openProjectDialog, pickNewProjectDir, openFileDialog,
-        openPalette, closePalette, activeTab, closeTab, code, studios, extensions: extensionHost,
+        agent: agentPanel, openPalette, closePalette, activeTab, closeTab, code, studios, extensions: extensionHost,
         openWith: (path, id) => openFile(rel(String(path)), 0, 0, id),
     };
 }
