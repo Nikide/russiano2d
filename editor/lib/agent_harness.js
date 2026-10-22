@@ -249,6 +249,28 @@ export async function testConnection(config, transport, now) {
     }
 }
 
+// Контекст не безразмерный: если история длиннее maxChars, отбрасываем самые старые пары
+// «ответ модели → результаты инструментов» (целиком — связка tool_use/tool_result не рвётся), первое
+// сообщение (задача) остаётся с пометкой. Возвращает число отброшенных сообщений.
+export function trimHistory(messages, maxChars) {
+    const size = (m) => JSON.stringify(m).length;
+    let total = messages.reduce((n, m) => n + size(m), 0);
+    let dropped = 0;
+    // сообщения: [user0, assistant, user(результаты), assistant, user, …] — режем с индекса 1 парами
+    while (total > maxChars && messages.length > 3 && messages[1].role === 'assistant') {
+        const pair = messages[2] && messages[2].role === 'user' ? 2 : 1;
+        for (let k = 0; k < pair; k++) total -= size(messages[1 + k]);
+        messages.splice(1, pair);
+        dropped += pair;
+    }
+    if (dropped) {
+        const first = messages[0];
+        const note = '\n\n[Ранние шаги диалога (' + dropped + ' сообщ.) сокращены для экономии контекста; при необходимости перечитай файлы.]';
+        if (typeof first.content === 'string') { if (!first.content.includes('Ранние шаги диалога')) first.content += note; else first.content = first.content.replace(/\(\d+ сообщ\.\)/, '(' + dropped + '+ сообщ.)'); }
+    }
+    return dropped;
+}
+
 // events: { text(t), tool(name,input), result(name,out), error(msg) } — все необязательные.
 // Куски документации по вопросу → текст для подкладывания к сообщению (экономит
 // ходы docs_search). Источник — `r2d docs context` (BM25); сюда же встанет
@@ -295,6 +317,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
             for (let step = 0; step < limit; step++) {
                 if (state.stop) { if (ev.error) ev.error('остановлено'); return; }
                 compact(state.messages, config.keepResults || 6);
+                trimHistory(state.messages, config.maxContextChars || 150000);
                 const reply = await callModel(config, transport, system || SYSTEM_PROMPT, state.messages, tools);
                 state.usage.calls++;
                 if (reply.usage) {
@@ -315,15 +338,29 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                     }
                     return;
                 }
-                const results = [];
+                // Независимые read-only вызовы из одного ответа идут параллельно (быстрее на шаге); правки, подтверждения
+                // и инструменты с общими файлами (serial) — по одному, в порядке модели. Порядок результатов сохраняется.
+                const results = new Array(calls.length);
                 let acted = false;
-                for (const call of calls) {
-                    if (ev.tool) ev.tool(call.name, call.input);
+                const serial = (call) => {
+                    const t = byName.get(call.name);
+                    return !t || t.serial || (typeof t.mutating === 'function' ? t.mutating(call.input || {}) : !!t.mutating);
+                };
+                const exec = async (k) => {
+                    const call = calls[k];
+                    if (ev.tool) ev.tool(call.name, call.input, call.id);
                     const r = await runTool(call);
-                    if (ev.result) ev.result(call.name, r.text, r.error);
+                    if (ev.result) ev.result(call.name, r.text, r.error, call.id);
                     const t = byName.get(call.name);
                     if (t && !r.error && (typeof t.mutating === 'function' ? t.mutating(call.input || {}) : t.mutating)) acted = true;
-                    results.push({ type: 'tool_result', tool_use_id: call.id, content: r.text, is_error: r.error });
+                    results[k] = { type: 'tool_result', tool_use_id: call.id, content: r.text, is_error: r.error };
+                };
+                for (let k = 0; k < calls.length;) {
+                    if (serial(calls[k])) { await exec(k); k++; continue; }
+                    let e = k;
+                    while (e < calls.length && !serial(calls[e])) e++;
+                    await Promise.all(calls.slice(k, e).map((_, d) => exec(k + d)));
+                    k = e;
                 }
                 // Слабые модели застревают в разведке: после нескольких шагов без единой правки подталкиваем к действию.
                 idle = acted ? 0 : idle + 1;
@@ -762,7 +799,7 @@ export function editorTools(host) {
               return (r.exact ? '' : 'точного совпадения нет, похожие:\n') + r.entries.map((e) =>
                   e.path + ' [' + e.kind + ']' + (e.args ? '(' + e.args.join(', ') + ')' : '') + ' — ' + String(e.description).slice(0, 200)).join('\n');
           } },
-        { name: 'playtest', description: 'Сыграть в игру headless по сценарию и проверить состояние: steps — список шагов, выполняются по порядку; в шаге: hold:["D"] — зажать клавиши (hold:[] — отпустить), tap:"Space" — нажать, frames:N — прокрутить кадры, eval:"JS" — вычислить выражение в игре (например `JSON.stringify($("#hero").pos())`, `$("text").text()`). В конце снимок кадра (grid:true — ASCII-карта). Так проверяют управление, подбор предметов, счёт, границы мира.',
+        { name: 'playtest', serial: true, description: 'Сыграть в игру headless по сценарию и проверить состояние: steps — список шагов, выполняются по порядку; в шаге: hold:["D"] — зажать клавиши (hold:[] — отпустить), tap:"Space" — нажать, frames:N — прокрутить кадры, eval:"JS" — вычислить выражение в игре (например `JSON.stringify($("#hero").pos())`, `$("text").text()`). В конце снимок кадра (grid:true — ASCII-карта). Так проверяют управление, подбор предметов, счёт, границы мира.',
           schema: { type: 'object', properties: { steps: { type: 'array', items: { type: 'object', properties: { hold: { type: 'array', items: { type: 'string' } }, tap: str('клавиша'), frames: { type: 'number' }, eval: str('JS-выражение') } }, description: 'шаги сценария' }, scene: str('сцена (необязательно)'), grid: { type: 'boolean', description: 'ASCII-карта итогового кадра' } }, required: ['steps'] },
           run: async (a) => {
               if (!Array.isArray(a.steps) || !a.steps.length) throw new Error('steps — непустой массив');
@@ -789,7 +826,7 @@ export function editorTools(host) {
               if (stats && stats.ok) { const { grid, ...rest } = stats; out.frame = rest.blank ? 'КАДР ПУСТОЙ' : 'кадр не пустой'; out.stats = { meanLuma: rest.meanLuma, distinctColors: rest.distinctColors, nonBackgroundFraction: rest.nonBackgroundFraction }; if (grid) out.ascii = grid; }
               return JSON.stringify(out);
           } },
-        { name: 'screenshot_check', description: 'Запустить игру headless на N кадров (можно с зажатыми клавишами), снять кадр и проверить его статистикой: blank:true — кадр пустой/одноцветный (чёрный экран!), иначе яркость, число цветов, доля не-фона. Вызывай после изменения сцены/графики; blank — значит искать причину (ошибка, не вызван render, камера, нет объектов).',
+        { name: 'screenshot_check', serial: true, description: 'Запустить игру headless на N кадров (можно с зажатыми клавишами), снять кадр и проверить его статистикой: blank:true — кадр пустой/одноцветный (чёрный экран!), иначе яркость, число цветов, доля не-фона. Вызывай после изменения сцены/графики; blank — значит искать причину (ошибка, не вызван render, камера, нет объектов).',
           schema: { type: 'object', properties: { frames: { type: 'number', description: 'кадров до снимка, по умолчанию 120' }, hold: { type: 'array', items: { type: 'string' }, description: 'клавиши, зажатые всё время, например ["D"] или ["W"]' }, scene: str('сцена (необязательно)'), grid: { type: 'boolean', description: 'добавить ASCII-карту кадра (48×18): видно, где на экране что нарисовано' } }, required: [] },
           run: async (a) => {
               const dir = '.r2d-check', shot = host.abs(dir + '/frame.png');

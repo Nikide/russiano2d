@@ -99,11 +99,11 @@ export function createAgentPanel($, doc, host) {
             context: (q) => docContext(host, q, 4),
             events: {
                 text: (t) => { st.mascot.talk(); applyMascot(); push({ kind: 'bot', text: t }); },
-                tool: (name, input) => { st.mascot.tool(name); applyMascot(); push({ kind: 'tool', name, input, status: 'run' }); },
-                result: (name, out, isErr) => {
+                tool: (name, input, id) => { st.mascot.tool(name); applyMascot(); push({ kind: 'tool', name, input, id, status: 'run' }); },
+                result: (name, out, isErr, id) => {
                     for (let i = st.log.length - 1; i >= 0; i--) {
                         const e = st.log[i];
-                        if (e.kind === 'tool' && e.status === 'run' && e.name === name) { e.status = isErr ? 'err' : 'ok'; e.result = String(out); break; }
+                        if (e.kind === 'tool' && e.status === 'run' && (id !== undefined ? e.id === id : e.name === name)) { e.status = isErr ? 'err' : 'ok'; e.result = String(out); break; }
                     }
                     render();
                 },

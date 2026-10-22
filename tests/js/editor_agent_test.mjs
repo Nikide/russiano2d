@@ -7,7 +7,7 @@ async function atest(name, fn) {
     try { await fn(); } catch (e) { err = e; }
     test(name, () => { if (err) throw err; });
 }
-import { usageOf, numberLines, grepProject, undoEdits, interactTools } from '../../editor/lib/agent_harness.js';
+import { trimHistory, usageOf, numberLines, grepProject, undoEdits, interactTools } from '../../editor/lib/agent_harness.js';
 import { createMascot, mascotFrames } from '../../editor/lib/agent_mascot.js';
 import { testConnection, snippetTools, fieldLine, snippetLine, studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
 
@@ -593,6 +593,57 @@ await atest('лимит шагов: событие limit вместо ошибк
     await agent.send('Продолжай');
     eq(seen.length, 3);
     truthy(agent.state.messages.length > 5, 'история сохранена между send');
+});
+
+await atest('параллельность: read-only вызовы одного ответа идут вместе, правки и serial — по очереди, порядок результатов сохраняется', async () => {
+    const log = [];
+    // таймеров в qjs нет: «медленный» инструмент ждёт, пока «быстрый» завершится (это возможно только при параллельности)
+    let open;
+    const gate = new Promise((r) => { open = r; });
+    const mk = (name, ms, extra) => ({ name, description: 'd', schema: { type: 'object', properties: {} }, ...(extra || {}),
+        run: async (a) => { log.push('start:' + a.n); if (name === 'slow') await gate; if (name === 'fast' && a.n === 2) open(); log.push('end:' + a.n); return name + a.n; } });
+    const seen = [], events = [];
+    const agent = createAgent({
+        config: { provider: 'anthropic', base: 'https://x', model: 'm' },
+        transport: scripted([anth(
+            { type: 'tool_use', id: 'r1', name: 'slow', input: { n: 1 } }, { type: 'tool_use', id: 'r2', name: 'fast', input: { n: 2 } },
+            { type: 'tool_use', id: 'w3', name: 'writer', input: { n: 3 } }, { type: 'tool_use', id: 's4', name: 'ser', input: { n: 4 } },
+            { type: 'tool_use', id: 'r5', name: 'fast', input: { n: 5 } }), anth({ type: 'text', text: 'ок' })], seen),
+        tools: [mk('slow', 40), mk('fast', 5), mk('writer', 5, { mutating: true }), mk('ser', 5, { serial: true })],
+        confirm: async () => true, events: { tool: (n, i, id) => events.push('T' + id), result: (n, o, e, id) => events.push('R' + id) },
+    });
+    await agent.send('go');
+    eq(log.slice(0, 2), ['start:1', 'start:2'], 'первые два read-only стартуют вместе');
+    truthy(log.indexOf('start:3') > log.indexOf('end:1'), 'правка ждёт завершения параллельной пачки');
+    truthy(log.indexOf('start:4') > log.indexOf('end:3'), 'serial идёт после правки');
+    truthy(log.indexOf('start:5') > log.indexOf('end:4'), 'следующий read-only после serial');
+    const res = seen[1].body.messages.at(-1).content;
+    eq(res.map((r) => r.tool_use_id), ['r1', 'r2', 'w3', 's4', 'r5'], 'порядок результатов — как у вызовов');
+    eq(res.map((r) => r.content), ['slow1', 'fast2', 'writer3', 'ser4', 'fast5']);
+    truthy(events.includes('Rr2') && events.includes('Rr1'), 'события результата приходят с id вызова');
+});
+
+test('trimHistory: старые пары отбрасываются целиком, связка вызовов цела, задача остаётся', () => {
+    const msgs = [{ role: 'user', content: 'ЗАДАЧА' }];
+    for (let i = 0; i < 12; i++) {
+        msgs.push({ role: 'assistant', content: [{ type: 'tool_use', id: 't' + i, name: 'x', input: { i } }] });
+        msgs.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't' + i, content: 'p'.repeat(1000) }] });
+    }
+    const before = msgs.length;
+    const dropped = trimHistory(msgs, 6000);
+    truthy(dropped > 0 && dropped % 2 === 0, 'режутся парами');
+    eq(msgs.length, before - dropped);
+    truthy(msgs[0].content.startsWith('ЗАДАЧА') && msgs[0].content.includes('сокращены'));
+    eq(msgs[1].role, 'assistant');
+    const ids = new Set();
+    for (const m of msgs) for (const b of Array.isArray(m.content) ? m.content : []) {
+        if (b.type === 'tool_use') ids.add(b.id);
+        if (b.type === 'tool_result') truthy(ids.has(b.tool_use_id), 'у результата есть вызов');
+    }
+    truthy(JSON.stringify(msgs).length <= 6000 + 400);
+    eq(trimHistory(msgs, 1e9), 0, 'в пределах лимита ничего не трогаем');
+    const short = [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }];
+    eq(trimHistory(short, 1), 0, 'короткую историю не режем');
 });
 
 finish();
