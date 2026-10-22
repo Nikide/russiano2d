@@ -213,6 +213,32 @@ def _sound(directory):
         check(agent, 'true' if not wav.exists() else 'false', 'generate_sound: кнопка отката удаляет звук')
 
 
+def _session(directory):
+    project = Path(directory) / 'sproject'
+    project.mkdir()
+    (project / 'project.json').write_text(json.dumps({'format': 2, 'title': 'Session fixture', 'entry': 'main.js'}))
+    (project / 'main.js').write_text('$.ready(() => {});\n')
+    first = [reply({'type': 'text', 'text': 'Первый ответ про платформер.'})]
+    with Agent(game='editor', scene=str(project), seed=21) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval('globalThis.__q=' + json.dumps(first) + ';$.http._setBackend((r)=>globalThis.__q.shift());1')
+        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","сделай платформер");' + D + '.click("ag-send");1')
+        settle(agent, '!' + E + '.agent.state.busy && ' + D + '.content("ag-log").includes("Первый ответ")', seconds=20)
+        check(agent, 'true' if (project / '.r2d-agent.json').is_file() else 'false', 'беседа: файл .r2d-agent.json записан в проект после хода')
+        check(agent, '!$.fs.readText(' + json.dumps(str(project / '.r2d-agent.json')) + ').includes("\\"k\\"")', 'беседа: ключ не попал в файл беседы')
+    second = [reply({'type': 'text', 'text': 'Продолжаю.'})]
+    with Agent(game='editor', scene=str(project), seed=22) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval(D + '.click("bt-agent");1'); agent.step(6)
+        check(agent, D + '.content("ag-log").includes("Первый ответ") && ' + D + '.content("ag-log").includes("восстановлена")', 'беседа: после перезапуска лента на месте')
+        agent.eval('globalThis.__q=' + json.dumps(second) + ';globalThis.__seen=[];$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
+        agent.eval(D + '.setValue("ag-key","k");' + D + '.setValue("ag-input","что дальше?");' + D + '.click("ag-send");1')
+        settle(agent, '!' + E + '.agent.state.busy && ' + D + '.content("ag-log").includes("Продолжаю.")', seconds=20)
+        check(agent, 'String(globalThis.__seen[0].body).includes("сделай платформер")', 'беседа: модель получила прежнюю историю')
+        agent.eval(D + '.click("ag-clear");1'); agent.step(4)
+        check(agent, 'true' if not (project / '.r2d-agent.json').exists() else 'false', 'беседа: «новый чат» удаляет сохранённую беседу')
+
+
 def _limit(directory):
     project = Path(directory) / 'lproject'
     project.mkdir()
@@ -286,6 +312,7 @@ def _run():
         _limit(directory)
         _pixel(directory)
         _sound(directory)
+        _session(directory)
     print(f'editor_agent_panel_test: {checks} checks', flush=True)
     return 0
 

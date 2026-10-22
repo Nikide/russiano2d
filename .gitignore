@@ -163,3 +163,4 @@ models/
 sfxgen_cache/
 agent.local.json
 editor/agent.local.json
+.r2d-agent.json

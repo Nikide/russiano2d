@@ -45,6 +45,8 @@ function argSummary(name, input) {
 }
 
 const PREFS_FILE = 'agent.local.json';
+const SESSION_FILE = '.r2d-agent.json';   // беседа с агентом: лежит в проекте, чтобы продолжить с того же места
+const SESSION_MAX_BYTES = 1500000;
 
 export function createAgentPanel($, doc, host) {
     const icon = (n) => $.ui.icon(n) || '';
@@ -119,6 +121,51 @@ export function createAgentPanel($, doc, host) {
                 limit: (n) => { st.mascot.failure('Устала… продолжим?'); applyMascot(); push({ kind: 'limit', text: 'Достигнут лимит шагов (' + n + ') — агент остановился на середине.' }); },
             },
         });
+        if (st.keep) { st.agent.state.messages.push(...st.keep); st.keep = null; }
+    }
+
+    // --- беседа в проекте ---------------------------------------------------------
+    function sessionPath() { const p = host.project(); return p ? p.abs + '/' + SESSION_FILE : null; }
+
+    function saveSession() {
+        const path = sessionPath();
+        if (!path) return;
+        try {
+            const messages = st.agent ? st.agent.state.messages : (st.keep || []);
+            if (!st.log.length && !messages.length) { if ($.fs.exists(path)) $.fs.remove(path); return; }
+            const log = st.log.slice(-200).map((e) => (e.result ? { ...e, result: String(e.result).slice(0, 1500) } : e));
+            let from = Math.max(0, messages.length - 80);
+            let text;
+            for (;;) {
+                text = JSON.stringify({ version: 1, savedAt: Date.now(), provider: st.cfg.provider, messages: messages.slice(from), log, plan: st.plan, usage: st.usage });
+                if (text.length <= SESSION_MAX_BYTES || from >= messages.length - 2) break;
+                from += Math.max(2, ((messages.length - from) / 4) | 0);
+            }
+            // история не должна начинаться с результата инструмента без вызова: берём с реплики пользователя
+            $.fs.write(path, text);
+        } catch (_) { /* беседа не критична */ }
+    }
+
+    // Загрузка беседы нового проекта: прежняя уже сохранена в конце хода.
+    function switchProject(abs) {
+        st.sessionFor = abs;
+        st.log.length = 0; st.expanded.clear(); st.agent = null; st.keep = null; st.plan = []; st.pending = null;
+        st.usage = { input: 0, output: 0, cached: 0, calls: 0 };
+        if (st.asking) { st.asking.resolve(null); st.asking = null; }
+        let data = null;
+        try { data = $.fs.exists(abs + '/' + SESSION_FILE) ? JSON.parse($.fs.readText(abs + '/' + SESSION_FILE)) : null; } catch (_) { data = null; }
+        if (data && data.version === 1 && Array.isArray(data.messages) && data.messages.length) {
+            let msgs = data.messages;
+            const firstUser = msgs.findIndex((m) => m.role === 'user' && (typeof m.content === 'string' || m.content.some((b) => b.type !== 'tool_result')));
+            msgs = firstUser > 0 ? msgs.slice(firstUser) : msgs;
+            st.keep = msgs;
+            if (Array.isArray(data.log)) for (const e of data.log) st.log.push(e);
+            if (Array.isArray(data.plan)) st.plan = data.plan;
+            if (data.usage) st.usage = data.usage;
+            st.log.push({ kind: 'bot', text: 'Беседа восстановлена — продолжаем с того места, где остановились.' });
+        }
+        st.scrollPending = 3;
+        render();
     }
 
     // Настройки между запусками: провайдер, адрес, модель, шаги, маскот. Ключ — только в памяти.
@@ -168,6 +215,7 @@ export function createAgentPanel($, doc, host) {
             const lastErr = st.log.length && st.log[st.log.length - 1].kind === 'err';
             if (failed || lastErr) st.mascot.failure('Что-то пошло не так…'); else st.mascot.success();
             applyMascot(); st.scrollPending = 3; render();
+            saveSession();
         }
     }
 
@@ -184,6 +232,7 @@ export function createAgentPanel($, doc, host) {
         readFields();
         st.cfg.provider = id;
         st.cfg.base = PROVIDERS[id].base; st.cfg.model = PROVIDERS[id].model;
+        if (st.agent) st.keep = st.agent.state.messages.slice();
         st.agent = null;
         doc.setValue('ag-base', st.cfg.base); doc.setValue('ag-model', st.cfg.model);
         savePrefs();
@@ -339,7 +388,7 @@ export function createAgentPanel($, doc, host) {
         for (const id of Object.keys(PROVIDERS)) doc.on('ag-prov-' + id, 'click', () => setProvider(id));
         doc.on('ag-send', 'click', () => { st.mascot.wake(); send(); });
         doc.on('ag-stop', 'click', () => { if (st.agent) st.agent.stop(); if (st.asking) answerAsk(null); answer(false); });
-        doc.on('ag-clear', 'click', () => { st.log.length = 0; st.expanded.clear(); st.agent = null; st.usage = { input: 0, output: 0, cached: 0, calls: 0 }; st.pending = null; st.plan = []; if (st.asking) { st.asking.resolve(null); st.asking = null; } render(); });
+        doc.on('ag-clear', 'click', () => { st.log.length = 0; st.expanded.clear(); st.agent = null; st.keep = null; st.usage = { input: 0, output: 0, cached: 0, calls: 0 }; st.pending = null; st.plan = []; if (st.asking) { st.asking.resolve(null); st.asking = null; } saveSession(); render(); });
         doc.on('ag-undo', 'click', () => {
             if (!st.history || !st.history.length || st.busy) return;
             const done = undoEdits(st.history, st.fsHost, 1);
@@ -373,6 +422,8 @@ export function createAgentPanel($, doc, host) {
         },
         // Раз в кадр: маскот, автопрокрутка вниз (после раскладки новой разметки) и Ctrl/⌘+Enter в поле ввода.
         tick(primaryDown, dt) {
+            const proj = host.project();
+            if (proj && st.sessionFor !== proj.abs && !st.busy) switchProject(proj.abs);
             if (st.mascot.tick(dt || 1 / 60, st.busy || !!st.pending)) applyMascot();
             if (!st.open) return;
             if (st.scrollPending > 0 && --st.scrollPending === 0) doc.scroll('ag-log');
