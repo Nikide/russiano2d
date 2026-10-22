@@ -67,6 +67,44 @@ def _hammer(directory):
         check(agent, 'true' if checks_ok else 'false', 'Hammer: brush.create сохранён в .re2dmap на диске')
 
 
+def _game(directory):
+    dest = Path(directory) / 'newgame'
+    start = Path(directory) / 'start'
+    start.mkdir()
+    (start / 'project.json').write_text(json.dumps({'format': 2, 'title': 'start', 'entry': 'main.js'}))
+    (start / 'main.js').write_text('$.ready(() => {});\n')
+    steps = [
+        tool_call(1, 'editor_op', {'op': 'new_project', 'args': {'template': 'blank', 'dir': str(dest), 'name': 'Агентская игра'}}),
+        tool_call(2, 'write_file', {'path': 'main.js', 'content': '$.ready(() => { $.log("агент: старт"); });\n'}),
+        tool_call(3, 'editor_op', {'op': 'create_tilemap', 'args': {}}),
+        tool_call(4, 'open_tab', {'path': 'level.tilemap.json'}),
+        tool_call(5, 'studio_ops', {}),
+        tool_call(6, 'studio_op', {'op': 'paint', 'args': {'x': 0, 'y': 0, 'id': 1}}),
+        tool_call(7, 'studio_save', {}),
+        tool_call(8, 'r2d_cli', {'args': ['templates']}),
+        tool_call(9, 'run_check', {'frames': 10}),
+        reply({'type': 'text', 'text': 'Игра создана.'}),
+    ]
+    with Agent(game='editor', scene=str(start), seed=14) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval('globalThis.__q=' + json.dumps(steps) + ';$.http._setBackend((r)=>globalThis.__q.shift());1')
+        agent.eval(D + '.click("bt-agent");' + D + '.setValue("ag-key","k");' +
+                   D + '.setValue("ag-input","сделай игру");' + D + '.click("ag-send");1')
+        for _ in range(400):
+            agent.step(3)
+            if agent.eval(E + '.agent.state.pending!==null'):
+                agent.eval(D + '.click("ag-yes");1')
+            elif not agent.eval(E + '.agent.state.busy'):
+                break
+        log = agent.eval('JSON.stringify(' + E + '.agent.state.log)')
+        check(agent, D + '.content("ag-log").includes("Игра создана.")', 'игра: сценарий агента дошёл до конца')
+        check(agent, E + '.state.project.abs===' + json.dumps(str(dest)), 'игра: new_project создал и открыл проект')
+        check(agent, '$.fs.readText(' + json.dumps(str(dest / 'main.js')) + ').includes("агент: старт")', 'игра: write_file записал скрипт')
+        tm = json.loads((dest / 'level.tilemap.json').read_text(encoding='utf-8'))
+        check(agent, 'true' if tm['layers'][0]['data'][0][0] == 1 else 'false', 'игра: studio_op paint + studio_save записали тайл в tilemap')
+        check(agent, 'false' if '"err"' in log else 'true', 'игра: ни один шаг сценария не вернул ошибку (' + log[-300:] + ')')
+
+
 def _run():
     with tempfile.TemporaryDirectory(prefix='r2d-agentpanel-') as directory:
         project = Path(directory) / 'project'
@@ -97,6 +135,7 @@ def _run():
             check(agent, '(()=>{const h=globalThis.__seen[0].headers;const i=h.indexOf("x-api-key");return i>=0&&h[i+1]==="test-key"&&!String(globalThis.__seen[0].body).includes("test-key");})()', 'ключ уходит только в заголовок запроса')
             check(agent, '!JSON.stringify($.fs.readText(' + json.dumps(str(project / 'project.json')) + ')).includes("test-key")', 'ключ не записан в project.json')
         _hammer(directory)
+        _game(directory)
     print(f'editor_agent_panel_test: {checks} checks', flush=True)
     return 0
 

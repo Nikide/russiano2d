@@ -45,11 +45,20 @@ curl его не знает, запрос упадёт на TLS — тогда �
 | `api_lookup` | есть ли такой `$`-метод и его аргументы (`r2d docs api`), «такого API нет» — запрет выдумывать |
 | `run_check` | короткий headless-прогон игры, возвращает ошибки скриптов |
 | `project_info` | `r2d project` |
-| `tabs`, `open_tab`, `studio_state` | вкладки Editor и состояние студии (для Hammer — содержимое карты) |
-| `studio_op`, `studio_save` | операции студии: в Hammer — любые операции native `world-edit` (`brush.create`, `entity.create`, `element.create`, `face.set`, `world.set`…) через сессию карты, то есть с общей историей Undo, диагностикой и перерисовкой, а также `validate`/`compile`/`undo`/`redo`/`setGrid`/`select`; затем `studio_save` |
+| `tabs`, `open_tab` | вкладки Editor; файл открывается в своей студии (`.re2dmap` → Hammer, атлас → Atlas, `*.tilemap.json` → Tilemap…) |
+| `studio_ops` | какие операции есть у студии вкладки (имена и параметры); вызывать первым в новой студии |
+| `studio_state` | состояние и данные документа любой студии (для Hammer — карта); `section` — целый раздел данных |
+| `studio_edit` | правка документа **любой студии ассетов** JSON-патчем (RFC 7386) через её историю Undo: tilemap, particles, audio, collision, parallax, fonts, input… |
+| `studio_op` | именованная операция студии (аргументы — объект по именам параметров или массив); в Hammer — ещё любые операции native `world-edit` (`brush.create`, `entity.create`, `element.create`, `face.set`, `world.set`…) через сессию карты |
+| `studio_save` | сохранить документ студии |
+| `editor_op` | операции самого Editor: `new_project` (шаблон + открыть), `open_project`, `run`, `stop`, `validate`, `build`, `reindex`, `create_script`, `create_tilemap`, `create_narrative` |
+| `r2d_cli` | любая команда `r2d` (`snippet`, `atlas-grid`, `world-compile`, `story`, `project-set`…): чтение — сразу, команды с записью — с подтверждением |
+
+Так через панель можно собрать игру целиком: `new_project` → скрипты (`write_file`/`edit_file`) → ресурсы в студиях → `validate` → `run_check`. Сквозной сценарий проверяет `tests/agent/editor_agent_panel_test.py` (создание проекта, скрипт, tilemap через студию, сохранение, headless-прогон) — на моканой модели.
+
+**Что не сделано.** Реальные модели планируют такую работу хуже, чем скрипт теста: качество на длинной сборке игры не измерялось. Студии без `ops.edit` (Hammer, Atlas, Narrative, RmlUi, SpriteMesh, Re2DSprite) правятся только их собственными операциями — их список агент берёт из `studio_ops`; полнота этих списков зависит от студии. Подтверждения на каждую запись — осознанное ограничение; режима «разрешать всё» нет.
 
 Старые результаты инструментов сворачиваются (последние 6 целиком), чтобы длинные чтения файлов не оплачивались токенами на каждом шаге.
-Остальные студии (атлас, tilemap, частицы…) агент пока правит как JSON-файлы через `edit_file`; операций студий для них нет.
 
 Лимит — 12 шагов на вопрос; кнопка «Стоп» прерывает цикл.
 

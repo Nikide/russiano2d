@@ -110,6 +110,27 @@ export function createEditor($) {
         tabs: () => s.tabs.map((t, i) => ({ index: i, path: t.path, studio: t.api ? t.api.id : (t.kind === 'studio' ? t.studio && t.studio.id : 'code'),
             dirty: !!(t.model ? t.model.dirty : t.api && t.api.dirty && t.api.dirty()), active: t === activeTab() })),
         openTab: async (p) => { const t = openFile(p, 0, 0); if (!t) throw new Error('не удалось открыть ' + p); if (t.opening) await t.opening; if (t.error) throw new Error(t.error); },
+        editorOp: async (op, a) => {
+            if (op === 'new_project') {
+                const dest = String(a.dir || '').trim();
+                if (!dest || !(dest[0] === '/' || /^[A-Za-z]:[\\/]/.test(dest))) throw new Error('dir — абсолютный путь нового проекта');
+                const res = await tool(['new', String(a.template || 'blank'), dest, '--name', String(a.name || 'Игра')]);
+                if (!res.ok) { const d = res.json && res.json.diagnostics && res.json.diagnostics[0]; throw new Error(d ? d.code + ': ' + d.message : (res.error || 'не удалось создать проект')); }
+                await openProject(dest);
+                return 'проект создан и открыт: ' + dest;
+            }
+            if (op === 'open_project') { await openProject(String(a.dir || '')); return s.project ? 'открыт ' + s.project.abs : 'не открыт'; }
+            if (!s.project) throw new Error('сначала откройте проект (new_project / open_project)');
+            if (op === 'run') { await run({}); return 'игра запущена'; }
+            if (op === 'stop') { stop(); return 'остановлено'; }
+            if (op === 'validate') { await validateProject(); return 'diagnostics: ' + JSON.stringify(allProblems().slice(0, 12)); }
+            if (op === 'build') { await buildPackage(String(a.outDir || '')); return 'сборка завершена (см. Вывод)'; }
+            if (op === 'reindex') { await reindex(); return 'граф пересчитан'; }
+            if (op === 'create_script') return 'создан ' + createScript();
+            if (op === 'create_tilemap') return 'создан ' + createTilemap();
+            if (op === 'create_narrative') return 'создана сцена: ' + createNarrativeScene();
+            throw new Error('неизвестная операция Editor: ' + op);
+        },
         studioApi: (p) => { const t = p ? s.tabs.find((x) => x.path === p) : activeTab(); return t && t.api ? t.api : null; },
         changed: (p) => { refreshTree(); const t = s.tabs.find((x) => x.path === p); if (t && t.model && !t.model.dirty) { const x = $.fs.readText(full(p)); if (typeof x === 'string') { t.model.setText(x); t.diskText = x; } } },
     });

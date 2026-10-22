@@ -37,12 +37,13 @@ export function createAgentPanel($, doc, host) {
     }
 
     function build() {
-        const project = host.project();
+        // Корень проекта берётся при каждом вызове: new_project/open_project меняют его на ходу.
+        const root = () => { const p = host.project(); if (!p) throw new Error('проект не открыт'); return p.abs; };
         const tools = editorTools({
-            tool: host.tool, abs: (p) => (p ? project.abs + '/' + p : project.abs),
-            exists: (p) => $.fs.exists(project.abs + '/' + p),
-            readText: (p) => $.fs.readText(project.abs + '/' + p),
-            writeText: (p, c) => { $.fs.write(project.abs + '/' + p, c); host.changed(p); },
+            tool: host.tool, abs: (p) => (p ? root() + '/' + p : root()),
+            exists: (p) => $.fs.exists(root() + '/' + p),
+            readText: (p) => $.fs.readText(root() + '/' + p),
+            writeText: (p, c) => { $.fs.write(root() + '/' + p, c); host.changed(p); },
             list: () => host.files(),
         });
         st.agent = createAgent({
@@ -106,6 +107,9 @@ export function createAgentPanel($, doc, host) {
         const what = !st.pending ? '' : st.pending.name === 'edit_file'
             ? 'изменить <b>' + esc(pin.path || '?') + '</b> (' + String(String(pin.old_string || '').length) + ' → ' + String(String(pin.new_string || '').length) + ' симв.)'
             : st.pending.name === 'studio_op' ? 'применить в студии <b>' + esc(pin.op || '?') + '</b> ' + esc(JSON.stringify(pin.args || {}).replace(/"/g, "'").slice(0, 140))
+            : st.pending.name === 'studio_edit' ? 'изменить документ студии патчем ' + esc(JSON.stringify(pin.patch || {}).replace(/"/g, "'").slice(0, 140))
+            : st.pending.name === 'editor_op' ? 'выполнить в Editor <b>' + esc(pin.op || '?') + '</b> ' + esc(JSON.stringify(pin.args || {}).replace(/"/g, "'").slice(0, 120))
+            : st.pending.name === 'r2d_cli' ? 'выполнить <b>r2d ' + esc((Array.isArray(pin.args) ? pin.args : []).join(' ').slice(0, 140)) + '</b>'
             : st.pending.name === 'studio_save' ? 'сохранить документ студии <b>' + esc(pin.path || 'активной вкладки') + '</b>'
             : 'записать <b>' + esc(pin.path || '?') + '</b> (' + String(String(pin.content || '').length) + ' симв.)';
         const ask = st.pending

@@ -7,7 +7,7 @@ async function atest(name, fn) {
     try { await fn(); } catch (e) { err = e; }
     test(name, () => { if (err) throw err; });
 }
-import { studioTools, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
+import { studioTools, listOps, bindArgs, mergePatch, paramNames, compact, createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
 
 const scripted = (replies, seen) => async (url, opts) => {
     seen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
@@ -102,7 +102,7 @@ await atest('editorTools: write_file/read_file через host, mutating тол�
     eq(await by.read_file.run({ path: 'a.js' }), 'x');
     eq(await by.list_files.run({}), 'a.js');
     eq(await by.docs_show.run({ page: 'ui' }), 'T');
-    eq(tools.filter((t) => t.mutating).map((t) => t.name), ['write_file', 'edit_file']);
+    eq(tools.filter((t) => t.mutating === true).map((t) => t.name), ['write_file', 'edit_file']);
 });
 
 await atest('контекст из доков подкладывается к вопросу, сбой поиска не мешает', async () => {
@@ -221,7 +221,8 @@ await atest('studio-инструменты: вкладки, состояние, 
         studioApi: (p) => (p === '' || p === 'a.re2dmap') ? api : null,
     }).map((t) => [t.name, t]));
     truthy(JSON.parse(await tools.tabs.run({}))[0].studio === 'hammer');
-    truthy(JSON.parse(await tools.studio_state.run({})).map.brushes.length === 1);
+    truthy(JSON.parse(await tools.studio_state.run({})).data.brushes.length === 1);
+    eq(JSON.parse(await tools.studio_state.run({ section: 'brushes' })).length, 1);
     await tools.studio_op.run({ op: 'brush.create', args: { rect: [0, 0, 16, 16] } });
     eq(applied[0][0], 'brush.create');
     truthy((await tools.studio_op.run({ op: 'validate', args: [] })).includes('"ok":true'));
@@ -234,7 +235,82 @@ await atest('studio-инструменты: вкладки, состояние, 
     try { await tools.studio_state.run({ path: 'other.re2dmap' }); } catch (e) { missing = e.message; }
     truthy(missing.includes('не открыта'));
     eq(JSON.parse(await tools.studio_save.run({})).ok, true);
-    eq(['studio_op', 'studio_save'], Object.values(tools).filter((t) => t.mutating).map((t) => t.name));
+    eq(Object.values(tools).filter((t) => t.mutating).map((t) => t.name), ['studio_edit', 'studio_op', 'studio_save']);
+});
+
+test('paramNames/bindArgs: позиционные и именованные аргументы', () => {
+    eq(paramNames((x, y) => 0), ['x', 'y']);
+    eq(paramNames(async function f(a, b = 2) { return 0; }), ['a', 'b']);
+    eq(paramNames({ paint(x, y, id) { return 0; } }.paint), ['x', 'y', 'id']);
+    const paint = (x, y, id) => 0;
+    eq(bindArgs(paint, { y: 2, id: 7, x: 1 }), [1, 2, 7]);
+    eq(bindArgs(paint, [4, 5, 6]), [4, 5, 6]);
+    const one = (spec) => 0;
+    eq(bindArgs(one, { a: 1 }), [{ a: 1 }]);
+    eq(bindArgs(paint, undefined), []);
+});
+
+test('mergePatch: слияние, замена массивов, null удаляет, прототип не трогается', () => {
+    const doc = { a: { b: 1, c: 2 }, list: [1, 2, 3], gone: 1 };
+    mergePatch(doc, { a: { b: 5 }, list: [9], gone: null, add: { x: 1 }, __proto__: { polluted: 1 } });
+    eq(doc, { a: { b: 5, c: 2 }, list: [9], add: { x: 1 } });
+    eq({}.polluted, undefined);
+});
+
+await atest('студии ассетов: studio_ops, studio_edit через историю, studio_op по именам параметров', async () => {
+    const data = { layers: [{ data: [[0, 0]] }], terrains: {} };
+    const edits = [];
+    const api = {
+        id: 'tilemap', state: { data },
+        ops: {
+            edit(label, fn) { edits.push(label); return fn(data) !== false; }, model: () => data,
+            paint: (x, y, id) => { data.layers[0].data[y][x] = id; return true; }, select: 5,
+        },
+        render() {}, save: async () => ({ ok: true }),
+    };
+    const tools = Object.fromEntries(studioTools({ tabs: () => [], openTab: async () => {}, studioApi: () => api }).map((t) => [t.name, t]));
+    const ops = JSON.parse(await tools.studio_ops.run({}));
+    eq(ops.ops.map((o) => o.name), ['paint']);
+    eq(ops.ops[0].params, ['x', 'y', 'id']);
+    eq(ops.edit, true);
+    await tools.studio_op.run({ op: 'paint', args: { x: 1, y: 0, id: 7 } });
+    eq(data.layers[0].data, [[0, 7]]);
+    await tools.studio_edit.run({ patch: { terrains: { grass: { id: 1 } } }, label: 'Террейн' });
+    eq(data.terrains, { grass: { id: 1 } });
+    eq(edits, ['Террейн']);
+    let blocked = '';
+    try { await tools.studio_op.run({ op: 'model' }); } catch (e) { blocked = e.message; }
+    truthy(blocked.includes('неизвестная операция'));
+    let noedit = '';
+    api.ops.edit = undefined;
+    try { await tools.studio_edit.run({ patch: {} }); } catch (e) { noedit = e.message; }
+    truthy(noedit.includes('не принимает патчи'));
+});
+
+await atest('r2d_cli: чтение без подтверждения, запись — с подтверждением; editor_op', async () => {
+    const calls = [];
+    const host = { tool: async (a) => { calls.push(a); return { output: 'ok' }; }, abs: (p) => p, exists: () => false, readText: () => '', writeText: () => {}, list: () => [] };
+    const cli = editorTools(host).find((t) => t.name === 'r2d_cli');
+    const mut = (args) => cli.mutating({ args });
+    eq(mut(['docs', 'list']), false);
+    eq(mut(['validate', 'p']), false);
+    eq(mut(['snippet', 'catalog']), false);
+    eq(mut(['snippet', 'add', 'p']), true);
+    eq(mut(['atlas-grid', 'x.png']), true);
+    eq(mut(['validate', 'p', '--write']), true);
+    eq(mut(['project-set', 'p', 'a=1']), true);
+    eq(await cli.run({ args: ['templates'] }), 'ok');
+    eq(calls[0], ['templates']);
+    let bad = '';
+    try { await cli.run({ args: [] }); } catch (e) { bad = e.message; }
+    truthy(bad.includes('непустой'));
+    const done = [];
+    const eo = studioTools({ tabs: () => [], openTab: async () => {}, studioApi: () => null, editorOp: async (op, args) => { done.push([op, args]); return 'сделано'; } }).find((t) => t.name === 'editor_op');
+    eq(await eo.run({ op: 'new_project', args: { template: 'blank', dir: '/tmp/g', name: 'G' } }), 'сделано');
+    eq(done[0][0], 'new_project');
+    let unknown = '';
+    try { await eo.run({ op: 'format_disk' }); } catch (e) { unknown = e.message; }
+    truthy(unknown.includes('неизвестная'));
 });
 
 finish();
