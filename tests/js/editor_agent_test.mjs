@@ -7,6 +7,7 @@ async function atest(name, fn) {
     try { await fn(); } catch (e) { err = e; }
     test(name, () => { if (err) throw err; });
 }
+import { markdownToRml, inlineMd } from '../../editor/lib/agent_markdown.js';
 import { createModelStore, validCustomId } from '../../editor/lib/agent_models.js';
 import { trimHistory, usageOf, numberLines, grepProject, undoEdits, interactTools } from '../../editor/lib/agent_harness.js';
 import { createMascot, mascotFrames } from '../../editor/lib/agent_mascot.js';
@@ -413,6 +414,42 @@ await atest('write_file: пустое содержимое и оборванны
     eq(writes, []); eq(asked, []);
     const results = agent.state.messages.filter((m) => Array.isArray(m.content)).flatMap((m) => m.content).filter((b) => b.type === 'tool_result').map((b) => b.content);
     truthy(results[0].includes('content пуст') && results[1].includes('оборваны'));
+});
+
+await atest('план: напоминание каждые 3 шага, нет конца ответа при открытом плане, план виден в новой просьбе', async () => {
+    const noop = { name: 'noop', description: 'x', schema: { type: 'object', properties: {} }, run: async () => 'ок' };
+    const planTool = { name: 'plan', description: 'x', schema: { type: 'object', properties: {} }, run: async () => 'план обновлён' };
+    const use = (id, name, input) => ({ content: [{ type: 'tool_use', id, name, input: input || {} }] });
+    const items = [{ text: 'каркас', status: 'doing' }, { text: 'герой', status: 'pending' }];
+    const q = [
+        use('p0', 'plan', { items }),
+        use('a1', 'noop'), use('a2', 'noop'), use('a3', 'noop'),                       // 3 шага без plan → напоминание
+        { content: [{ type: 'text', text: 'Готово!' }] },                               // план открыт → пинок
+        use('p1', 'plan', { items: items.map((x) => ({ ...x, status: 'done' })) }),
+        { content: [{ type: 'text', text: 'Всё сделано.' }] },
+        { content: [{ type: 'text', text: 'Правка принята.' }] },
+    ];
+    const seen = [];
+    const transport = async (url, opts) => { seen.push(JSON.parse(opts.body).messages); return { ok: true, status: 200, json: q.shift() }; };
+    const agent = createAgent({ config: { provider: 'anthropic', base: 'x', model: 'm', key: 'k', maxSteps: 20 }, transport, tools: [noop, planTool] });
+    await agent.send('сделай игру');
+    const flat = (m) => JSON.stringify(m);
+    truthy(flat(seen[4]).includes('Напоминание: обнови план'), 'после 3 шагов без plan — напоминание');
+    truthy(flat(seen[5]).includes('остались незавершённые пункты'), 'ответ при открытом плане не принимается');
+    eq(agent.state.plan.every((x) => x.status === 'done'), true);
+    eq(q.length, 1, 'после закрытия плана ответ принят');
+    await agent.send('добавь ещё врага');
+    truthy(flat(seen[7]).includes('Текущий план') && flat(seen[7]).includes('1. ✓ каркас'), 'новая просьба получает текущий план');
+});
+
+await atest('markdown ответа агента: блоки и строчная разметка, текст экранируется', async () => {
+    const html = markdownToRml('# Итог\n\nСделал **платформер** и `main.js`.\n\n- герой\n- платформы *две*\n1. запуск\n\n```js\nconst a = 1 < 2;\n```\n> заметка\n---\n[док](https://x.io/a)');
+    truthy(html.includes('mdx-h1') && html.includes('<span class="mdx-b">платформер</span>') && html.includes('<span class="mdx-c">main.js</span>'));
+    truthy(html.includes('mdx-bul">•') && html.includes('<span class="mdx-i">две</span>') && html.includes('mdx-bul">1.'));
+    truthy(html.includes('mdx-code">const a = 1 &lt; 2;</div>') && html.includes('mdx-q') && html.includes('mdx-hr') && html.includes('mdx-a">док'));
+    eq(markdownToRml('<b>x</b> & <rml>'), '<div class="mdx-p">&lt;b&gt;x&lt;/b&gt; &amp; &lt;rml&gt;</div>');
+    eq(inlineMd('a_b_c и 2*3*4'), 'a_b_c и 2*3*4');
+    truthy(markdownToRml('| a | b |\n|---|---|\n| 1 | 2 |').includes('a  │  b'));
 });
 
 await atest('r2d_cli: чтение без подтверждения, запись — с подтверждением; editor_op', async () => {

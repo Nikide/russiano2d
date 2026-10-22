@@ -99,6 +99,16 @@ def run_task(name, args):
 
 
 def main():
+    prefs = Path('agent.local.json')   # бенчмарк меняет настройки агента в корне запуска — возвращаем как были
+    saved = prefs.read_bytes() if prefs.exists() else None
+    try:
+        _main()
+    finally:
+        if saved is None: prefs.unlink(missing_ok=True)
+        else: prefs.write_bytes(saved)
+
+
+def _main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--provider", required=True)
     ap.add_argument("--model", default="")

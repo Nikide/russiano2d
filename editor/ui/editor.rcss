@@ -644,7 +644,21 @@ scrollbarcorner { background-color: transparent; }
 .ag-ub { display: block; margin-left: 30%; padding: 9px 12px; font-size: 13px; color: #e8f0ff; background-color: #1f3a5f; border-radius: 10px; white-space: pre-wrap; }
 .agm-bot { display: flex; flex-direction: row; }
 .ag-av { display: block; width: 28px; height: 28px; flex: 0 0 28px; margin-right: 8px; decorator: image(idle_0); }
-.ag-bt { display: block; flex: 1 1 0; padding-top: 2px; font-size: 13px; line-height: 1.5; color: #d6dbe5; white-space: pre-wrap; }
+.ag-bt { display: block; flex: 1 1 0; min-width: 0px; padding-top: 2px; font-size: 13px; line-height: 1.5; color: #d6dbe5; }
+/* Markdown в ответах агента (editor/lib/agent_markdown.js) */
+.mdx-p { display: block; margin: 0px 0px 7px 0px; white-space: pre-wrap; }
+.mdx-b { font-weight: bold; color: #f0f2f6; }
+.mdx-i { color: #b9c3d6; }
+.mdx-a { color: #7db3ff; text-decoration: underline; }
+.mdx-c { padding: 0px 4px; font-size: 12px; color: #f2c9a0; background-color: #262a33; border-radius: 4px; }
+.mdx-code { display: block; margin: 4px 0px 9px 0px; padding: 8px 10px; font-size: 12px; line-height: 1.45; color: #cfd6e4; background-color: #101216; border-width: 1px; border-color: #2a2f39; border-radius: 6px; white-space: pre-wrap; }
+.mdx-h { display: block; margin: 8px 0px 5px 0px; color: #f0f2f6; font-weight: bold; }
+.mdx-h1 { font-size: 16px; } .mdx-h2 { font-size: 15px; } .mdx-h3 { font-size: 14px; }
+.mdx-li { display: flex; flex-direction: row; margin: 1px 0px; }
+.mdx-bul { display: block; flex: 0 0 18px; color: #7d8594; }
+.mdx-lt { display: block; flex: 1 1 0; min-width: 0px; white-space: pre-wrap; }
+.mdx-q { display: block; margin: 4px 0px 7px 0px; padding: 2px 10px; color: #9aa2b1; border-left: 3px #3a4150; white-space: pre-wrap; }
+.mdx-hr { display: block; height: 1px; margin: 9px 0px; background-color: #2a2f39; }
 .ag-tools { display: block; margin: 0px 0px 10px 32px; }
 .agt { display: flex; flex-direction: row; align-items: center; padding: 6px 9px; margin-bottom: 3px; border-radius: 7px; background-color: #1a1d23; cursor: pointer; }
 .agt:hover { background-color: #21252d; }

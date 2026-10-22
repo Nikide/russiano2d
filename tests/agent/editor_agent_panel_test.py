@@ -352,6 +352,17 @@ def warm_index():
 
 
 def main():
+    # Тесты пишут agent.local.json в корень запуска — настройки живого Editor не трогаем: сохраняем и возвращаем.
+    prefs = Path('agent.local.json')
+    saved = prefs.read_bytes() if prefs.exists() else None
+    try:
+        return _main()
+    finally:
+        if saved is None: prefs.unlink(missing_ok=True)
+        else: prefs.write_bytes(saved)
+
+
+def _main():
     warm_index()
     state = ROOT / 'state.local.json'
     previous = state.read_bytes() if state.exists() else None

@@ -4,6 +4,7 @@
 
 import { createAgent, editorTools, studioTools, snippetTools, interactTools, docContext, undoEdits } from './agent_harness.js';
 import { httpTransport } from './agent_models.js';
+import { markdownToRml } from './agent_markdown.js';
 import { createMascot } from './agent_mascot.js';
 import { esc as escRml } from './studio_kit.js';
 
@@ -123,6 +124,7 @@ export function createAgentPanel($, doc, host) {
             },
         });
         if (st.keep) { st.agent.state.messages.push(...st.keep); st.keep = null; }
+        if (st.plan.length) st.agent.state.plan = st.plan.map((x) => ({ ...x }));
     }
 
     // --- беседа в проекте ---------------------------------------------------------
@@ -234,11 +236,20 @@ export function createAgentPanel($, doc, host) {
             '<div class="ask-btns"><span id="ag-yes" class="ask-yes">Разрешить</span><span id="ag-no" class="ask-no">Отклонить</span></div>';
     }
 
+    // Прокрутить план к текущему шагу (doing, иначе первому незавершённому): раскладка нужна уже готовая.
+    function focusPlan() {
+        const i = st.plan.findIndex((x) => x.status === 'doing') >= 0 ? st.plan.findIndex((x) => x.status === 'doing') : st.plan.findIndex((x) => x.status !== 'done');
+        if (i < 0) return;
+        const row = doc.rect('plan-r-' + i), box = doc.rect('ag-plan-rows');
+        if (!row || !box || !box.h) return;
+        doc.scroll('ag-plan-rows', Math.max(0, Math.round(row.y - box.y - box.h / 3)));
+    }
+
     function planHtml() {
         if (!st.plan.length) return '';
         const done = st.plan.filter((x) => x.status === 'done').length;
-        return '<span class="plan-head">План · ' + done + ' из ' + st.plan.length + '</span><div id="ag-plan-rows">' + st.plan.map((x) =>
-            '<div class="plan-row ' + x.status + '"><span class="plan-ic">' + icon(x.status === 'done' ? 'check_circle' : x.status === 'doing' ? 'play_circle' : 'radio_button_unchecked') + '</span><span>' + esc(x.text) + '</span></div>').join('') + '</div>';
+        return '<span class="plan-head">План · ' + done + ' из ' + st.plan.length + '</span><div id="ag-plan-rows">' + st.plan.map((x, i) =>
+            '<div id="plan-r-' + i + '" class="plan-row ' + x.status + '"><span class="plan-ic">' + icon(x.status === 'done' ? 'check_circle' : x.status === 'doing' ? 'play_circle' : 'radio_button_unchecked') + '</span><span>' + esc(x.text) + '</span></div>').join('') + '</div>';
     }
 
     function askQuestionCard() {
@@ -281,7 +292,7 @@ export function createAgentPanel($, doc, host) {
             if (e.kind === 'user') out += '<div class="agm"><span class="ag-ub">' + esc(e.text) + '</span></div>';
             else if (e.kind === 'limit') out += '<div class="ag-limit"><span class="ag-limit-t">' + esc(e.text) + '</span>' + (e.used ? '' : '<span id="ag-continue-' + idx + '" class="ag-send" data-key="continue:' + idx + '">Продолжить</span>') + '</div>';
             else if (e.kind === 'note') out += '<span class="ag-note">' + esc(e.text) + '</span>';
-            else if (e.kind === 'bot') out += '<div class="agm agm-bot"><span class="ag-av"></span><span class="ag-bt">' + esc(e.text) + '</span></div>';
+            else if (e.kind === 'bot') out += '<div class="agm agm-bot"><span class="ag-av"></span><span class="ag-bt">' + markdownToRml(e.text) + '</span></div>';
             else out += '<span class="ag-errbox">' + esc(e.text) + '</span>';
         });
         flush();
@@ -322,7 +333,9 @@ export function createAgentPanel($, doc, host) {
         doc.html('ag-log', logHtml());
         doc.cls('ag-plan', 'hidden', !st.plan.length);
         doc.cls('ag-side', 'off', !st.plan.length);
-        doc.html('ag-plan', planHtml());
+        // Разметку плана пересобираем только при изменении: иначе сбрасывается прокрутка пользователя.
+        const planKey = JSON.stringify(st.plan);
+        if (planKey !== st.planKey) { st.planKey = planKey; doc.html('ag-plan', planHtml()); st.planFocus = 3; }
         doc.cls('ag-undo', 'disabled', !(st.history && st.history.length));
         doc.cls('ag-ask', 'hidden', !st.pending && !st.asking);
         doc.html('ag-ask', st.asking ? askQuestionCard() : askCard());
@@ -381,6 +394,7 @@ export function createAgentPanel($, doc, host) {
             const proj = host.project();
             if (proj && st.sessionFor !== proj.abs && !st.busy) switchProject(proj.abs);
             if (st.mascot.tick(dt || 1 / 60, st.busy || !!st.pending)) applyMascot();
+            if (st.planFocus > 0 && --st.planFocus === 0) focusPlan();
             if (!st.open) return;
             if (st.scrollPending > 0 && --st.scrollPending === 0 && st.log.length) doc.scroll('ag-log');   // пустой чат остаётся сверху
             if (primaryDown && $.ui.typing() && $.input.pressed('enter')) send();

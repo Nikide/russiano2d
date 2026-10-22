@@ -41,6 +41,7 @@ export const SYSTEM_PROMPT = [
     'ГОТОВОЕ ПОВЕДЕНИЕ (движение, прыжок, AI, способности, камера, UI) НЕ ПИШИ КОДОМ: snippet_find → snippet_apply. Наборы `kit.*` (например kit.platformer-core: движение+здоровье+камера) подключают сразу несколько кирпичиков — предпочитай их; искать достаточно 2–3 раза, потом действуй. Не вызывай `r2d_cli snippet catalog` — это 500 кирпичиков, используй snippet_find с одним словом.',
     'Объект, к которому цепляется кирпичик, создай в коде с `id`, затем snippet_apply с owner "object:<id>".',
     'ПЕРЕД КОДОМ ИГРЫ (main.js, сцены, герой, платформы, текст/счёт, камера, вид от первого лица) вызови skill_load engine-basics: там проверенные идиомы `$` и ловушки (твёрдые `<wall>`, литеральные id, `$.world.bounds`, `$.re2dWorld`). Не пиши по памяти. После изменения сцены вызови screenshot_check: `КАДР ПУСТОЙ` — игра не работает, найди причину.',
+    'ПЛАН: для задачи из 3+ шагов сначала вызови plan, дальше обновляй его ПО ХОДУ: закончил пункт — сразу plan с done и следующим doing (один doing за раз); просьба пользователя меняет задачу — поправь пункты. Не отмечай всё done разом в конце.',
     'Инструменты: search_project (grep по файлам) и read_file со start/end вместо чтения целиком; для длинных задач начни с plan и обновляй его; при неоднозначной задаче спроси ask_user (кнопки вариантов); для проверки игры playtest (ввод + eval состояния: позиция героя, счёт, подбор предметов; grid:true — ASCII-карта кадра); ошибочную правку откати undo_edit.',
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
     'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
@@ -321,6 +322,11 @@ export async function docContext(host, question, limit) {
     return chunks.map((c) => '[' + (c.kind === 'snippet' ? 'кирпичик → snippet_apply ' : c.kind === 'api' ? 'api ' : '') + c.path + ':' + c.line + ']\n' + String(c.text).slice(0, 900)).join('\n---\n');
 }
 
+// План в разговоре: текст для подсказок модели и признак «есть незавершённое».
+const PLAN_MARK = { done: '✓', doing: '→', pending: '·' };
+export function planText(items) { return items.map((x, i) => (i + 1) + '. ' + PLAN_MARK[x.status] + ' ' + x.text).join('\n'); }
+export const planOpen = (items) => !!items && items.some((x) => x.status !== 'done');
+
 // Редкие инструменты (рисование/звук, студии) не нужны большинству задач, а их схемы весят около половины набора:
 // предлагаем их, когда о них речь в задаче, когда загружен соответствующий навык или когда модель попросила tools_more.
 export const TOOL_GROUPS = {
@@ -349,7 +355,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
         const open = new Set([...unlocked].flatMap((g) => TOOL_GROUPS[g].tools));
         return tools.filter((t) => !gated.has(t.name) || open.has(t.name)).concat([byName.get('tools_more')]);
     };
-    const state = { messages: [], running: false, stop: false, usage: { input: 0, output: 0, cached: 0, calls: 0 } };
+    const state = { messages: [], plan: null, running: false, stop: false, usage: { input: 0, output: 0, cached: 0, calls: 0 } };
 
     async function runTool(block) {
         const tool = byName.get(block.name);
@@ -381,9 +387,11 @@ export function createAgent({ config, transport, tools, system, confirm, events,
             try { ctx = await context(content); } catch (_) { ctx = ''; }
             if (ctx) content = 'Возможно относящееся к вопросу (из документации движка; если мало — docs_search):\n' + ctx + '\n\nВопрос: ' + content;
         }
+        // Просьба посреди работы: модель видит текущий план и обязана поправить его, если задача изменилась.
+        if (state.plan && state.plan.length) content += '\n\n[Текущий план (✓ готово, → делаю, · впереди). Если просьба меняет задачу — обнови его вызовом plan: добавь, измени или переставь пункты:]\n' + planText(state.plan);
         state.messages.push({ role: 'user', content });
         const limit = config.maxSteps || 12;
-        let idle = 0, announced = 0, textCalls = 0;
+        let idle = 0, announced = 0, textCalls = 0, sincePlan = 0, planNudges = 0;
         try {
             for (let step = 0; step < limit; step++) {
                 if (state.stop) { if (ev.error) ev.error('остановлено'); return; }
@@ -400,6 +408,12 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 for (const b of reply.blocks) if (b.type === 'text' && ev.text) ev.text(b.text);
                 const calls = reply.blocks.filter((b) => b.type === 'tool_use');
                 if (!calls.length) {
+                    // План не закрыт, а модель уже отвечает: либо она забыла отметить пункты, либо не доделала.
+                    if (planOpen(state.plan) && planNudges < 2) {
+                        planNudges++;
+                        state.messages.push({ role: 'user', content: 'В плане остались незавершённые пункты:\n' + planText(state.plan) + '\nЕсли всё уже сделано — вызови plan и отметь их done. Если нет — продолжай работу, а не завершай ответ.' });
+                        continue;
+                    }
                     // Слабые модели пишут «теперь применю…» и останавливаются: просим вызвать инструмент.
                     const said = reply.blocks.filter((b) => b.type === 'text').map((b) => b.text).join(' ');
                     // Модели с function-calling «вслепую» (GigaChat) иногда пишут вызов ТЕКСТОМ: `write_file(path=…)` или `read_file "x"`.
@@ -420,7 +434,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 // Независимые read-only вызовы из одного ответа идут параллельно (быстрее на шаге); правки, подтверждения
                 // и инструменты с общими файлами (serial) — по одному, в порядке модели. Порядок результатов сохраняется.
                 const results = new Array(calls.length);
-                let acted = false;
+                let acted = false, planTouched = false;
                 const serial = (call) => {
                     const t = byName.get(call.name);
                     return !t || t.serial || (typeof t.mutating === 'function' ? t.mutating(call.input || {}) : !!t.mutating);
@@ -433,6 +447,10 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                     const t = byName.get(call.name);
                     if (t && !r.error && (typeof t.mutating === 'function' ? t.mutating(call.input || {}) : t.mutating)) acted = true;
                     results[k] = { type: 'tool_result', tool_use_id: call.id, content: r.text, is_error: r.error };
+                    if (call.name === 'plan' && !r.error && Array.isArray(call.input && call.input.items)) {
+                        state.plan = call.input.items.slice(0, 20).map((x) => ({ text: String(x.text || '').slice(0, 120), status: ['pending', 'doing', 'done'].includes(x.status) ? x.status : 'pending' }));
+                        planTouched = true;
+                    }
                 };
                 for (let k = 0; k < calls.length;) {
                     if (serial(calls[k])) { await exec(k); k++; continue; }
@@ -447,6 +465,12 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                     results.push({ type: 'text', text: idle >= 2 * (config.nudgeAfter || 4)
                         ? 'СТОП ПОИСКУ. В следующем ответе обязательно вызови snippet_apply (подходящий найденный кирпичик/набор) или write_file/edit_file. Больше никаких snippet_find, docs_search, api_lookup.'
                         : 'Хватит исследовать: ты уже ' + idle + ' шагов ничего не меняешь. Действуй сейчас: примени найденный кирпичик (snippet_apply) или напиши код (write_file/edit_file), затем r2d_validate.' });
+                }
+                // План ведёт модель: без обновлений он замирает на «1», а в конце сразу «всё готово». Напоминаем каждые 3 шага.
+                if (planTouched) sincePlan = 0;
+                else if (planOpen(state.plan) && ++sincePlan >= 3) {
+                    sincePlan = 0;
+                    results.push({ type: 'text', text: 'Напоминание: обнови план вызовом plan — отметь выполненные пункты (done) и текущий (doing). Сейчас:\n' + planText(state.plan) });
                 }
                 state.messages.push({ role: 'user', content: results });
             }
