@@ -66,7 +66,9 @@ for name in existing:
 check(not missing, 'live Markdown local targets exist: ' + str(missing))
 for manifest in sorted((ROOT / 'dist').glob('*/SHA256SUMS.txt')):
     verify_sums(manifest.read_bytes(), lambda n: (manifest.parent / n).read_bytes(), str(manifest.relative_to(ROOT)))
-verify_sums((ROOT / 'dist/SHA256SUMS.txt').read_bytes(), lambda n: (ROOT / 'dist' / n).read_bytes(), 'release archive manifest')
+# dist/ в .gitignore: на чистом клоне каталога нет, проверяем только локальную сборку.
+if (ROOT / 'dist/SHA256SUMS.txt').exists():
+    verify_sums((ROOT / 'dist/SHA256SUMS.txt').read_bytes(), lambda n: (ROOT / 'dist' / n).read_bytes(), 'release archive manifest')
 for path in sorted((ROOT / 'dist').glob('russiano2d-*')):
     if path.suffix == '.zip':
         with zipfile.ZipFile(path) as archive:

@@ -1,9 +1,0 @@
-{
- "light": {
-  "radius": 240,
-  "intensity": 3,
-  "color": "#a0e0ff",
-  "life": 0.3,
-  "priority": 5
- }
-}

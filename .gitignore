@@ -33,8 +33,9 @@ Testing/
 
 out/
 bin/
-# dist/ СОЗНАТЕЛЬНО не игнорируется: готовые сборки раздаются прямо из
-# репозитория (их кладёт tools/autobuild.py или локальный build_and_push.sh).
+# dist/ — локальный каталог релизной сборки (build_and_push): пакеты собираются
+# и заливаются в GitHub/GitVerse Releases, но копии в репозитории не остаётся.
+dist/
 #
 # dist-ci/ — каталог сборки CI на GitVerse (.gitverse/workflows/release.yaml).
 # Он тоже собирается в архив, но это временный артефакт прогона: в репозиторий
@@ -118,16 +119,6 @@ id_rsa*
 *.ppk
 .ftpconfig
 .vscode/sftp.json
-
-# В dist/ лежат готовые пакеты, и там нужны файлы, которые обычно собираются
-# на месте: исполняемые (.exe) и библиотеки рядом с бинарником (.dylib/.so).
-# Без этих исключений из репозитория пропадали windows-russiano2d.exe и весь
-# каталог lib/ в macOS-пакете.
-!dist/**/*.exe
-!dist/**/*.dll
-!dist/**/*.dylib
-!dist/**/*.so
-!dist/**/*.so.*
 
 # Local Claude configuration
 .claude/
