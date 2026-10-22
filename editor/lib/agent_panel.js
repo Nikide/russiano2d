@@ -44,6 +44,8 @@ function argSummary(name, input) {
     return short(JSON.stringify(i) === '{}' ? '' : JSON.stringify(i), 54);
 }
 
+const PREFS_FILE = 'agent.local.json';
+
 export function createAgentPanel($, doc, host) {
     const icon = (n) => $.ui.icon(n) || '';
     const st = {
@@ -94,7 +96,7 @@ export function createAgentPanel($, doc, host) {
         const tools = editorTools(fsHost);
         st.history = history;
         st.fsHost = fsHost;
-        const studio = studioTools({ ...host, remember: (p) => history.push({ items: [{ path: p, before: fsHost.exists(p) ? fsHost.readText(p) : null }] }) });
+        const studio = studioTools({ ...host, pushStep: (step) => { history.push(step); if (history.length > 100) history.shift(); }, remember: (p) => history.push({ items: [{ path: p, before: fsHost.exists(p) ? fsHost.readText(p) : null }] }) });
         const interact = interactTools({
             setPlan: (items) => { st.plan = items; render(); },
             ask: (question, options) => new Promise((resolve) => { st.asking = { question, options, resolve }; st.scrollPending = 3; st.mascot.asking(); applyMascot(); render(); }),
@@ -119,6 +121,21 @@ export function createAgentPanel($, doc, host) {
         });
     }
 
+    // Настройки между запусками: провайдер, адрес, модель, шаги, маскот. Ключ — только в памяти.
+    function loadPrefs() {
+        let p = null;
+        try { p = $.fs.readJSON(PREFS_FILE, null); } catch (_) { p = null; }
+        if (!p || typeof p !== 'object' || !PROVIDERS[p.provider]) return;
+        st.cfg.provider = p.provider;
+        if (typeof p.base === 'string' && p.base) st.cfg.base = p.base;
+        if (typeof p.model === 'string' && p.model) st.cfg.model = p.model;
+        if (p.maxSteps >= 1 && p.maxSteps <= 100) st.cfg.maxSteps = p.maxSteps | 0;
+        if (typeof p.mascotOn === 'boolean') st.mascotOn = p.mascotOn;
+    }
+    function savePrefs() {
+        try { $.fs.writeJSON(PREFS_FILE, { version: 1, provider: st.cfg.provider, base: st.cfg.base, model: st.cfg.model, maxSteps: st.cfg.maxSteps, mascotOn: st.mascotOn }); } catch (_) { /* настройки не критичны */ }
+    }
+
     function readFields() {
         st.cfg.base = String(doc.value('ag-base') || '').trim();
         st.cfg.model = String(doc.value('ag-model') || '').trim();
@@ -127,6 +144,7 @@ export function createAgentPanel($, doc, host) {
         st.cfg.key = key;
         const steps = parseInt(String(doc.value('ag-steps') || ''), 10);
         if (steps >= 1 && steps <= 100) st.cfg.maxSteps = steps;
+        savePrefs();
     }
 
     async function send(override) {
@@ -168,6 +186,7 @@ export function createAgentPanel($, doc, host) {
         st.cfg.base = PROVIDERS[id].base; st.cfg.model = PROVIDERS[id].model;
         st.agent = null;
         doc.setValue('ag-base', st.cfg.base); doc.setValue('ag-model', st.cfg.model);
+        savePrefs();
         render();
     }
 
@@ -329,7 +348,7 @@ export function createAgentPanel($, doc, host) {
         doc.on('ag-model-chip', 'click', () => host.showSettings());
         doc.on('cfg-test', 'click', () => { runTest(); });
         doc.on('cfg-done', 'click', () => { readFields(); host.showChat(); });
-        doc.on('cfg-mascot', 'click', () => { st.mascotOn = !st.mascotOn; st.mcKey = ''; render(); applyMascot(); });
+        doc.on('cfg-mascot', 'click', () => { readFields(); st.mascotOn = !st.mascotOn; savePrefs(); st.mcKey = ''; render(); applyMascot(); });
         doc.on('mc', 'click', () => { st.mascot.poke(); applyMascot(); });
         doc.on('ag-log', 'click', (_id, _ev, key) => {
             if (!key) return;
@@ -337,6 +356,7 @@ export function createAgentPanel($, doc, host) {
             else if (key.startsWith('continue:')) { const e = st.log[Number(key.slice(9))]; if (e && !e.used && !st.busy) { e.used = true; send('Продолжай с того места, где остановился. Заверши задачу и кратко отчитайся.'); } }
             else if (key.startsWith('sug:')) { doc.setValue('ag-input', SUGGESTIONS[Number(key.slice(4))] || ''); doc.focus('ag-input'); }
         });
+        loadPrefs();
         doc.setValue('ag-base', st.cfg.base); doc.setValue('ag-model', st.cfg.model); doc.setValue('ag-steps', String(st.cfg.maxSteps));
         applyMascot();
     }

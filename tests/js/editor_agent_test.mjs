@@ -293,6 +293,32 @@ await atest('студии ассетов: studio_ops, studio_edit через и�
     truthy(noedit.includes('не принимает патчи'));
 });
 
+await atest('откат агента отменяет правки студии: только реально изменившие документ', async () => {
+    const data = { layers: [{ data: [[0, 0]] }] };
+    const stack = [];
+    const api = {
+        id: 'tilemap', state: { data },
+        ops: {
+            edit(label, fn) { const prev = JSON.stringify(data); fn(data); stack.push(prev); return true; },
+            paint: (x, y, id) => { stack.push(JSON.stringify(data)); data.layers[0].data[y][x] = id; return true; },
+            check: () => ({ ok: true }),
+        },
+        undo() { const prev = stack.pop(); if (prev === undefined) return false; for (const k of Object.keys(data)) delete data[k]; Object.assign(data, JSON.parse(prev)); return true; },
+        render() {},
+    };
+    const history = [];
+    const tools = Object.fromEntries(studioTools({ tabs: () => [], openTab: async () => {}, studioApi: () => api, pushStep: (st) => history.push(st) }).map((t) => [t.name, t]));
+    await tools.studio_op.run({ op: 'paint', args: { x: 0, y: 0, id: 5 } });
+    await tools.studio_op.run({ op: 'check', args: [] });
+    await tools.studio_edit.run({ patch: { note: 'x' } });
+    eq(history.length, 2, 'check ничего не менял — шага в истории нет');
+    const done = undoEdits(history, {}, 2);
+    eq(done.length, 2);
+    truthy(done[0].includes('отменена правка студии: studio_edit'));
+    eq(data.layers[0].data, [[0, 0]]);
+    eq(data.note, undefined);
+});
+
 await atest('r2d_cli: чтение без подтверждения, запись — с подтверждением; editor_op', async () => {
     const calls = [];
     const host = { tool: async (a) => { calls.push(a); return { output: 'ok' }; }, abs: (p) => p, exists: () => false, readText: () => '', writeText: () => {}, list: () => [] };

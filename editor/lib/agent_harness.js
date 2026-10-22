@@ -501,6 +501,14 @@ export function studioTools(host) {
         return api;
     };
     const docData = (api) => (api.map !== undefined ? api.map : api.state && api.state.data !== undefined ? api.state.data : null);
+    // Правка в памяти студии откатывается историей самой студии: шаг попадает в общий откат агента,
+    // только если документ реально изменился (чтение и validate историю не трогают).
+    const docKey = (api) => { try { return JSON.stringify(docData(api)); } catch (_) { return null; } };
+    const rememberStudio = (api, label, before) => {
+        if (!host.pushStep || typeof api.undo !== 'function') return;
+        if (before !== null && docKey(api) === before) return;
+        host.pushStep({ undo: () => api.undo(), label });
+    };
     const tools = [
         { name: 'tabs', description: 'Открытые вкладки Editor: путь, студия (code, hammer, atlas, tilemap, narrative, particles, audio…), несохранённые правки, активная.', schema: obj({}),
           run: async () => JSON.stringify(host.tabs()) },
@@ -534,8 +542,10 @@ export function studioTools(host) {
           run: async (a) => {
               const api = need(a.path);
               if (!api.ops || typeof api.ops.edit !== 'function') throw new Error('студия ' + api.id + ' не принимает патчи — используйте studio_op (см. studio_ops) или edit_file');
+              const before = docKey(api);
               const ok = api.ops.edit(String(a.label || 'Агент'), (m) => { mergePatch(m, a.patch); return true; });
               if (ok === false) throw new Error('студия отклонила правку (проверьте studio_state → diagnostics)');
+              rememberStudio(api, 'studio_edit', before);
               return 'правка применена';
           } },
         { name: 'studio_op', mutating: true,
@@ -545,6 +555,7 @@ export function studioTools(host) {
           run: async (a) => {
               const api = need(a.path);
               const op = String(a.op);
+              const before = docKey(api);
               let result;
               if (op.includes('.')) {
                   if (!api.session || typeof api.session.apply !== 'function') throw new Error('эта студия не принимает операции world-edit: ' + op);
@@ -554,6 +565,7 @@ export function studioTools(host) {
                   if (!names.includes(op) || !api.ops || typeof api.ops[op] !== 'function') throw new Error('неизвестная операция «' + op + '», доступны: ' + names.join(', '));
                   result = await api.ops[op](...bindArgs(api.ops[op], a.args));
               }
+              rememberStudio(api, 'studio_op ' + op, before);
               if (api.render) api.render();
               return JSON.stringify(result === undefined ? { ok: true } : result).slice(0, 3000);
           } },
@@ -750,6 +762,12 @@ export function undoEdits(history, host, count) {
     const done = [];
     for (let k = 0; k < Math.max(1, count || 1) && history.length; k++) {
         const step = history.pop();
+        if (typeof step.undo === 'function') {
+            let ok = false;
+            try { ok = step.undo() !== false; } catch (_) { ok = false; }
+            done.push((ok ? 'отменена правка студии: ' : 'не удалось отменить правку студии: ') + (step.label || ''));
+            continue;
+        }
         const items = step.items || [step];
         for (const h of items.slice().reverse()) {
             if (h.before === null) { if (host.remove && host.exists(h.path)) host.remove(h.path); else host.writeText(h.path, ''); }

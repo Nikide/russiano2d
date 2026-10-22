@@ -161,3 +161,5 @@ demos/real2d/from_agent_to_agent.md
 # Весовая модель эмбеддингов (tools/ai/export_gguf.py): большой артефакт, не в git
 models/
 sfxgen_cache/
+agent.local.json
+editor/agent.local.json

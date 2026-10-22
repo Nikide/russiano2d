@@ -8,8 +8,16 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agent_client import Agent
+from agent_client import Agent as _Agent
 from editor_hammer_test import run, settle
+
+
+
+def Agent(*args, **kwargs):
+    # панель запоминает настройки в agent.local.json: каждый сценарий начинает с чистого листа
+    Path('agent.local.json').unlink(missing_ok=True)
+    return _Agent(*args, **kwargs)
+
 
 E = '$.editorApp'
 D = '$.ui.doc("ui/editor.rml")'
@@ -225,6 +233,7 @@ def _limit(directory):
 
 def _run():
     with tempfile.TemporaryDirectory(prefix='r2d-agentpanel-') as directory:
+        Path('agent.local.json').unlink(missing_ok=True)
         project = Path(directory) / 'project'
         project.mkdir()
         (project / 'project.json').write_text(json.dumps({'format': 2, 'title': 'Agent fixture', 'entry': 'main.js'}))
@@ -265,6 +274,11 @@ def _run():
             check(agent, D + '.content("ag-log").includes("Готово.")', 'итоговый ответ показан в панели')
             check(agent, '(()=>{const h=globalThis.__seen[0].headers;const i=h.indexOf("x-api-key");return i>=0&&h[i+1]==="test-key"&&!String(globalThis.__seen[0].body).includes("test-key");})()', 'ключ уходит только в заголовок запроса')
             check(agent, '!JSON.stringify($.fs.readText(' + json.dumps(str(project / 'project.json')) + ')).includes("test-key")', 'ключ не записан в project.json')
+            # настройки живут между запусками (без ключа)
+            agent.eval(D + '.click("ag-prov-gigachat");' + D + '.setValue("ag-model","GigaChat-2-Max");' + D + '.setValue("ag-steps","31");' + D + '.setValue("ag-key","secret-xyz");' + D + '.click("cfg-mascot");1'); agent.step(3)
+            check(agent, '(()=>{const p=$.fs.readJSON("agent.local.json",null);return !!p&&p.provider==="gigachat"&&p.maxSteps===31&&p.mascotOn===false;})()', 'настройки агента сохранены в agent.local.json')
+            check(agent, '!$.fs.readText("agent.local.json").includes("secret-xyz")', 'ключ не попал в файл настроек')
+            agent.eval('$.fs.remove("agent.local.json");1')
         _hammer(directory)
         _game(directory)
         _interact(directory)
