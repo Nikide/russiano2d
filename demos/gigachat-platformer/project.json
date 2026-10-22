@@ -1,0 +1,30 @@
+{
+  "schema_version": 2,
+  "project": {"name": "Прыжок к маяку", "version": "0.1.0"},
+  "runtime": {
+    "entry": "main.js",
+    "window": {"title": "Прыжок к маяку", "width": 1280, "height": 720}
+  },
+  "editor": {
+    "graph": {
+      "format": 1,
+      "status": "current",
+      "sources": [
+        {"path": "main.js", "hash": "e68e79c38f1974fa"}
+      ],
+      "diagnostics": [],
+      "areas": [
+        {"key": "project:main", "type": "project", "label": "Проект", "origin": "code"},
+        {"key": "world:main", "type": "world", "label": "World", "runtime_root": "$.world", "origin": "code"}
+      ],
+      "entities": [
+        {"key": "script:main.js", "area": "project:main", "type": "script", "origin": "code", "path": "main.js", "entry": true, "source": {"file": "main.js", "line": 1}},
+        {"key": "object:main:text:1", "area": "world:main", "type": "object", "origin": "code", "tag": "text", "source": {"file": "main.js", "line": 4}}
+      ],
+      "edges": [
+        {"key": "edge:spatial_parent:world:main>object:main:text:1", "type": "spatial_parent", "from": "world:main", "to": "object:main:text:1", "origin": "code", "evidence": {"api": "appendTo", "file": "main.js", "line": 6}}
+      ],
+      "views": {}
+    }
+  }
+}
