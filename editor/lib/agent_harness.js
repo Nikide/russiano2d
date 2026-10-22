@@ -319,16 +319,40 @@ export async function docContext(host, question, limit) {
     return chunks.map((c) => '[' + (c.kind === 'snippet' ? 'кирпичик → snippet_apply ' : c.kind === 'api' ? 'api ' : '') + c.path + ':' + c.line + ']\n' + String(c.text).slice(0, 900)).join('\n---\n');
 }
 
+// Редкие инструменты (рисование/звук, студии) не нужны большинству задач, а их схемы весят около половины набора:
+// предлагаем их, когда о них речь в задаче, когда загружен соответствующий навык или когда модель попросила tools_more.
+export const TOOL_GROUPS = {
+    media: { tools: ['pixel_art', 'pixel_preview', 'generate_sound'], skills: ['pixel-art', 'generate-sound'], re: /спрайт|пиксел|рису|нарису|картинк|иконк|тайл|звук|sound|sprite|png|wav|sfx|эффект|музык/i },
+    studio: { tools: ['tabs', 'open_tab', 'studio_ops', 'studio_state', 'studio_edit', 'studio_op', 'studio_save', 'editor_op'], skills: ['level-design'], re: /карт|студи|tilemap|hammer|частиц|атлас|atlas|нов\S* проект|new_project|brush|re2dmap|вкладк|открой проект/i },
+};
+const TOOLS_MORE = { name: 'tools_more', description: 'Подключить редкие инструменты: media (pixel_art, pixel_preview, generate_sound) или studio (вкладки и студии: tabs, open_tab, studio_*, editor_op).',
+    schema: { type: 'object', properties: { group: { type: 'string', enum: Object.keys(TOOL_GROUPS) } }, required: ['group'] } };
+
 export function createAgent({ config, transport, tools, system, confirm, events, context }) {
     const ev = events || {};
     const byName = new Map(tools.map((t) => [t.name, t]));
     const subset = (PROVIDERS[config.provider] || {}).toolSubset;
-    const offered = subset ? tools.filter((t) => subset.includes(t.name)) : tools;
+    const lazy = config.lazyTools !== false && !subset;
+    const gated = new Set(Object.values(TOOL_GROUPS).flatMap((g) => g.tools));
+    const unlocked = new Set();
+    const unlock = (name) => { if (TOOL_GROUPS[name]) unlocked.add(name); };
+    const hasGated = tools.some((t) => gated.has(t.name));
+    if (lazy && hasGated) byName.set('tools_more', { ...TOOLS_MORE, run: async (a) => {
+        if (!TOOL_GROUPS[a.group]) return 'нет такой группы; есть: ' + Object.keys(TOOL_GROUPS).join(', ');
+        unlock(a.group); return 'подключено: ' + TOOL_GROUPS[a.group].tools.join(', ');
+    } });
+    const offeredNow = () => {
+        if (subset) return tools.filter((t) => subset.includes(t.name));
+        if (!lazy || !hasGated) return tools;
+        const open = new Set([...unlocked].flatMap((g) => TOOL_GROUPS[g].tools));
+        return tools.filter((t) => !gated.has(t.name) || open.has(t.name)).concat([byName.get('tools_more')]);
+    };
     const state = { messages: [], running: false, stop: false, usage: { input: 0, output: 0, cached: 0, calls: 0 } };
 
     async function runTool(block) {
         const tool = byName.get(block.name);
         if (!tool) return { text: 'нет такого инструмента: ' + block.name, error: true };
+        if (block.name === 'skill_load' && block.input) for (const [g, def] of Object.entries(TOOL_GROUPS)) if (def.skills.includes(String(block.input.name || block.input.skill || ''))) unlock(g);
         const mut = typeof tool.mutating === 'function' ? tool.mutating(block.input || {}) : tool.mutating;
         if (mut && confirm && !(await confirm(tool.name, block.input))) {
             return { text: 'пользователь отклонил действие', error: true };
@@ -345,6 +369,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
         if (state.running) throw new Error('агент уже работает');
         state.running = true; state.stop = false;
         let content = String(userText);
+        for (const [g, def] of Object.entries(TOOL_GROUPS)) if (def.re.test(content)) unlock(g);
         if (context) {
             let ctx = '';
             try { ctx = await context(content); } catch (_) { ctx = ''; }
@@ -358,7 +383,7 @@ export function createAgent({ config, transport, tools, system, confirm, events,
                 if (state.stop) { if (ev.error) ev.error('остановлено'); return; }
                 compact(state.messages, config.keepResults || 4);
                 trimHistory(state.messages, config.maxContextChars || 150000);
-                const reply = await callModel(config, transport, system || ((PROVIDERS[config.provider] || {}).compactPrompt ? SYSTEM_PROMPT_COMPACT : SYSTEM_PROMPT), state.messages, offered);
+                const reply = await callModel(config, transport, system || ((PROVIDERS[config.provider] || {}).compactPrompt ? SYSTEM_PROMPT_COMPACT : SYSTEM_PROMPT), state.messages, offeredNow());
                 state.usage.calls++;
                 if (reply.usage) {
                     state.usage.input += reply.usage.input; state.usage.output += reply.usage.output; state.usage.cached += reply.usage.cached;
@@ -857,7 +882,7 @@ export function editorTools(host) {
               if (!r.hits.length) return 'совпадений нет (просмотрено файлов: ' + r.scanned + ')';
               return r.hits.join('\n') + (r.truncated ? '\n… достигнут лимит, уточните запрос' : '') + '\n[файлов просмотрено: ' + r.scanned + ']';
           } },
-        { name: 'write_file', description: 'Создать файл или полностью заменить (требует подтверждения). Для правок существующих файлов используй edit_file. После записи .js автоматически запускается lint.', mutating: true,
+        { name: 'write_file', description: 'Создать файл или полностью заменить (требует подтверждения). Большой файл пиши ЦЕЛИКОМ одним вызовом, а не кусками. Для небольших правок используй edit_file. После записи .js автоматически запускается lint.', mutating: true,
           schema: obj({ path: str('относительный путь'), content: str('полное содержимое') }),
           run: async (a) => { const p = safeRel(a.path); remember(p); host.writeText(p, String(a.content)); return 'записано ' + p + await autoLint(p); } },
         { name: 'edit_file', description: 'Заменить фрагмент в файле (требует подтверждения): old_string должен встретиться ровно один раз. Дёшево по токенам. После правки .js запускается lint.', mutating: true,

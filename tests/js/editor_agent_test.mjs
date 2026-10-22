@@ -334,6 +334,29 @@ await atest('compact: старые записанные тексты в вызо
     eq(uses[3].content.length, 2000);
 });
 
+await atest('ленивый набор инструментов: редкие группы подключаются по задаче, навыку или tools_more', async () => {
+    const mk = (name) => ({ name, description: name, schema: { type: 'object', properties: {} }, run: async () => 'ок' });
+    const toolset = ['read_file', 'pixel_art', 'generate_sound', 'studio_op', 'tabs', 'skill_load'].map(mk);
+    const seenTools = [];
+    const reply = (blocks) => ({ ok: true, status: 200, json: { content: blocks, stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } } });
+    const run = async (task, scripted) => {
+        seenTools.length = 0;
+        const q = scripted.slice();
+        const transport = async (url, opts) => { seenTools.push(JSON.parse(opts.body).tools.map((t) => t.name)); return reply(q.shift()); };
+        const agent = createAgent({ config: { provider: 'anthropic', base: 'x', model: 'm', key: 'k', maxSteps: 6 }, transport, tools: toolset });
+        await agent.send(task);
+        return seenTools.map((n) => n.join(','));
+    };
+    const plain = await run('поправь main.js', [[{ type: 'text', text: 'ок' }]]);
+    truthy(!plain[0].includes('pixel_art') && !plain[0].includes('studio_op') && plain[0].includes('tools_more'));
+    const sprite = await run('нарисуй спрайт монеты', [[{ type: 'text', text: 'ок' }]]);
+    truthy(sprite[0].includes('pixel_art') && sprite[0].includes('generate_sound') && !sprite[0].includes('studio_op'));
+    const more = await run('сделай игру', [[{ type: 'tool_use', id: 'a', name: 'tools_more', input: { group: 'studio' } }], [{ type: 'text', text: 'ок' }]]);
+    truthy(!more[0].includes('studio_op') && more[1].includes('studio_op') && more[1].includes('tabs'));
+    const viaSkill = await run('сделай игру', [[{ type: 'tool_use', id: 'a', name: 'skill_load', input: { name: 'pixel-art' } }], [{ type: 'text', text: 'ок' }]]);
+    truthy(!viaSkill[0].includes('pixel_art') && viaSkill[1].includes('pixel_art'));
+});
+
 await atest('r2d_cli: чтение без подтверждения, запись — с подтверждением; editor_op', async () => {
     const calls = [];
     const host = { tool: async (a) => { calls.push(a); return { output: 'ok' }; }, abs: (p) => p, exists: () => false, readText: () => '', writeText: () => {}, list: () => [] };
