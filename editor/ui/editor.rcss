@@ -627,8 +627,9 @@ scrollbarcorner { background-color: transparent; }
 /* маскот */
 #ag-body { display: flex; flex-direction: row; flex: 1 1 0; min-height: 0px; }
 #ag-col { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0px; min-height: 0px; }
-#ag-side { display: block; width: 230px; flex: 0 0 230px; padding: 6px 12px 0px 0px; text-align: center; overflow-y: auto; }
-#mc { display: block; width: 128px; height: 128px; max-width: 128px; margin: 0px auto; cursor: pointer; }
+#ag-side { display: flex; flex-direction: column; width: 230px; flex: 0 0 230px; min-height: 0px; padding: 6px 12px 8px 0px; text-align: center; overflow: hidden; }
+#ag-side > * { flex: 0 0 auto; }
+#mc { display: block; width: 64px; height: 64px; max-width: 64px; margin: 0px auto; cursor: pointer; }
 #mc.off { display: none; }
 #ag-side.off { display: none; }
 #mc-bubble { display: block; margin: 8px 6px 4px 6px; padding: 6px 10px; font-size: 12px; color: #1b1e24; background-color: #eef1f7; border-radius: 10px; }
@@ -693,7 +694,7 @@ scrollbarcorner { background-color: transparent; }
 .ag-stop:hover { background-color: #d92d20; }
 
 /* план задач */
-#ag-plan { display: block; margin: 10px 0px 10px 0px; padding: 8px 10px; text-align: left; background-color: #181b21; border-width: 1px; border-color: #262b35; border-radius: 9px; }
+#ag-plan { display: block; flex: 1 1 0; min-height: 40px; margin: 10px 0px 0px 0px; padding: 8px 10px; text-align: left; overflow-y: auto; background-color: #181b21; border-width: 1px; border-color: #262b35; border-radius: 9px; }
 .plan-head { display: block; margin-bottom: 4px; font-size: 11px; color: #8b93a3; }
 .plan-row { display: flex; flex-direction: row; align-items: flex-start; padding: 2px 0px; white-space: normal; font-size: 12px; color: #9aa2b1; }
 .plan-ic { display: block; flex: 0 0 18px; width: 18px; font-size: 14px; color: #5d6575; }
