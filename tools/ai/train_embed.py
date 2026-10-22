@@ -26,20 +26,55 @@ def main():
     ap.add_argument("--batch", type=int, default=64)
     ap.add_argument("--max-len", type=int, default=256)
     ap.add_argument("--lr", type=float, default=2e-5)
+    ap.add_argument("--freeze-embeddings", action="store_true",
+                    help="не обучать таблицу слов (96M из 118M параметров e5-small): влезает в память Mac")
     args = ap.parse_args()
 
-    from sentence_transformers import SentenceTransformer, InputExample, losses
-    from torch.utils.data import DataLoader
+    import random
+    import torch
+    import torch.nn.functional as F
+    from sentence_transformers import SentenceTransformer
 
-    model = SentenceTransformer(args.base)
+    device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
+    model = SentenceTransformer(args.base, device=device)
     model.max_seq_length = args.max_len
+    if args.freeze_embeddings:
+        for prm in model[0].auto_model.embeddings.word_embeddings.parameters():
+            prm.requires_grad = False
     train = load(Path(args.data) / "train.jsonl")
-    examples = [InputExample(texts=["query: " + r["query"], "passage: " + r["positive"]]) for r in train]
-    loader = DataLoader(examples, shuffle=True, batch_size=args.batch)
-    loss = losses.MultipleNegativesRankingLoss(model)
-    model.fit(train_objectives=[(loader, loss)], epochs=args.epochs,
-              warmup_steps=int(0.1 * len(loader) * args.epochs),
-              optimizer_params={"lr": args.lr}, show_progress_bar=True)
+    pairs = [("query: " + r["query"], "passage: " + r["positive"]) for r in train]
+    params = [p for p in model.parameters() if p.requires_grad]
+    opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.01)
+    steps_per_epoch = len(pairs) // args.batch
+    total = steps_per_epoch * args.epochs
+    warm = max(1, int(0.1 * total))
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda t: min((t + 1) / warm, max(0.0, (total - t) / max(1, total - warm))))
+    rnd = random.Random(1)
+    model.train()
+
+    def embed(texts):
+        feats = {k: v.to(device) for k, v in model.tokenize(texts).items() if hasattr(v, 'to')}
+        return F.normalize(model(feats)["sentence_embedding"], dim=-1)
+
+    step = 0
+    for epoch in range(args.epochs):
+        rnd.shuffle(pairs)
+        for b in range(steps_per_epoch):
+            batch = pairs[b * args.batch:(b + 1) * args.batch]
+            q = embed([x[0] for x in batch])
+            p = embed([x[1] for x in batch])
+            logits = q @ p.T * 20.0       # масштаб как у MultipleNegativesRankingLoss
+            labels = torch.arange(len(batch), device=device)
+            loss = F.cross_entropy(logits, labels)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(params, 1.0)
+            opt.step(); sched.step(); opt.zero_grad(set_to_none=True)
+            step += 1
+            if step % 10 == 0:
+                if device == "mps":
+                    torch.mps.empty_cache()   # кэш аллокатора MPS растёт и упирается в лимит памяти Mac
+                print(f"шаг {step}/{total} эпоха {epoch + 1} loss {loss.item():.4f}", flush=True)
+    model.eval()
     model.save(args.out)
     print("сохранено:", args.out, "пар:", len(train))
 

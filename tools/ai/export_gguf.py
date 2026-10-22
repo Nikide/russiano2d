@@ -50,6 +50,19 @@ def main():
         from huggingface_hub import hf_hub_download
         shutil.copy(hf_hub_download(args.base, "sentencepiece.bpe.model"), work / "sentencepiece.bpe.model")
         cfg = json.loads((work / "config.json").read_text(encoding="utf-8"))
+        # Свежий transformers при дообучении может сохранить pad_token_id=0 вместо 1: HF считает позицию токена
+        # как i + pad_token_id, поэтому веса обучены со сдвигом на 1 меньше, чем ждёт llama.cpp (i + 2).
+        # Сдвигаем таблицу позиций, чтобы вектора совпали (иначе recall в GGUF падает до ~0,04).
+        pad = cfg.get("pad_token_id", 1)
+        if pad != 1:
+            from safetensors.torch import load_file, save_file
+            import torch
+            tensors = load_file(str(work / "model.safetensors"))
+            key = next(k for k in tensors if k.endswith("position_embeddings.weight"))
+            w = tensors[key]
+            shift = 1 - pad
+            tensors[key] = torch.cat([w[:1].repeat(1 + shift, 1), w[1:w.shape[0] - shift]], 0).contiguous()
+            save_file(tensors, str(work / "model.safetensors"), metadata={"format": "pt"})
         cfg["architectures"] = ["XLMRobertaModel"]
         cfg.pop("pad_token_id", None)
         (work / "config.json").write_text(json.dumps(cfg), encoding="utf-8")
