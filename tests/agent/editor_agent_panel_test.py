@@ -239,6 +239,24 @@ def _session(directory):
         check(agent, 'true' if not (project / '.r2d-agent.json').exists() else 'false', 'беседа: «новый чат» удаляет сохранённую беседу')
 
 
+def _approve(directory):
+    project = Path(directory) / 'aproject'
+    project.mkdir()
+    (project / 'project.json').write_text(json.dumps({'format': 2, 'title': 'Approve fixture', 'entry': 'main.js'}))
+    (project / 'main.js').write_text('$.ready(() => {});\n')
+    steps = [tool_call(1, 'write_file', {'path': 'auto.txt', 'content': 'hi'}), reply({'type': 'text', 'text': 'Записал без вопросов.'})]
+    with Agent(game='editor', scene=str(project), seed=31) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval('globalThis.__q=' + json.dumps(steps) + ';$.http._setBackend((r)=>globalThis.__q.shift());1')
+        agent.eval(E + '.models.set("anthropic",{key:"k"});' + D + '.click("bt-agent");' + D + '.click("ag-mode");1'); agent.step(3)
+        check(agent, D + '.content("ag-mode").includes("Разрешать всё")&&' + E + '.models.state.autoApprove', 'кнопка режима переключается на «Разрешать всё»')
+        agent.eval(D + '.setValue("ag-input","запиши файл");' + D + '.click("ag-send");1')
+        settle(agent, '!' + E + '.agent.state.busy && ' + D + '.content("ag-log").includes("Записал без вопросов.")', seconds=20)
+        check(agent, 'true' if (project / 'auto.txt').read_text() == 'hi' else 'false', 'в режиме «Разрешать всё» запись выполнена без подтверждения')
+        agent.eval(D + '.click("ag-mode");1'); agent.step(3)
+        check(agent, D + '.content("ag-mode").includes("Спрашивать")&&!' + E + '.models.state.autoApprove', 'кнопка возвращает режим «Спрашивать»')
+
+
 def _limit(directory):
     project = Path(directory) / 'lproject'
     project.mkdir()
@@ -320,6 +338,7 @@ def _run():
         _pixel(directory)
         _sound(directory)
         _session(directory)
+        _approve(directory)
     print(f'editor_agent_panel_test: {checks} checks', flush=True)
     return 0
 

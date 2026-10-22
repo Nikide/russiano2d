@@ -38,7 +38,7 @@ export function httpTransport($) {
 /** persist: { read() → object|null, write(object) }; в тестах — подставной. */
 export function createModelStore(persist) {
     const builtin = Object.keys(PROVIDERS).filter((id) => !PROVIDERS[id].custom);
-    const st = { active: 'anthropic', profiles: {}, custom: [], maxSteps: 24, mascotOn: true, listeners: [] };
+    const st = { active: 'anthropic', profiles: {}, custom: [], maxSteps: 24, mascotOn: true, autoApprove: false, listeners: [] };
 
     const defaults = (id) => ({ base: PROVIDERS[id].base, model: PROVIDERS[id].model, key: '', remember: false, folder: '', models: [], modelsAt: 0 });
     const profile = (id) => {
@@ -78,6 +78,7 @@ export function createModelStore(persist) {
         if (PROVIDERS[data.provider || data.active]) st.active = data.provider || data.active;
         if (data.maxSteps >= 1 && data.maxSteps <= 100) st.maxSteps = data.maxSteps | 0;
         if (typeof data.mascotOn === 'boolean') st.mascotOn = data.mascotOn;
+        if (typeof data.autoApprove === 'boolean') st.autoApprove = data.autoApprove;
     }
 
     function save() {
@@ -86,7 +87,7 @@ export function createModelStore(persist) {
             const p = st.profiles[id];
             profiles[id] = { base: p.base, model: p.model, remember: !!p.remember, ...(p.models.length ? { models: p.models, modelsAt: p.modelsAt } : {}), ...(p.folder ? { folder: p.folder } : {}), ...(p.remember && p.key ? { key: p.key } : {}) };
         }
-        try { persist.write({ version: 2, active: st.active, profiles, custom: st.custom, maxSteps: st.maxSteps, mascotOn: st.mascotOn }); } catch (_) { /* настройки не критичны */ }
+        try { persist.write({ version: 2, active: st.active, profiles, custom: st.custom, maxSteps: st.maxSteps, mascotOn: st.mascotOn, autoApprove: st.autoApprove }); } catch (_) { /* настройки не критичны */ }
     }
 
     const api = {
@@ -132,9 +133,10 @@ export function createModelStore(persist) {
             return !p.models.length || ((now || Date.now()) - p.modelsAt) > 86400000;
         },
         activate(id) { profile(id); st.active = id; save(); notify(); },
-        setBehavior({ maxSteps, mascotOn }) {
+        setBehavior({ maxSteps, mascotOn, autoApprove }) {
             if (maxSteps !== undefined) { const n = parseInt(maxSteps, 10); if (n >= 1 && n <= 100) st.maxSteps = n; }
             if (mascotOn !== undefined) st.mascotOn = !!mascotOn;
+            if (autoApprove !== undefined) st.autoApprove = !!autoApprove;
             save(); notify();
         },
         addCustom(def) {

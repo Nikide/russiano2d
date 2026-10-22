@@ -200,7 +200,7 @@ UI consumers; отсутствие consumer явно отражено в [SDK_EX
 python3 tests/agent/world_editor_test.py     # живой движок: UI+ops+snapshot
 python3 tests/agent/world_edit_cli_test.py   # CLI-контракт world-edit
 "$R2D_BINARY" world compile tests/fixtures/sdk/world/editor_base.re2dmap --renderer --output /tmp/a.re2dworld
-python3 tests/agent/sdk_studios_test.py      # реестр инструментов
+python3 tests/agent/editor_hammer_world_test.py  # Hammer и Re2D World в Editor
 ```
 
 ## 9. Границы

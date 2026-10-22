@@ -71,6 +71,8 @@ export function createAgentPanel($, doc, host) {
     }
 
     function confirm(name, input) {
+        // «Разрешать всё»: запись, студии и команды выполняются без вопроса (откат ↶ остаётся).
+        if (models.state.autoApprove) return Promise.resolve(true);
         return new Promise((resolve) => {
             st.pending = { name, input, resolve };
             st.scrollPending = 3;
@@ -311,6 +313,8 @@ export function createAgentPanel($, doc, host) {
         const pill = st.asking ? ['wait', 'Ждёт ответа'] : st.pending ? ['wait', 'Ждёт подтверждения'] : st.busy ? ['busy', 'Работает'] : needKey ? ['need', 'Нужен ключ'] : ['', 'Готов'];
         doc.text('ag-state', pill[1]);
         for (const c of ['busy', 'wait', 'need']) doc.cls('ag-state', c, pill[0] === c);
+        doc.text('ag-mode', models.state.autoApprove ? 'Разрешать всё' : 'Спрашивать');
+        doc.cls('ag-mode', 'on', models.state.autoApprove);
         doc.text('ag-model-chip', esc(provider.label + ' · ' + (cur.model || provider.model) + '  ›'));
         doc.text('ag-usage', st.usage.calls ? esc('↑' + kfmt(st.usage.input) + ' ↓' + kfmt(st.usage.output) + (st.usage.cached ? ' · кэш ' + kfmt(st.usage.cached) : '')) : '');
         doc.cls('ag-send', 'hidden', st.busy);
@@ -338,6 +342,11 @@ export function createAgentPanel($, doc, host) {
         });
         doc.on('ag-model-chip', 'click', () => host.showSettings());
         doc.on('ag-gear', 'click', () => host.showSettings());
+        doc.on('ag-mode', 'click', () => {
+            models.setBehavior({ autoApprove: !models.state.autoApprove });
+            // уже висящий вопрос при включении режима принимается сразу
+            if (models.state.autoApprove && st.pending) answer(true);
+        });
         doc.on('mc', 'click', () => { st.mascot.poke(); applyMascot(); });
         doc.on('ag-log', 'click', (_id, _ev, key) => {
             if (!key) return;

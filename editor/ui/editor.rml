@@ -130,6 +130,7 @@
             <div id="ag-top">
                 <span id="ag-state" class="ag-pill">Готов</span>
                 <span id="ag-model-chip" class="ag-modelchip"></span>
+                <span id="ag-mode" class="ag-modechip" title="Спрашивать подтверждение на каждую запись или разрешать всё сразу"></span>
                 <span id="ag-usage" title="Токены за диалог (по данным API): отправлено · получено · из кэша"></span>
                 <span class="grow"></span>
                 <span id="ag-gear" class="tb-btn icon" title="Модели и настройки агента"></span>

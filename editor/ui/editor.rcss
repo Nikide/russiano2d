@@ -591,6 +591,9 @@ scrollbarcorner { background-color: transparent; }
 #ag-top .tb-btn { margin-right: 0px; padding: 3px 7px; font-size: 18px; color: #9aa2b1; }
 #ag-top .tb-btn:hover { color: #ffffff; }
 #ag-top .ag-modelchip { margin-left: 8px; }
+.ag-modechip { display: block; margin-left: 6px; padding: 3px 9px; font-size: 11px; color: #8b93a3; background-color: #20242c; border-width: 1px; border-color: #2d323d; border-radius: 10px; cursor: pointer; }
+.ag-modechip:hover { color: #e6e9ef; border-color: #4a5160; }
+.ag-modechip.on { color: #f2c14e; background-color: #3a2f12; border-color: #6b5a22; }
 .ag-pill { padding: 2px 10px; border-radius: 10px; font-size: 11px; color: #9aa2b1; background-color: #262a33; }
 .ag-pill.busy { color: #9cc2ff; background-color: #1f3a5f; }
 .ag-pill.wait { color: #f2c14e; background-color: #3a2f12; }

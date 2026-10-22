@@ -352,8 +352,8 @@ $.ui.doc('ui/menu.rml').layoutRect('row-0');    // то же через обёр
 им пользуются проверки вычисленных из `.rcss` размеров и инструменты SDK
 (анимационная студия, оболочка студии). Появился в task-56 после того, как
 честный `rect()` сломал три проверки, которые читали геометрию скрытого
-элемента: `highlevel_animtracks_test`, `highlevel_reload_test`
-(`$.fixture.hud_width()`), `sdk_shell_test`.
+элемента: `highlevel_animtracks_test` и `highlevel_reload_test`
+(`$.fixture.hud_width()`).
 
 Правило выбора простое: **проверяете видимость — `rect()`, проверяете размеры из
 стилей — `layoutRect()`**. Молчаливое «`rect()` вернул 0 вместо ширины» — тот

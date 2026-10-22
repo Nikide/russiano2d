@@ -62,7 +62,8 @@ export function create(host) {
         }
         const b = models.state;
         html += '<span class="md-h">ПОВЕДЕНИЕ АГЕНТА</span><div class="md-card" style="border-top-width:1px;border-radius:10px;"><span class="md-label">Лимит шагов на вопрос</span><input id="md-steps" class="md-in" type="text" style="width:120px;"/>' +
-            '<div class="md-actions"><span class="md-chip' + (b.mascotOn ? ' on' : '') + '" data-key="mascot">Маскот: ' + (b.mascotOn ? 'вкл' : 'выкл') + '</span></div></div>' +
+            '<div class="md-actions"><span class="md-chip' + (b.autoApprove ? ' on' : '') + '" data-key="approve">Подтверждения: ' + (b.autoApprove ? 'разрешать всё' : 'спрашивать') + '</span><span class="md-chip' + (b.mascotOn ? ' on' : '') + '" data-key="mascot">Маскот: ' + (b.mascotOn ? 'вкл' : 'выкл') + '</span></div>' +
+            '<span class="md-hint">«Разрешать всё» — запись файлов, правки студий и команды r2d выполняются без вопроса; откат ↶ в шапке агента остаётся.</span></div>' +
             '<span class="md-note">Настройки (кроме ключей) хранятся в agent.local.json рядом с state.local.json и не попадают в проект и git. Беседа с агентом лежит в проекте (.r2d-agent.json).</span>';
         doc.html('md-body', html);
         fill();
@@ -104,6 +105,7 @@ export function create(host) {
         if (name === 'activate') { commit(); models.activate(id); render(); return; }
         if (name === 'remember') { commit(); models.set(id, { remember: !models.profile(id).remember }); render(); return; }
         if (name === 'pick') { models.set(id, { model: arg }); commit(); render(); return; }
+        if (name === 'approve') { commit(); models.setBehavior({ autoApprove: !models.state.autoApprove }); render(); return; }
         if (name === 'mascot') { commit(); models.setBehavior({ mascotOn: !models.state.mascotOn }); render(); return; }
         if (name === 'add') { commit(); st.adding = true; st.error = ''; render(); return; }
         if (name === 'cancel') { st.adding = false; render(); return; }

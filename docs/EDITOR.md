@@ -224,8 +224,8 @@ atlas не перезаписывается. PNG получает только b
 Приёмка: `tests/agent/editor_sprite_mesh_test.py` — 36 проверок: независимые вкладки,
 историю, сохранность исходников и cache при ошибках, ручной/покадровый pivot,
 ракурс спереди, первое включение SpriteMesh, PNG и закрытие pending preview.
-Xmake-сборка, native bake/cache test, 6 qjs-тестов SpriteMesh, полный
-`sdk_studios_test.py`, lint, validate Editor и четыре стража документации прошли.
+Xmake-сборка, native bake/cache test, 6 qjs-тестов SpriteMesh, lint,
+validate Editor и четыре стража документации прошли.
 Снимок настоящего RmlUi:
 `build/editor-sprite-mesh-tabs.png`. Другие ОС и ручной HiDPI-прогон не проверены.
 
