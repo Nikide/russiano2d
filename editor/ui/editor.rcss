@@ -360,6 +360,7 @@ scrollbarcorner { background-color: transparent; }
     display: block; width: 588px; margin: 8px; padding: 6px 8px; color: #e6e9ef;
     background-color: #14161b; border-width: 1px; border-color: #3b82f6; border-radius: 4px;
 }
+#palette-hint { display: block; padding: 6px 12px; font-size: 11px; color: #8b93a3; border-top-width: 1px; border-color: #343a46; }
 #palette-list { display: block; max-height: 360px; overflow-y: auto; padding-bottom: 6px; }
 .pal-row { display: flex; flex-direction: row; height: 28px; line-height: 28px; padding: 0px 12px; cursor: pointer; font-size: 13px; }
 .pal-row:hover { background-color: #2c313b; }

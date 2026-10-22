@@ -163,6 +163,7 @@
     <div id="palette" class="hidden">
         <input id="palette-input" type="text" value=""/>
         <div id="palette-list"></div>
+        <div id="palette-hint"></div>
     </div>
 
     <div id="close-confirm" class="hidden">

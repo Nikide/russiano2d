@@ -41,6 +41,7 @@ def _run():
             'format': 2, 'title': 'Palette fixture', 'entry': 'main.js',
         }))
         (project / 'main.js').write_text('$.ready(() => {});\n')
+        (project / '.DS_Store').write_text('junk')
         (project / 'other.js').write_text(
             '// function hidden() {}\nconst label = "class fake {}";\n'
             'function startGame() {\n  const player = {};\n}\nclass WorldState {}\n')
@@ -52,6 +53,10 @@ def _run():
             open_palette(agent)
             check(agent, E + '.state.palette && ' + E + '.state.palette.mode==="files"',
                   'Ctrl+P opens Quick Open')
+            check(agent, '!' + E + '.state.palette.items.some(x=>x.path.endsWith(".DS_Store"))',
+                  'Quick Open hides OS junk files')
+            check(agent, E + '.state.palette.items[0].open===true && ' + D + '.content("palette-hint").length>0',
+                  'Quick Open lists open tabs first and shows a mode hint')
             agent.eval(D + '.setValue("palette-input","other.js");1')
             agent.step(3)
             check(agent, E + '.state.palette.list.some(x=>x.item.path==="other.js")',

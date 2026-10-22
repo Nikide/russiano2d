@@ -1332,6 +1332,23 @@ export function createEditor($) {
         return out;
     }
 
+    // Quick Open: без служебного мусора ФС, открытые вкладки — первыми (как в VS Code).
+    const JUNK_FILE = /(^|\/)(\.DS_Store|Thumbs\.db|desktop\.ini)$/;
+    function quickOpenItems() {
+        const open = new Set(s.tabs.map((t) => t.path));
+        const items = s.entries.filter((e) => !JUNK_FILE.test(e.path))
+            .map((e) => ({ label: e.path, detail: open.has(e.path) ? 'открыт' : e.type, path: e.path, open: open.has(e.path) }));
+        return items.filter((i) => i.open).concat(items.filter((i) => !i.open));
+    }
+
+    const PALETTE_HINTS = {
+        files: 'Файлы проекта · «>» команды · «:» строка · Enter — открыть · Esc — закрыть',
+        commands: 'Команды · Enter — выполнить · Esc — закрыть',
+        symbols: 'Символы файла · Enter — перейти · Esc — закрыть',
+        line: 'Номер строки · Enter — перейти · Esc — закрыть',
+        rename: 'Новое имя · Enter — применить · Esc — закрыть',
+    };
+
     function openPalette(mode) {
         const items = mode === 'commands'
             ? openAsCommands().concat(COMMANDS.map((c) => ({ label: c.label, detail: c.keys, cmd: c })))
@@ -1342,7 +1359,7 @@ export function createEditor($) {
                     : [];
             })()
             : mode === 'line' || mode === 'rename' ? []
-            : s.entries.map((e) => ({ label: e.path, detail: e.type, path: e.path }));
+            : quickOpenItems();
         s.palette = { mode, items, list: [], sel: 0, query: null };
         doc.setValue('palette-input', mode === 'commands' ? '>' : mode === 'line' ? ':' : '');
         doc.cls('palette', 'hidden', false);
@@ -1397,6 +1414,7 @@ export function createEditor($) {
             return '<div class="pal-row' + (i === p.sel ? ' sel' : '') + '" data-key="' + i + '"><span class="pal-label">' + text +
                 '</span><span class="pal-detail">' + esc(r.item.detail || '') + '</span></div>';
         }).join('') : '<span class="empty">Ничего не найдено</span>');
+        doc.text('palette-hint', PALETTE_HINTS[p.mode] || PALETTE_HINTS.files);
     }
 
     function acceptPalette(index) {
