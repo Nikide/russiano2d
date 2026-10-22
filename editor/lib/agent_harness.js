@@ -37,6 +37,7 @@ export const SYSTEM_PROMPT = [
     'Объекты для кирпичиков создавай с ЛИТЕРАЛЬНЫМ id (`id: "coin1"`), не в цикле с id из строки — граф их иначе не увидит. ФИЗИКА ЕСТЬ ТОЛЬКО У ВИДОВ УЗЛОВ: герой — `$("<player>", { id: "hero" }).at(200, 300).size(26, 30).color("#e07040").controls({ axis: "both", coyote: 100, jumpBuffer: 120 }).collision(26, 30).appendTo($.world)`;',
     'земля и платформы — ТВЁРДЫЕ `$("<wall>", { id: "p1" }).at(x, y).size(200, 24).color("#5a6a5a").appendTo($.world)` (голый `<sprite>` — просто картинка: без гравитации и столкновений, герой пройдёт сквозь); монета — `$("<sprite>", { id: "coin1" }).at(x, y).size(18, 18).color("#ffd040")` + кирпичик interact.pickup;',
     'текст: `const label = $("<text>", { text: "Счёт: 0", size: 32 }).at(40, 40).appendTo($.world); label.text("Счёт: 1")` (так обновляется); кирпичик interact.pickup шлёт на герое событие `collect` с `{ value }`: `hero.on("collect", (e) => { score += e.value || 1; label.text("Счёт: " + score); })`; картинка: `$("<sprite>", { src: "assets/a.png", w: 64, h: 64 })`. Строку `import "./generated/snippets/index.js"` добавляет генератор кирпичиков — сам её не пиши.',
+    'Вид от первого лица / 2.5D (бумер-шутер): НОВЫЙ API `$.re2dWorld` — `docs_show highlevel/re2d` (карта Hammer .re2dmap → `r2d world-compile <карта> --renderer` → .re2dworld; `const world = $.re2dWorld.load("maps/level.re2dworld").backend("gpu"); const ctrl = world.controller({ radius: 14, height: 56, eye: 48, step: 9 }); ctrl.place(x, y, 0); $.render(() => world.render(view, 640, 360));`, где `view = { x, y, h, yaw, pitch, fov, near }` обновляется из ctrl и мыши). НЕ используй `.kind(Re2D)`/`$.camera.kind` — это legacy. Не оборачивай вызовы в try/catch (ошибки должны быть видны). После изменения сцены вызови screenshot_check: `КАДР ПУСТОЙ` — игра не работает, найди причину.',
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
     'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
     'Пути — относительно корня проекта. Сначала list_files/read_file, потом пиши.',
@@ -585,6 +586,22 @@ export function editorTools(host) {
               if (!r.count) return 'в схеме нет «' + a.name + '». Такого `$`-API не существует — не используй; поищи docs_search.';
               return (r.exact ? '' : 'точного совпадения нет, похожие:\n') + r.entries.map((e) =>
                   e.path + ' [' + e.kind + ']' + (e.args ? '(' + e.args.join(', ') + ')' : '') + ' — ' + String(e.description).slice(0, 200)).join('\n');
+          } },
+        { name: 'screenshot_check', description: 'Запустить игру headless на N кадров (можно с зажатыми клавишами), снять кадр и проверить его статистикой: blank:true — кадр пустой/одноцветный (чёрный экран!), иначе яркость, число цветов, доля не-фона. Вызывай после изменения сцены/графики; blank — значит искать причину (ошибка, не вызван render, камера, нет объектов).',
+          schema: { type: 'object', properties: { frames: { type: 'number', description: 'кадров до снимка, по умолчанию 120' }, hold: { type: 'array', items: { type: 'string' }, description: 'клавиши, зажатые всё время, например ["D"] или ["W"]' }, scene: str('сцена (необязательно)') }, required: [] },
+          run: async (a) => {
+              const dir = '.r2d-check', shot = host.abs(dir + '/frame.png');
+              const frames = Math.min(600, Math.max(10, Number(a.frames) || 120));
+              const reqs = [];
+              if (Array.isArray(a.hold) && a.hold.length) reqs.push({ cmd: 'keys', hold: a.hold.map(String) });
+              reqs.push({ cmd: 'step', frames }, { cmd: 'screenshot', path: shot }, { cmd: 'quit' });
+              const session = { version: 1, game: host.abs(''), seed: 1, timeoutMs: 90000, requests: reqs };
+              if (a.scene) session.scene = String(a.scene);
+              host.writeText(dir + '/session.json', JSON.stringify(session));
+              const run = await host.tool(['agent', host.abs(dir + '/session.json')]);
+              const stats = (await host.tool(['image-stats', shot])).json;
+              if (!stats || !stats.ok) return 'снимок не получен: ' + String((run.json && JSON.stringify(run.json.diagnostics || run.json).slice(0, 400)) || run.error || 'нет ответа');
+              return (stats.blank ? 'КАДР ПУСТОЙ (одноцветный ' + stats.background + ')' : 'кадр не пустой') + ': ' + JSON.stringify(stats);
           } },
         { name: 'project_info', description: 'Сведения о проекте: project.json, точка входа, сцены.', schema: obj({}),
           run: async () => JSON.stringify((await host.tool(['project', host.abs('')])).json).slice(0, 4000) },

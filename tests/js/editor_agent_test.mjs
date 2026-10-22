@@ -398,4 +398,24 @@ await atest('объявил действие без вызова инструм�
     eq(plain.length, 1, 'обычный ответ без лишних запросов');
 });
 
+await atest('screenshot_check: сессия агента, снимок и статистика; пустой кадр помечается', async () => {
+    const files = new Map(), calls = [];
+    const mk = (stats) => editorTools({
+        tool: async (a) => { calls.push(a); return a[0] === 'image-stats' ? { json: stats } : { json: { ok: true } }; },
+        abs: (p) => '/proj' + (p ? '/' + p : ''), exists: () => false, readText: () => '', writeText: (p, c) => files.set(p, c), list: () => [],
+    }).find((t) => t.name === 'screenshot_check');
+    const blank = await mk({ ok: true, blank: true, background: '#07090d', meanLuma: 8 }).run({ frames: 30, hold: ['W'] });
+    truthy(blank.startsWith('КАДР ПУСТОЙ'));
+    const session = JSON.parse(files.get('.r2d-check/session.json'));
+    eq(session.requests.map((r) => r.cmd), ['keys', 'step', 'screenshot', 'quit']);
+    eq(session.requests[1].frames, 30);
+    eq(session.game, '/proj');
+    eq(calls[0][0], 'agent');
+    eq(calls[1], ['image-stats', '/proj/.r2d-check/frame.png']);
+    const ok = await mk({ ok: true, blank: false, distinctColors: 900 }).run({});
+    truthy(ok.startsWith('кадр не пустой'));
+    const none = await mk({ ok: false }).run({});
+    truthy(none.startsWith('снимок не получен'));
+});
+
 finish();

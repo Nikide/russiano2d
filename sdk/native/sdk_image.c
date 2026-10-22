@@ -66,3 +66,53 @@ bool sdk_image_write_png(const char *path, const uint8_t *rgba, int w, int h)
     STBIW_FREE(png);
     return ok;
 }
+
+// ---------------------------------------------------------------------------
+// r2d image-stats <png> — быстрая «проверка кадра» для агентов: пустой/чёрный ли
+// скриншот. JSON: размер, средняя яркость 0..255, число различных цветов (по
+// сетке выборки), доля пикселей, отличных от фона (цвет верхнего левого угла).
+// ---------------------------------------------------------------------------
+int sdk_cmd_image_stats(const SdkArgs *a)
+{
+    const char *path = sdk_arg_positional(a, 0);
+    if (!path || !path[0]) {
+        printf("{\"ok\":false,\"code\":\"SDK_USAGE\",\"message\":\"r2d image-stats <файл.png>\"}\n");
+        return 2;
+    }
+    int w = 0, h = 0;
+    uint8_t *px = sdk_image_load_rgba(path, &w, &h);
+    if (!px || w <= 0 || h <= 0) {
+        printf("{\"ok\":false,\"code\":\"SDK_IMAGE_LOAD\",\"message\":\"не удалось прочитать изображение\"}\n");
+        free(px);
+        return 2;
+    }
+    const uint32_t bg = ((uint32_t)px[0] << 16) | ((uint32_t)px[1] << 8) | px[2];
+    double luma = 0;
+    size_t n = 0, diff = 0, distinct = 0;
+    enum { SLOTS = 4096 };
+    uint32_t *seen = (uint32_t *)calloc(SLOTS, sizeof *seen);
+    bool *used = (bool *)calloc(SLOTS, sizeof *used);
+    const int step = (w * h > 400000) ? 3 : 1;
+    for (int y = 0; y < h; y += step) {
+        for (int x = 0; x < w; x += step) {
+            const uint8_t *p = px + ((size_t)y * w + x) * 4;
+            const uint32_t c = ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | p[2];
+            luma += 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+            if (c != bg) ++diff;
+            ++n;
+            if (seen && used) {
+                size_t s = (c * 2654435761u) % SLOTS;
+                for (int probe = 0; probe < 32; ++probe, s = (s + 1) % SLOTS) {
+                    if (!used[s]) { used[s] = true; seen[s] = c; ++distinct; break; }
+                    if (seen[s] == c) break;
+                }
+            }
+        }
+    }
+    printf("{\"ok\":true,\"width\":%d,\"height\":%d,\"meanLuma\":%.2f,\"distinctColors\":%zu,\"nonBackgroundFraction\":%.4f,"
+           "\"background\":\"#%06x\",\"blank\":%s}\n",
+           w, h, n ? luma / (double)n : 0.0, distinct, n ? (double)diff / (double)n : 0.0, bg,
+           (n && (double)diff / (double)n < 0.002) ? "true" : "false");
+    free(seen); free(used); free(px);
+    return 0;
+}
