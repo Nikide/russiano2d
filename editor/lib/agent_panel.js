@@ -237,8 +237,8 @@ export function createAgentPanel($, doc, host) {
     function planHtml() {
         if (!st.plan.length) return '';
         const done = st.plan.filter((x) => x.status === 'done').length;
-        return '<span class="plan-head">План · ' + done + ' из ' + st.plan.length + '</span>' + st.plan.map((x) =>
-            '<div class="plan-row ' + x.status + '"><span class="plan-ic">' + icon(x.status === 'done' ? 'check_circle' : x.status === 'doing' ? 'play_circle' : 'radio_button_unchecked') + '</span><span>' + esc(x.text) + '</span></div>').join('');
+        return '<span class="plan-head">План · ' + done + ' из ' + st.plan.length + '</span><div id="ag-plan-rows">' + st.plan.map((x) =>
+            '<div class="plan-row ' + x.status + '"><span class="plan-ic">' + icon(x.status === 'done' ? 'check_circle' : x.status === 'doing' ? 'play_circle' : 'radio_button_unchecked') + '</span><span>' + esc(x.text) + '</span></div>').join('') + '</div>';
     }
 
     function askQuestionCard() {
