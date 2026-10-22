@@ -6,12 +6,24 @@
 
 ## Подключение
 
-Две вкладки-протокола, поля «адрес», «модель», «ключ»:
+Вкладки-провайдеры, поля «адрес», «модель», «ключ»:
 
-| Протокол | Адрес по умолчанию | Ключ |
-|----------|--------------------|------|
-| Anthropic (Messages API) | `https://api.anthropic.com` | обязателен |
-| OpenAI-совместимый (`/chat/completions`) | `http://localhost:8080/v1` (llama-server, Ollama, LM Studio…) | по необходимости |
+| Провайдер | Адрес по умолчанию | Ключ / авторизация |
+|-----------|--------------------|--------------------|
+| Anthropic (Messages API) | `https://api.anthropic.com` | API-ключ → `x-api-key` |
+| OpenAI-совм. (`/chat/completions`) | `http://localhost:8080/v1` (llama-server, Ollama, LM Studio…) | `Bearer`, по необходимости |
+| YandexGPT | `https://llm.api.cloud.yandex.net/v1` | API-ключ сервисного аккаунта → `Authorization: Api-Key …`; IAM-токен — введите `Bearer t1.…`. Модель: `gpt://<id каталога>/yandexgpt/latest` |
+| GigaChat / GigaCode (Сбер) | `https://gigachat.devices.sberbank.ru/api/v1` | «Authorization key» из кабинета: харнес сам обменивает его на токен (`POST ngw.devices.sberbank.ru:9443/api/v2/oauth`, `scope=GIGACHAT_API_PERS`, `RqUID`) и обновляет по сроку; вызовы инструментов — через `functions` |
+
+Для других российских моделей, говорящих на OpenAI-протоколе (например, через
+собственный шлюз), берите «OpenAI-совм.» и свой адрес. Новый вид авторизации —
+запись в `PROVIDERS` (`protocol`, `auth`) в `agent_harness.js`.
+
+**Проверено** только юнит-тестами на подставной сети (формат заголовков, обмен
+токена, функции). С живыми YandexGPT/GigaChat не гонялось. Известный риск GigaChat:
+его серверы подписаны российским корневым сертификатом; если системное хранилище
+curl его не знает, запрос упадёт на TLS — тогда нужен сертификат Минцифры в хранилище
+ОС или шлюз.
 
 Ключ хранится **только в памяти** процесса Editor: не пишется в `project.json`,
 на диск и в Output. Он уходит лишь в заголовок запроса к указанному адресу.

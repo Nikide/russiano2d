@@ -7,7 +7,7 @@ import { esc } from './studio_kit.js';
 
 export function createAgentPanel($, doc, host) {
     const st = {
-        cfg: { provider: 'anthropic', base: PROVIDERS.anthropic.base, model: PROVIDERS.anthropic.model, key: '' },
+        cfg: { provider: 'anthropic', base: PROVIDERS.anthropic.base, model: PROVIDERS.anthropic.model, key: '', folder: '' },
         log: [], agent: null, pending: null, busy: false,
     };
 
@@ -56,7 +56,9 @@ export function createAgentPanel($, doc, host) {
     function readFields() {
         st.cfg.base = String(doc.value('ag-base') || '').trim();
         st.cfg.model = String(doc.value('ag-model') || '').trim();
-        st.cfg.key = String(doc.value('ag-key') || '').trim();
+        const key = String(doc.value('ag-key') || '').trim();
+        if (key !== st.cfg.key) st.cfg._token = null;   // новый ключ — новый токен
+        st.cfg.key = key;
     }
 
     async function send() {
@@ -64,7 +66,7 @@ export function createAgentPanel($, doc, host) {
         if (!text || st.busy) return;
         if (!host.project()) { push('err', 'сначала откройте проект'); return; }
         readFields();
-        if (st.cfg.provider === 'anthropic' && !st.cfg.key) { push('err', 'нужен API-ключ (поле «ключ»)'); return; }
+        if (PROVIDERS[st.cfg.provider].auth !== 'bearer' && !st.cfg.key) { push('err', 'нужен API-ключ (поле «ключ»)'); return; }
         if (!st.agent) build();
         doc.setValue('ag-input', '');
         push('user', text);

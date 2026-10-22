@@ -8,9 +8,20 @@
 // Внутри история хранится в формате блоков Anthropic; для openai она
 // переводится на лету.
 
+// protocol: anthropic | openai | gigachat. auth: как ключ уходит в запрос
+// (bearer — `Authorization: Bearer`, api-key — `Authorization: Api-Key`,
+// x-api-key — заголовок Anthropic, oauth — сначала обмен на токен).
 export const PROVIDERS = {
-    anthropic: { label: 'Anthropic', base: 'https://api.anthropic.com', model: 'claude-sonnet-5-5' },
-    openai: { label: 'OpenAI-совместимый', base: 'http://localhost:8080/v1', model: 'local' },
+    anthropic: { label: 'Anthropic', protocol: 'anthropic', auth: 'x-api-key', base: 'https://api.anthropic.com', model: 'claude-sonnet-5-5' },
+    openai: { label: 'OpenAI-совм.', protocol: 'openai', auth: 'bearer', base: 'http://localhost:8080/v1', model: 'local' },
+    // YandexGPT через OpenAI-совместимый эндпоинт Yandex Cloud: ключ сервисного аккаунта
+    // (`Api-Key`) или IAM-токен (`Bearer`: начните ключ с `Bearer `); модель — gpt://<id каталога>/yandexgpt/latest.
+    yandex: { label: 'YandexGPT', protocol: 'openai', auth: 'api-key', base: 'https://llm.api.cloud.yandex.net/v1', model: 'gpt://<id-каталога>/yandexgpt/latest' },
+    // GigaChat/GigaCode (Сбер): «Authorization key» из кабинета обменивается на токен (30 мин).
+    gigachat: {
+        label: 'GigaChat', protocol: 'gigachat', auth: 'oauth', base: 'https://gigachat.devices.sberbank.ru/api/v1', model: 'GigaChat-2',
+        oauthUrl: 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth', scope: 'GIGACHAT_API_PERS',
+    },
 };
 
 export const SYSTEM_PROMPT = [
@@ -61,18 +72,81 @@ function openaiBody(cfg, system, messages, tools) {
     };
 }
 
+function uuid4() {
+    const h = '0123456789abcdef';
+    let out = '';
+    for (let i = 0; i < 36; i++) {
+        if (i === 8 || i === 13 || i === 18 || i === 23) out += '-';
+        else if (i === 14) out += '4';
+        else if (i === 19) out += h[8 + Math.floor(Math.random() * 4)];
+        else out += h[Math.floor(Math.random() * 16)];
+    }
+    return out;
+}
+
+// GigaChat: обмен ключа авторизации на токен; токен кэшируется в cfg._token до истечения.
+export async function gigachatToken(cfg, transport, now) {
+    const t = now === undefined ? Date.now() : now;
+    if (cfg._token && cfg._token.exp - 60000 > t) return cfg._token.value;
+    const spec = PROVIDERS.gigachat;
+    const key = String(cfg.key || '').replace(/^Basic\s+/i, '');
+    const res = await transport(cfg.oauthUrl || spec.oauthUrl, {
+        headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json', rquid: uuid4(), authorization: 'Basic ' + key },
+        body: 'scope=' + (cfg.scope || spec.scope), timeout: cfg.timeout || 30000,
+    });
+    const data = res.json;
+    if (!res.ok || !data || !data.access_token) {
+        throw new Error('GigaChat: не удалось получить токен (' + String(data && (data.message || data.error) || res.status).slice(0, 200) + ')');
+    }
+    cfg._token = { value: data.access_token, exp: Number(data.expires_at) || t + 25 * 60000 };
+    return data.access_token;
+}
+
+// GigaChat принимает `functions`; результат функции обязан быть JSON-строкой.
+function gigachatBody(cfg, system, messages, tools) {
+    const names = new Map();
+    for (const m of messages) if (Array.isArray(m.content)) for (const b of m.content) if (b.type === 'tool_use') names.set(b.id, b.name);
+    const out = [{ role: 'system', content: system }];
+    for (const m of messages) {
+        if (typeof m.content === 'string') { out.push({ role: m.role, content: m.content }); continue; }
+        if (m.role === 'assistant') {
+            const text = m.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+            const call = m.content.find((b) => b.type === 'tool_use');
+            const msg = { role: 'assistant', content: text };
+            if (call) msg.function_call = { name: call.name, arguments: call.input || {} };
+            out.push(msg);
+        } else {
+            for (const b of m.content) if (b.type === 'tool_result') out.push({ role: 'function', name: names.get(b.tool_use_id) || 'tool', content: JSON.stringify({ result: b.content }) });
+        }
+    }
+    return {
+        model: cfg.model, messages: out, max_tokens: cfg.maxTokens || 4096,
+        functions: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.schema })), function_call: 'auto',
+    };
+}
+
+let giga_seq = 0;
+
 // Запрос к модели → { blocks: [{type:'text'|'tool_use',…}], stop }.
 export async function callModel(cfg, transport, system, messages, tools) {
     const base = String(cfg.base || '').replace(/\/+$/, '');
+    const spec = PROVIDERS[cfg.provider] || {};
+    const protocol = cfg.protocol || spec.protocol || (cfg.provider === 'anthropic' ? 'anthropic' : 'openai');
+    const auth = cfg.auth || spec.auth || (protocol === 'anthropic' ? 'x-api-key' : 'bearer');
     let url, headers, body;
-    if (cfg.provider === 'anthropic') {
+    if (protocol === 'gigachat') {
+        url = base + '/chat/completions';
+        headers = { 'content-type': 'application/json', authorization: 'Bearer ' + await gigachatToken(cfg, transport) };
+        body = gigachatBody(cfg, system, messages, tools);
+    } else if (protocol === 'anthropic') {
         url = base + '/v1/messages';
         headers = { 'content-type': 'application/json', 'x-api-key': cfg.key || '', 'anthropic-version': '2023-06-01' };
         body = anthropicBody(cfg, system, messages, tools);
     } else {
         url = base + '/chat/completions';
         headers = { 'content-type': 'application/json' };
-        if (cfg.key) headers.authorization = 'Bearer ' + cfg.key;
+        if (cfg.key) headers.authorization = auth === 'api-key' && !/^Bearer\s/i.test(cfg.key) ? 'Api-Key ' + cfg.key : (/^Bearer\s/i.test(cfg.key) ? cfg.key : 'Bearer ' + cfg.key);
+        if (cfg.folder) headers['x-folder-id'] = cfg.folder;
         body = openaiBody(cfg, system, messages, tools);
     }
     const res = await transport(url, { headers, body: JSON.stringify(body), timeout: cfg.timeout || 120000 });
@@ -81,7 +155,18 @@ export async function callModel(cfg, transport, system, messages, tools) {
         const detail = data && (data.error && (data.error.message || data.error)) || res.text || ('HTTP ' + res.status);
         throw new Error('модель вернула ошибку: ' + String(detail).slice(0, 300));
     }
-    if (cfg.provider === 'anthropic') {
+    if (protocol === 'gigachat') {
+        const m = data.choices && data.choices[0] && data.choices[0].message || {};
+        const blocks = [];
+        if (m.content) blocks.push({ type: 'text', text: m.content });
+        if (m.function_call && m.function_call.name) {
+            let input = m.function_call.arguments;
+            if (typeof input === 'string') { try { input = JSON.parse(input); } catch (_) { input = { _raw: input }; } }
+            blocks.push({ type: 'tool_use', id: 'gc_' + (++giga_seq), name: m.function_call.name, input: input || {} });
+        }
+        return { blocks, stop: data.choices && data.choices[0] && data.choices[0].finish_reason };
+    }
+    if (protocol === 'anthropic') {
         return { blocks: (data.content || []).filter((b) => b.type === 'text' || b.type === 'tool_use'), stop: data.stop_reason };
     }
     const msg = data.choices && data.choices[0] && data.choices[0].message || {};

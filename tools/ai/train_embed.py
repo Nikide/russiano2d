@@ -24,6 +24,7 @@ def main():
     ap.add_argument("--base", default="intfloat/multilingual-e5-small")
     ap.add_argument("--epochs", type=int, default=3)
     ap.add_argument("--batch", type=int, default=64)
+    ap.add_argument("--max-len", type=int, default=256)
     ap.add_argument("--lr", type=float, default=2e-5)
     args = ap.parse_args()
 
@@ -31,6 +32,7 @@ def main():
     from torch.utils.data import DataLoader
 
     model = SentenceTransformer(args.base)
+    model.max_seq_length = args.max_len
     train = load(Path(args.data) / "train.jsonl")
     examples = [InputExample(texts=["query: " + r["query"], "passage: " + r["positive"]]) for r in train]
     loader = DataLoader(examples, shuffle=True, batch_size=args.batch)

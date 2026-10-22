@@ -7,7 +7,7 @@ async function atest(name, fn) {
     try { await fn(); } catch (e) { err = e; }
     test(name, () => { if (err) throw err; });
 }
-import { createAgent, callModel, safeRel, editorTools, docContext } from '../../editor/lib/agent_harness.js';
+import { createAgent, callModel, safeRel, editorTools, docContext, gigachatToken, PROVIDERS } from '../../editor/lib/agent_harness.js';
 
 const scripted = (replies, seen) => async (url, opts) => {
     seen.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
@@ -117,6 +117,58 @@ await atest('контекст из доков подкладывается к в
     truthy(first.includes('[docs/a.md:3]') && first.includes('Вопрос: как рисовать?'));
     await mk(async () => { throw new Error('нет'); }).send('голый вопрос');
     eq(seen[1].body.messages[0].content, 'голый вопрос');
+});
+
+await atest('YandexGPT: Api-Key или Bearer, OpenAI-формат', async () => {
+    const seen = [];
+    const ok = { choices: [{ message: { content: 'да' }, finish_reason: 'stop' }] };
+    const run = async (key) => {
+        const agent = createAgent({ config: { provider: 'yandex', base: PROVIDERS.yandex.base, model: 'gpt://f/yandexgpt/latest', key, folder: 'b1g' },
+            transport: scripted([ok], seen), tools: toolsOf([]) });
+        await agent.send('?');
+    };
+    await run('AQVN-key');
+    await run('Bearer t1.iam');
+    eq(seen[0].headers.authorization, 'Api-Key AQVN-key');
+    eq(seen[0].headers['x-folder-id'], 'b1g');
+    eq(seen[1].headers.authorization, 'Bearer t1.iam');
+    eq(seen[0].url, 'https://llm.api.cloud.yandex.net/v1/chat/completions');
+});
+
+await atest('GigaChat: OAuth-токен кэшируется, functions и function-результат', async () => {
+    const calls = [];
+    const replies = [
+        { access_token: 'TOK', expires_at: 9e15 },
+        { choices: [{ message: { content: '', function_call: { name: 'echo', arguments: { x: 3 } } }, finish_reason: 'function_call' }] },
+        { choices: [{ message: { content: 'готово' }, finish_reason: 'stop' }] },
+    ];
+    const transport = async (url, opts) => { calls.push({ url, headers: opts.headers, body: opts.body }); return { ok: true, status: 200, json: replies.shift() }; };
+    const log = [], texts = [];
+    const agent = createAgent({ config: { provider: 'gigachat', base: PROVIDERS.gigachat.base, model: 'GigaChat-2', key: 'Qkxh' },
+        transport, tools: toolsOf(log), events: { text: (t) => texts.push(t) } });
+    await agent.send('привет');
+    eq(calls[0].url, PROVIDERS.gigachat.oauthUrl);
+    eq(calls[0].headers.authorization, 'Basic Qkxh');
+    truthy(/^[0-9a-f-]{36}$/.test(calls[0].headers.rquid));
+    eq(calls[0].body, 'scope=GIGACHAT_API_PERS');
+    eq(calls[1].headers.authorization, 'Bearer TOK');
+    eq(JSON.parse(calls[1].body).functions[0].name, 'echo');
+    eq(log, [{ x: 3 }]);
+    const second = JSON.parse(calls[2].body).messages;
+    eq(second.at(-1).role, 'function');
+    eq(second.at(-1).name, 'echo');
+    eq(JSON.parse(second.at(-1).content).result, 'эхо:3');
+    eq(second.at(-2).function_call.arguments, { x: 3 });
+    eq(calls.length, 3, 'токен получен один раз');
+    eq(texts, ['готово']);
+});
+
+await atest('GigaChat: ошибка токена понятна, срок токена учитывается', async () => {
+    let msg = '';
+    try { await gigachatToken({ key: 'x' }, async () => ({ ok: false, status: 401, json: { message: 'bad creds' } })); } catch (e) { msg = e.message; }
+    truthy(msg.includes('bad creds'));
+    const cfg = { key: 'k', _token: { value: 'OLD', exp: 1000 } };
+    eq(await gigachatToken(cfg, async () => ({ ok: true, json: { access_token: 'NEW', expires_at: 999999 } }), 5000), 'NEW');
 });
 
 finish();

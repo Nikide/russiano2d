@@ -127,7 +127,9 @@
         <div id="ag" class="hidden">
             <div id="ag-head">
                 <span id="ag-prov-anthropic" class="out-filter">Anthropic</span>
-                <span id="ag-prov-openai" class="out-filter">OpenAI-совместимый</span>
+                <span id="ag-prov-openai" class="out-filter">OpenAI-совм.</span>
+                <span id="ag-prov-yandex" class="out-filter">YandexGPT</span>
+                <span id="ag-prov-gigachat" class="out-filter">GigaChat</span>
                 <input id="ag-base" type="text" class="field" value=""/>
                 <input id="ag-model" type="text" class="field" value=""/>
                 <input id="ag-key" type="password" class="field" value=""/>

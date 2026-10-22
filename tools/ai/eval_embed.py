@@ -17,6 +17,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
     ap.add_argument("--model", required=True)
+    ap.add_argument("--max-len", type=int, default=256)
     ap.add_argument("--split", default="test")
     args = ap.parse_args()
 
@@ -25,8 +26,9 @@ def main():
 
     rows = [json.loads(l) for l in (Path(args.data) / f"{args.split}.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
     model = SentenceTransformer(args.model)
-    q = model.encode(["query: " + r["query"] for r in rows], normalize_embeddings=True, batch_size=64)
-    p = model.encode(["passage: " + r["positive"] for r in rows], normalize_embeddings=True, batch_size=64)
+    model.max_seq_length = args.max_len
+    q = model.encode(["query: " + r["query"] for r in rows], normalize_embeddings=True, batch_size=32)
+    p = model.encode(["passage: " + r["positive"] for r in rows], normalize_embeddings=True, batch_size=32)
     sims = q @ p.T
     ranks = (sims > sims.diagonal()[:, None]).sum(axis=1) + 1
     out = {"model": args.model, "split": args.split, "n": len(rows),
