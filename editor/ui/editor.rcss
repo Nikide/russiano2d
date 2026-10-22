@@ -630,9 +630,12 @@ scrollbarcorner { background-color: transparent; }
 #ag-side { display: flex; flex-direction: column; width: 230px; flex: 0 0 230px; min-height: 0px; padding: 6px 12px 8px 0px; text-align: center; overflow: hidden; }
 #ag-side > * { flex: 0 0 auto; }
 #mc { display: block; width: 64px; height: 64px; max-width: 64px; margin: 0px auto; cursor: pointer; }
+#ag-compose .ag-input { margin-right: 0px; }
 #mc.off { display: none; }
 #ag-side.off { display: none; }
-#mc-bubble { display: block; margin: 8px 6px 4px 6px; padding: 6px 10px; font-size: 12px; color: #1b1e24; background-color: #eef1f7; border-radius: 10px; }
+#ag-mc-wrap { display: block; position: relative; flex: 0 0 72px; width: 72px; height: 64px; margin: 0px 12px; align-self: center; }
+/* реплика не двигает Руси-тян: абсолютное позиционирование над ней */
+#mc-bubble { display: block; position: absolute; bottom: 70px; left: -64px; width: 200px; padding: 6px 10px; font-size: 12px; text-align: center; color: #1b1e24; background-color: #eef1f7; border-radius: 10px; }
 #bt-agent-mc { display: inline-block; width: 20px; height: 20px; margin-right: 5px; vertical-align: middle; }
 
 /* журнал */
@@ -694,7 +697,7 @@ scrollbarcorner { background-color: transparent; }
 .ag-stop:hover { background-color: #d92d20; }
 
 /* план задач */
-#ag-plan { display: block; flex: 1 1 0; min-height: 40px; margin: 10px 0px 0px 0px; padding: 8px 10px; text-align: left; overflow-y: auto; background-color: #181b21; border-width: 1px; border-color: #262b35; border-radius: 9px; }
+#ag-plan { display: block; flex: 0 1 auto; min-height: 40px; margin: 10px 0px 0px 0px; padding: 8px 10px; text-align: left; overflow-y: auto; background-color: #181b21; border-width: 1px; border-color: #262b35; border-radius: 9px; }
 .plan-head { display: block; margin-bottom: 4px; font-size: 11px; color: #8b93a3; }
 .plan-row { display: flex; flex-direction: row; align-items: flex-start; padding: 2px 0px; white-space: normal; font-size: 12px; color: #9aa2b1; }
 .plan-ic { display: block; flex: 0 0 18px; width: 18px; font-size: 14px; color: #5d6575; }

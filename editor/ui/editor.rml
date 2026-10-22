@@ -143,13 +143,15 @@
                     <div id="ag-ask" class="hidden"></div>
                 </div>
                 <div id="ag-side">
-                    <span id="mc-bubble" class="hidden"></span>
-                    <span id="mc" class="mc-idle-0"></span>
                     <div id="ag-plan" class="hidden"></div>
                 </div>
             </div>
             <div id="ag-compose">
                 <textarea id="ag-input" class="ag-input" value=""></textarea>
+                <div id="ag-mc-wrap">
+                    <span id="mc-bubble" class="hidden"></span>
+                    <span id="mc" class="mc-idle-0"></span>
+                </div>
                 <div id="ag-compose-side">
                     <span id="ag-send" class="ag-send">Отправить</span>
                     <span id="ag-stop" class="ag-stop hidden">Стоп</span>
