@@ -12,6 +12,7 @@
 |-----------|--------------------|--------------------|
 | Anthropic (Messages API) | `https://api.anthropic.com` | API-ключ → `x-api-key` |
 | OpenAI-совм. (`/chat/completions`) | `http://localhost:8080/v1` (llama-server, Ollama, LM Studio…) | `Bearer`, по необходимости |
+| DeepSeek | `https://api.deepseek.com` | `Bearer`, модель `deepseek-chat` |
 | YandexGPT | `https://llm.api.cloud.yandex.net/v1` | API-ключ сервисного аккаунта → `Authorization: Api-Key …`; IAM-токен — введите `Bearer t1.…`. Модель: `gpt://<id каталога>/yandexgpt/latest` |
 | GigaChat / GigaCode (Сбер) | `https://gigachat.devices.sberbank.ru/api/v1` | «Authorization key» из кабинета: харнес сам обменивает его на токен (`POST ngw.devices.sberbank.ru:9443/api/v2/oauth`, `scope=GIGACHAT_API_PERS`, `RqUID`) и обновляет по сроку; вызовы инструментов — через `functions` |
 
@@ -19,8 +20,7 @@
 собственный шлюз), берите «OpenAI-совм.» и свой адрес. Новый вид авторизации —
 запись в `PROVIDERS` (`protocol`, `auth`) в `agent_harness.js`.
 
-**Проверено** только юнит-тестами на подставной сети (формат заголовков, обмен
-токена, функции). С живыми YandexGPT/GigaChat не гонялось. Известный риск GigaChat:
+**Проверено:** DeepSeek — вживую (2026-10-22, харнес под Node: цикл с вызовами инструментов, `read_file`/`write_file` отработали). YandexGPT и GigaChat — только юнит-тестами на подставной сети (заголовки, обмен токена, функции), с живыми сервисами не гонялись. Известный риск GigaChat:
 его серверы подписаны российским корневым сертификатом; если системное хранилище
 curl его не знает, запрос упадёт на TLS — тогда нужен сертификат Минцифры в хранилище
 ОС или шлюз.

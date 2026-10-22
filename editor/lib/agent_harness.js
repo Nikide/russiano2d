@@ -17,6 +17,7 @@ export const PROVIDERS = {
     // YandexGPT через OpenAI-совместимый эндпоинт Yandex Cloud: ключ сервисного аккаунта
     // (`Api-Key`) или IAM-токен (`Bearer`: начните ключ с `Bearer `); модель — gpt://<id каталога>/yandexgpt/latest.
     yandex: { label: 'YandexGPT', protocol: 'openai', auth: 'api-key', base: 'https://llm.api.cloud.yandex.net/v1', model: 'gpt://<id-каталога>/yandexgpt/latest' },
+    deepseek: { label: 'DeepSeek', protocol: 'openai', auth: 'bearer', base: 'https://api.deepseek.com', model: 'deepseek-chat' },
     // GigaChat/GigaCode (Сбер): «Authorization key» из кабинета обменивается на токен (30 мин).
     gigachat: {
         label: 'GigaChat', protocol: 'gigachat', auth: 'oauth', base: 'https://gigachat.devices.sberbank.ru/api/v1', model: 'GigaChat-2',
