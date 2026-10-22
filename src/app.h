@@ -136,6 +136,11 @@ typedef struct R2DApp {
     char *clipboard;
     bool  clipboard_owned;
 
+    // Файлы, брошенные в окно (SDL_EVENT_DROP_FILE): пути через '\n', копятся до чтения r2d_app_take_dropped().
+    char  *dropped;
+    size_t dropped_len;
+    size_t dropped_cap;
+
     // --- Геймпады (до четырёх: одновременная игра вчетвером) ---
     //
     // Раньше был ОДИН геймпад: «подключён первый» — и всё. Для игры вдвоём-
@@ -349,6 +354,8 @@ void r2d_app_set_text_input_area(R2DApp *app, int x, int y, int w, int h, int cu
 // Текст из буфера обмена (или NULL, если буфера нет/он не текстовый). Указатель
 // жив до следующего чтения или shutdown.
 const char *r2d_app_clipboard(R2DApp *app);
+/** Пути брошенных в окно файлов, разделённые '\n' (владелец — вызывающий, free()); NULL — ничего не бросали. */
+char *r2d_app_take_dropped(R2DApp *app);
 // Положить текст в буфер обмена. false — платформа отказала.
 bool r2d_app_set_clipboard(R2DApp *app, const char *text);
 

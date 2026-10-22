@@ -742,6 +742,8 @@ void r2d_app_shutdown(R2DApp *app)
         SDL_free(app->clipboard);
         app->clipboard = NULL;
     }
+    free(app->dropped);
+    app->dropped = NULL;
     if (app->device) {
         if (app->window) {
             SDL_ReleaseWindowFromGPUDevice(app->device, app->window);
@@ -1002,6 +1004,27 @@ void r2d_app_begin_frame(R2DApp *app)
 
         case SDL_EVENT_MOUSE_WHEEL:
             app->wheel_y += ev.wheel.y;
+            break;
+
+        case SDL_EVENT_DROP_FILE:
+            // Брошенный в окно файл: путь копится до чтения игрой (предел 64 КБ — не растём бесконечно).
+            if (ev.drop.data && *ev.drop.data) {
+                const size_t n = strlen(ev.drop.data);
+                if (app->dropped_len + n + 2 <= 65536) {
+                    if (app->dropped_len + n + 2 > app->dropped_cap) {
+                        size_t cap = app->dropped_cap ? app->dropped_cap * 2 : 1024;
+                        while (cap < app->dropped_len + n + 2) cap *= 2;
+                        char *grown = (char *)realloc(app->dropped, cap);
+                        if (!grown) break;
+                        app->dropped = grown;
+                        app->dropped_cap = cap;
+                    }
+                    if (app->dropped_len) app->dropped[app->dropped_len++] = '\n';
+                    memcpy(app->dropped + app->dropped_len, ev.drop.data, n);
+                    app->dropped_len += n;
+                    app->dropped[app->dropped_len] = '\0';
+                }
+            }
             break;
 
         case SDL_EVENT_TEXT_INPUT:
@@ -1370,6 +1393,16 @@ const char *r2d_app_clipboard(R2DApp *app)
     char *text = SDL_GetClipboardText();
     app->clipboard = text;
     return text;
+}
+
+char *r2d_app_take_dropped(R2DApp *app)
+{
+    if (!app || !app->dropped_len) return NULL;
+    char *out = app->dropped;
+    app->dropped = NULL;
+    app->dropped_len = 0;
+    app->dropped_cap = 0;
+    return out;
 }
 
 bool r2d_app_set_clipboard(R2DApp *app, const char *text)

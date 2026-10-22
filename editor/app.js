@@ -531,6 +531,27 @@ export function createEditor($) {
         return true;
     }
 
+    // Файлы, брошенные в окно: копируются в assets/ проекта (по типу — подкаталог), агент получает список.
+    const DROP_DIRS = [[/\.(png|jpe?g|gif|webp|bmp)$/i, 'assets'], [/\.(wav|ogg|mp3|flac)$/i, 'assets/audio'], [/\.(ttf|otf)$/i, 'assets/fonts'], [/\.(atlas|tilemap)\.json$|\.json$/i, 'assets']];
+    function importDropped() {
+        const list = $.input.dropped();
+        if (!list.length) return;
+        if (!s.project) { setStatus('Сначала откройте проект: брошенные файлы некуда копировать', 'err'); return; }
+        const added = [], failed = [];
+        for (const src of list) {
+            const name = String(src).split(/[\\/]/).pop();
+            const hit = DROP_DIRS.find(([re]) => re.test(name));
+            const dir = hit ? hit[1] : 'assets';
+            const dot = name.lastIndexOf('.');
+            const stem = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
+            let dest = dir + '/' + name;
+            for (let n = 2; $.fs.exists(full(dest)) && n < 100; n++) dest = dir + '/' + stem + '-' + n + ext;
+            if ($.fs.copy(src, full(dest))) added.push(dest); else failed.push(name);
+        }
+        if (added.length) { refreshTree(); agentPanel.assetsAdded(added); }
+        setStatus(added.length ? 'Добавлено файлов: ' + added.length + (failed.length ? ', не удалось: ' + failed.join(', ') : '') + ' → ' + added[0].split('/').slice(0, -1).join('/') : 'Не удалось добавить: ' + failed.join(', ') + ' (папки не копируются — бросайте файлы)', added.length ? 'ok' : 'err');
+    }
+
     async function refreshTree() {
         if (!s.project) return;
         const res = await tool(['assets', s.project.abs]);
@@ -1988,6 +2009,7 @@ export function createEditor($) {
             return;
         }
         shortcuts();
+        importDropped();
         agentPanel.tick(primary(), dt);
         if (s.palette) filterPalette();
         if (s.focus === 'search') {

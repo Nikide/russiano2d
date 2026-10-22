@@ -138,6 +138,7 @@ axisThreshold: 0.5 })` — пауза до автоповтора, темп по
 | `$.input.ime()` | текущая незавершённая IME-композиция `{ text, start }` или пустое значение |
 | `$.input.textInputArea(x, y, w, h, cursor)` | позиция системного окна кандидатов IME в координатах окна; алиас `$.ввод.textInputArea(...)` |
 | `$.input.clipboard()` / `$.input.setClipboard(text)` | системный буфер обмена: текст или `null` / записать → `bool` |
+| `$.input.dropped()` | пути файлов, брошенных в окно с прошлого вызова: массив абсолютных путей (очередь очищается; событие SDL `DROP_FILE`); нативный backend — `engine.dropped()` (доступен только модулям `src/highlevel`) |
 | `cursor(name?)` / `cursorVisible(on?)` | форма и видимость курсора |
 | `touches()` / `touchCount()` / `touch(i)` / `touched()` | касания: список, число, один палец, есть ли вообще |
 | `taken()` | ввод забран катсценой (`$.cutscene`) |

@@ -46,6 +46,7 @@ export const SYSTEM_PROMPT = [
     'Правка: edit_file (точечно) или write_file (новый файл); после записи .js lint уже запущен — исправь замечания. В конце r2d_validate; при изменении логики — run_check. Не повторяй проверки без правок.',
     'Проект обычно уже открыт (project_info/list_files) — работай в нём; new_project нужен только если проекта нет. Игра целиком: код → кирпичики → ресурсы в студиях. Студии и вкладки: tabs/open_tab/studio_ops/studio_state/studio_edit/studio_op/studio_save (карты .re2dmap в Hammer: brush.create, entity.create, element.create…; после серии правок validate и studio_save). Остальное — r2d_cli (atlas-grid, world-compile, project-set…).',
     'НАВЫКИ — справочники «как делать»: skill_list, затем skill_load перед незнакомой работой: engine-basics (идиомы и ловушки `$`), generate-sound (звуки), game-workflow (игра целиком), genre-kits (жанр → набор kit.*), platformer, top-down-action, fps-2-5d, rpg-systems, story-dialogue, enemy-ai, level-design, game-feel, audio, ui-hud, save-progress, playtest-qa, pixel-art. Нужен спрайт/тайл, а готовой картинки нет — загрузи pixel-art и нарисуй pixel_art (ASCII-срез покажет результат), затем укажи созданный файл в `.sprite(path)`. Нужен звуковой эффект — загрузи generate-sound и вызови generate_sound (слова или пресет → WAV; монета, выстрел, взрыв, прыжок, удар, бонус, клик); музыку создать нельзя — только существующие файлы.',
+    'Пользователь добавил свои файлы (картинки, звуки, шрифты) или просит «сделай из этих ассетов» — сначала asset_inventory, затем pixel_preview нужных картинок; лист кадров нарежь atlas-grid. Не рисуй заново то, что уже есть.',
     'Пути — относительно корня проекта. Сначала list_files/read_file, потом пиши.',
 ].join('\n');
 
@@ -1011,6 +1012,31 @@ export function editorTools(host) {
               const r = (await host.tool(['pixel-art', host.abs('.r2d-check/pixel.json')])).json;
               if (!r || !r.ok) throw new Error(r ? (r.message || r.code) : 'pixel-art не ответил');
               return pixelReport(p, r, false) + '\n[preview: ' + host.abs(prev) + ']';
+          } },
+        { name: 'asset_inventory', description: 'Опись ассетов проекта: картинки (размер, цвета, похоже ли на лист кадров, есть ли .atlas.json), звуки, шрифты. Зови, когда пользователь добавил свои файлы или просит «сделай из этих ассетов»; детали одной картинки — pixel_preview.',
+          schema: obj({ prefix: str('каталог, например assets/ (по умолчанию весь проект)') }, []),
+          run: async (a) => {
+              const prefix = a && a.prefix ? safeRel(a.prefix) : '';
+              const files = host.list().filter((f) => f.startsWith(prefix) && !f.startsWith('.r2d') && !f.startsWith('generated/') && /\.(png|jpe?g|gif|webp|wav|ogg|mp3|flac|ttf|otf|atlas\.json|tilemap\.json|re2dmap)$/i.test(f)).slice(0, 80);
+              if (!files.length) return 'в ' + (prefix || 'проекте') + ' нет картинок, звуков и шрифтов';
+              const set = new Set(host.list());
+              const lines = [];
+              for (const f of files) {
+                  if (/\.png$/i.test(f)) {
+                      host.writeText('.r2d-check/inv.json', JSON.stringify({ base: host.abs(f) }));
+                      let r = null;
+                      try { r = (await host.tool(['pixel-art', host.abs('.r2d-check/inv.json')])).json; } catch (_) { r = null; }
+                      if (!r || !r.ok) { lines.push(f + ' · PNG (не удалось прочитать)'); continue; }
+                      const colors = Object.keys(r.legend || {}).length;
+                      const sheet = r.width > r.height && r.width % r.height === 0 ? ' · похоже на лист: ' + (r.width / r.height) + ' кадров ' + r.height + '×' + r.height : (r.height > r.width && r.height % r.width === 0 ? ' · похоже на лист: ' + (r.height / r.width) + ' кадров ' + r.width + '×' + r.width : '');
+                      const atlas = set.has(f.replace(/\.png$/i, '.atlas.json')) ? ' · атлас ' + f.replace(/\.png$/i, '.atlas.json') : '';
+                      lines.push(f + ' · ' + r.width + '×' + r.height + ' · цветов ' + colors + (r.opaque === 0 ? ' · пустая' : '') + sheet + atlas);
+                  } else if (/\.(wav|ogg|mp3|flac)$/i.test(f)) lines.push(f + ' · звук');
+                  else if (/\.(ttf|otf)$/i.test(f)) lines.push(f + ' · шрифт');
+                  else lines.push(f);
+              }
+              if (host.remove && host.exists('.r2d-check/inv.json')) { try { host.remove('.r2d-check/inv.json'); } catch (_) { /* не критично */ } }
+              return 'ассетов: ' + files.length + '\n' + lines.join('\n') + '\nДетали картинки — pixel_preview; лист кадров нарезается r2d_cli atlas-grid.';
           } },
         { name: 'generate_sound', mutating: true,
           description: 'Звуковой эффект → WAV в проекте (подтверждение). text — словами («короткий высокий прыжок», «big explosion») или preset: coin, laser, explosion, powerup, hurt, jump, blip, random; seed — другой вариант, mutate 0..1 — вариация, params — тонкая подстройка (skill_load generate-sound). Вернёт длительность, пик, тон и ASCII-огибающую. Играть: `$.sound.play("assets/sfx/x.wav")`.',

@@ -208,6 +208,14 @@ export function installStore($) {
             return ok;
         },
 
+        /** Копия файла побайтно (картинка, звук) → bool; каталоги назначения создаются. Причина отказа — как у write. */
+        copy(src, dst) {
+            if (typeof engine.fs.copy !== 'function') return false;
+            const ok = engine.fs.copy(String(src), String(dst));
+            if (!ok) reportWriteFailure($, dst, '$.fs.copy');
+            return ok;
+        },
+
         exists(path) { return engine.fs.exists(path); },
 
         /** Список файлов в каталоге (пути, отсортированы). */

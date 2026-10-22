@@ -258,6 +258,36 @@ def _approve(directory):
         check(agent, D + '.content("ag-mode").includes("Спрашивать")&&!' + E + '.models.state.autoApprove', 'кнопка возвращает режим «Спрашивать»')
 
 
+def _assets(directory):
+    import struct, zlib
+    project = Path(directory) / 'asproject'
+    project.mkdir()
+    (project / 'project.json').write_text(json.dumps({'format': 2, 'title': 'Assets fixture', 'entry': 'main.js'}))
+    (project / 'main.js').write_text('$.ready(() => {});\n')
+    def png(w, h):
+        raw = b''.join(b'\x00' + b'\xff\x00\x00\xff' * w for _ in range(h))
+        chunk = lambda t, d: struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+        return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+    dropped = Path(directory) / 'incoming'
+    dropped.mkdir()
+    (dropped / 'hero_sheet.png').write_bytes(png(64, 16))
+    (dropped / 'jump.wav').write_bytes(b'RIFF$\x00\x00\x00WAVEfmt ')
+    steps = [tool_call(1, 'asset_inventory', {}), reply({'type': 'text', 'text': 'Вижу ассеты.'})]
+    with Agent(game='editor', scene=str(project), seed=41) as agent:
+        settle(agent, E + '.state.project!==null && ' + E + '.state.busy===0')
+        agent.eval('globalThis.__q=' + json.dumps(steps) + ';globalThis.__seen=[];$.http._setBackend((r)=>{globalThis.__seen.push(r);return globalThis.__q.shift();});1')
+        agent.eval(E + '.models.set("anthropic",{key:"k"});' + D + '.click("bt-agent");1'); agent.step(3)
+        # окно получило два брошенных файла (SDL DROP_FILE доходит до $.input.dropped)
+        agent.eval('globalThis.__drops=[' + json.dumps(str(dropped / 'hero_sheet.png')) + ',' + json.dumps(str(dropped / 'jump.wav')) + '];$.input.dropped=()=>{const d=globalThis.__drops;globalThis.__drops=[];return d;};1'); agent.step(4)
+        check(agent, 'true' if (project / 'assets/hero_sheet.png').read_bytes()[:4] == b'\x89PNG' else 'false', 'drop: картинка скопирована в assets/')
+        check(agent, 'true' if (project / 'assets/audio/jump.wav').is_file() else 'false', 'drop: звук скопирован в assets/audio/')
+        check(agent, D + '.content("ag-log").includes("Добавлено в проект")', 'drop: в чате заметка о добавленных файлах')
+        agent.eval(D + '.setValue("ag-input","сделай игру из этих ассетов");' + D + '.click("ag-send");1')
+        settle(agent, '!' + E + '.agent.state.busy && ' + D + '.content("ag-log").includes("Вижу ассеты.")', seconds=30)
+        check(agent, 'String(globalThis.__seen[0].body).includes("assets/hero_sheet.png")', 'drop: агент знает, какие файлы добавлены')
+        check(agent, 'String(globalThis.__seen[1].body).includes("hero_sheet.png · 64") && String(globalThis.__seen[1].body).includes("4 кадров")', 'asset_inventory: размер и лист кадров')
+
+
 def _limit(directory):
     project = Path(directory) / 'lproject'
     project.mkdir()
@@ -340,6 +370,7 @@ def _run():
         _sound(directory)
         _session(directory)
         _approve(directory)
+        _assets(directory)
     print(f'editor_agent_panel_test: {checks} checks', flush=True)
     return 0
 

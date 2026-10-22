@@ -1382,6 +1382,7 @@ interface R2D_font {
 
 interface R2D_fs {
     basePath(): any;
+    copy(arg0: any, arg1: any): any;
     documentsPath(): any;
     exists(arg0: any): any;
     list(arg0: any): any;
@@ -1576,6 +1577,7 @@ interface R2D_input {
     device(arg0: any): any;
     devices(): any;
     down(arg0: any): any;
+    dropped(): any;
     gamepad(arg0: any): any;
     glyphs(arg0: any): any;
     hardLocked(): any;
@@ -2976,6 +2978,7 @@ interface R2D_________ {
     device(arg0: any): any;
     devices(): any;
     down(arg0: any): any;
+    dropped(): any;
     gamepad(arg0: any): any;
     glyphs(arg0: any): any;
     hardLocked(): any;

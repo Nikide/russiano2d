@@ -45,6 +45,7 @@ const hp = $.store.get('hp', 100);    // значение по умолчани�
 | `readJSON(path, fallback?)` / `readText(path)` | чтение |
 | `writeJSON(path, data)` / `write(path, text)` | запись |
 | `writeAtomic(path, text \| object)` | **атомарная замена** файла через `engine.fs.writeAtomic` (temp рядом + `fsync` + `rename`); без биндинга — обычная запись (`$.store`/`$.save` добавляют temp+backup) |
+| `$.fs.copy(src, dst)` | побайтная копия файла (картинка, звук; `src` может быть абсолютным путём, например из `$.input.dropped()`) → `bool`; каталоги назначения создаются; нативный backend — `engine.fs.copy` (только модулям `src/highlevel`) |
 | `exists(path)` | есть ли файл (видит и встроенные данные собранной игры) |
 | `list(dir)` | пути в каталоге, отсортированы |
 | `remove(path)` | удалить файл (идемпотентно: файла нет — тишина, см. ниже) |

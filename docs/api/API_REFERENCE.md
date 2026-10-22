@@ -6,7 +6,7 @@
 
 Engine version: "2.0.0"
 
-Entries: 4124
+Entries: 4128
 
 ## $
 
@@ -1417,6 +1417,7 @@ Entries: 4124
 | Name | Kind | Signature / value |
 |---|---|---|
 | `basePath` | function | `() -> any` — Чтение сначала проверяет встроенные данные собранной игры, затем файлы на диске: каталог выбранного --game → корень запуска ($.fs.basePath()). Абсолютные пути принимаются как есть. Запись и удаление работают на диске; встроенный payload не меняют. |
+| `copy` | function | `(arg0: any, arg1: any) -> any` — побайтная копия файла (картинка, звук; src может быть абсолютным путём, например из $.input.dropped()) → bool; каталоги назначения создаются; нативный backend — engine.fs.copy (только модулям src/highlevel) |
 | `documentsPath` | function | `() -> any` — системный каталог «Документы» текущего пользователя на этой ОС |
 | `exists` | function | `(arg0: any) -> any` — Проверяет, существует ли файл или каталог по указанному пути. |
 | `list` | function | `(arg0: any) -> any` — Возвращает список файлов и каталогов по указанному пути. |
@@ -1664,6 +1665,7 @@ Entries: 4124
 | `device` | function | `(arg0: any) -> any` — слот как устройство: player, held(), assign() |
 | `devices` | function | `() -> any` — слоты, «зажатые» после отключения кнопки, сброс |
 | `down` | function | `(name: string) -> boolean` — Проверяет, нажато ли игровое действие или клавиша. Возвращает false, пока ввод заблокирован жёстким локом. |
+| `dropped` | function | `() -> any` — пути файлов, брошенных в окно с прошлого вызова: массив абсолютных путей (очередь очищается; событие SDL DROP_FILE); нативный backend — engine.dropped() (доступен только модулям src/highlevel) |
 | `gamepad` | function | `(arg0: any) -> any` — геймпад по номеру: .down(), .pressed(), .axis(), .connected(), .rumble() |
 | `glyphs` | function | `(arg0: any) -> any` — подписи кнопок для UI (ESCAPE, A, LB) |
 | `hardLocked` | function | `() -> any` — Есть ли жесткий лок: пока он жив, gameplay-запросы ввода = false. |
@@ -3639,6 +3641,7 @@ Entries: 4124
 | `device` | function | `(arg0: any) -> any` — слот как устройство: player, held(), assign() |
 | `devices` | function | `() -> any` — слоты, «зажатые» после отключения кнопки, сброс |
 | `down` | function | `(arg0: any) -> any` — удержание / нажатие / отпускание |
+| `dropped` | function | `() -> any` — пути файлов, брошенных в окно с прошлого вызова: массив абсолютных путей (очередь очищается; событие SDL DROP_FILE); нативный backend — engine.dropped() (доступен только модулям src/highlevel) |
 | `gamepad` | function | `(arg0: any) -> any` — геймпад по номеру: .down(), .pressed(), .axis(), .connected(), .rumble() |
 | `glyphs` | function | `(arg0: any) -> any` — подписи кнопок для UI (ESCAPE, A, LB) |
 | `hardLocked` | function | `() -> any` — Есть ли жесткий лок: пока он жив, gameplay-запросы ввода = false. |
@@ -4390,6 +4393,7 @@ Entries: 4124
 | `drawRect` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any) -> any` |
 | `drawSprite` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any, arg6: any) -> any` |
 | `drawText` | function | `(arg0: any, arg1: any, arg2: any, arg3: any, arg4: any, arg5: any, arg6: any, arg7: any, arg8: any) -> any` |
+| `dropped` | function | `() -> any` |
 | `dt` | number | — |
 | `fixedDt` | number | — |
 | `fontDefault` | function | `() -> any` |

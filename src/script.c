@@ -2535,6 +2535,27 @@ static JSValue r2d__js_set_clipboard(JSContext *ctx, JSValueConst this_val, int 
     return JS_NewBool(ctx, ok);
 }
 
+// engine.dropped() → string[] — пути файлов, брошенных в окно с прошлого вызова (очередь очищается).
+static JSValue r2d__js_dropped(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val); R2D_UNUSED(argc); R2D_UNUSED(argv);
+    R2DScript *s = r2d__script_of(ctx);
+    JSValue arr = JS_NewArray(ctx);
+    if (!s || !s->app) return arr;
+    char *all = r2d_app_take_dropped(s->app);
+    if (!all) return arr;
+    uint32_t n = 0;
+    for (char *p = all; *p;) {
+        char *nl = strchr(p, '\n');
+        const size_t len = nl ? (size_t)(nl - p) : strlen(p);
+        if (len) JS_SetPropertyUint32(ctx, arr, n++, JS_NewStringLen(ctx, p, len));
+        if (!nl) break;
+        p = nl + 1;
+    }
+    free(all);
+    return arr;
+}
+
 // engine.ime() → { text, start } — незавершённая композиция IME.
 static JSValue r2d__js_ime(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
@@ -5166,6 +5187,28 @@ static JSValue r2d__js_fs_write_atomic(JSContext *ctx, JSValueConst this_val, in
     return ok ? JS_TRUE : JS_FALSE;
 }
 
+// engine.fs.copy(src, dst) → bool — побайтовая копия файла (картинки, звук); каталоги назначения создаются.
+static JSValue r2d__js_fs_copy(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
+{
+    R2D_UNUSED(this_val);
+    R2DScript *s = r2d__script_of(ctx);
+    const char *src = r2d__arg_str(ctx, argc, argv, 0);
+    const char *dst = r2d__arg_str(ctx, argc, argv, 1);
+    bool ok = false;
+    if (src && dst && s) {
+        char from[4096], to[4096], dir_error[320];
+        r2d_app_resolve_path(s->app, from, sizeof from, src);
+        r2d_app_resolve_path(s->app, to, sizeof to, dst);
+        r2d__fs_ensure_parent(to, dir_error, sizeof dir_error);
+        ok = SDL_CopyFile(from, to);
+        if (!ok) SDL_snprintf(r2d__fs_error, sizeof r2d__fs_error, "не удалось скопировать \"%s\" → \"%s\": %s (код R2D_FS_WRITE_FAILED)", from, to, SDL_GetError());
+        else r2d__fs_error[0] = '\0';
+    }
+    if (src) JS_FreeCString(ctx, src);
+    if (dst) JS_FreeCString(ctx, dst);
+    return ok ? JS_TRUE : JS_FALSE;
+}
+
 // engine.fs.lastError() → строка последнего отказа записи ("" — отказов не было).
 static JSValue r2d__js_fs_last_error(JSContext *ctx, JSValueConst this_val,
                                      int argc, JSValueConst *argv)
@@ -6806,6 +6849,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     // Буфер обмена и IME.
     r2d__set_fn(ctx, engine, "clipboard", r2d__js_clipboard, 0);
     r2d__set_fn(ctx, engine, "setClipboard", r2d__js_set_clipboard, 1);
+    r2d__set_fn(ctx, engine, "dropped", r2d__js_dropped, 0);
     r2d__set_fn(ctx, engine, "ime", r2d__js_ime, 0);
     r2d__set_fn(ctx, engine, "textInputArea", r2d__js_text_input_area, 5);
     r2d__set_fn(ctx, engine, "padCount", r2d__js_pad_count, 0);
@@ -7007,6 +7051,7 @@ static JSValue r2d__make_engine(JSContext *ctx)
     r2d__set_fn(ctx, fs, "readText", r2d__js_fs_read_text, 1);
     r2d__set_fn(ctx, fs, "write", r2d__js_fs_write, 2);
     r2d__set_fn(ctx, fs, "writeAtomic", r2d__js_fs_write_atomic, 2);
+    r2d__set_fn(ctx, fs, "copy", r2d__js_fs_copy, 2);
     // Причина последнего отказа записи: `$.fs`/`$.store` печатают её одной
     // строкой — раньше отказ записи не был виден вообще (отчёт BASHNYA A5).
     r2d__set_fn(ctx, fs, "lastError", r2d__js_fs_last_error, 0);

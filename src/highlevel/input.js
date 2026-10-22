@@ -591,6 +591,12 @@ export function installInput($) {
             const value = engine.clipboard();
             return typeof value === 'string' ? value : null;
         },
+        /** Файлы, брошенные в окно с прошлого вызова: массив абсолютных путей (очередь очищается). */
+        dropped() {
+            if (typeof engine.dropped !== 'function') return [];
+            const list = engine.dropped();
+            return Array.isArray(list) ? list.filter((p) => typeof p === 'string') : [];
+        },
         /** Записать текст в системный буфер обмена → bool (удалось ли). */
         setClipboard(text) {
             if (typeof engine.setClipboard !== 'function') return false;

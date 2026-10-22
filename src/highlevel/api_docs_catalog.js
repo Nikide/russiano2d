@@ -7419,6 +7419,13 @@ export const API_DOCS_CATALOG = {
         "returns": "any",
         "description": "системный буфер обмена: текст или null / записать → bool"
     },
+    "$.input.dropped": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "пути файлов, брошенных в окно с прошлого вызова: массив абсолютных путей (очередь очищается; событие SDL DROP_FILE); нативный backend — engine.dropped() (доступен только модулям src/highlevel)"
+    },
     "$.input.cursor": {
         "kind": "function",
         "arity": 1,
@@ -16708,6 +16715,22 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "автосохранение по игровому времени (по умолчанию 30000 мс, пишет только при изменениях)"
+    },
+    "$.fs.copy": {
+        "kind": "function",
+        "arity": 2,
+        "args": [
+            {
+                "name": "arg0",
+                "type": "any"
+            },
+            {
+                "name": "arg1",
+                "type": "any"
+            }
+        ],
+        "returns": "any",
+        "description": "побайтная копия файла (картинка, звук; src может быть абсолютным путём, например из $.input.dropped()) → bool; каталоги назначения создаются; нативный backend — engine.fs.copy (только модулям src/highlevel)"
     },
     "$.fs.documentsPath": {
         "kind": "function",
@@ -31104,6 +31127,13 @@ export const API_DOCS_CATALOG = {
         ],
         "returns": "any",
         "description": "системный буфер обмена: текст или null / записать → bool"
+    },
+    "$.ввод.dropped": {
+        "kind": "function",
+        "arity": 0,
+        "args": [],
+        "returns": "any",
+        "description": "пути файлов, брошенных в окно с прошлого вызова: массив абсолютных путей (очередь очищается; событие SDL DROP_FILE); нативный backend — engine.dropped() (доступен только модулям src/highlevel)"
     },
     "$.ввод.cursor": {
         "kind": "function",

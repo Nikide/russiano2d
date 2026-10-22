@@ -181,9 +181,11 @@ export function createAgentPanel($, doc, host) {
         if (!st.agent) build();
         if (typeof override !== 'string') doc.setValue('ag-input', '');
         push({ kind: 'user', text });
+        let sendText = text;
+        if (st.assets && st.assets.length) { sendText += '\n\n[Пользователь добавил в проект файлы: ' + st.assets.join(', ') + '. Сначала вызови asset_inventory (и pixel_preview для нужных картинок), потом используй их как есть — не рисуй заново то, что уже есть.]'; st.assets = []; }
         st.busy = true; st.mascot.wake(); st.mascot.thinking(); applyMascot(); render();
         let failed = false;
-        try { await st.agent.send(text); }
+        try { await st.agent.send(sendText); }
         catch (e) { failed = true; push({ kind: 'err', text: e && e.message || String(e) }); }
         finally {
             st.busy = false; st.pending = null;
@@ -381,6 +383,11 @@ export function createAgentPanel($, doc, host) {
 
     const api = {
         render, wire, state: st,
+        // Файлы добавлены в проект (drop в окно): заметка в чате и подсказка агенту в следующей просьбе.
+        assetsAdded(paths) {
+            st.assets = (st.assets || []).concat(paths).slice(-40);
+            push({ kind: 'note', text: 'Добавлено в проект: ' + paths.join(', ') + '. Напишите, что с ними сделать — агент увидит их опись.' });
+        },
         // Вызывается Editor при смене вкладки нижней панели: чат и/или настройки видны.
         setOpen(chat) {
             const was = st.open;
